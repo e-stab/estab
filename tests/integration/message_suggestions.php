@@ -82,6 +82,7 @@ $createIncident = static function (
         [
             'kennung' => 'SUGGEST-' . $suffix,
             'name' => 'Vorschlagstest ' . $suffix,
+            'estab_permission_mode' => 'LOOSE',
             'beginn' => date('Y-m-d\TH:i', time() - 3600),
             'ort' => 'Integrationsprüfung',
             'organisation' => 'THW',
@@ -91,7 +92,8 @@ $createIncident = static function (
         ],
         'message-suggestion-integration',
         $activate,
-        $activate ? (int) $status['revision'] : null
+        $activate ? (int) $status['revision'] : null,
+        true
     );
 };
 $activateIncident = static function (
@@ -103,7 +105,8 @@ $activateIncident = static function (
         $connection,
         $incidentId,
         (int) $status['revision'],
-        'message-suggestion-integration'
+        'message-suggestion-integration',
+        true
     );
 };
 $insertMessage = static function (
@@ -156,6 +159,10 @@ $insertMessage = static function (
 try {
     $incidentA = $createIncident($connection, 'A', true);
     $incidentAId = (int) $incidentA['einsatz_id'];
+    $assert(
+        ($incidentA['estab_permission_mode'] ?? null) === 'LOOSE',
+        'suggestion fixture A is not explicitly LOOSE'
+    );
     $insertMessage(
         $connection,
         $incidentAId,
@@ -168,6 +175,10 @@ try {
 
     $incidentB = $createIncident($connection, 'B', false);
     $incidentBId = (int) $incidentB['einsatz_id'];
+    $assert(
+        ($incidentB['estab_permission_mode'] ?? null) === 'LOOSE',
+        'suggestion fixture B is not explicitly LOOSE'
+    );
     $activateIncident($connection, $incidentBId);
     $insertMessage(
         $connection,
@@ -180,6 +191,10 @@ try {
 
     $incidentC = $createIncident($connection, 'C', false);
     $incidentCId = (int) $incidentC['einsatz_id'];
+    $assert(
+        ($incidentC['estab_permission_mode'] ?? null) === 'LOOSE',
+        'suggestion fixture C is not explicitly LOOSE'
+    );
     $activateIncident($connection, $incidentCId);
 
     $fixtureRows = [

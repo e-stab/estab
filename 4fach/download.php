@@ -26,18 +26,24 @@ function estab_download_error(int $status, string $message): never
 $readIdentity = session_status() === PHP_SESSION_ACTIVE
     ? estab_read_session_identity($_SESSION)
     : null;
+$loginDestination = (
+    isset($_GET['area'])
+    && is_string($_GET['area'])
+    && $_GET['area'] === 'vordruck'
+) ? 'forms' : 'messages';
 if (!is_array($readIdentity)) {
-    $loginDestination = (
-        isset($_GET['area'])
-        && is_string($_GET['area'])
-        && $_GET['area'] === 'vordruck'
-    ) ? 'forms' : 'messages';
     estab_navigation_require_session(
         $_SESSION,
         $loginDestination,
         $_SERVER
     );
 }
+estab_navigation_require_selected_duty(
+    $_SESSION,
+    $readIdentity,
+    $loginDestination,
+    $_SERVER
+);
 // Streaming and current-layout PDF rendering may take noticeable time on a
 // NAS. The copied identity is all later authorization needs, so release the
 // session lock before database, hashing and file work starts.

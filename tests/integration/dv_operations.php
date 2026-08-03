@@ -12,6 +12,7 @@ require_once dirname(__DIR__, 2) . '/app/logbook.php';
 require_once dirname(__DIR__, 2) . '/app/attachment.php';
 require_once dirname(__DIR__, 2) . '/app/category.php';
 require_once dirname(__DIR__, 2) . '/app/message_evidence.php';
+require_once dirname(__DIR__, 2) . '/app/read_authorization.php';
 
 $databaseName = getenv('ESTAB_DB_NAME') ?: '';
 if (preg_match('/\Aestab_dv_operations_[a-z0-9_]*\z/D', $databaseName) !== 1) {
@@ -134,6 +135,21 @@ $expect = static function (
     }
     $assert(false, $message . ' (no exception)');
     throw new LogicException('unreachable');
+};
+$expectLockWaitTimeout = static function (
+    callable $operation,
+    string $message
+) use ($assert): void {
+    try {
+        $operation();
+    } catch (mysqli_sql_exception $exception) {
+        $assert(
+            (int) $exception->getCode() === 1205,
+            $message . ' (got database error ' . $exception->getCode() . ')'
+        );
+        return;
+    }
+    $assert(false, $message . ' (mutation was not serialized)');
 };
 $scalar = static function (
     mysqli $connection,
@@ -317,8 +333,25 @@ $createLegacyTelecomDraft = static function (
                     $notes,
                     $actor
                 );
-                $insertPlan->execute();
-                $planId = (int) $connection->insert_id;
+                $planId = estab_dv_positive_id(
+                    estab_dv_with_sql_authority_context(
+                        $connection,
+                        estab_dv_authority_assignment_id($selected),
+                        null,
+                        static function () use (
+                            $connection,
+                            $insertPlan
+                        ): int {
+                            if (!$insertPlan->execute()) {
+                                throw new RuntimeException(
+                                    'Legacy telecommunications plan could not be inserted'
+                                );
+                            }
+                            return (int) $connection->insert_id;
+                        }
+                    ),
+                    'Legacy telecommunications plan'
+                );
             } finally {
                 $insertPlan->close();
             }
@@ -632,6 +665,7 @@ $incidentId = 0;
 $messageId = 0;
 $conversationMessageId = 0;
 $sessionStarted = false;
+$strictAttachmentContext = null;
 
 $phpSessionId = 'dvops' . $suffix;
 if (session_status() !== PHP_SESSION_NONE) {
@@ -648,6 +682,149 @@ if (!estab_auth_session_id_is_valid($phpSessionId)) {
 $sessionStarted = true;
 
 try {
+    $assert(
+        estab_dv_with_sql_authority_context(
+            $connection,
+            17,
+            23,
+            static fn (): string => (string) $scalar(
+                $connection,
+                'SELECT CONCAT(@estab_dv_actor_assignment_id, ?, '
+                    . '@estab_dv_target_assignment_id)',
+                's',
+                '|'
+            )
+        ) === '17|23'
+            && (string) $scalar(
+                $connection,
+                'SELECT CONCAT(@estab_dv_actor_assignment_id IS NULL, ?, '
+                    . '@estab_dv_target_assignment_id IS NULL)',
+                's',
+                '|'
+            ) === '1|1',
+        'assignment context was not exact or remained set after success'
+    );
+    $expect(
+        RuntimeException::class,
+        static fn (): mixed => estab_dv_with_sql_authority_context(
+            $connection,
+            31,
+            null,
+            static function (): never {
+                throw new RuntimeException('authority-context-probe');
+            }
+        ),
+        'assignment context did not propagate its protected exception'
+    );
+    $assert(
+        (string) $scalar(
+            $connection,
+            'SELECT CONCAT(@estab_dv_actor_assignment_id IS NULL, ?, '
+                . '@estab_dv_target_assignment_id IS NULL)',
+            's',
+            '|'
+        ) === '1|1',
+        'assignment context remained set after an exception'
+    );
+    $connection->query(
+        'SET @estab_dv_actor_assignment_id = 41,'
+        . ' @estab_dv_target_assignment_id = 43'
+    );
+    $expect(
+        LogicException::class,
+        static fn (): mixed => estab_dv_with_sql_authority_context(
+            $connection,
+            47,
+            53,
+            static fn (): bool => true
+        ),
+        'stale assignment context was accepted or nested'
+    );
+    $assert(
+        (string) $scalar(
+            $connection,
+            'SELECT CONCAT(@estab_dv_actor_assignment_id IS NULL, ?, '
+                . '@estab_dv_target_assignment_id IS NULL)',
+            's',
+            '|'
+        ) === '1|1',
+        'stale assignment context was not discarded fail-closed'
+    );
+    $assert(
+        estab_logbook_lifecycle_with_system_write_context(
+            $connection,
+            59,
+            'ETB',
+            static fn (): string => (string) $scalar(
+                $connection,
+                'SELECT CONCAT('
+                    . '@estab_logbook_system_write_incident_id, ?, '
+                    . '@estab_logbook_system_write_book)',
+                's',
+                '|'
+            )
+        ) === '59|ETB'
+            && (string) $scalar(
+                $connection,
+                'SELECT CONCAT('
+                    . '@estab_logbook_system_write_incident_id IS NULL, ?, '
+                    . '@estab_logbook_system_write_book IS NULL)',
+                's',
+                '|'
+            ) === '1|1',
+        'system logbook context was not exact or remained after success'
+    );
+    $expect(
+        RuntimeException::class,
+        static fn (): mixed =>
+            estab_logbook_lifecycle_with_system_write_context(
+                $connection,
+                61,
+                'TTB',
+                static function (): never {
+                    throw new RuntimeException('system-context-probe');
+                }
+            ),
+        'system logbook context did not propagate its protected exception'
+    );
+    $assert(
+        (string) $scalar(
+            $connection,
+            'SELECT CONCAT('
+                . '@estab_logbook_system_write_incident_id IS NULL, ?, '
+                . '@estab_logbook_system_write_book IS NULL)',
+            's',
+            '|'
+        ) === '1|1',
+        'system logbook context remained set after an exception'
+    );
+    $connection->query(
+        'SET @estab_logbook_system_write_incident_id = 67,'
+        . " @estab_logbook_system_write_book = 'ETB'"
+    );
+    $expect(
+        LogicException::class,
+        static fn (): mixed =>
+            estab_logbook_lifecycle_with_system_write_context(
+                $connection,
+                71,
+                'TTB',
+                static fn (): bool => true
+            ),
+        'stale system logbook context was accepted or nested'
+    );
+    $assert(
+        (string) $scalar(
+            $connection,
+            'SELECT CONCAT('
+                . '@estab_logbook_system_write_incident_id IS NULL, ?, '
+                . '@estab_logbook_system_write_book IS NULL)',
+            's',
+            '|'
+        ) === '1|1',
+        'stale system logbook context was not discarded fail-closed'
+    );
+
     $status = estab_incident_status($connection);
     $assert(
         $status['active_einsatz_id'] === null,
@@ -749,18 +926,23 @@ try {
         $insertUser->close();
     }
 
-    $assert(
-        estab_dv_require_operational_account(
+    $expect(
+        EstabDvPermissionException::class,
+        static fn (): array => estab_dv_require_operational_account(
             $connection,
             $incidentId,
             $preShiftS2Identity
-        )['funktion'] === 'S2'
-            && estab_dv_require_operational_account(
-                $connection,
-                $incidentId,
-                $preShiftAwIdentity
-            )['funktion'] === 'A/W',
-        'fixed accounts required an active legacy duty shift'
+        ),
+        'STRICT admitted S2 before the first active duty shift'
+    );
+    $expect(
+        EstabDvPermissionException::class,
+        static fn (): array => estab_dv_require_operational_account(
+            $connection,
+            $incidentId,
+            $preShiftAwIdentity
+        ),
+        'STRICT admitted A/W before the first active duty shift'
     );
 
     $shift = estab_dv_create_shift(
@@ -896,9 +1078,25 @@ try {
         'accepted initial shift still reports missing mandatory functions'
     );
 
-    // Force the final audit write to fail after historical shift activation.
-    // The incident activation already opened both books independently of any
-    // shift, so the surrounding transaction must leave their evidence intact.
+    $strictHeaderFixture = [
+        'organisation' => 'THW',
+        'einsatzleitung' => 'Leitung Integration',
+        'beschreibung' => 'Isolierter Nachweis der DV-Abläufe.',
+        'expected_organisation' => 'THW',
+        'expected_einsatzleitung' => 'Leitung Integration',
+        'expected_beschreibung' => 'Isolierter Nachweis der DV-Abläufe.',
+    ];
+    $assert(
+        estab_incident_update_logbook_header(
+            $connection,
+            $incidentId,
+            $strictHeaderFixture,
+            $actor
+        )['organisation'] === 'THW',
+        'a merely planned STRICT shift locked the logbook header'
+    );
+    // Force the final audit write to fail after the STRICT shift and book-open
+    // mutations. The surrounding transaction must roll back both atomically.
     $openingRollbackEvidence = $logbookEvidenceSnapshot(
         $connection,
         $incidentId
@@ -945,6 +1143,282 @@ try {
         $incidentId,
         $shiftId,
         $actor
+    );
+    $strictSystemEntryCount = (string) $scalar(
+        $connection,
+        'SELECT CONCAT('
+            . '(SELECT COUNT(*) FROM `nv_etb` WHERE `einsatz_id` = ?),'
+            . "'|',"
+            . '(SELECT COUNT(*) FROM `nv_tbb` WHERE `einsatz_id` = ?))',
+        'ii',
+        $incidentId,
+        $incidentId
+    );
+    foreach (
+        [
+            'ETB' => [
+                'sql' => 'INSERT INTO `nv_etb`'
+                    . ' (`einsatz_id`, `etb_time`, `etb_aktion`,'
+                    . ' `etb_bemerk`, `etb_benutzer`, `etb_kuerzel`,'
+                    . ' `etb_funktion`, `estab_event_time`,'
+                    . ' `estab_event_type`) VALUES (' . $incidentId
+                    . ", NOW(), 'System ohne Schicht', '',"
+                    . " 'eStab-System', 'system', '', NOW(6), 'ohne')",
+                'message' => 'STRICT ETB entry requires duty shift provenance',
+            ],
+            'TTB' => [
+                'sql' => 'INSERT INTO `nv_tbb`'
+                    . ' (`einsatz_id`, `tbb_time`, `tbb_aktion`,'
+                    . ' `tbb_bemerk`, `tbb_benutzer`, `tbb_kuerzel`,'
+                    . ' `tbb_funktion`, `estab_event_time`,'
+                    . ' `estab_entry_type`, `estab_operations`) VALUES ('
+                    . $incidentId
+                    . ", NOW(), 'System ohne Schicht', '',"
+                    . " 'eStab-System', 'system', '', NOW(6),"
+                    . " 'betriebsereignis', 'Fehlender Schichtnachweis')",
+                'message' => 'STRICT TTB entry requires duty shift provenance',
+            ],
+        ] as $book => $probe
+    ) {
+        $strictSystemFailure = $expect(
+            mysqli_sql_exception::class,
+            static fn (): mixed =>
+                estab_logbook_lifecycle_with_system_write_context(
+                    $connection,
+                    $incidentId,
+                    $book,
+                    static fn (): bool => $connection->query($probe['sql'])
+                ),
+            'STRICT accepted a system ' . $book . ' entry without duty shift'
+        );
+        $assert(
+            str_contains(
+                $strictSystemFailure->getMessage(),
+                $probe['message']
+            ),
+            'STRICT system ' . $book
+                . ' no-shift rejection was not explicit'
+        );
+    }
+    $assert(
+        (string) $scalar(
+            $connection,
+            'SELECT CONCAT('
+                . '(SELECT COUNT(*) FROM `nv_etb` WHERE `einsatz_id` = ?),'
+                . "'|',"
+                . '(SELECT COUNT(*) FROM `nv_tbb` WHERE `einsatz_id` = ?))',
+            'ii',
+            $incidentId,
+            $incidentId
+        ) === $strictSystemEntryCount,
+        'rejected STRICT system no-shift probes changed ETB/TBB evidence'
+    );
+
+    // Before efbc4b9, a first STRICT duty shift could never be activated over
+    // pre-existing logbook evidence. Reproduce that boundary with a separate
+    // strict incident and prove that the failed activation is atomic.
+    $legacyStatus = estab_incident_status($connection);
+    $legacyCreated = estab_incident_create(
+        $connection,
+        [
+            'kennung' => 'DV-LEGACY-' . strtoupper($suffix),
+            'name' => 'STRICT Altbestand vor Erstschicht',
+            'estab_permission_mode' => ESTAB_PERMISSION_MODE_STRICT,
+            'beginn' => date('Y-m-d\TH:i', time() - 1800),
+            'ort' => 'Integrationsprüfung',
+            'organisation' => 'THW',
+            'fuehrungsstellenname' => 'Führungsstelle Altbestand',
+            'einsatzleitung' => 'Leitung Integration',
+            'beschreibung' => 'Atomare Erstschichtprüfung mit Altbestand.',
+        ],
+        $actor,
+        false
+    );
+    $legacyIncidentId = (int) $legacyCreated['einsatz_id'];
+    estab_incident_activate(
+        $connection,
+        $legacyIncidentId,
+        (int) $legacyStatus['revision'],
+        $actor
+    );
+    $legacyShift = estab_dv_create_shift(
+        $connection,
+        $legacyIncidentId,
+        'Erstschicht über Altbestand',
+        null,
+        $actor
+    );
+    $legacyShiftId = (int) $legacyShift['dienstschicht_id'];
+    foreach ($hatDefinitions as $accountKey => $function) {
+        $legacyAssignment = estab_dv_assign_hat(
+            $connection,
+            $legacyIncidentId,
+            $legacyShiftId,
+            $codes[$accountKey],
+            $function,
+            $actor
+        );
+        estab_dv_accept_hat(
+            $connection,
+            $legacyIncidentId,
+            (int) $legacyAssignment['dienstbesetzung_id'],
+            $codes[$accountKey]
+        );
+    }
+    $legacyEventTime = date('Y-m-d H:i:s');
+    estab_logbook_lifecycle_insert_etb(
+        $connection,
+        $legacyIncidentId,
+        $legacyEventTime,
+        'Übernommener ETB-Altbestand',
+        'Vor der ersten formalen Dienstschicht vorhanden.',
+        'ohne',
+        $legacyShiftId
+    );
+    estab_logbook_lifecycle_insert_ttb_record(
+        $connection,
+        $legacyIncidentId,
+        $legacyEventTime,
+        'betriebsereignis',
+        ['operations' => 'Übernommener TTB-Altbestand'],
+        'Vor der ersten formalen Dienstschicht vorhanden.',
+        null,
+        null,
+        $legacyShiftId
+    );
+    $legacyActivationEvidence = $logbookEvidenceSnapshot(
+        $connection,
+        $legacyIncidentId
+    );
+    $legacyActivationFailure = $expect(
+        RuntimeException::class,
+        static fn (): null => (
+            estab_dv_activate_initial_shift(
+                $connection,
+                $legacyIncidentId,
+                $legacyShiftId,
+                $actor
+            ) ?? null
+        ),
+        'STRICT activated a first duty shift over existing ETB/TBB evidence'
+    );
+    $assert(
+        str_contains(
+            $legacyActivationFailure->getMessage(),
+            'weil bereits Einträge vorhanden sind'
+        )
+            && $logbookEvidenceSnapshot($connection, $legacyIncidentId)
+                === $legacyActivationEvidence
+            && (string) $scalar(
+                $connection,
+                "SELECT CONCAT(`status`, '|',"
+                    . " COALESCE(CAST(`aktiviert_am` AS CHAR), ''))"
+                    . ' FROM `nv_dienstschichten`'
+                    . ' WHERE `dienstschicht_id` = ?',
+                'i',
+                $legacyShiftId
+            ) === 'GEPLANT|',
+        'rejected STRICT first-shift activation changed legacy evidence or '
+            . 'retained a partial activation'
+    );
+    $returnStatus = estab_incident_status($connection);
+    $returnedIncident = estab_incident_activate(
+        $connection,
+        $incidentId,
+        (int) $returnStatus['revision'],
+        $actor
+    );
+    $assert(
+        ($returnedIncident['active_einsatz_id'] ?? null) === $incidentId
+            && ($returnedIncident['estab_permission_mode'] ?? null)
+                === ESTAB_PERMISSION_MODE_STRICT,
+        'STRICT activation rollback fixture did not restore the main incident'
+    );
+    $listedIncident = array_values(array_filter(
+        estab_incident_list($connection),
+        static fn (array $incident): bool =>
+            (int) $incident['einsatz_id'] === $incidentId
+    ));
+    $expect(
+        EstabIncidentConflictException::class,
+        static fn (): array => estab_incident_update_logbook_header(
+            $connection,
+            $incidentId,
+            $strictHeaderFixture,
+            $actor
+        ),
+        'an activated STRICT duty shift did not lock the logbook header'
+    );
+    $assert(
+        count($listedIncident) === 1
+            && ($listedIncident[0]['logbuchkopf_gesperrt'] ?? false) === true,
+        'the incident list did not expose the STRICT duty-shift header lock'
+    );
+    $strictAttachmentIdentity = $preShiftS2Identity + [
+        'estab_permission_mode' => ESTAB_PERMISSION_MODE_STRICT,
+        'duty_assignment_id' => $assignments['s2'],
+    ];
+    estab_permission_context_set_from_incident(
+        estab_incident_status($connection)
+    );
+    $strictAttachmentContext = estab_attachment_origin_context_create(
+        $strictAttachmentIdentity,
+        $incidentId,
+        ['task' => 'Stab_schreiben', '00_lfd' => '']
+    );
+    $strictAttachmentDraft = estab_attachment_origin_draft_from_request(
+        ['task' => 'Stab_schreiben', '12_betreff' => 'Übergabefester Entwurf'],
+        $strictAttachmentIdentity,
+        $strictAttachmentContext
+    );
+    $strictAttachmentSession = [];
+    estab_attachment_origin_flow_store(
+        $strictAttachmentSession,
+        $strictAttachmentContext,
+        $strictAttachmentDraft
+    );
+    $assert(
+        ($strictAttachmentContext['duty_assignment_id'] ?? null)
+            === $assignments['s2']
+            && ($strictAttachmentContext['permission_mode'] ?? null)
+                === ESTAB_PERMISSION_MODE_STRICT
+            && estab_attachment_origin_draft_find(
+                $strictAttachmentSession,
+                $strictAttachmentContext
+            ) === $strictAttachmentDraft,
+        'STRICT attachment draft lost its exact assignment/session binding'
+    );
+    $assert(
+        estab_auth_duty_assignment_matches_session(
+            $connection,
+            $assignments['s2'],
+            $codes['s2'],
+            'S2',
+            'Stab'
+        )
+            && !estab_auth_duty_assignment_matches_session(
+                $connection,
+                $assignments['s2'],
+                $codes['aw'],
+                'S2',
+                'Stab'
+            )
+            && !estab_auth_duty_assignment_matches_session(
+                $connection,
+                $assignments['s2'],
+                $codes['s2'],
+                'S3',
+                'Stab'
+            )
+            && !estab_auth_duty_assignment_matches_session(
+                $connection,
+                $unacceptedOutgoingAssignmentId,
+                $codes['ldf_duplicate'],
+                'A/W',
+                'Fernmelder'
+            ),
+        'STRICT session validation accepted a foreign, wrong-function or '
+            . 'unaccepted duty assignment'
     );
     $assert(
         (int) $scalar(
@@ -1179,6 +1653,7 @@ try {
         'kuerzel' => $codes['s3'],
         'funktion' => 'S3',
         'rolle' => 'Stab',
+        'duty_assignment_id' => $assignments['s3'],
     ];
     $assert(
         estab_dv_require_operational_account(
@@ -1440,6 +1915,7 @@ try {
         'kuerzel' => $codes['etb'],
         'funktion' => 'ETB',
         'rolle' => 'Stab',
+        'duty_assignment_id' => $assignments['etb'],
     ];
     $assert(
         estab_dv_require_operational_account(
@@ -1485,54 +1961,64 @@ try {
         'kuerzel' => $codes['aw'],
         'funktion' => 'A/W',
         'rolle' => 'Fernmelder',
+        'duty_assignment_id' => $assignments['aw'],
     ];
     $messengerIdentity = [
         'benutzer' => 'Melder',
         'kuerzel' => $codes['messenger'],
         'funktion' => 'A/W',
         'rolle' => 'Fernmelder',
+        'duty_assignment_id' => $assignments['messenger'],
     ];
     $s2Identity = [
         'benutzer' => 'Lage/Dokumentation',
         'kuerzel' => $codes['s2'],
         'funktion' => 'S2',
         'rolle' => 'Stab',
+        'duty_assignment_id' => $assignments['s2'],
     ];
     $siIdentity = [
         'benutzer' => 'Sichter',
         'kuerzel' => $codes['si'],
         'funktion' => 'Si',
         'rolle' => 'Stab',
+        'duty_assignment_id' => $assignments['si'],
     ];
     $s6Identity = [
         'benutzer' => 'Fernmeldeplanung',
         'kuerzel' => $codes['s6'],
         'funktion' => 'S6',
         'rolle' => 'Stab',
+        'duty_assignment_id' => $assignments['s6'],
     ];
     $ldfIdentity = [
         'benutzer' => 'Leiter FmZt',
         'kuerzel' => $codes['ldf'],
         'funktion' => 'LdF',
         'rolle' => 'Fernmelder',
+        'duty_assignment_id' => $assignments['ldf'],
     ];
     $assert(
         estab_dv_require_operational_account(
             $connection,
             $incidentId,
             $awIdentity
-        )['funktion'] === 'A/W'
-            && estab_dv_require_operational_account(
-                $connection,
-                $incidentId,
-                [
-                    'benutzer' => 'Zweiter Sichter',
-                    'kuerzel' => $codes['si_duplicate'],
-                    'funktion' => 'Si',
-                    'rolle' => 'Stab',
-                ]
-            )['funktion'] === 'Si',
-        'a fixed account without historical staffing was denied'
+        )['funktion'] === 'A/W',
+        'accepted and selected A/W duty assignment was denied in STRICT'
+    );
+    $expect(
+        EstabDvPermissionException::class,
+        static fn (): array => estab_dv_require_operational_account(
+            $connection,
+            $incidentId,
+            [
+                'benutzer' => 'Zweiter Sichter',
+                'kuerzel' => $codes['si_duplicate'],
+                'funktion' => 'Si',
+                'rolle' => 'Stab',
+            ]
+        ),
+        'STRICT admitted a fixed account without accepted selected staffing'
     );
     $expect(
         EstabDvPermissionException::class,
@@ -1583,14 +2069,14 @@ try {
         'fixed ETB account could not write through EINSATZTAGEBUCH capability'
     );
     $assert(
-        estab_logbook_is_designated_writer(
+        !estab_logbook_is_designated_writer(
             $connection,
             $incidentId,
             $s2Identity,
             'etb'
         ),
-        'fixed S2 account lost its ETB writing permission because an ETB '
-            . 'account exists'
+        'STRICT no longer gives S2 the ETB writer role while the selected '
+            . 'ETB assignment has precedence'
     );
 
     $expect(
@@ -1804,10 +2290,10 @@ try {
         throw $exception;
     }
 
-    // Migration 115 must relax only the incident's fixed write-function
-    // predicates. Exercise the real application APIs and their database
-    // triggers for ETB, TTB and messenger assignment under one serialized
-    // STRICT -> LOOSE -> STRICT roundtrip.
+    // LOOSE keeps every Fachzuständigkeit bound to the account's primary
+    // function or an explicit personal additional function. Permission mode is
+    // immutable once operational records exist, so STRICT and LOOSE use
+    // independent incident identities and are activated in turn.
     $permissionModeStatus = estab_incident_status($connection);
     $assert(
         (int) ($permissionModeStatus['active_einsatz_id'] ?? 0) === $incidentId
@@ -1834,7 +2320,7 @@ try {
         'i',
         $incidentId
     );
-    $permissionModeAuditBefore = (int) $scalar(
+    $strictPermissionModeAuditBefore = (int) $scalar(
         $connection,
         'SELECT COUNT(*) FROM `nv_einsatz_ereignisse`'
             . ' WHERE `einsatz_id` = ?'
@@ -1913,19 +2399,391 @@ try {
         'STRICT cross-role probes left partial ETB, TTB or messenger data'
     );
 
-    $loosePermissionIncident = estab_incident_update_permission_mode(
+    $permissionModeStatus = estab_incident_status($connection);
+    $loosePermissionCreated = estab_incident_create(
         $connection,
-        $incidentId,
-        'LOOSE',
-        'STRICT',
-        (int) $permissionModeStatus['revision'],
+        [
+            'kennung' => 'DV-LOOSE-' . strtoupper($suffix),
+            'name' => 'DV-Berechtigungsmatrix LOOSE',
+            'beginn' => date('Y-m-d\TH:i', time() - 1800),
+            'ort' => 'Integrationsprüfung',
+            'organisation' => 'THW',
+            'fuehrungsstellenname' => 'Führungsstelle DV-Operationen',
+            'einsatzleitung' => 'Leitung Integration',
+            'beschreibung' =>
+                'Isolierter LOOSE-Nachweis expliziter Zusatzfunktionen.',
+            'estab_permission_mode' => ESTAB_PERMISSION_MODE_LOOSE,
+        ],
         'dv-permission-mode-matrix',
+        true,
+        (int) $permissionModeStatus['revision'],
         true
     );
+    $loosePermissionIncidentId =
+        (int) $loosePermissionCreated['einsatz_id'];
+    $loosePermissionIncident = estab_incident_status($connection);
     estab_permission_context_set_from_incident($loosePermissionIncident);
+    $loosePermissionPlan = estab_dv_create_telecom_plan(
+        $connection,
+        $loosePermissionIncidentId,
+        $s6Identity,
+        [
+            'herkunft' => 'S6 LOOSE-Matrix',
+            'gueltig_ab' => date('Y-m-d H:i:s', time() - 60),
+            'gueltig_bis' => date('Y-m-d H:i:s', time() + 3600),
+            'betriebsleitung' => 'LdF ' . $codes['ldf'],
+            'bemerkungen' => 'Isolierter LOOSE-Fernmeldeplan',
+        ]
+    );
+    $loosePermissionPlanId =
+        (int) $loosePermissionPlan['fernmeldeplan_id'];
+    $loosePermissionRouteId = estab_dv_add_telecom_entry(
+        $connection,
+        $loosePermissionIncidentId,
+        $loosePermissionPlanId,
+        $s6Identity,
+        [
+            'betriebsstelle' => 'Gegenstelle LOOSE',
+            'rufname' => 'Integration LOOSE 01',
+            'medium' => 'Me',
+            'kanal' => 'persönlich',
+            'bandlage' => 'entfällt',
+            'verkehrsform' => 'Melderbeförderung',
+            'besondere_vermerke' => 'Identität am Ziel feststellen',
+            'bemerkungen' => 'LOOSE-Berechtigungsmatrix',
+        ]
+    );
+    estab_dv_activate_telecom_plan(
+        $connection,
+        $loosePermissionIncidentId,
+        $loosePermissionPlanId,
+        $s6Identity
+    );
+    $looseMessageInsert = $connection->prepare(
+        'INSERT INTO `nv_nachrichten`'
+            . ' (`einsatz_id`, `04_richtung`, `04_nummer`, `06_befweg`,'
+            . ' `06_befwegausw`, `estab_fernmeldeplan_eintrag_id`,'
+            . ' `10_anschrift`, `12_inhalt`, `14_zeichen`, `14_funktion`,'
+            . ' `x00_status`, `x01_abschluss`)'
+            . " VALUES (?, 'A', 1, ?, 'Me', ?, ?, ?, ?, 'LdF', 2, 'f')"
+    );
+    if (!$looseMessageInsert) {
+        throw new RuntimeException('Could not prepare LOOSE messenger fixture');
+    }
+    try {
+        $looseRouteLabel = 'S6/V1 · Integration LOOSE 01 · persönlich · Me';
+        $looseDestination = 'Gegenstelle LOOSE';
+        $looseContent = 'Nachricht für die LOOSE-Berechtigungsmatrix';
+        $looseMessageInsert->bind_param(
+            'iisiss',
+            $loosePermissionIncidentId,
+            $looseRouteLabel,
+            $loosePermissionRouteId,
+            $looseDestination,
+            $looseContent,
+            $codes['ldf']
+        );
+        $looseMessageInsert->execute();
+        $loosePermissionMessageId = (int) $connection->insert_id;
+    } finally {
+        $looseMessageInsert->close();
+    }
+    $looseConversationInsert = $connection->prepare(
+        'INSERT INTO `nv_nachrichten`'
+            . ' (`einsatz_id`, `04_richtung`, `04_nummer`, `11_gesprnotiz`,'
+            . ' `12_inhalt`, `14_zeichen`, `14_funktion`, `x00_status`,'
+            . ' `x01_abschluss`)'
+            . " VALUES (?, 'E', 2, 't', ?, ?, 'S3', 8, 't')"
+    );
+    if (!$looseConversationInsert) {
+        throw new RuntimeException('Could not prepare LOOSE direction fixture');
+    }
+    try {
+        $looseConversationContent = 'Unzulässige Melder-Richtung in LOOSE';
+        $looseConversationInsert->bind_param(
+            'iss',
+            $loosePermissionIncidentId,
+            $looseConversationContent,
+            $codes['s3']
+        );
+        $looseConversationInsert->execute();
+        $loosePermissionConversationMessageId =
+            (int) $connection->insert_id;
+    } finally {
+        $looseConversationInsert->close();
+    }
+    $connection->begin_transaction();
+    try {
+        foreach ([
+            [$loosePermissionMessageId, 'A', 2],
+            [$loosePermissionConversationMessageId, 'E', 8],
+        ] as [$fixtureMessageId, $fixtureDirection, $fixtureStatus]) {
+            estab_message_event_append(
+                $connection,
+                $loosePermissionIncidentId,
+                $fixtureMessageId,
+                'dv_permission_fixture_created',
+                [
+                    'benutzer' => 'DV LOOSE Fixture',
+                    'kuerzel' => $codes['s6'],
+                    'funktion' => 'S6',
+                ],
+                null,
+                $fixtureStatus,
+                ['direction' => $fixtureDirection]
+            );
+        }
+        $connection->commit();
+    } catch (Throwable $exception) {
+        $connection->rollback();
+        throw $exception;
+    }
+    $permissionModeEtbBefore = (int) $scalar(
+        $connection,
+        'SELECT COUNT(*) FROM `nv_etb` WHERE `einsatz_id` = ?',
+        'i',
+        $loosePermissionIncidentId
+    );
+    $permissionModeTtbBefore = (int) $scalar(
+        $connection,
+        'SELECT COUNT(*) FROM `nv_tbb` WHERE `einsatz_id` = ?',
+        'i',
+        $loosePermissionIncidentId
+    );
+    $permissionModeJobsBefore = (int) $scalar(
+        $connection,
+        'SELECT COUNT(*) FROM `nv_melderauftraege` WHERE `einsatz_id` = ?',
+        'i',
+        $loosePermissionIncidentId
+    );
+    $loosePermissionModeAuditBefore = (int) $scalar(
+        $connection,
+        'SELECT COUNT(*) FROM `nv_einsatz_ereignisse`'
+            . ' WHERE `einsatz_id` = ?'
+            . " AND `aktion` = 'berechtigung_geaendert'",
+        'i',
+        $loosePermissionIncidentId
+    );
     $strictPermissionIncident = null;
     $looseModeJobId = 0;
     try {
+        $setLoosePrimaryFunction = $connection->prepare(
+            'UPDATE `nv_benutzer` SET `funktion` = ?, `rolle` = ?'
+                . ' WHERE BINARY `kuerzel` = BINARY ?'
+        );
+        if (!$setLoosePrimaryFunction) {
+            throw new RuntimeException(
+                'Could not prepare stale loose primary-function probe'
+            );
+        }
+        try {
+            $primaryCode = $s3Identity['kuerzel'];
+            $stalePrimaryFunction = 'ZZ';
+            $stalePrimaryRole = 'Stab';
+            $setLoosePrimaryFunction->bind_param(
+                'sss',
+                $stalePrimaryFunction,
+                $stalePrimaryRole,
+                $primaryCode
+            );
+            $setLoosePrimaryFunction->execute();
+            $stalePrimaryIdentity = $s3Identity;
+            $stalePrimaryIdentity['funktion'] = $stalePrimaryFunction;
+            $stalePrimaryIdentity['rolle'] = $stalePrimaryRole;
+            $expect(
+                EstabDvPermissionException::class,
+                static fn (): array => estab_dv_require_operational_account(
+                    $connection,
+                    $loosePermissionIncidentId,
+                    $stalePrimaryIdentity,
+                    false
+                ),
+                'LOOSE accepted a stale primary account function outside '
+                    . 'the authoritative catalogue'
+            );
+        } finally {
+            $restoredPrimaryFunction = 'S3';
+            $restoredPrimaryRole = 'Stab';
+            $setLoosePrimaryFunction->bind_param(
+                'sss',
+                $restoredPrimaryFunction,
+                $restoredPrimaryRole,
+                $primaryCode
+            );
+            $setLoosePrimaryFunction->execute();
+            $setLoosePrimaryFunction->close();
+        }
+
+        $expect(
+            EstabDvPermissionException::class,
+            static fn (): int => estab_logbook_insert_entry(
+                $databaseConfig,
+                'nv_etb',
+                'etb',
+                $permissionEtbEntry('loose-without-grant'),
+                $s3Identity
+            ),
+            'LOOSE admitted S3 into ETB without an explicit ETB grant'
+        );
+        $expect(
+            EstabDvPermissionException::class,
+            static fn (): int => estab_logbook_insert_entry(
+                $databaseConfig,
+                'nv_tbb',
+                'tbb',
+                $permissionTtbEntry('loose-without-grant'),
+                $s3Identity
+            ),
+            'LOOSE admitted S3 into TTB without an explicit A/W grant'
+        );
+        $expect(
+            EstabDvPermissionException::class,
+            static fn (): int => estab_dv_assign_messenger(
+                $connection,
+                $loosePermissionIncidentId,
+                $loosePermissionMessageId,
+                $codes['messenger'],
+                'Gegenstelle Integration',
+                $s3Identity
+            ),
+            'LOOSE admitted S3 as messenger supervisor without an LdF grant'
+        );
+        $expect(
+            EstabDvPermissionException::class,
+            static fn (): array => estab_dv_start_telecom_plan_revision(
+                $connection,
+                $loosePermissionIncidentId,
+                $loosePermissionPlanId,
+                $s3Identity
+            ),
+            'LOOSE admitted S3 into S6 planning without an explicit S6 grant'
+        );
+        $assert(
+            (int) $scalar(
+                $connection,
+                'SELECT COUNT(*) FROM `nv_etb` WHERE `einsatz_id` = ?',
+                'i',
+                $loosePermissionIncidentId
+            ) === $permissionModeEtbBefore
+                && (int) $scalar(
+                    $connection,
+                    'SELECT COUNT(*) FROM `nv_tbb` WHERE `einsatz_id` = ?',
+                    'i',
+                    $loosePermissionIncidentId
+                ) === $permissionModeTtbBefore
+                && (int) $scalar(
+                    $connection,
+                    'SELECT COUNT(*) FROM `nv_melderauftraege`'
+                        . ' WHERE `einsatz_id` = ?',
+                    'i',
+                    $loosePermissionIncidentId
+                ) === $permissionModeJobsBefore,
+            'LOOSE ungranted probes left partial operational records'
+        );
+
+        $grantAdditionalFunction = $connection->prepare(
+            'INSERT INTO `nv_benutzer_zusatzfunktionen`'
+                . ' (`benutzer_kuerzel`, `funktion`, `rolle`, `vergeben_von`)'
+                . ' VALUES (?, ?, ?, ?)'
+        );
+        if (!$grantAdditionalFunction) {
+            throw new RuntimeException(
+                'Could not prepare loose additional-function grants'
+            );
+        }
+        try {
+            $grantCode = $s3Identity['kuerzel'];
+            $grantActor = 'dv-permission-mode-matrix';
+            foreach ([
+                ['ETB', 'Stab'],
+                ['A/W', 'Fernmelder'],
+                ['LdF', 'Fernmelder'],
+                ['S6', 'Stab'],
+            ] as [$function, $role]) {
+                $grantAdditionalFunction->bind_param(
+                    'ssss',
+                    $grantCode,
+                    $function,
+                    $role,
+                    $grantActor
+                );
+                $grantAdditionalFunction->execute();
+            }
+        } finally {
+            $grantAdditionalFunction->close();
+        }
+
+        $looseS3Authority = estab_dv_require_operational_account(
+            $connection,
+            $loosePermissionIncidentId,
+            $s3Identity,
+            false
+        );
+        $looseS6Authority = estab_workflow_identity_as_tuple(
+            $looseS3Authority,
+            ['funktion' => 'S6', 'rolle' => 'Stab']
+        );
+        $looseAttachmentContext = estab_attachment_origin_context_create(
+            $looseS6Authority,
+            $loosePermissionIncidentId,
+            ['task' => 'Stab_schreiben', '00_lfd' => '']
+        );
+        $assert(
+            ($looseAttachmentContext['permission_mode'] ?? null) === 'LOOSE'
+                && array_key_exists(
+                    'duty_assignment_id',
+                    $looseAttachmentContext
+                )
+                && $looseAttachmentContext['duty_assignment_id'] === null
+                && ($looseAttachmentContext['account_function'] ?? null)
+                    === 'S3'
+                && ($looseAttachmentContext['account_role'] ?? null)
+                    === 'Stab'
+                && ($looseAttachmentContext['funktion'] ?? null) === 'S6'
+                && ($looseAttachmentContext['rolle'] ?? null) === 'Stab'
+                && ($looseAttachmentContext['function_source'] ?? null)
+                    === 'ADDITIONAL'
+                && estab_attachment_origin_context_validate(
+                    $looseAttachmentContext,
+                    $looseS3Authority,
+                    $loosePermissionIncidentId
+                ) === $looseAttachmentContext,
+            'LOOSE attachment origin lost its exact canonical additional '
+                . 'function and fixed-account provenance'
+        );
+
+        $looseMessengerCandidates = estab_dv_messenger_candidates(
+            $connection,
+            $loosePermissionIncidentId
+        );
+        $looseCandidateCodes = array_column(
+            $looseMessengerCandidates,
+            'kuerzel'
+        );
+        sort($looseCandidateCodes);
+        $expectedLooseCandidateCodes = [
+            $codes['aw'],
+            $codes['messenger'],
+            $codes['aw_extension'],
+            $s3Identity['kuerzel'],
+        ];
+        sort($expectedLooseCandidateCodes);
+        $assert(
+            $looseCandidateCodes === $expectedLooseCandidateCodes
+                && !in_array(
+                    $codes['ldf_duplicate'],
+                    $looseCandidateCodes,
+                    true
+                )
+                && array_filter(
+                    $looseMessengerCandidates,
+                    static fn (array $candidate): bool =>
+                        $candidate['dienstbesetzung_id'] !== null
+                ) === [],
+            'LOOSE messenger candidates did not use only fixed and explicit '
+                . 'A/W functions independently of formal duty assignments'
+        );
+
         $looseEtbId = estab_logbook_insert_entry(
             $databaseConfig,
             'nv_etb',
@@ -1942,27 +2800,27 @@ try {
         );
         $looseModeJobId = estab_dv_assign_messenger(
             $connection,
-            $incidentId,
-            $messageId,
-            $codes['messenger'],
+            $loosePermissionIncidentId,
+            $loosePermissionMessageId,
+            $s3Identity['kuerzel'],
             'Gegenstelle Integration',
             $s3Identity
         );
         $loosePlanRevision = estab_dv_start_telecom_plan_revision(
             $connection,
-            $incidentId,
-            $planId,
+            $loosePermissionIncidentId,
+            $loosePermissionPlanId,
             $s3Identity
         );
         $loosePlanId = (int) $loosePlanRevision['fernmeldeplan_id'];
         $loosePlan = $telecomPlanById(
             $connection,
-            $incidentId,
+            $loosePermissionIncidentId,
             $loosePlanId
         );
         estab_dv_discard_telecom_plan_draft(
             $connection,
-            $incidentId,
+            $loosePermissionIncidentId,
             $loosePlanId,
             $s3Identity,
             (string) $loosePlan['revision']
@@ -1985,13 +2843,12 @@ try {
                 '|',
                 '|',
                 '|',
-                $incidentId,
+                $loosePermissionIncidentId,
                 $loosePlanId,
                 $s3Identity['kuerzel'],
-                $s3Identity['funktion']
-            ) === '2|1|' . $s3Identity['funktion'] . '|'
-                . $s3Identity['funktion'],
-            'LOOSE telecommunications audit replaced the real S3 function with S6'
+                'S6'
+            ) === '2|1|S6|S6',
+            'LOOSE telecommunications audit did not retain the authorizing S6 grant'
         );
         $assert(
             $looseEtbId > 0
@@ -2008,7 +2865,7 @@ try {
                     $looseEtbId
                 ) === $s3Identity['benutzer'] . '|'
                     . $s3Identity['kuerzel'] . '|'
-                    . $s3Identity['funktion']
+                    . 'ETB'
                 && (string) $scalar(
                     $connection,
                     'SELECT CONCAT(`tbb_benutzer`, ?, `tbb_kuerzel`, ?, '
@@ -2020,7 +2877,7 @@ try {
                     $looseTtbId
                 ) === $s3Identity['benutzer'] . '|'
                     . $s3Identity['kuerzel'] . '|'
-                    . $s3Identity['funktion']
+                    . 'A/W'
                 && (string) $scalar(
                     $connection,
                     'SELECT CONCAT(job.`beauftragt_von`, ?, supervisor.`benutzer`,'
@@ -2042,19 +2899,80 @@ try {
                     . $s3Identity['benutzer'] . '|'
                     . $s3Identity['funktion'] . '|'
                     . $s3Identity['rolle'] . '|'
-                    . $codes['messenger'] . '|BEAUFTRAGT',
-            'LOOSE did not persist exact S3 identity in ETB, TTB and messenger data'
+                    . $s3Identity['kuerzel'] . '|BEAUFTRAGT',
+            'LOOSE did not persist the account and exact ETB/A-W functions'
+        );
+        $assert(
+            (string) $scalar(
+                $connection,
+                'SELECT CONCAT(`akteur_kuerzel`, ?, `akteur_funktion`, ?, '
+                    . "JSON_UNQUOTE(JSON_EXTRACT(`details`, '$.actor_role')))"
+                    . ' FROM `nv_betriebsereignisse`'
+                    . ' WHERE `einsatz_id` = ?'
+                    . " AND `objekttyp` = 'MELDERAUFTRAG'"
+                    . ' AND `objekt_id` = ?'
+                    . " AND `aktion` = 'messenger_assigned'",
+                'ssii',
+                '|',
+                '|',
+                $loosePermissionIncidentId,
+                $looseModeJobId
+            ) === $s3Identity['kuerzel'] . '|LdF|Fernmelder',
+            'LOOSE messenger assignment lost the authorizing LdF function and role'
+        );
+        $assert(
+            (string) $scalar(
+                $connection,
+                'SELECT CONCAT('
+                    . "JSON_UNQUOTE(JSON_EXTRACT(`details`, '$.permission_mode')) ,"
+                    . ' ?, '
+                    . "JSON_UNQUOTE(JSON_EXTRACT(`details`, '$.messenger_function')) ,"
+                    . ' ?, '
+                    . "JSON_UNQUOTE(JSON_EXTRACT(`details`, '$.messenger_role')) ,"
+                    . ' ?, '
+                    . "JSON_TYPE(JSON_EXTRACT(`details`, '$.messenger_duty_assignment_id')))"
+                    . ' FROM `nv_betriebsereignisse`'
+                    . ' WHERE `einsatz_id` = ?'
+                    . " AND `objekttyp` = 'MELDERAUFTRAG'"
+                    . ' AND `objekt_id` = ?'
+                    . " AND `aktion` = 'messenger_assigned'",
+                'sssii',
+                '|',
+                '|',
+                '|',
+                $loosePermissionIncidentId,
+                $looseModeJobId
+            ) === 'LOOSE|A/W|Fernmelder|NULL',
+            'LOOSE messenger assignment lost target function provenance'
         );
         $assert(
             estab_dv_transition_messenger(
                 $connection,
-                $incidentId,
+                $loosePermissionIncidentId,
                 $looseModeJobId,
                 'cancel',
                 $s3Identity,
                 ['abbruchgrund' => 'LOOSE-Matrix abgeschlossen']
             ) === 'ABGEBROCHEN',
-            'LOOSE cross-role supervisor could not close its test assignment'
+            'LOOSE supervisor with explicit LdF grant could not close its test assignment'
+        );
+        $assert(
+            (string) $scalar(
+                $connection,
+                'SELECT CONCAT(`akteur_kuerzel`, ?, `akteur_funktion`, ?, '
+                    . "JSON_UNQUOTE(JSON_EXTRACT(`details`, '$.actor_role')))"
+                    . ' FROM `nv_betriebsereignisse`'
+                    . ' WHERE `einsatz_id` = ?'
+                    . " AND `objekttyp` = 'MELDERAUFTRAG'"
+                    . ' AND `objekt_id` = ?'
+                    . " AND `aktion` = 'messenger_cancel'",
+                'ssii',
+                '|',
+                '|',
+                $loosePermissionIncidentId,
+                $looseModeJobId
+            ) === $s3Identity['kuerzel'] . '|LdF|Fernmelder',
+            'LOOSE messenger transition lost the authorizing LdF function and role'
         );
 
         $expect(
@@ -2079,7 +2997,7 @@ try {
                 'tbb',
                 $permissionTtbEntry(
                     'manual-message-reference',
-                    ['message_id' => $messageId]
+                    ['message_id' => $loosePermissionMessageId]
                 ),
                 $s3Identity
             ),
@@ -2089,8 +3007,8 @@ try {
             EstabDvConflictException::class,
             static fn (): int => estab_dv_assign_messenger(
                 $connection,
-                $incidentId,
-                $conversationMessageId,
+                $loosePermissionIncidentId,
+                $loosePermissionConversationMessageId,
                 $codes['messenger'],
                 'Gegenstelle Integration',
                 $s3Identity
@@ -2101,8 +3019,8 @@ try {
             EstabDvConflictException::class,
             static fn (): int => estab_dv_assign_messenger(
                 $connection,
-                $incidentId + 1000000,
-                $messageId,
+                $loosePermissionIncidentId + 1000000,
+                $loosePermissionMessageId,
                 $codes['messenger'],
                 'Gegenstelle Integration',
                 $s3Identity
@@ -2111,10 +3029,252 @@ try {
         );
 
         mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
+        $readAuthorityConnection = estab_auth_connect($databaseConfig);
+        $authorityMutationConnection = estab_auth_connect($databaseConfig);
+        mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
+        $readAuthorityTransaction = false;
+        try {
+            $authorityMutationConnection->query(
+                'SET SESSION innodb_lock_wait_timeout = 1'
+            );
+
+            $readAuthorityConnection->begin_transaction();
+            $readAuthorityTransaction = true;
+            $grantReadScope = estab_read_require_operational_scope(
+                $readAuthorityConnection,
+                $looseS6Authority,
+                true
+            );
+            $assert(
+                (int) $scalar(
+                    $readAuthorityConnection,
+                    'SELECT COUNT(*) FROM `nv_benutzer_zusatzfunktionen`'
+                        . ' WHERE BINARY `benutzer_kuerzel` = BINARY ?'
+                        . " AND `funktion` = 'S6' AND `rolle` = 'Stab'",
+                    's',
+                    $s3Identity['kuerzel']
+                ) === 1,
+                'LOOSE protected read did not resolve the persisted S6 grant'
+            );
+            estab_read_require_capability(
+                $readAuthorityConnection,
+                $loosePermissionIncidentId,
+                $grantReadScope['identity'],
+                'FERNMELDEPLANUNG'
+            );
+            $grantProtectedPlan = $scalar(
+                $readAuthorityConnection,
+                'SELECT `fernmeldeplan_id` FROM `nv_fernmeldeplaene`'
+                    . ' WHERE `einsatz_id` = ? AND `fernmeldeplan_id` = ?',
+                'ii',
+                $loosePermissionIncidentId,
+                $loosePermissionPlanId
+            );
+            $expectLockWaitTimeout(
+                static function () use (
+                    $authorityMutationConnection,
+                    $s3Identity
+                ): void {
+                    $statement = $authorityMutationConnection->prepare(
+                        'DELETE FROM `nv_benutzer_zusatzfunktionen`'
+                            . ' WHERE BINARY `benutzer_kuerzel` = BINARY ?'
+                            . " AND `funktion` = 'S6' AND `rolle` = 'Stab'"
+                    );
+                    try {
+                        $statement->bind_param('s', $s3Identity['kuerzel']);
+                        $statement->execute();
+                        if ($statement->affected_rows !== 1) {
+                            throw new RuntimeException(
+                                'LOOSE grant revoke found no persisted S6 grant'
+                            );
+                        }
+                    } finally {
+                        $statement->close();
+                    }
+                },
+                'LOOSE grant revoke passed an in-flight protected read'
+            );
+            $assert(
+                (int) $grantProtectedPlan === $loosePermissionPlanId,
+                'LOOSE grant-protected object was not selected before release'
+            );
+            $readAuthorityConnection->commit();
+            $readAuthorityTransaction = false;
+
+            $deleteGrant = $authorityMutationConnection->prepare(
+                'DELETE FROM `nv_benutzer_zusatzfunktionen`'
+                    . ' WHERE BINARY `benutzer_kuerzel` = BINARY ?'
+                    . " AND `funktion` = 'S6' AND `rolle` = 'Stab'"
+            );
+            try {
+                $deleteGrant->bind_param('s', $s3Identity['kuerzel']);
+                $deleteGrant->execute();
+                $assert(
+                    $deleteGrant->affected_rows === 1,
+                    'LOOSE grant revoke did not complete after read release'
+                );
+            } finally {
+                $deleteGrant->close();
+            }
+            $expect(
+                EstabReadPermissionException::class,
+                static fn (): array => estab_read_require_operational_scope(
+                    $readAuthorityConnection,
+                    $looseS6Authority
+                ),
+                'LOOSE retained a selected additional function after revoke'
+            );
+            $restoreGrant = $authorityMutationConnection->prepare(
+                'INSERT INTO `nv_benutzer_zusatzfunktionen`'
+                    . ' (`benutzer_kuerzel`, `funktion`, `rolle`,'
+                    . ' `vergeben_von`) VALUES (?, \'S6\', \'Stab\', ?)'
+            );
+            try {
+                $grantRestoreActor = 'dv-read-authority-race';
+                $restoreGrant->bind_param(
+                    'ss',
+                    $s3Identity['kuerzel'],
+                    $grantRestoreActor
+                );
+                $restoreGrant->execute();
+            } finally {
+                $restoreGrant->close();
+            }
+
+            $insertAccessShift = $authorityMutationConnection->prepare(
+                'INSERT INTO `nv_zugangsschichten`'
+                    . ' (`einsatz_id`, `bezeichnung`, `zugang_aktiv`,'
+                    . ' `erstellt_von`, `geaendert_von`)'
+                    . ' VALUES (?, ?, 1, ?, ?)'
+            );
+            try {
+                $accessShiftLabel = 'DV Lesesperre ' . $suffix;
+                $accessShiftActor = 'dv-read-authority-race';
+                $insertAccessShift->bind_param(
+                    'isss',
+                    $loosePermissionIncidentId,
+                    $accessShiftLabel,
+                    $accessShiftActor,
+                    $accessShiftActor
+                );
+                $insertAccessShift->execute();
+                $readAccessShiftId = (int) (
+                    $authorityMutationConnection->insert_id
+                );
+            } finally {
+                $insertAccessShift->close();
+            }
+            $insertAccessMember = $authorityMutationConnection->prepare(
+                'INSERT INTO `nv_zugangsschicht_mitglieder`'
+                    . ' (`zugangsschicht_id`, `benutzer_kuerzel`,'
+                    . ' `zugeordnet_von`) VALUES (?, ?, ?)'
+            );
+            try {
+                $insertAccessMember->bind_param(
+                    'iss',
+                    $readAccessShiftId,
+                    $s3Identity['kuerzel'],
+                    $accessShiftActor
+                );
+                $insertAccessMember->execute();
+            } finally {
+                $insertAccessMember->close();
+            }
+
+            $readAuthorityConnection->begin_transaction();
+            $readAuthorityTransaction = true;
+            $accessReadScope = estab_read_require_operational_scope(
+                $readAuthorityConnection,
+                $s3Identity,
+                true
+            );
+            $accessProtectedMessage = $scalar(
+                $readAuthorityConnection,
+                'SELECT `00_lfd` FROM `nv_nachrichten`'
+                    . ' WHERE `einsatz_id` = ? AND `00_lfd` = ?',
+                'ii',
+                $loosePermissionIncidentId,
+                $loosePermissionConversationMessageId
+            );
+            $expectLockWaitTimeout(
+                static function () use (
+                    $authorityMutationConnection,
+                    $readAccessShiftId
+                ): void {
+                    $statement = $authorityMutationConnection->prepare(
+                        'UPDATE `nv_zugangsschichten` SET `zugang_aktiv` = 0'
+                            . ' WHERE `zugangsschicht_id` = ?'
+                    );
+                    try {
+                        $statement->bind_param('i', $readAccessShiftId);
+                        $statement->execute();
+                    } finally {
+                        $statement->close();
+                    }
+                },
+                'LOOSE access disable passed an in-flight protected read'
+            );
+            $assert(
+                (int) $accessProtectedMessage
+                    === $loosePermissionConversationMessageId
+                    && ($accessReadScope['identity']['kuerzel'] ?? null)
+                        === $s3Identity['kuerzel'],
+                'LOOSE access-protected object was not selected before release'
+            );
+            $readAuthorityConnection->commit();
+            $readAuthorityTransaction = false;
+
+            $disableAccess = $authorityMutationConnection->prepare(
+                'UPDATE `nv_zugangsschichten` SET `zugang_aktiv` = 0'
+                    . ' WHERE `zugangsschicht_id` = ?'
+            );
+            try {
+                $disableAccess->bind_param('i', $readAccessShiftId);
+                $disableAccess->execute();
+                $assert(
+                    $disableAccess->affected_rows === 1,
+                    'LOOSE access disable did not complete after read release'
+                );
+            } finally {
+                $disableAccess->close();
+            }
+            $expect(
+                EstabReadPermissionException::class,
+                static fn (): array => estab_read_require_operational_scope(
+                    $readAuthorityConnection,
+                    $s3Identity
+                ),
+                'LOOSE retained read authority after access disable'
+            );
+            $enableAccess = $authorityMutationConnection->prepare(
+                'UPDATE `nv_zugangsschichten` SET `zugang_aktiv` = 1'
+                    . ' WHERE `zugangsschicht_id` = ?'
+            );
+            try {
+                $enableAccess->bind_param('i', $readAccessShiftId);
+                $enableAccess->execute();
+            } finally {
+                $enableAccess->close();
+            }
+        } finally {
+            if ($readAuthorityTransaction) {
+                $readAuthorityConnection->rollback();
+            }
+            estab_auth_close($authorityMutationConnection);
+            estab_auth_close($readAuthorityConnection);
+        }
+
+        mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
+        $looseDirectEtbIdentity = $s3Identity;
+        $looseDirectEtbIdentity['funktion'] = 'ETB';
+        $looseDirectEtbIdentity['rolle'] = 'Stab';
+        $looseDirectTtbIdentity = $s3Identity;
+        $looseDirectTtbIdentity['funktion'] = 'A/W';
+        $looseDirectTtbIdentity['rolle'] = 'Fernmelder';
         $directEtbInsert = static function (
             int $targetIncidentId,
             ?string $reference
-        ) use ($connection, $s3Identity): void {
+        ) use ($connection, $looseDirectEtbIdentity): void {
             $statement = $connection->prepare(
                 'INSERT INTO `nv_etb` (`einsatz_id`, `etb_time`,'
                     . ' `etb_aktion`, `etb_bemerk`, `etb_benutzer`,'
@@ -2130,9 +3290,9 @@ try {
                     $targetIncidentId,
                     $event,
                     $comment,
-                    $s3Identity['benutzer'],
-                    $s3Identity['kuerzel'],
-                    $s3Identity['funktion'],
+                    $looseDirectEtbIdentity['benutzer'],
+                    $looseDirectEtbIdentity['kuerzel'],
+                    $looseDirectEtbIdentity['funktion'],
                     $reference
                 );
                 $statement->execute();
@@ -2143,7 +3303,7 @@ try {
         $directTtbInsert = static function (
             int $targetIncidentId,
             int $targetMessageId
-        ) use ($connection, $s3Identity): void {
+        ) use ($connection, $looseDirectTtbIdentity): void {
             $statement = $connection->prepare(
                 'INSERT INTO `nv_tbb` (`einsatz_id`, `tbb_time`,'
                     . ' `tbb_aktion`, `tbb_bemerk`, `tbb_benutzer`,'
@@ -2162,9 +3322,9 @@ try {
                     $targetIncidentId,
                     $event,
                     $comment,
-                    $s3Identity['benutzer'],
-                    $s3Identity['kuerzel'],
-                    $s3Identity['funktion'],
+                    $looseDirectTtbIdentity['benutzer'],
+                    $looseDirectTtbIdentity['kuerzel'],
+                    $looseDirectTtbIdentity['funktion'],
                     $targetMessageId,
                     $operations
                 );
@@ -2173,37 +3333,65 @@ try {
                 $statement->close();
             }
         };
-        $expect(
+        $invalidEtbReference = $expect(
             mysqli_sql_exception::class,
             static fn (): null => ($directEtbInsert(
-                $incidentId,
+                $loosePermissionIncidentId,
                 '999999999'
             ) ?? null),
             'LOOSE ETB trigger accepted a nonexistent local reference'
         );
-        $expect(
+        $assert(
+            str_contains(
+                $invalidEtbReference->getMessage(),
+                'ETB reference target is not an earlier incident entry'
+            ),
+            'LOOSE ETB reference probe failed before the intended boundary'
+        );
+        $wrongEtbIncident = $expect(
             mysqli_sql_exception::class,
             static fn (): null => ($directEtbInsert(
-                $incidentId + 1000000,
+                $loosePermissionIncidentId + 1000000,
                 null
             ) ?? null),
             'LOOSE ETB trigger accepted another incident'
         );
-        $expect(
+        $assert(
+            str_contains(
+                $wrongEtbIncident->getMessage(),
+                'Operational insert targets inactive incident'
+            ),
+            'LOOSE ETB incident probe failed before the intended boundary'
+        );
+        $manualTtbReference = $expect(
             mysqli_sql_exception::class,
             static fn (): null => ($directTtbInsert(
-                $incidentId,
-                $messageId
+                $loosePermissionIncidentId,
+                $loosePermissionMessageId
             ) ?? null),
             'LOOSE TTB trigger accepted a human-authored message reference'
         );
-        $expect(
+        $assert(
+            str_contains(
+                $manualTtbReference->getMessage(),
+                'TTB message link requires system-generated evidence'
+            ),
+            'LOOSE TTB message probe failed before the intended boundary'
+        );
+        $wrongTtbIncident = $expect(
             mysqli_sql_exception::class,
             static fn (): null => ($directTtbInsert(
-                $incidentId + 1000000,
-                $messageId
+                $loosePermissionIncidentId + 1000000,
+                $loosePermissionMessageId
             ) ?? null),
             'LOOSE TTB trigger accepted another incident'
+        );
+        $assert(
+            str_contains(
+                $wrongTtbIncident->getMessage(),
+                'Operational insert targets inactive incident'
+            ),
+            'LOOSE TTB incident probe failed before the intended boundary'
         );
 
         $setPermissionActorBlocked = static function (
@@ -2253,8 +3441,8 @@ try {
                 EstabDvPermissionException::class,
                 static fn (): int => estab_dv_assign_messenger(
                     $connection,
-                    $incidentId,
-                    $messageId,
+                    $loosePermissionIncidentId,
+                    $loosePermissionMessageId,
                     $codes['messenger'],
                     'Gegenstelle Integration',
                     $s3Identity
@@ -2269,34 +3457,32 @@ try {
                 $connection,
                 'SELECT COUNT(*) FROM `nv_etb` WHERE `einsatz_id` = ?',
                 'i',
-                $incidentId
+                $loosePermissionIncidentId
             ) === $permissionModeEtbBefore + 1
                 && (int) $scalar(
                     $connection,
                     'SELECT COUNT(*) FROM `nv_tbb` WHERE `einsatz_id` = ?',
                     'i',
-                    $incidentId
+                    $loosePermissionIncidentId
                 ) === $permissionModeTtbBefore + 1
                 && (int) $scalar(
                     $connection,
                     'SELECT COUNT(*) FROM `nv_melderauftraege`'
                         . ' WHERE `einsatz_id` = ?',
                     'i',
-                    $incidentId
+                    $loosePermissionIncidentId
                 ) === $permissionModeJobsBefore + 1,
             'LOOSE negative probes left partial ETB, TTB or messenger rows'
         );
     } finally {
         $modeBeforeStrictRestore = estab_incident_status($connection);
         if (
-            ($modeBeforeStrictRestore['estab_permission_mode'] ?? null)
-                === 'LOOSE'
+            (int) ($modeBeforeStrictRestore['active_einsatz_id'] ?? 0)
+                === $loosePermissionIncidentId
         ) {
-            $strictPermissionIncident = estab_incident_update_permission_mode(
+            $strictPermissionIncident = estab_incident_activate(
                 $connection,
                 $incidentId,
-                'STRICT',
-                'LOOSE',
                 (int) $modeBeforeStrictRestore['revision'],
                 'dv-permission-mode-matrix'
             );
@@ -2350,7 +3536,15 @@ try {
                     . " AND `aktion` = 'berechtigung_geaendert'",
                 'i',
                 $incidentId
-            ) === $permissionModeAuditBefore + 2
+            ) === $strictPermissionModeAuditBefore
+            && (int) $scalar(
+                $connection,
+                'SELECT COUNT(*) FROM `nv_einsatz_ereignisse`'
+                    . ' WHERE `einsatz_id` = ?'
+                    . " AND `aktion` = 'berechtigung_geaendert'",
+                'i',
+                $loosePermissionIncidentId
+            ) === $loosePermissionModeAuditBefore
             && (int) $scalar(
                 $connection,
                 'SELECT `estab_gesperrt` FROM `nv_benutzer`'
@@ -2365,14 +3559,112 @@ try {
                 'i',
                 $looseModeJobId
             ) === 'ABGEBROCHEN',
-        'permission-mode matrix did not restore STRICT and terminal fixture state'
+        'permission-mode matrix did not reactivate immutable STRICT or retain '
+            . 'the terminal LOOSE fixture state'
     );
+    $assert(
+        (int) $scalar(
+            $connection,
+            'SELECT COUNT(*) FROM `nv_benutzer_zusatzfunktionen`'
+                . ' WHERE BINARY `benutzer_kuerzel` = BINARY ?',
+            's',
+            $s3Identity['kuerzel']
+        ) === 4,
+        'STRICT boundary was not exercised while loose grants still existed'
+    );
+    $deleteLooseGrants = $connection->prepare(
+        'DELETE FROM `nv_benutzer_zusatzfunktionen`'
+            . ' WHERE BINARY `benutzer_kuerzel` = BINARY ?'
+    );
+    if (!$deleteLooseGrants) {
+        throw new RuntimeException('Could not prepare loose-grant cleanup');
+    }
+    try {
+        $deleteGrantCode = $s3Identity['kuerzel'];
+        $deleteLooseGrants->bind_param('s', $deleteGrantCode);
+        $deleteLooseGrants->execute();
+    } finally {
+        $deleteLooseGrants->close();
+    }
+
+    if (!$connection->begin_transaction()) {
+        throw new RuntimeException(
+            'Could not start STRICT capability-catalogue probe'
+        );
+    }
+    try {
+        $removeStrictCapability = $connection->prepare(
+            'DELETE FROM `nv_funktionsfaehigkeiten`'
+                . ' WHERE BINARY `funktion` = BINARY ?'
+                . ' AND BINARY `rolle` = BINARY ?'
+                . ' AND BINARY `faehigkeit` = BINARY ?'
+        );
+        if (!$removeStrictCapability) {
+            throw new RuntimeException(
+                'Could not prepare STRICT capability probe'
+            );
+        }
+        try {
+            $strictFunction = (string) $ldfIdentity['funktion'];
+            $strictRole = (string) $ldfIdentity['rolle'];
+            $strictCapability = 'FERNMELDEBETRIEB';
+            $removeStrictCapability->bind_param(
+                'sss',
+                $strictFunction,
+                $strictRole,
+                $strictCapability
+            );
+            $removeStrictCapability->execute();
+            $assert(
+                $removeStrictCapability->affected_rows === 1,
+                'STRICT capability-catalogue probe removed no capability'
+            );
+        } finally {
+            $removeStrictCapability->close();
+        }
+        $expect(
+            EstabDvPermissionException::class,
+            static fn (): array => estab_dv_require_write_capability(
+                $connection,
+                $incidentId,
+                $ldfIdentity,
+                'FERNMELDEBETRIEB'
+            ),
+            'STRICT write authority ignored the selected function capability'
+        );
+        $expect(
+            EstabDvPermissionException::class,
+            static fn (): array => estab_dv_require_account_capability(
+                $connection,
+                $incidentId,
+                $ldfIdentity,
+                'FERNMELDEBETRIEB'
+            ),
+            'STRICT read authority ignored the selected function capability'
+        );
+        $expect(
+            EstabReadPermissionException::class,
+            static fn (): array => estab_read_require_identity_scope(
+                $connection,
+                $incidentId,
+                $ldfIdentity
+            ),
+            'STRICT generic read scope ignored the selected function capability'
+        );
+    } finally {
+        $connection->rollback();
+    }
 
     $messengerCandidates = estab_dv_messenger_candidates(
         $connection,
         $incidentId
     );
     $candidateCodes = array_column($messengerCandidates, 'kuerzel');
+    $candidateAssignments = array_column(
+        $messengerCandidates,
+        'dienstbesetzung_id',
+        'kuerzel'
+    );
     sort($candidateCodes);
     $expectedCandidateCodes = [
         $codes['aw'],
@@ -2382,8 +3674,14 @@ try {
     sort($expectedCandidateCodes);
     $assert(
         $candidateCodes === $expectedCandidateCodes
-            && !in_array($codes['s2'], $candidateCodes, true),
-        'messenger UI did not derive candidates from fixed active A/W accounts'
+            && !in_array($codes['s2'], $candidateCodes, true)
+            && (int) ($candidateAssignments[$codes['aw']] ?? 0)
+                === $assignments['aw']
+            && (int) ($candidateAssignments[$codes['messenger']] ?? 0)
+                === $assignments['messenger']
+            && (int) ($candidateAssignments[$codes['aw_extension']] ?? 0)
+                === $awExtensionId,
+        'STRICT messenger UI did not retain exact accepted A/W assignments'
     );
     $expect(
         EstabDvPermissionException::class,
@@ -2412,6 +3710,43 @@ try {
         $ldfIdentity
     );
     $assert(
+        $cancelledJobId > 0
+            && (int) $scalar(
+                $connection,
+                'SELECT COUNT(*) FROM `nv_melderauftraege`'
+                    . ' WHERE `einsatz_id` = ? AND `melderauftrag_id` = ?',
+                'ii',
+                $incidentId,
+                $cancelledJobId
+            ) === 1,
+        'messenger dispatch lost its insert id while clearing SQL authority'
+    );
+    $assert(
+        (string) $scalar(
+            $connection,
+            'SELECT CONCAT('
+                . "JSON_UNQUOTE(JSON_EXTRACT(`details`, '$.permission_mode')) ,"
+                . ' ?, '
+                . "JSON_UNQUOTE(JSON_EXTRACT(`details`, '$.messenger_function')) ,"
+                . ' ?, '
+                . "JSON_UNQUOTE(JSON_EXTRACT(`details`, '$.messenger_role')) ,"
+                . ' ?, CAST(JSON_UNQUOTE(JSON_EXTRACT('
+                . "`details`, '$.messenger_duty_assignment_id')) AS UNSIGNED))"
+                . ' FROM `nv_betriebsereignisse`'
+                . ' WHERE `einsatz_id` = ?'
+                . " AND `objekttyp` = 'MELDERAUFTRAG'"
+                . ' AND `objekt_id` = ?'
+                . " AND `aktion` = 'messenger_assigned'",
+            'sssii',
+            '|',
+            '|',
+            '|',
+            $incidentId,
+            $cancelledJobId
+        ) === 'STRICT|A/W|Fernmelder|' . $assignments['messenger'],
+        'STRICT messenger assignment lost its exact target duty provenance'
+    );
+    $assert(
         estab_dv_transition_messenger(
             $connection,
             $incidentId,
@@ -2428,15 +3763,12 @@ try {
         $messageId
     );
     $assert(
-        count($redispatchHistory) === 2
+        count($redispatchHistory) === 1
             && (int) $redispatchHistory[0]['melderauftrag_id']
-                === $looseModeJobId
-            && $redispatchHistory[0]['status'] === 'ABGEBROCHEN'
-            && (int) $redispatchHistory[1]['melderauftrag_id']
                 === $cancelledJobId
-            && $redispatchHistory[1]['status'] === 'ABGEBROCHEN',
+            && $redispatchHistory[0]['status'] === 'ABGEBROCHEN',
         'an aborted pre-acceptance run did not release the message for '
-            . 'traceable redispatch'
+            . 'traceable incident-scoped redispatch'
     );
     $expect(
         EstabDvConflictException::class,
@@ -2987,13 +4319,19 @@ try {
         $messengerIdentity
     );
     $assert(
-        estab_logbook_is_designated_writer(
+        !estab_logbook_is_designated_writer(
             $connection,
             $incidentId,
             $messengerIdentity,
             'tbb'
-        ),
-        'a fixed A/W account lost TTB permission because another A/W exists'
+        )
+            && estab_logbook_is_designated_writer(
+                $connection,
+                $incidentId,
+                $awIdentity,
+                'tbb'
+            ),
+        'STRICT no longer retains one exact designated A/W assignment for TTB'
     );
     $tbbEntryId = estab_logbook_insert_entry(
         $databaseConfig,
@@ -3037,8 +4375,9 @@ try {
     );
     $assert(
         $messengerSnapshots['valid'] === true
-            && (int) $messengerSnapshots['jobs'] === 3,
-        'terminal messenger rows do not match their canonical event snapshots'
+            && (int) $messengerSnapshots['jobs'] === 2,
+        'incident-scoped terminal messenger rows do not match their canonical '
+            . 'event snapshots'
     );
 
     // The legacy connection shim disables mysqli exception reporting when the
@@ -3128,6 +4467,13 @@ try {
         'the disposed message route was mutable'
     );
 
+    $expectedRevisionVersion = (int) $scalar(
+        $connection,
+        'SELECT COALESCE(MAX(`version`), 0) + 1'
+            . ' FROM `nv_fernmeldeplaene` WHERE `einsatz_id` = ?',
+        'i',
+        $incidentId
+    );
     $barrierBase = tempnam(
         sys_get_temp_dir(),
         'estab-telecom-revision-contenders-'
@@ -3237,10 +4583,11 @@ try {
     $assert(
         $revisionPlanId > 0
             && $revisionPlanId !== $planId
-            && (int) $revision['version'] === 3
+            && (int) $revision['version'] === $expectedRevisionVersion
             && (int) $revision['source_plan_id'] === $planId
             && (int) $revision['copied_entries'] === 2,
-        'active telecommunications plan was not cloned as complete version 3'
+        'active telecommunications plan was not cloned with the next '
+            . 'incident-local version and all entries'
     );
     $plansAfterClone = estab_dv_telecom_plans($connection, $incidentId);
     $sourceAfterClone = null;
@@ -3712,9 +5059,9 @@ try {
         'Fu'
     );
     $assert(
-        (int) $resolvedSuccessor['version'] === 3
+        (int) $resolvedSuccessor['version'] === $expectedRevisionVersion
             && $resolvedSuccessor['rufname'] === 'Integration 02',
-        'edited successor route was not selected from active version 3'
+        'edited successor route was not selected from the active revision'
     );
 
     $successorActivationSequence = (int) $scalar(
@@ -3751,7 +5098,8 @@ try {
         $staleLegacyPlanId
     );
     $assert(
-        (int) $staleLegacyDraft['version'] === 4
+        (int) $staleLegacyDraft['version']
+            === $expectedRevisionVersion + 1
             && $staleLegacyCreationSequence > 0
             && $staleLegacyCreationSequence < $successorActivationSequence,
         'stale legacy draft fixture was not created before current activation'
@@ -3812,12 +5160,13 @@ try {
                     . ' AND CAST(JSON_UNQUOTE(JSON_EXTRACT('
                     . " `details`, '$.preserved_entries')) AS UNSIGNED) = 1"
                     . ' AND CAST(JSON_UNQUOTE(JSON_EXTRACT('
-                    . " `details`, '$.plan_version')) AS UNSIGNED) = 4",
-                'iiss',
+                    . " `details`, '$.plan_version')) AS UNSIGNED) = ?",
+                'iissi',
                 $incidentId,
                 $staleLegacyPlanId,
                 $s6Identity['kuerzel'],
-                $s6Identity['funktion']
+                $s6Identity['funktion'],
+                $expectedRevisionVersion + 1
             ) === 1,
         'discarded draft lost its entries, release state or immutable audit'
     );
@@ -3893,7 +5242,8 @@ try {
         $replacementDraftId
     );
     $assert(
-        (int) $replacementDraft['version'] === 5
+        (int) $replacementDraft['version']
+            === $expectedRevisionVersion + 2
             && (int) $replacementDraft['source_plan_id'] === $revisionPlanId
             && (int) $replacementDraft['copied_entries'] === 2
             && $replacementDraftPlan['status'] === 'ENTWURF',
@@ -3932,7 +5282,8 @@ try {
         $currentLegacyPlanId
     );
     $assert(
-        (int) $currentLegacyDraft['version'] === 6
+        (int) $currentLegacyDraft['version']
+            === $expectedRevisionVersion + 3
             && $currentLegacyCreationSequence > $successorActivationSequence,
         'current legacy draft fixture was not created after active-plan release'
     );
@@ -3951,7 +5302,8 @@ try {
         'Fu'
     );
     $assert(
-        (int) $currentLegacyRoute['version'] === 6
+        (int) $currentLegacyRoute['version']
+            === $expectedRevisionVersion + 3
             && (int) $currentLegacyRoute['fernmeldeplan_id']
                 === $currentLegacyPlanId
             && (string) $scalar(
@@ -3977,6 +5329,20 @@ try {
                 $phpSessionId
             ),
         'fixed S2 account session was invalid before historical handover'
+    );
+    // Take a fresh draft snapshot immediately before the real handover. The
+    // earlier activation of the separate LOOSE matrix incident deliberately
+    // advanced the global status revision and must not mask the assignment-id
+    // assertion.
+    estab_permission_context_set_from_incident(
+        estab_incident_status($connection)
+    );
+    $strictAttachmentContext = estab_attachment_origin_context_create(
+        $s2Identity + [
+            'estab_permission_mode' => ESTAB_PERMISSION_MODE_STRICT,
+        ],
+        $incidentId,
+        ['task' => 'Stab_schreiben', '00_lfd' => '']
     );
     $cancelledHandoverRequestId = estab_dv_initiate_handover_shift(
         $connection,
@@ -4337,13 +5703,72 @@ try {
         'failed handover retained partial shifts, assignments, request, '
             . 'handover, ETB/TBB, heads or audit mutations'
     );
-    estab_dv_confirm_handover_shift(
-        $connection,
-        $incidentId,
-        $handoverRequestId,
-        $secondAssignments['s2'],
-        $incomingHandoverIdentity
-    );
+    $strictReadConnection = estab_auth_connect($databaseConfig);
+    $handoverMutationConnection = estab_auth_connect($databaseConfig);
+    mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
+    $strictReadTransaction = false;
+    try {
+        $handoverMutationConnection->query(
+            'SET SESSION innodb_lock_wait_timeout = 1'
+        );
+        $strictReadConnection->begin_transaction();
+        $strictReadTransaction = true;
+        $strictReadScope = estab_read_require_operational_scope(
+            $strictReadConnection,
+            $s2Identity,
+            true
+        );
+        $strictProtectedMessage = $scalar(
+            $strictReadConnection,
+            'SELECT `00_lfd` FROM `nv_nachrichten`'
+                . ' WHERE `einsatz_id` = ? AND `00_lfd` = ?',
+            'ii',
+            $incidentId,
+            $messageId
+        );
+        $expectLockWaitTimeout(
+            static fn (): null => (
+                estab_dv_confirm_handover_shift(
+                    $handoverMutationConnection,
+                    $incidentId,
+                    $handoverRequestId,
+                    $secondAssignments['s2'],
+                    $incomingHandoverIdentity
+                ) ?? null
+            ),
+            'STRICT handover passed an in-flight protected read'
+        );
+        $assert(
+            (int) $strictProtectedMessage === $messageId
+                && ($strictReadScope['identity']['duty_assignment_id'] ?? 0)
+                    === $assignments['s2'],
+            'STRICT assignment-protected object was not selected before release'
+        );
+        $strictReadConnection->commit();
+        $strictReadTransaction = false;
+
+        estab_dv_confirm_handover_shift(
+            $handoverMutationConnection,
+            $incidentId,
+            $handoverRequestId,
+            $secondAssignments['s2'],
+            $incomingHandoverIdentity
+        );
+        $expect(
+            EstabReadPermissionException::class,
+            static fn (): array => estab_read_require_operational_scope(
+                $strictReadConnection,
+                $s2Identity
+            ),
+            'STRICT retained the outgoing assignment after handover'
+        );
+    } finally {
+        if ($strictReadTransaction) {
+            $strictReadConnection->rollback();
+        }
+        estab_auth_close($handoverMutationConnection);
+        estab_auth_close($strictReadConnection);
+    }
     $handoverInitiatedAt = (string) $scalar(
         $connection,
         "SELECT DATE_FORMAT(`initiiert_am`, '%Y-%m-%d %H:%i:%s.%f')"
@@ -4537,6 +5962,52 @@ try {
                 $handoverRequestId
             ) === 1,
         'handover and takeover persons or their separate times are missing'
+    );
+    $assert(
+        !estab_auth_duty_assignment_matches_session(
+            $connection,
+            $assignments['s2'],
+            $codes['s2'],
+            'S2',
+            'Stab'
+        )
+            && estab_auth_duty_assignment_matches_session(
+                $connection,
+                $secondAssignments['s2'],
+                $codes['s2_successor'],
+                'S2',
+                'Stab'
+            ),
+        'STRICT session validation retained the handed-over assignment or '
+            . 'rejected its active accepted successor'
+    );
+    $expect(
+        EstabDvPermissionException::class,
+        static fn (): array => estab_dv_require_operational_account(
+            $connection,
+            $incidentId,
+            estab_attachment_origin_authority_identity(
+                $strictAttachmentContext
+            )
+        ),
+        'STRICT attachment authority survived the real shift handover'
+    );
+    estab_permission_context_set_from_incident(
+        estab_incident_status($connection)
+    );
+    $sameAccountSuccessorTuple = $preShiftS2Identity + [
+        'estab_permission_mode' => ESTAB_PERMISSION_MODE_STRICT,
+        'duty_assignment_id' => $secondAssignments['s2'],
+    ];
+    $expect(
+        EstabAttachmentContextException::class,
+        static fn (): array => estab_attachment_origin_context_validate(
+            $strictAttachmentContext,
+            $sameAccountSuccessorTuple,
+            $incidentId
+        ),
+        'STRICT attachment draft survived an assignment change with the '
+            . 'same account and function tuple'
     );
     $storedOldS2 = estab_auth_fetch_session_user(
         $connection,
@@ -4788,6 +6259,105 @@ try {
         $connection->rollback();
         throw $exception;
     }
+    $strictClosurePreflight = estab_incident_close_preflight(
+        $connection,
+        $incidentId
+    );
+    $assert(
+        $strictClosurePreflight['closable'] === false
+            && $strictClosurePreflight['offene_schichten'] > 0
+            && $strictClosurePreflight['offene_besetzungen'] > 0,
+        'STRICT ignored open formal shift and assignment records at closure'
+    );
+    // A separate incident created as LOOSE models retained formal records from
+    // imported history. They remain visible evidence, but are not operational
+    // prerequisites or closure blockers in this mode. Keep the fixture in
+    // valid open planning states instead of bypassing the immutable transition
+    // evidence enforced by the database triggers.
+    $strictClosureStatus = estab_incident_status($connection);
+    $looseClosureCreated = estab_incident_create(
+        $connection,
+        [
+            'kennung' => 'DV-CLOSE-LOOSE-' . strtoupper($suffix),
+            'name' => 'DV Abschlussprüfung LOOSE',
+            'beginn' => date('Y-m-d\TH:i', time() - 900),
+            'ort' => 'Integrationsprüfung',
+            'organisation' => 'THW',
+            'fuehrungsstellenname' => 'Führungsstelle DV-Operationen',
+            'einsatzleitung' => 'Leitung Integration',
+            'beschreibung' =>
+                'LOOSE-Abschlussnachweis mit importierten Formaldaten.',
+            'estab_permission_mode' => ESTAB_PERMISSION_MODE_LOOSE,
+        ],
+        'dv-close-permission-mode-test',
+        true,
+        (int) $strictClosureStatus['revision'],
+        true
+    );
+    $looseClosureIncidentId = (int) $looseClosureCreated['einsatz_id'];
+    $retainedShiftInsert = $connection->prepare(
+        'INSERT INTO `nv_dienstschichten`'
+            . ' (`einsatz_id`, `nummer`, `bezeichnung`, `status`,'
+            . ' `erstellt_von`)'
+            . " VALUES (?, 1, ?, 'GEPLANT', ?)"
+    );
+    if (!$retainedShiftInsert) {
+        throw new RuntimeException('Could not prepare retained LOOSE shift');
+    }
+    try {
+        $retainedShiftLabel = 'Importierte historische Dienstschicht';
+        $retainedShiftInsert->bind_param(
+            'iss',
+            $looseClosureIncidentId,
+            $retainedShiftLabel,
+            $actor
+        );
+        $retainedShiftInsert->execute();
+        $looseClosureShiftId = (int) $connection->insert_id;
+    } finally {
+        $retainedShiftInsert->close();
+    }
+    $retainedAssignmentInsert = $connection->prepare(
+        'INSERT INTO `nv_dienstbesetzungen`'
+            . ' (`dienstschicht_id`, `benutzer_kuerzel`, `funktion`, `rolle`,'
+            . ' `status`, `zugewiesen_von`)'
+            . " VALUES (?, ?, 'S2', 'Stab', 'ZUGEWIESEN', ?)"
+    );
+    if (!$retainedAssignmentInsert) {
+        throw new RuntimeException('Could not prepare retained LOOSE assignment');
+    }
+    try {
+        $retainedAssignmentCode = $codes['s2'];
+        $retainedAssignmentInsert->bind_param(
+            'iss',
+            $looseClosureShiftId,
+            $retainedAssignmentCode,
+            $actor
+        );
+        $retainedAssignmentInsert->execute();
+    } finally {
+        $retainedAssignmentInsert->close();
+    }
+    $looseClosureIncident = estab_incident_status($connection);
+    estab_permission_context_set_from_incident($looseClosureIncident);
+    $looseClosurePreflight = estab_incident_close_preflight(
+        $connection,
+        $looseClosureIncidentId
+    );
+    $assert(
+        $looseClosurePreflight['closable'] === true
+            && $looseClosurePreflight['offene_schichten'] > 0
+            && $looseClosurePreflight['offene_besetzungen'] > 0,
+        'LOOSE treated retained formal duty records as closure blockers'
+    );
+    $looseClosureStatus = estab_incident_status($connection);
+    $strictClosureIncident = estab_incident_activate(
+        $connection,
+        $incidentId,
+        (int) $looseClosureStatus['revision'],
+        'dv-close-permission-mode-test'
+    );
+    estab_permission_context_set_from_incident($strictClosureIncident);
     $assert(
         estab_incident_close_preflight(
             $connection,
@@ -4795,13 +6365,23 @@ try {
             null,
             $secondShiftId
         )['closable'] === true,
-        'clean final-shift preflight still reported fachliche blockers'
+        'STRICT closingShiftId exception did not permit the governed final close'
     );
     estab_dv_close_shift(
         $connection,
         $incidentId,
         $secondShiftId,
         $actor
+    );
+    $assert(
+        !estab_auth_duty_assignment_matches_session(
+            $connection,
+            $secondAssignments['s2'],
+            $codes['s2_successor'],
+            'S2',
+            'Stab'
+        ),
+        'STRICT session validation retained an assignment after shift closure'
     );
     $restartShift = estab_dv_create_shift(
         $connection,
@@ -4847,13 +6427,14 @@ try {
         $restartShiftId,
         $actor
     );
-    $assert(
-        estab_dv_require_operational_account(
+    $expect(
+        EstabDvPermissionException::class,
+        static fn (): array => estab_dv_require_operational_account(
             $connection,
             $incidentId,
             $awIdentity
-        )['funktion'] === 'A/W',
-        'closing the historical duty shift blocked fixed-account writes'
+        ),
+        'STRICT admitted a fixed account after all duty shifts were closed'
     );
     $blockers = estab_dv_incident_closure_blockers(
         $connection,

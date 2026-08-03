@@ -50,10 +50,10 @@ function estab_attachment_origin_tasks(): array
 }
 
 /**
- * Return the authoritative account identity used to bind an attachment flow.
+ * Return the authoritative acting identity used to bind an attachment flow.
  *
- * Optional shift membership is deliberately absent from this context. A flow
- * remains bound to the complete fixed account identity and active incident.
+ * The selected assignment/additional-function set is revalidated separately.
+ * A flow itself stores the exact acting tuple and active incident.
  */
 function estab_attachment_origin_identity(array $identity): array
 {
@@ -69,6 +69,359 @@ function estab_attachment_origin_identity(array $identity): array
         );
     }
     return $shape;
+}
+
+/** Parse the server-owned active-incident snapshot used by one draft flow. */
+function estab_attachment_origin_permission_context(int $incidentId): array
+{
+    $context = estab_permission_context();
+    if (!is_array($context)) {
+        throw new EstabAttachmentContextException(
+            'Der Anhangvorgang besitzt keinen aktuellen Berechtigungskontext.'
+        );
+    }
+    try {
+        $contextIncidentId = estab_incident_positive_id(
+            $context['incident_id'] ?? null
+        );
+        $mode = estab_permission_mode($context['mode'] ?? null);
+        $revision = estab_incident_revision($context['revision'] ?? null);
+    } catch (InvalidArgumentException $exception) {
+        throw new EstabAttachmentContextException(
+            'Der Berechtigungskontext des Anhangvorgangs ist ungültig.',
+            previous: $exception
+        );
+    }
+    if ($contextIncidentId !== $incidentId) {
+        throw new EstabAttachmentContextException(
+            'Der Berechtigungskontext gehört nicht zum aktuellen Einsatz.'
+        );
+    }
+    return [
+        'incident_id' => $contextIncidentId,
+        'mode' => $mode,
+        'revision' => $revision,
+    ];
+}
+
+/** Parse a positive duty-assignment id without accepting PHP coercions. */
+function estab_attachment_origin_assignment_id(mixed $value): int
+{
+    if (
+        (!is_int($value) && !is_string($value))
+        || preg_match('/\A[1-9][0-9]{0,18}\z/D', (string) $value) !== 1
+    ) {
+        throw new EstabAttachmentContextException(
+            'Der Anhangvorgang besitzt keine gültige Dienstbesetzung.'
+        );
+    }
+    $assignmentId = filter_var(
+        (string) $value,
+        FILTER_VALIDATE_INT,
+        ['options' => ['min_range' => 1, 'max_range' => PHP_INT_MAX]]
+    );
+    if (!is_int($assignmentId)) {
+        throw new EstabAttachmentContextException(
+            'Der Anhangvorgang besitzt keine gültige Dienstbesetzung.'
+        );
+    }
+    return $assignmentId;
+}
+
+/** Parse one canonical account/function role pair carried by server state. */
+function estab_attachment_origin_function_role(
+    mixed $function,
+    mixed $role,
+    string $message
+): array {
+    if (
+        !is_string($function)
+        || !is_string($role)
+        || preg_match('/\A(?:A\/W|[A-Za-z0-9_]{1,10})\z/D', $function) !== 1
+        || !in_array($role, ['Stab', 'FB', 'Fernmelder'], true)
+    ) {
+        throw new EstabAttachmentContextException($message);
+    }
+    return ['funktion' => $function, 'rolle' => $role];
+}
+
+/** Return the fixed account pair from a DB-resolved LOOSE identity. */
+function estab_attachment_origin_loose_account(array $identity): array
+{
+    $function = $identity['authorization_account_function']
+        ?? $identity['funktion']
+        ?? null;
+    $role = $identity['authorization_account_role']
+        ?? $identity['rolle']
+        ?? null;
+    return estab_attachment_origin_function_role(
+        $function,
+        $role,
+        'Der Anhangvorgang besitzt keine gültige Hauptfunktion.'
+    );
+}
+
+/**
+ * Resolve whether the exact acting LOOSE tuple is the primary or an explicit
+ * additional function. The additional-function array is attached only by the
+ * authenticated database boundary and is never read from the browser.
+ */
+function estab_attachment_origin_loose_function_source(
+    array $identity,
+    string $function,
+    string $role
+): string {
+    $account = estab_attachment_origin_loose_account($identity);
+    if (
+        hash_equals($account['funktion'], $function)
+        && hash_equals($account['rolle'], $role)
+    ) {
+        return 'PRIMARY';
+    }
+    $additional = $identity['estab_additional_functions'] ?? null;
+    if (is_array($additional)) {
+        foreach ($additional as $tuple) {
+            if (
+                is_array($tuple)
+                && is_string($tuple['funktion'] ?? null)
+                && is_string($tuple['rolle'] ?? null)
+                && hash_equals($function, $tuple['funktion'])
+                && hash_equals($role, $tuple['rolle'])
+            ) {
+                return 'ADDITIONAL';
+            }
+        }
+    }
+    throw new EstabAttachmentContextException(
+        'Die handelnde Zusatzfunktion ist nicht mehr wirksam.'
+    );
+}
+
+/** Resolve the complete mode-specific authority behind one acting tuple. */
+function estab_attachment_origin_authority_fields(
+    array $currentIdentity,
+    array $actingIdentity,
+    array $permissionContext
+): array {
+    $identityMode = $currentIdentity['estab_permission_mode'] ?? null;
+    if (
+        !is_string($identityMode)
+        || !hash_equals($permissionContext['mode'], $identityMode)
+    ) {
+        throw new EstabAttachmentContextException(
+            'Die Dienstidentität passt nicht zum aktuellen Berechtigungsmodus.'
+        );
+    }
+    if ($permissionContext['mode'] === ESTAB_PERMISSION_MODE_STRICT) {
+        return [
+            'duty_assignment_id' => estab_attachment_origin_assignment_id(
+                $currentIdentity['duty_assignment_id'] ?? null
+            ),
+            'account_function' => null,
+            'account_role' => null,
+            'function_source' => 'DUTY_ASSIGNMENT',
+        ];
+    }
+    if (($currentIdentity['duty_assignment_id'] ?? null) !== null) {
+        throw new EstabAttachmentContextException(
+            'Im lockeren Modus darf keine Dienstbesetzung den '
+            . 'Anhangvorgang autorisieren.'
+        );
+    }
+    $account = estab_attachment_origin_loose_account($currentIdentity);
+    return [
+        'duty_assignment_id' => null,
+        'account_function' => $account['funktion'],
+        'account_role' => $account['rolle'],
+        'function_source' => estab_attachment_origin_loose_function_source(
+            $currentIdentity,
+            $actingIdentity['funktion'],
+            $actingIdentity['rolle']
+        ),
+    ];
+}
+
+/** Exact serialized fields of one mode-aware attachment origin. */
+function estab_attachment_origin_context_fields(): array
+{
+    return [
+        'version', 'flow_token', 'incident_id', 'benutzer', 'kuerzel',
+        'funktion', 'rolle', 'task', 'record_id', 'permission_mode',
+        'permission_revision', 'duty_assignment_id', 'account_function',
+        'account_role', 'function_source', 'authority_fingerprint',
+    ];
+}
+
+/** Bind every serialized origin field to one deterministic integrity token. */
+function estab_attachment_origin_context_fingerprint(array $context): string
+{
+    $payload = [];
+    foreach (estab_attachment_origin_context_fields() as $field) {
+        if ($field === 'authority_fingerprint') {
+            continue;
+        }
+        $payload[$field] = $context[$field] ?? null;
+    }
+    try {
+        $encoded = json_encode(
+            $payload,
+            JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
+                | JSON_THROW_ON_ERROR
+        );
+    } catch (JsonException $exception) {
+        throw new EstabAttachmentContextException(
+            'Der Anhangvorgang konnte nicht eindeutig gebunden werden.',
+            previous: $exception
+        );
+    }
+    return hash('sha256', $encoded);
+}
+
+/** Reject old, partial, extended or internally inconsistent session rows. */
+function estab_attachment_origin_context_structure(mixed $context): array
+{
+    if (!is_array($context) || ($context['version'] ?? null) !== 3) {
+        throw new EstabAttachmentContextException(
+            'Der gespeicherte Anhangvorgang ist ungültig oder abgelaufen.'
+        );
+    }
+    $actualFields = array_keys($context);
+    $expectedFields = estab_attachment_origin_context_fields();
+    sort($actualFields, SORT_STRING);
+    sort($expectedFields, SORT_STRING);
+    $fingerprint = $context['authority_fingerprint'] ?? null;
+    if (
+        $actualFields !== $expectedFields
+        || !is_string($fingerprint)
+        || preg_match('/\A[a-f0-9]{64}\z/D', $fingerprint) !== 1
+        || !hash_equals(
+            estab_attachment_origin_context_fingerprint($context),
+            $fingerprint
+        )
+    ) {
+        throw new EstabAttachmentContextException(
+            'Der gespeicherte Anhangvorgang ist inkonsistent oder abgelaufen.'
+        );
+    }
+    try {
+        $identity = estab_attachment_origin_identity($context);
+        estab_incident_positive_id($context['incident_id'] ?? null);
+        $mode = estab_permission_mode($context['permission_mode'] ?? null);
+        estab_incident_revision($context['permission_revision'] ?? null);
+        estab_attachment_origin_flow_token($context['flow_token'] ?? null);
+    } catch (InvalidArgumentException $exception) {
+        throw new EstabAttachmentContextException(
+            'Der gespeicherte Anhangvorgang enthält ungültige Autoritätsfelder.',
+            previous: $exception
+        );
+    }
+    $task = $context['task'] ?? null;
+    if (
+        !is_string($task)
+        || !in_array($task, estab_attachment_origin_tasks(), true)
+        || !estab_attachment_origin_role_allowed($identity, $task)
+    ) {
+        throw new EstabAttachmentContextException(
+            'Der gespeicherte Anhangvorgang enthält eine ungültige Aufgabe.'
+        );
+    }
+    if ($task === 'Stab_korrigieren') {
+        try {
+            estab_incident_positive_id(
+                $context['record_id'] ?? null,
+                'Nachrichten-ID'
+            );
+        } catch (InvalidArgumentException $exception) {
+            throw new EstabAttachmentContextException(
+                'Der gespeicherte Korrekturdatensatz ist ungültig.',
+                previous: $exception
+            );
+        }
+    } elseif (($context['record_id'] ?? null) !== null) {
+        throw new EstabAttachmentContextException(
+            'Ein neuer Nachrichtenvordruck enthält unerwartet eine Datensatz-ID.'
+        );
+    }
+    if ($mode === ESTAB_PERMISSION_MODE_STRICT) {
+        estab_attachment_origin_assignment_id(
+            $context['duty_assignment_id'] ?? null
+        );
+        if (
+            ($context['account_function'] ?? null) !== null
+            || ($context['account_role'] ?? null) !== null
+            || ($context['function_source'] ?? null) !== 'DUTY_ASSIGNMENT'
+        ) {
+            throw new EstabAttachmentContextException(
+                'Der strenge Anhangvorgang enthält eine ungültige Funktionsherkunft.'
+            );
+        }
+    } else {
+        if (($context['duty_assignment_id'] ?? null) !== null) {
+            throw new EstabAttachmentContextException(
+                'Ein lockerer Anhangvorgang enthält eine Dienstbesetzung.'
+            );
+        }
+        estab_attachment_origin_function_role(
+            $context['account_function'] ?? null,
+            $context['account_role'] ?? null,
+            'Der lockere Anhangvorgang enthält keine gültige Hauptfunktion.'
+        );
+        if (!in_array(
+            $context['function_source'] ?? null,
+            ['PRIMARY', 'ADDITIONAL'],
+            true
+        )) {
+            throw new EstabAttachmentContextException(
+                'Der lockere Anhangvorgang enthält eine ungültige Funktionsherkunft.'
+            );
+        }
+    }
+    return $context;
+}
+
+/** Rebuild only the server-authenticated authority fields used by DB writes. */
+function estab_attachment_origin_authority_identity(array $context): array
+{
+    $context = estab_attachment_origin_context_structure($context);
+    $identity = estab_attachment_origin_identity($context);
+    $mode = estab_permission_mode($context['permission_mode'] ?? null);
+    $identity['estab_permission_mode'] = $mode;
+    $identity['authorization_route_function'] = $identity['funktion'];
+    $identity['authorization_route_role'] = $identity['rolle'];
+    if ($mode === ESTAB_PERMISSION_MODE_STRICT) {
+        if (
+            ($context['function_source'] ?? null) !== 'DUTY_ASSIGNMENT'
+            || ($context['account_function'] ?? null) !== null
+            || ($context['account_role'] ?? null) !== null
+        ) {
+            throw new EstabAttachmentContextException(
+                'Der strenge Anhangvorgang besitzt eine ungültige Funktionsherkunft.'
+            );
+        }
+        $identity['duty_assignment_id'] =
+            estab_attachment_origin_assignment_id(
+                $context['duty_assignment_id'] ?? null
+            );
+        return $identity;
+    }
+    if (($context['duty_assignment_id'] ?? null) !== null) {
+        throw new EstabAttachmentContextException(
+            'Ein lockerer Anhangvorgang darf keine Dienstbesetzung verwenden.'
+        );
+    }
+    $account = estab_attachment_origin_function_role(
+        $context['account_function'] ?? null,
+        $context['account_role'] ?? null,
+        'Der lockere Anhangvorgang besitzt keine gültige Hauptfunktion.'
+    );
+    if (!in_array($context['function_source'] ?? null, ['PRIMARY', 'ADDITIONAL'], true)) {
+        throw new EstabAttachmentContextException(
+            'Der lockere Anhangvorgang besitzt keine gültige Funktionsherkunft.'
+        );
+    }
+    $identity['authorization_account_function'] = $account['funktion'];
+    $identity['authorization_account_role'] = $account['rolle'];
+    return $identity;
 }
 
 function estab_attachment_origin_role_allowed(array $identity, string $task): bool
@@ -95,6 +448,7 @@ function estab_attachment_direct_action_fingerprint(
     mixed $task,
     mixed $recordId = null
 ): string {
+    $currentIdentity = $identity;
     $identity = estab_attachment_origin_identity($identity);
     $incidentId = estab_incident_positive_id($incidentId);
     if (
@@ -106,6 +460,14 @@ function estab_attachment_direct_action_fingerprint(
             'Der direkte Anhangvorgang gehört zu keinem bearbeitbaren Formular.'
         );
     }
+    $permissionContext = estab_attachment_origin_permission_context(
+        $incidentId
+    );
+    $authority = estab_attachment_origin_authority_fields(
+        $currentIdentity,
+        $identity,
+        $permissionContext
+    );
     if ($task === 'Stab_korrigieren') {
         $recordId = estab_incident_positive_id($recordId, 'Nachrichten-ID');
     } elseif ($recordId === null || $recordId === '') {
@@ -125,6 +487,13 @@ function estab_attachment_direct_action_fingerprint(
                 'kuerzel' => $identity['kuerzel'],
                 'funktion' => $identity['funktion'],
                 'rolle' => $identity['rolle'],
+                'permission_mode' => $permissionContext['mode'],
+                'permission_revision' => $permissionContext['revision'],
+                'duty_assignment_id' =>
+                    $authority['duty_assignment_id'],
+                'account_function' => $authority['account_function'],
+                'account_role' => $authority['account_role'],
+                'function_source' => $authority['function_source'],
             ],
             JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR
         );
@@ -504,7 +873,14 @@ function estab_attachment_direct_action_forget(
  *   funktion:string,
  *   rolle:string,
  *   task:string,
- *   record_id:?int
+ *   record_id:?int,
+ *   permission_mode:string,
+ *   permission_revision:int,
+ *   duty_assignment_id:?int,
+ *   account_function:?string,
+ *   account_role:?string,
+ *   function_source:string,
+ *   authority_fingerprint:string
  * }
  */
 function estab_attachment_origin_context_create(
@@ -513,6 +889,7 @@ function estab_attachment_origin_context_create(
     array $request,
     ?array $authorizedMessage = null
 ): array {
+    $currentIdentity = $identity;
     $identity = estab_attachment_origin_identity($identity);
     try {
         $incidentId = estab_incident_positive_id($incidentId);
@@ -522,6 +899,14 @@ function estab_attachment_origin_context_create(
             previous: $exception
         );
     }
+    $permissionContext = estab_attachment_origin_permission_context(
+        $incidentId
+    );
+    $authority = estab_attachment_origin_authority_fields(
+        $currentIdentity,
+        $identity,
+        $permissionContext
+    );
     $task = $request['task'] ?? null;
     if (
         !is_string($task)
@@ -590,8 +975,8 @@ function estab_attachment_origin_context_create(
         );
     }
 
-    return [
-        'version' => 2,
+    $context = [
+        'version' => 3,
         'flow_token' => $flowToken,
         'incident_id' => $incidentId,
         'benutzer' => $identity['benutzer'],
@@ -600,7 +985,17 @@ function estab_attachment_origin_context_create(
         'rolle' => $identity['rolle'],
         'task' => $task,
         'record_id' => $recordId,
+        'permission_mode' => $permissionContext['mode'],
+        'permission_revision' => $permissionContext['revision'],
+        'duty_assignment_id' => $authority['duty_assignment_id'],
+        'account_function' => $authority['account_function'],
+        'account_role' => $authority['account_role'],
+        'function_source' => $authority['function_source'],
+        'authority_fingerprint' => '',
     ];
+    $context['authority_fingerprint'] =
+        estab_attachment_origin_context_fingerprint($context);
+    return estab_attachment_origin_context_structure($context);
 }
 
 /**
@@ -617,12 +1012,10 @@ function estab_attachment_origin_context_validate(
     array $request = [],
     bool $requireFlowToken = false
 ): array {
-    if (!is_array($stored) || ($stored['version'] ?? null) !== 2) {
-        throw new EstabAttachmentContextException(
-            'Der gespeicherte Anhangvorgang ist ungültig oder abgelaufen.'
-        );
-    }
-    $identity = estab_attachment_origin_identity($identity);
+    $stored = estab_attachment_origin_context_structure($stored);
+    $currentIdentity = $identity;
+    $identity = estab_attachment_origin_identity($currentIdentity);
+    $storedIdentity = estab_attachment_origin_identity($stored);
     try {
         $incidentId = estab_incident_positive_id($incidentId);
         $storedIncidentId = estab_incident_positive_id(
@@ -634,12 +1027,42 @@ function estab_attachment_origin_context_validate(
             previous: $exception
         );
     }
+    $permissionContext = estab_attachment_origin_permission_context(
+        $incidentId
+    );
+    try {
+        $storedMode = estab_permission_mode(
+            $stored['permission_mode'] ?? null
+        );
+        $storedRevision = estab_incident_revision(
+            $stored['permission_revision'] ?? null
+        );
+    } catch (InvalidArgumentException $exception) {
+        throw new EstabAttachmentContextException(
+            'Der gespeicherte Berechtigungskontext ist ungültig.',
+            previous: $exception
+        );
+    }
+    if (
+        !hash_equals($permissionContext['mode'], $storedMode)
+        || $permissionContext['revision'] !== $storedRevision
+        || !is_string($currentIdentity['estab_permission_mode'] ?? null)
+        || !hash_equals(
+            $storedMode,
+            $currentIdentity['estab_permission_mode']
+        )
+    ) {
+        throw new EstabAttachmentContextException(
+            'Der Einsatz oder sein Berechtigungsmodus wurde seit dem '
+            . 'Beginn des Anhangvorgangs geändert.'
+        );
+    }
     $task = $stored['task'] ?? null;
     $flowToken = $stored['flow_token'] ?? null;
     if (
         !is_string($task)
         || !in_array($task, estab_attachment_origin_tasks(), true)
-        || !estab_attachment_origin_role_allowed($identity, $task)
+        || !estab_attachment_origin_role_allowed($storedIdentity, $task)
         || !is_string($flowToken)
         || preg_match('/\A[a-f0-9]{32}\z/D', $flowToken) !== 1
         || $storedIncidentId !== $incidentId
@@ -649,7 +1072,7 @@ function estab_attachment_origin_context_validate(
             . 'Kontofunktion oder zum aktiven Einsatz.'
         );
     }
-    foreach (['benutzer', 'kuerzel', 'funktion', 'rolle'] as $field) {
+    foreach (['benutzer', 'kuerzel'] as $field) {
         if (
             !isset($stored[$field])
             || !is_string($stored[$field])
@@ -658,6 +1081,68 @@ function estab_attachment_origin_context_validate(
             throw new EstabAttachmentContextException(
                 'Der gespeicherte Anhangvorgang gehört nicht zur aktuellen '
                 . 'Benutzeridentität.'
+            );
+        }
+    }
+    if (!estab_auth_identity_has_function(
+        $currentIdentity,
+        $storedIdentity['funktion'],
+        $storedIdentity['rolle']
+    )) {
+        throw new EstabAttachmentContextException(
+            'Die im Anhangvorgang verwendete Dienstfunktion ist nicht mehr '
+            . 'wirksam.'
+        );
+    }
+    if ($storedMode === ESTAB_PERMISSION_MODE_STRICT) {
+        $storedAssignmentId = estab_attachment_origin_assignment_id(
+            $stored['duty_assignment_id'] ?? null
+        );
+        $currentAssignmentId = estab_attachment_origin_assignment_id(
+            $currentIdentity['duty_assignment_id'] ?? null
+        );
+        if (
+            $storedAssignmentId !== $currentAssignmentId
+            || ($stored['function_source'] ?? null) !== 'DUTY_ASSIGNMENT'
+            || ($stored['account_function'] ?? null) !== null
+            || ($stored['account_role'] ?? null) !== null
+        ) {
+            throw new EstabAttachmentContextException(
+                'Die ausgewählte Dienstbesetzung wurde seit dem Beginn des '
+                . 'Anhangvorgangs geändert.'
+            );
+        }
+    } else {
+        if (($stored['duty_assignment_id'] ?? null) !== null) {
+            throw new EstabAttachmentContextException(
+                'Der lockere Anhangvorgang enthält eine Dienstbesetzung.'
+            );
+        }
+        $storedAccount = estab_attachment_origin_function_role(
+            $stored['account_function'] ?? null,
+            $stored['account_role'] ?? null,
+            'Die gespeicherte Hauptfunktion ist ungültig.'
+        );
+        $currentAccount = estab_attachment_origin_loose_account(
+            $currentIdentity
+        );
+        $currentSource = estab_attachment_origin_loose_function_source(
+            $currentIdentity,
+            $storedIdentity['funktion'],
+            $storedIdentity['rolle']
+        );
+        if (
+            !hash_equals(
+                $storedAccount['funktion'],
+                $currentAccount['funktion']
+            )
+            || !hash_equals($storedAccount['rolle'], $currentAccount['rolle'])
+            || !is_string($stored['function_source'] ?? null)
+            || !hash_equals($stored['function_source'], $currentSource)
+        ) {
+            throw new EstabAttachmentContextException(
+                'Die Haupt- oder Zusatzfunktion des Anhangvorgangs wurde '
+                . 'seit seinem Beginn geändert.'
             );
         }
     }
@@ -765,6 +1250,7 @@ function estab_attachment_origin_context_store(
     ) {
         throw new InvalidArgumentException('Invalid attachment flow limit');
     }
+    $context = estab_attachment_origin_context_structure($context);
     $token = estab_attachment_origin_flow_token(
         $context['flow_token'] ?? null
     );
@@ -835,7 +1321,16 @@ function estab_attachment_origin_context_find(
         );
     }
     $context = $contexts[$token] ?? null;
-    return is_array($context) ? $context : null;
+    if ($context === null) {
+        return null;
+    }
+    $context = estab_attachment_origin_context_structure($context);
+    if (!hash_equals($token, (string) $context['flow_token'])) {
+        throw new EstabAttachmentContextException(
+            'Der gespeicherte Anhangvorgang ist einem falschen Flow zugeordnet.'
+        );
+    }
+    return $context;
 }
 
 /** Exact scalar fields that one unsaved official message form may retain. */
@@ -875,6 +1370,21 @@ function estab_attachment_origin_draft_from_request(
     array $identity,
     array $context
 ): array {
+    try {
+        $contextIncidentId = estab_incident_positive_id(
+            $context['incident_id'] ?? null
+        );
+    } catch (InvalidArgumentException $exception) {
+        throw new EstabAttachmentContextException(
+            'Der Nachrichtenentwurf besitzt keinen gültigen Einsatzkontext.',
+            previous: $exception
+        );
+    }
+    $context = estab_attachment_origin_context_validate(
+        $context,
+        $identity,
+        $contextIncidentId
+    );
     if (array_key_exists('16_gncopy', $request)) {
         throw new EstabAttachmentDraftException(
             'Der Nachrichtenentwurf enthält ungültige Formularwerte. '
@@ -1102,6 +1612,14 @@ function estab_attachment_origin_drafts_bytes(
                 'Die gespeicherten Nachrichtenentwürfe sind ungültig.'
             );
         }
+        $storedContext = estab_attachment_origin_context_structure(
+            $contexts[$token]
+        );
+        if (!hash_equals($token, (string) $storedContext['flow_token'])) {
+            throw new EstabAttachmentContextException(
+                'Ein Nachrichtenentwurf ist einem falschen Flow zugeordnet.'
+            );
+        }
         estab_attachment_origin_draft_bytes($draft);
     }
     $bytes = strlen(serialize($drafts));
@@ -1134,6 +1652,7 @@ function estab_attachment_origin_flow_store(
     ) {
         throw new InvalidArgumentException('Invalid attachment flow limit');
     }
+    $context = estab_attachment_origin_context_structure($context);
     $token = estab_attachment_origin_flow_token(
         $context['flow_token'] ?? null
     );
@@ -1230,6 +1749,14 @@ function estab_attachment_origin_draft_store(
             'Der Entwurf besitzt keinen aktiven Anhangvorgang.'
         );
     }
+    if (!hash_equals(
+        (string) $stored['authority_fingerprint'],
+        (string) ($context['authority_fingerprint'] ?? '')
+    )) {
+        throw new EstabAttachmentContextException(
+            'Der Entwurf gehört nicht zum gespeicherten Anhangvorgang.'
+        );
+    }
     if (
         array_key_exists('anhang_origin_drafts', $session)
         && !is_array($session['anhang_origin_drafts'])
@@ -1258,6 +1785,7 @@ function estab_attachment_origin_draft_find(
     array $session,
     array $context
 ): array {
+    $context = estab_attachment_origin_context_structure($context);
     $token = estab_attachment_origin_flow_token(
         $context['flow_token'] ?? null
     );
@@ -1269,6 +1797,18 @@ function estab_attachment_origin_draft_find(
     if (!is_array($drafts) || !is_array($contexts)) {
         throw new EstabAttachmentContextException(
             'Die gespeicherten Nachrichtenentwürfe sind ungültig.'
+        );
+    }
+    $stored = estab_attachment_origin_context_find($session, $token);
+    if (
+        !is_array($stored)
+        || !hash_equals(
+            (string) $stored['authority_fingerprint'],
+            (string) $context['authority_fingerprint']
+        )
+    ) {
+        throw new EstabAttachmentContextException(
+            'Der Nachrichtenentwurf gehört nicht zum aktuellen Anhangvorgang.'
         );
     }
     estab_attachment_origin_drafts_bytes($drafts, $contexts);

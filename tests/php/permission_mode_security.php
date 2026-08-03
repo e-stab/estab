@@ -5,6 +5,7 @@ declare(strict_types=1);
 require_once dirname(__DIR__, 2) . '/app/permission_mode.php';
 require_once dirname(__DIR__, 2) . '/app/workflow.php';
 require_once dirname(__DIR__, 2) . '/app/message_repository.php';
+require_once dirname(__DIR__, 2) . '/app/read_authorization.php';
 
 $root = dirname(__DIR__, 2);
 $assertions = 0;
@@ -132,12 +133,12 @@ $assert(
         'POST',
         ['task' => 'FM-Eingang']
     )
-        && !estab_workflow_route_allowed(
+        && estab_workflow_route_allowed(
             $ordinaryAccount,
             'POST',
             ['stab_korrekturen_x' => '1']
         ),
-    'STRICT mode admitted a cross-role write route'
+    'STRICT mode did not preserve the selected S2 function boundary'
 );
 
 $looseIncident = [
@@ -147,18 +148,20 @@ $looseIncident = [
 ];
 estab_permission_context_set_from_incident($looseIncident);
 $assert(
-    !estab_permission_role_checks_enforced()
-        && estab_workflow_is_telecommunications($ordinaryAccount, true)
-        && estab_workflow_is_telecommunications_lead($ordinaryAccount, true)
-        && estab_workflow_is_viewer($ordinaryAccount, true)
+    estab_permission_role_checks_enforced()
+        && !estab_permission_duty_shift_required()
+        && estab_permission_loose_mode_active()
+        && !estab_workflow_is_telecommunications($ordinaryAccount, true)
+        && !estab_workflow_is_telecommunications_lead($ordinaryAccount, true)
+        && !estab_workflow_is_viewer($ordinaryAccount, true)
         && estab_workflow_is_staff_writer($ordinaryAccount, true)
         && !estab_workflow_is_telecommunications($ordinaryAccount)
         && !estab_workflow_is_telecommunications_lead($ordinaryAccount)
         && !estab_workflow_is_viewer($ordinaryAccount),
-    'LOOSE mode did not relax only the fixed workflow-role predicates'
+    'LOOSE mode disabled role checks or broadened an account without grants'
 );
 $assert(
-    estab_workflow_route_allowed(
+    !estab_workflow_route_allowed(
         $ordinaryAccount,
         'POST',
         ['task' => 'FM-Eingang']
@@ -188,7 +191,59 @@ $assert(
             'POST',
             ['fm' => 'SI-Adminmeldung', '00_lfd' => '1']
         ),
-    'LOOSE mode widened operation names, reader routes, or over-posting instead of write roles only'
+    'LOOSE mode widened ungranted roles, operation names, reader routes, or over-posting'
+);
+
+$looseAdditionalIdentity = $ordinaryAccount + [
+    'estab_permission_mode' => 'LOOSE',
+    'estab_additional_functions' => [
+        ['funktion' => 'A/W', 'rolle' => 'Fernmelder'],
+        ['funktion' => 'LdF', 'rolle' => 'Fernmelder'],
+        ['funktion' => 'Si', 'rolle' => 'Stab'],
+        ['funktion' => 'S1', 'rolle' => 'Stab'],
+    ],
+];
+$assert(
+    estab_workflow_is_telecommunications($looseAdditionalIdentity)
+        && estab_workflow_is_telecommunications_lead($looseAdditionalIdentity)
+        && estab_workflow_is_viewer($looseAdditionalIdentity)
+        && estab_workflow_route_allowed(
+            $looseAdditionalIdentity,
+            'POST',
+            ['task' => 'FM-Eingang']
+        )
+        && estab_workflow_route_allowed(
+            $looseAdditionalIdentity,
+            'POST',
+            ['task' => 'LdF-Eingang']
+        )
+        && estab_workflow_route_allowed(
+            $looseAdditionalIdentity,
+            'POST',
+            ['task' => 'Stab_sichten']
+        ),
+    'explicit LOOSE additional functions did not grant their exact routes'
+);
+$strictIdentityWithStaleAdditionalData = array_replace(
+    $looseAdditionalIdentity,
+    ['estab_permission_mode' => ESTAB_PERMISSION_MODE_STRICT]
+);
+$assert(
+    estab_auth_effective_function_roles($strictIdentityWithStaleAdditionalData)
+        === [['funktion' => 'S2', 'rolle' => 'Stab']]
+        && !estab_workflow_is_telecommunications(
+            $strictIdentityWithStaleAdditionalData
+        )
+        && !estab_workflow_is_telecommunications_lead(
+            $strictIdentityWithStaleAdditionalData
+        )
+        && !estab_workflow_is_viewer($strictIdentityWithStaleAdditionalData)
+        && !estab_workflow_route_allowed(
+            $strictIdentityWithStaleAdditionalData,
+            'POST',
+            ['task' => 'FM-Eingang']
+        ),
+    'stale LOOSE additional-function data retained authority after switching to STRICT'
 );
 
 $pendingOutgoing = [
@@ -212,19 +267,24 @@ $assert(
         'telecommunications-save',
         $pendingOutgoing
     )
-        && estab_message_object_allowed(
+        && !estab_message_object_allowed(
             $ordinaryAccount,
             'telecommunications-save',
             $pendingOutgoing,
             true
+        )
+        && estab_message_object_allowed(
+            $looseAdditionalIdentity,
+            'telecommunications-save',
+            $pendingOutgoing
         ),
-    'LOOSE write policy leaked into reads/default calls or did not relax role ownership'
+    'LOOSE message writes are not bound to an explicit additional function'
 );
 $foreignLock = $pendingOutgoing;
 $foreignLock['x03_sperruser'] = 'other1';
 $assert(
     !estab_message_object_allowed(
-        $ordinaryAccount,
+        $looseAdditionalIdentity,
         'telecommunications-save',
         $foreignLock,
         true
@@ -236,7 +296,7 @@ $terminalOutgoing['x00_status'] = 8;
 $terminalOutgoing['x01_abschluss'] = 't';
 $assert(
     !estab_message_object_allowed(
-        $ordinaryAccount,
+        $looseAdditionalIdentity,
         'telecommunications-save',
         $terminalOutgoing,
         true
@@ -247,7 +307,7 @@ $wrongDirection = $pendingOutgoing;
 $wrongDirection['04_richtung'] = 'E';
 $assert(
     !estab_message_object_allowed(
-        $ordinaryAccount,
+        $looseAdditionalIdentity,
         'telecommunications-save',
         $wrongDirection,
         true
@@ -276,19 +336,24 @@ $assert(
         'staff-correction',
         $returnedOutgoing
     )
-        && estab_message_object_allowed(
+        && !estab_message_object_allowed(
             $ordinaryAccount,
             'staff-correction',
             $returnedOutgoing,
             true
+        )
+        && estab_message_object_allowed(
+            $looseAdditionalIdentity,
+            'staff-correction',
+            $returnedOutgoing
         ),
-    'LOOSE mode did not permit explicit write takeover of a returned outgoing message'
+    'returned messages are not limited to an exact effective author function'
 );
 $returnedWrongState = $returnedOutgoing;
 $returnedWrongState['x00_status'] = 4;
 $assert(
     !estab_message_object_allowed(
-        $ordinaryAccount,
+        $looseAdditionalIdentity,
         'staff-correction',
         $returnedWrongState,
         true
@@ -335,81 +400,104 @@ $accountBoundary = $slice(
 );
 $assert(
     str_contains($writeCapability, 'estab_dv_require_operational_account(')
-        && str_contains($writeCapability, 'estab_incident_status($connection)')
-        && str_contains($writeCapability, "['active_einsatz_id']")
-        && str_contains($writeCapability, "['estab_status']")
+        && preg_match(
+            '/estab_dv_require_operational_account\(\s*'
+                . '\$connection,\s*\$incidentId,\s*\$identity,\s*'
+                . '\$requireMessengerAvailable,\s*true\s*\)/s',
+            $writeCapability
+        ) === 1
         && str_contains(
             $writeCapability,
-            'estab_incident_role_permissions_enforced($incident)'
+            "\$permissionMode = \$shape['estab_permission_mode'] ?? null"
         )
-        && str_contains($writeCapability, '`nv_funktionsfaehigkeiten`'),
-    'LOOSE write boundary does not preserve account/active-incident checks before role relaxation'
-);
-$assert(
-    str_contains($accountBoundary, 'BINARY account.`benutzer` = BINARY ?')
-        && str_contains($accountBoundary, 'BINARY account.`kuerzel` = BINARY ?')
-        && str_contains($accountBoundary, 'BINARY account.`funktion` = BINARY ?')
-        && str_contains($accountBoundary, 'BINARY account.`rolle` = BINARY ?')
-        && str_contains($accountBoundary, 'account.`aktiv` = 1')
-        && str_contains($accountBoundary, 'account.`estab_gesperrt` = 0')
-        && str_contains($accountBoundary, 'estab_auth_shift_access_allowed(')
-        && str_contains($accountBoundary, 'LIMIT 1 FOR UPDATE'),
-    'LOOSE write boundary can bypass authentication, account blocking, or optional access groups'
-);
-$assert(
-    str_contains($strictReadCapability, '`nv_funktionsfaehigkeiten`')
+        && str_contains($writeCapability, "\$permissionMode === 'LOOSE'")
+        && str_contains($writeCapability, 'estab_auth_fetch_additional_functions(')
+        && str_contains(
+            $writeCapability,
+            'estab_dv_effective_identity_capability_function('
+        )
+        && str_contains(
+            $writeCapability,
+            "\$permissionMode !== 'STRICT'"
+        )
+        && str_contains(
+            $writeCapability,
+            "\$permissionMode !== 'LOOSE'"
+        )
+        && str_contains(
+            $writeCapability,
+            'Die aktuell ausgewählte Dienstfunktion besitzt nicht die'
+        )
         && !str_contains(
-            $strictReadCapability,
+            $writeCapability,
             'estab_incident_role_permissions_enforced'
-        )
-        && !str_contains(
-            $ordinaryReadAuthorizationSource,
-            'permission_mode'
-        )
-        && !str_contains(
-            $ordinaryReadAuthorizationSource,
-            'role_checks_enforced'
         ),
-    'LOOSE write mode broadened read authorization'
+    'capability writes do not lock and revalidate exact effective functions'
 );
 $assert(
     str_contains(
-        $attachmentWriteScope,
-        'estab_permission_role_checks_enforced()'
+        $accountBoundary,
+        'estab_incident_duty_shift_required($incident)'
     )
         && str_contains(
-            $attachmentWriteScope,
-            'estab_message_operation_relaxes_write_role($operation)'
+            $accountBoundary,
+            'estab_dv_require_active_hat_for_operational_write('
+        )
+        && str_contains($accountBoundary, "'duty_assignment_id'")
+        && str_contains($accountBoundary, "'estab_permission_mode' => 'STRICT'")
+        && str_contains($accountBoundary, 'BINARY account.`benutzer` = BINARY ?')
+        && str_contains($accountBoundary, 'BINARY account.`kuerzel` = BINARY ?')
+        && str_contains(
+            $accountBoundary,
+            'SELECT account.`funktion`, account.`rolle`'
+        )
+        && str_contains($accountBoundary, 'account.`aktiv` = 1')
+        && str_contains($accountBoundary, 'account.`estab_gesperrt` = 0')
+        && str_contains($accountBoundary, '$provenanceFunction')
+        && str_contains($accountBoundary, '$provenanceRole')
+        && str_contains($accountBoundary, 'estab_auth_identity_has_function(')
+        && str_contains($accountBoundary, 'estab_auth_shift_access_allowed(')
+        && str_contains($accountBoundary, 'estab_auth_fetch_additional_functions(')
+        && str_contains($accountBoundary, "'estab_permission_mode'] = 'LOOSE'")
+        && str_contains($accountBoundary, 'LIMIT 1 FOR UPDATE'),
+    'STRICT hats and LOOSE account/grant/access-shift boundaries are not separated'
+);
+$assert(
+    str_contains($strictReadCapability, 'estab_dv_require_operational_account(')
+        && str_contains(
+            $strictReadCapability,
+            "\$permissionMode = \$shape['estab_permission_mode'] ?? null"
         )
         && str_contains(
-            $attachmentWriteScope,
-            'estab_message_object_allowed($identity, $operation, $message, true)'
+            $strictReadCapability,
+            "\$permissionMode !== 'STRICT'"
         )
         && str_contains(
-            $attachmentWriteScope,
-            "\$message['einsatz_id']"
+            $strictReadCapability,
+            "\$permissionMode !== 'LOOSE'"
         )
         && str_contains(
-            $attachmentWriteScope,
-            "\$message['00_lfd']"
+            $strictReadCapability,
+            'estab_dv_effective_identity_capability_function('
         )
         && str_contains(
-            $attachmentWriteScope,
-            '$scopeIncidentId !== $incidentId'
+            $strictReadCapability,
+            'Die aktuell ausgewählte Dienstfunktion besitzt nicht die'
         )
         && str_contains(
-            $attachmentWriteScope,
-            "(int) (\$message['00_lfd'] ?? 0) === \$scopeMessageId"
-        )
-        && str_contains(
-            $attachmentWriteScope,
-            'hash_equals($shape[$field], $scope[$field])'
-        )
-        && substr_count(
-            $attachmentWriteScope,
-            'estab_message_object_allowed('
-        ) === 2,
-    'LOOSE attachment write scope is not bound to the exact incident, message, operation, and identity'
+            $strictReadCapability,
+            'estab_dv_authorized_capability_identity('
+        ),
+    'STRICT reads do not enforce the selected tuple capability or LOOSE '
+        . 'reads lost their effective-function check'
+);
+$assert(
+    estab_read_attachment_write_scope(
+        $ordinaryAccount,
+        'staff-correction',
+        $returnedOutgoing + ['einsatz_id' => 7, '00_lfd' => 91]
+    ) === null,
+    'LOOSE created an exceptional cross-role attachment read capability'
 );
 $assert(
     str_contains($listSource, '$expectedFunction')
@@ -424,39 +512,6 @@ $assert(
         )
         && !str_contains($listSource, '$visibilityIdentity'),
     'LOOSE mode broadened second-sighting list visibility'
-);
-$correctionQueue = $slice(
-    $listSource,
-    'case "KORREKTUR":',
-    'case "Stab_sichten":'
-);
-$assert(
-    str_contains(
-        $correctionQueue,
-        'estab_read_require_operational_scope ('
-    )
-        && str_contains(
-            $correctionQueue,
-            'estab_permission_context_set_from_incident ($scope ["incident"])'
-        )
-        && str_contains(
-            $correctionQueue,
-            'estab_permission_role_checks_enforced ()'
-        )
-        && str_contains($correctionQueue, 'm.`einsatz_id` = ?')
-        && str_contains($correctionQueue, 'm.`x00_status` = 10')
-        && str_contains($correctionQueue, "m.`04_richtung` = 'A'")
-        && str_contains($correctionQueue, 'm.`02_zeit` IS NULL')
-        && str_contains($correctionQueue, 'm.`03_datum` IS NULL')
-        && str_contains($correctionQueue, 'm.`15_quitdatum` IS NOT NULL')
-        && str_contains(
-            $correctionQueue,
-            'estab_message_object_allowed ('
-        )
-        && str_contains($correctionQueue, '"staff-correction"')
-        && str_contains($correctionQueue, 'true')
-        && !str_contains($correctionQueue, '"staff-read"'),
-    'status-10 takeover is not an incident-scoped LOOSE-only write queue'
 );
 $assert(
     str_contains(
@@ -476,12 +531,7 @@ $resubmitBoundary = $slice(
     'function estab_message_fetch_for_incident_by_id('
 );
 $assert(
-    str_contains(
-        $resubmitBoundary,
-        'estab_incident_role_permissions_enforced($incident)'
-    )
-        && str_contains($resubmitBoundary, '$rolePermissionsEnforced')
-        && str_contains($resubmitBoundary, '$authorPredicate')
+    str_contains($resubmitBoundary, '$authorPredicate')
         && str_contains(
             $resubmitBoundary,
             "\$authorPredicate = ' AND `14_funktion` = ?';"
@@ -501,7 +551,7 @@ $assert(
             $resubmitBoundary,
             'estab_message_require_attachment_scope('
         ),
-    'returned-message takeover does not retain strict author, actor, state, lock, or attachment boundaries'
+    'returned-message correction does not retain exact author-function, actor, state, lock, or attachment boundaries'
 );
 foreach ([
     'original_author_code',
@@ -588,17 +638,66 @@ $modeUpdate = $slice(
     'function estab_incident_update_permission_mode(',
     'function estab_incident_activate_locked('
 );
+$operationalDataCheck = $slice(
+    $incidentSource,
+    'function estab_incident_has_operational_data(',
+    'function estab_incident_update_command_post_name('
+);
+foreach ([
+    'nv_nachrichten',
+    'nv_anhang',
+    'nv_etb',
+    'nv_tbb',
+    'nv_ubb',
+    'nv_protokoll',
+    'nv_bhp50',
+    'nv_komplan',
+    'nv_etbtitel',
+    'nv_tbbtitel',
+    'nv_dienstschichten',
+    'nv_dienstuebergaben',
+    'nv_dienstuebergabe_anfragen',
+    'nv_zugangsschichten',
+    'nv_fernmeldeplaene',
+    'nv_melderauftraege',
+    'nv_betriebsereignisse',
+    'nv_betriebsereignis_kopf',
+] as $modeFreezeTable) {
+    $assert(
+        str_contains($operationalDataCheck, '`' . $modeFreezeTable . '`'),
+        'permission-mode freeze omits operational/formal table: '
+            . $modeFreezeTable
+    );
+}
 $assert(
     str_contains($modeUpdate, 'estab_incident_status($connection, true)')
         && str_contains($modeUpdate, '$expectedRevision')
         && str_contains($modeUpdate, '$expectedMode')
         && str_contains($modeUpdate, '$confirmedLoose')
         && str_contains($modeUpdate, 'ESTAB_PERMISSION_MODE_LOOSE')
+        && str_contains(
+            $modeUpdate,
+            'estab_incident_has_operational_data($connection, $incidentId)'
+        )
+        && strpos(
+            $modeUpdate,
+            'estab_incident_has_operational_data($connection, $incidentId)'
+        ) < strpos(
+            $modeUpdate,
+            'SET @estab_permission_mode_admin_write_id'
+        )
+        && strpos(
+            $modeUpdate,
+            'if (hash_equals($currentMode, $mode))'
+        ) < strpos(
+            $modeUpdate,
+            'estab_incident_has_operational_data($connection, $incidentId)'
+        )
         && str_contains($modeUpdate, 'SET @estab_permission_mode_admin_write_id')
         && str_contains($modeUpdate, "'berechtigung_geaendert'")
         && str_contains($modeUpdate, '$connection->commit()')
         && str_contains($modeUpdate, '$connection->rollback()'),
-    'administrative mode switch lacks revision, confirmation, trigger marker, audit, or transaction protection'
+    'administrative mode switch lacks data immutability, revision, confirmation, trigger marker, audit, or transaction protection'
 );
 $assert(
     str_contains($adminSource, 'estab_csrf_require_post($_SERVER, $_POST)')
@@ -716,15 +815,29 @@ $assert(
         && str_contains($readiness, "'116-standard-categories.sql'")
         && str_contains($verify, "'117-telecom-draft-discard.sql'")
         && str_contains($readiness, "'117-telecom-draft-discard.sql'")
+        && str_contains($verify, "'118-operational-authority.sql'")
+        && str_contains($readiness, "'118-operational-authority.sql'")
         && str_contains($verify, 'estab_permission_mode')
         && str_contains($readiness, 'estab_permission_mode')
-        && str_contains($verify, 'estab_schema_migrations`) = 23')
-        && str_contains($readiness, 'estab_schema_migrations) = 23'),
-    'Migrations 115-117 and exact ledger are outside verify/readiness gates'
+        && str_contains($verify, 'estab_schema_migrations`) = 24')
+        && str_contains($readiness, 'estab_schema_migrations) = 24'),
+    'Migrations 115-118 and exact ledger are outside verify/readiness gates'
 );
 $assert(
-    str_contains($permissionSource, 'Missing context is fail-closed')
-        && str_contains($permissionSource, "!== ESTAB_PERMISSION_MODE_LOOSE")
+    str_contains($permissionSource, 'Missing context fails closed')
+        && str_contains(
+            $permissionSource,
+            'function estab_permission_duty_shift_required()'
+        )
+        && str_contains(
+            $permissionSource,
+            "\$context['mode'] === ESTAB_PERMISSION_MODE_STRICT"
+        )
+        && str_contains(
+            $permissionSource,
+            'function estab_permission_loose_mode_active()'
+        )
+        && str_contains($permissionSource, 'return true;')
         && !str_contains($permissionSource, '$_GET')
         && !str_contains($permissionSource, '$_POST')
         && !str_contains($permissionSource, '$_SESSION'),

@@ -580,8 +580,133 @@ foreach (['', '0', '-1', '+1', '01', '1 OR 1=1', '1.0', [], null] as $invalidId)
 $staff = ['benutzer' => 'Staff', 'kuerzel' => 'staff1', 'funktion' => 'S1', 'rolle' => 'Stab'];
 $advisor = ['benutzer' => 'Advisor', 'kuerzel' => 'fb0001', 'funktion' => 'POL', 'rolle' => 'FB'];
 $viewer = ['benutzer' => 'Viewer', 'kuerzel' => 'si0001', 'funktion' => 'Si', 'rolle' => 'Stab'];
+$strictEtb = [
+    'benutzer' => 'ETB',
+    'kuerzel' => 'etb001',
+    'funktion' => 'ETB',
+    'rolle' => 'Stab',
+    'estab_permission_mode' => 'STRICT',
+    'duty_assignment_id' => 701,
+];
+$looseEtbOnly = [
+    'benutzer' => 'LdF mit historischer ETB-Zusatzfunktion',
+    'kuerzel' => 'ldf001',
+    'funktion' => 'LdF',
+    'rolle' => 'Fernmelder',
+    'estab_permission_mode' => 'LOOSE',
+    'estab_additional_functions' => [
+        ['funktion' => 'ETB', 'rolle' => 'Stab'],
+    ],
+];
+$assert(
+    !estab_workflow_is_staff_writer($strictEtb)
+        && !estab_workflow_route_allowed(
+            $strictEtb,
+            'POST',
+            ['stab_schreiben_x' => '1']
+        )
+        && !estab_workflow_route_allowed(
+            $strictEtb,
+            'POST',
+            ['task' => 'Stab_lesen', '00_lfd' => '1']
+        )
+        && !estab_workflow_is_staff_writer($looseEtbOnly)
+        && !estab_workflow_route_allowed(
+            $looseEtbOnly,
+            'POST',
+            ['stab_lesen_x' => '1']
+        ),
+    'ETB received a normal Stab/FB message workflow in STRICT or LOOSE'
+);
 $telecommunications = ['benutzer' => 'Radio', 'kuerzel' => 'aw0001', 'funktion' => 'A/W', 'rolle' => 'Fernmelder'];
 $telecommunicationsLead = ['benutzer' => 'Lead', 'kuerzel' => 'ldf001', 'funktion' => 'LdF', 'rolle' => 'Fernmelder'];
+
+$looseMultiStaff = [
+    'benutzer' => 'Mehrfachfunktion',
+    'kuerzel' => 'multi1',
+    'funktion' => 'S1',
+    'rolle' => 'Stab',
+    'estab_permission_mode' => 'LOOSE',
+    'estab_additional_functions' => [
+        ['funktion' => 'S2', 'rolle' => 'Stab'],
+    ],
+];
+$selectedLooseS2 = estab_workflow_identity_for_request(
+    $looseMultiStaff,
+    ['stab_schreiben_x' => '1', 'acting_function' => 'S2']
+);
+$assert(
+    ($selectedLooseS2['funktion'] ?? null) === 'S2'
+        && ($selectedLooseS2['rolle'] ?? null) === 'Stab'
+        && ($selectedLooseS2['authorization_account_function'] ?? null)
+            === 'S1'
+        && ($selectedLooseS2['authorization_route_function'] ?? null)
+            === 'S2'
+        && estab_workflow_route_allowed(
+            $looseMultiStaff,
+            'POST',
+            [
+                'task' => 'Stab_schreiben',
+                'acting_function' => 'S2',
+                '14_zeichen' => 'multi1',
+                '14_funktion' => 'S2',
+            ]
+        ),
+    'LOOSE S1 plus S2 did not bind a staff write explicitly to S2'
+);
+$forgedActingFunctionRejected = false;
+try {
+    estab_workflow_identity_for_request(
+        $looseMultiStaff,
+        ['stab_lesen_x' => '1', 'acting_function' => 'S3']
+    );
+} catch (RuntimeException) {
+    $forgedActingFunctionRejected = true;
+}
+$looseAfterS2Revocation = $looseMultiStaff;
+unset($looseAfterS2Revocation['estab_additional_functions']);
+$strictSelectedS2 = [
+    'benutzer' => 'Strenger S2',
+    'kuerzel' => 'str002',
+    'funktion' => 'S2',
+    'rolle' => 'Stab',
+    'estab_permission_mode' => 'STRICT',
+    'duty_assignment_id' => 702,
+];
+$assert(
+    $forgedActingFunctionRejected
+        && !estab_workflow_route_allowed(
+            $looseMultiStaff,
+            'POST',
+            ['stab_lesen_x' => '1', 'acting_function' => 'S3']
+        )
+        && !estab_workflow_route_allowed(
+            $looseAfterS2Revocation,
+            'POST',
+            ['stab_lesen_x' => '1', 'acting_function' => 'S2']
+        )
+        && estab_workflow_route_allowed(
+            $strictSelectedS2,
+            'POST',
+            ['stab_lesen_x' => '1', 'acting_function' => 'S2']
+        )
+        && !estab_workflow_route_allowed(
+            $strictSelectedS2,
+            'POST',
+            ['stab_lesen_x' => '1', 'acting_function' => 'S1']
+        ),
+    'forged, revoked or non-selected STRICT acting function was accepted'
+);
+foreach ([['S2'], ' S2', 'S/2', str_repeat('S', 11)] as $invalidActing) {
+    $assert(
+        !estab_workflow_route_allowed(
+            $looseMultiStaff,
+            'POST',
+            ['stab_lesen_x' => '1', 'acting_function' => $invalidActing]
+        ),
+        'malformed acting function selector was accepted'
+    );
+}
 
 $attachmentEditRoutes = [
     [$telecommunications, 'FM-Eingang'],
@@ -1277,11 +1402,18 @@ $assert(
         )
         && str_contains(
             $mainController,
-            '$formdata ["14_zeichen"]      = $_SESSION ["vStab_kuerzel"];'
+            '$formdata ["01_zeichen"] =' . "\n"
+                . '          (string) $workflowSelectedIdentity ["kuerzel"];'
         )
         && str_contains(
             $mainController,
-            '$formdata ["14_funktion"]     = $_SESSION ["vStab_funktion"];'
+            '$formdata ["14_zeichen"] ='."\n"
+                . '          (string) $workflowSelectedIdentity ["kuerzel"];'
+        )
+        && str_contains(
+            $mainController,
+            '$formdata ["14_funktion"] ='."\n"
+                . '          (string) $workflowSelectedIdentity ["funktion"];'
         )
         && str_contains(
             $mainController,
@@ -1292,7 +1424,7 @@ $assert(
             '$formdata ["15_quitzeichen"]  = "";'
         )
         && !str_contains($mainController, 'ESTAB_ORGANISATION'),
-    'conversation-note staging is not bound to incident and session authority'
+    'conversation-note staging is not bound to incident and exact acting-function authority'
 );
 
 $ciIntegration = file_get_contents(dirname(__DIR__) . '/integration/ci.sh');
@@ -1303,20 +1435,112 @@ $categoryHttp = file_get_contents(dirname(__DIR__) . '/integration/categories_ht
 $messageWorkflowHttp = file_get_contents(
     dirname(__DIR__) . '/integration/message_workflow_http.sh'
 );
+$messageWorkflowIncidentFixture = file_get_contents(
+    dirname(__DIR__) . '/integration/message_workflow_incident_fixture.php'
+);
+$mainControllerSource = file_get_contents(
+    dirname(__DIR__, 2) . '/4fach/mainindex.php'
+);
 $assert(
     is_string($logbookHttp)
         && is_string($categoryHttp)
-        && is_string($messageWorkflowHttp),
+        && is_string($messageWorkflowHttp)
+        && is_string($messageWorkflowIncidentFixture)
+        && is_string($mainControllerSource),
     'fachliche HTTP integration contracts are unreadable'
+);
+$assert(
+    str_contains(
+        $mainControllerSource,
+        'estab_auth_active_permission_mode ('
+    )
+        && str_contains(
+            $mainControllerSource,
+            'estab_navigation_login_landing_key ('
+        )
+        && str_contains(
+            $mainControllerSource,
+            'estab_navigation_open_after_login ($loginLandingKey);'
+        )
+        && !str_contains(
+            $mainControllerSource,
+            'unset ($_SESSION ["estab_pending_navigation_key"]);' . "\n"
+                . '        estab_navigation_open_after_login ('
+        ),
+    'successful login bypasses the mode-specific STRICT duty-selection bootstrap'
+);
+$assert(
+    str_contains(
+        $mainControllerSource,
+        'estab_navigation_require_selected_duty ('
+    )
+        && str_contains(
+            $mainControllerSource,
+            '$workflowIdentity,' . "\n" . '    "messages",'
+        )
+        && strpos(
+            $mainControllerSource,
+            'estab_navigation_require_selected_duty ('
+        ) < strpos(
+            $mainControllerSource,
+            'estab_read_require_operational_scope ('
+        ),
+    'main message controller can reach its read gate before STRICT duty selection'
+);
+$assert(
+    !str_contains($messageWorkflowHttp, 'set_test_permission_mode')
+        && !str_contains(
+            $messageWorkflowHttp,
+            'UPDATE `nv_einsaetze` SET `estab_permission_mode`'
+        )
+        && str_contains(
+            $messageWorkflowHttp,
+            'create LOOSE "$loose_incident_code" 1'
+        )
+        && str_contains(
+            $messageWorkflowHttp,
+            'create STRICT "$strict_incident_code" 0'
+        )
+        && str_contains(
+            $messageWorkflowHttp,
+            'restore "$original_active_incident_id"'
+        )
+        && str_contains(
+            $messageWorkflowHttp,
+            'original active incident and immutable permission mode were restored'
+        )
+        && str_contains(
+            $messageWorkflowIncidentFixture,
+            "getenv('ESTAB_MESSAGE_WORKFLOW_INCIDENT_FIXTURE') !== '1'"
+        )
+        && str_contains(
+            $messageWorkflowIncidentFixture,
+            'estab_incident_create('
+        )
+        && str_contains(
+            $messageWorkflowIncidentFixture,
+            'estab_incident_activate('
+        )
+        && str_contains(
+            $messageWorkflowIncidentFixture,
+            'estab_incident_deactivate('
+        )
+        && !str_contains(
+            $messageWorkflowIncidentFixture,
+            'estab_incident_update_permission_mode('
+        ),
+    'HTTP workflow mutates one incident between STRICT and LOOSE or bypasses the guarded incident lifecycle'
 );
 $assert(
     !str_contains($logbookHttp, 'operation_action=select_hat')
         && !str_contains($logbookHttp, 'dienstbesetzung_id=')
+        && str_contains($logbookHttp, 'explicitly LOOSE central incident')
         && str_contains($logbookHttp, 'fixed account function')
         && str_contains($logbookHttp, "'logbook_action=save_entry'")
         && !str_contains($categoryHttp, 'operation_action=select_hat')
         && !str_contains($categoryHttp, 'dienstbesetzung_id=')
-        && str_contains($categoryHttp, 'fixed account function')
+        && str_contains($categoryHttp, 'explicitly LOOSE central incident')
+        && str_contains($categoryHttp, 'primary and explicit personal')
         && str_contains($categoryHttp, "'category_action=create'")
         && !str_contains($messageWorkflowHttp, 'operation_action=select_hat')
         && !str_contains($messageWorkflowHttp, 'activate_http_shift.php')
@@ -1331,10 +1555,23 @@ $assert(
         )
         && str_contains(
             $messageWorkflowHttp,
-            'active incident for Führungsstellen HTTP workflow'
+            'dedicated LOOSE incident is active from creation'
+        )
+        && str_contains(
+            $messageWorkflowHttp,
+            'dedicated STRICT incident is inactive and operationally empty'
+        )
+        && str_contains(
+            $messageWorkflowHttp,
+            'STRICT login first opens duty-function selector'
+        )
+        && str_contains(
+            $messageWorkflowHttp,
+            'LOOSE login continues directly to messages'
         ),
-    'fachliche HTTP integration still depends on a selected legacy duty '
-        . 'assignment or lost its fixed-account and active-incident evidence'
+    'fachliche HTTP integration still depends on a selected formal duty '
+        . 'assignment in LOOSE or lost its primary/extra-function and '
+        . 'active-incident evidence'
 );
 $assert(
     is_string($ciIntegration)
@@ -1376,7 +1613,8 @@ $assert(
                 . '"$cookie_jar" \\' . "\n"
                 . '    "$base_url/4fach/vordrucke.php"'
         )
-        && str_contains($legacyHttpSmoke, 'Zugewiesene Funktion')
+        && str_contains($legacyHttpSmoke, 'Kontofunktion')
+        && str_contains($legacyHttpSmoke, 'Wirksame Funktionen')
         && str_contains(
             $legacyHttpSmoke,
             'operation_action[^>]*select_hat'

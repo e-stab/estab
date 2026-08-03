@@ -128,13 +128,13 @@ $assert(
         )
         && str_contains($sidebarMarkup, '<h2>Bereiche</h2>')
         && str_contains($sidebarMarkup, '>Führungsstelle</span>')
-        && str_contains($sidebarMarkup, '>Nachrichten</span>')
+        && !str_contains($sidebarMarkup, '>Nachrichten</span>')
         && str_contains($sidebarMarkup, 'data-estab-user-code="ada001"')
         && str_contains($sidebarMarkup, 'data-estab-logout-form')
         && !str_contains($sidebarMarkup, '<details')
         && !str_contains($sidebarMarkup, '<summary')
         && !str_contains($sidebarMarkup, 'data-estab-mainframe-guard'),
-    'always-visible authenticated sidebar presentation is incomplete'
+    'default-STRICT sidebar presentation is incomplete or exposes an operational area without a selected duty function'
 );
 $sidebarIdentityMarkup = estab_session_ui_markup(
     $identity,

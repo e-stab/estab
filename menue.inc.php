@@ -42,7 +42,7 @@ include ("./4fcfg/config.inc.php");
 
 // Kanonische Bereichsreihenfolge wie in app/navigation.php
    $menue[1]["text"] = "Nachrichtenvordruck";
-	$menue[1]["info"] = "Anmeldung als Teilnehmer des Stabs.\nAls Sachgebiet, Fachberater oder Verbindungsbeamter.\nDie Anmeldung entscheidet &uuml;ber die Zugriffsrechte auf andere Men&uuml;punkte.";
+		$menue[1]["info"] = "Nachrichtenvordrucke des aktiven Einsatzes bearbeiten.\nIm Modus Streng folgen die Rechte der ausgew&auml;hlten Dienstbesetzung.\nIm Modus Locker gelten Prim&auml;rfunktion und ausdr&uuml;cklich vergebene Zusatzfunktionen.";
    $menue[1]["pic"]  = $conf_menue ["symbole"]."4fach_aktiv.png";
    $menue[1]["link"] = "./4fach/index.php";
    $menue[1]["navigation_key"] = "messages";
@@ -50,7 +50,7 @@ include ("./4fcfg/config.inc.php");
 	$menue[1]["visible"] = true ;  
 
 	$menue[2]["text"] = "Führungsstellenbetrieb";
-		$menue[2]["info"] = "S6-Fernmeldepläne und Melderläufe für den aktiven Einsatz; Rechte folgen der festen Kontofunktion.";
+	$menue[2]["info"] = "S6-Fernmeldepläne und Melderläufe für den aktiven Einsatz; Rechte folgen dem dort festgelegten Berechtigungsmodus.";
    $menue[2]["pic"]  = $conf_menue ["symbole"]."iuk_hs80.png";
    $menue[2]["link"] = "./4fach/fuehrungsstelle.php";
    $menue[2]["navigation_key"] = "command-post";
@@ -82,7 +82,7 @@ include ("./4fcfg/config.inc.php");
    $zusatz_menue[1]["visible"] = true ;
 
    $menue[5]["text"] = "Einsatztagebuch<BR>(ETB)";
-		$menue[5]["info"] = "ETB-Einträge dürfen Konten mit der festen Funktion S2 oder ETB schreiben. Andere Funktionen können lesen.";
+	$menue[5]["info"] = "ETB-Einträge dürfen wirksame Funktionen S2 oder ETB schreiben. Andere berechtigte Funktionen können lesen.";
    $menue[5]["pic"]  = $conf_menue ["symbole"]."etb_aktiv.png";
    $menue[5]["link"] = "./stabetb/etb.php";
    $menue[5]["navigation_key"] = "incident-log";

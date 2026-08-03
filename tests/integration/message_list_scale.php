@@ -287,6 +287,11 @@ $insertMessages = static function (
         if ($shiftId < 1) {
             throw new RuntimeException('Could not create TTB fixture shift');
         }
+        $database->query(
+            'SET @estab_logbook_system_write_incident_id = '
+                . $incidentId
+                . ", @estab_logbook_system_write_book = 'TTB'"
+        );
         for ($index = 1; $index <= $rowCount; $index++) {
             $direction = $index % 2 === 0 ? 'E' : 'A';
             $number = ($foreign ? 900000 : 500000) + $index;
@@ -364,10 +369,18 @@ $insertMessages = static function (
                 ];
             }
         }
+        $database->query(
+            'SET @estab_logbook_system_write_incident_id = NULL,'
+                . ' @estab_logbook_system_write_book = NULL'
+        );
         if (!$database->commit()) {
             throw new RuntimeException('Could not commit scale fixture');
         }
     } catch (Throwable $exception) {
+        $database->query(
+            'SET @estab_logbook_system_write_incident_id = NULL,'
+                . ' @estab_logbook_system_write_book = NULL'
+        );
         $database->rollback();
         throw $exception;
     } finally {

@@ -9,15 +9,15 @@ require_once __DIR__ . '/message_repository.php';
 /**
  * Return the distinct configured functions in their established display order.
  *
- * Active and current functions are appended if a deployment's matrix is
- * temporarily incomplete, so the live status never hides a signed-in user.
+ * Primary account functions with a live session are appended if a
+ * deployment's matrix is temporarily incomplete. Selected STRICT duty hats
+ * and LOOSE additional functions are intentionally not inferred here.
  *
  * @return list<array{rolle: string, funktion: string}>
  */
 function estab_sidebar_positions(
     array $configuredPositions,
     array $users,
-    array $identity,
     ?DateTimeInterface $now = null
 ): array {
     $positions = [];
@@ -66,8 +66,6 @@ function estab_sidebar_positions(
         }
         $append($user['rolle'] ?? null, $user['funktion'] ?? null);
     }
-    $append($identity['rolle'] ?? null, $identity['funktion'] ?? null);
-
     return $positions;
 }
 
@@ -149,7 +147,8 @@ function estab_sidebar_fetch_configured_positions(
  * @return array{
  *     session_key: string,
  *     sound_file: string,
- *     label: string
+ *     label: string,
+ *     funktion: string
  * }|null
  */
 function estab_sidebar_queue_profile(?array $identity): ?array
@@ -157,39 +156,69 @@ function estab_sidebar_queue_profile(?array $identity): ?array
     if ($identity === null) {
         return null;
     }
-    $role = $identity['rolle'] ?? null;
-    $function = $identity['funktion'] ?? null;
-    if (!is_string($role) || !is_string($function)) {
+    $functions = estab_auth_effective_function_roles($identity);
+    if ($functions === []) {
         throw new InvalidArgumentException('Invalid sidebar queue identity');
     }
-
-    if ($role === 'Fernmelder' && $function === 'LdF') {
+    if (array_filter(
+        $functions,
+        static fn (array $tuple): bool =>
+            $tuple['rolle'] === 'Fernmelder'
+            && $tuple['funktion'] === 'LdF'
+    ) !== []) {
         return [
             'session_key' => 'old_que_ldf',
             'sound_file' => 'notify_aw.wav',
             'label' => 'Bei LdF',
+            'funktion' => 'LdF',
         ];
     }
-    if ($role === 'Fernmelder' && $function === 'A/W') {
+    if (array_filter(
+        $functions,
+        static fn (array $tuple): bool =>
+            $tuple['rolle'] === 'Fernmelder'
+            && $tuple['funktion'] === 'A/W'
+    ) !== []) {
         return [
             'session_key' => 'old_que_aw',
             'sound_file' => 'notify_aw.wav',
             'label' => 'Im Ausgang',
+            'funktion' => 'A/W',
         ];
     }
-    if ($role === 'Stab' && $function === 'Si') {
+    if (array_filter(
+        $functions,
+        static fn (array $tuple): bool =>
+            $tuple['rolle'] === 'Stab' && $tuple['funktion'] === 'Si'
+    ) !== []) {
         return [
             'session_key' => 'old_que_si',
             'sound_file' => 'notify_si.wav',
             'label' => 'Zu sichten',
+            'funktion' => 'Si',
         ];
     }
-    if ($role === 'Stab' || $role === 'FB') {
-        return [
-            'session_key' => 'old_que_stab',
-            'sound_file' => 'notify_stab.wav',
-            'label' => 'Offene Meldungen',
-        ];
+    if (array_filter(
+        $functions,
+        static fn (array $tuple): bool =>
+            estab_auth_has_staff_message_workspace(
+                $tuple['funktion'],
+                $tuple['rolle']
+            )
+    ) !== []) {
+        foreach ($functions as $tuple) {
+            if (estab_auth_has_staff_message_workspace(
+                $tuple['funktion'],
+                $tuple['rolle']
+            )) {
+                return [
+                    'session_key' => 'old_que_stab',
+                    'sound_file' => 'notify_stab.wav',
+                    'label' => 'Offene Meldungen',
+                    'funktion' => $tuple['funktion'],
+                ];
+            }
+        }
     }
 
     return null;
@@ -491,7 +520,8 @@ function estab_sidebar_audio_markup(?string $soundUrl): string
  *     key: string,
  *     name: string,
  *     label: string,
- *     description: string
+ *     description: string,
+ *     acting_function?: string
  * }>
  */
 function estab_sidebar_workflow_actions(
@@ -501,152 +531,114 @@ function estab_sidebar_workflow_actions(
     if ($identity === null || $menuState !== 'ROLLE') {
         return [];
     }
-    $role = $identity['rolle'] ?? null;
-    $function = $identity['funktion'] ?? null;
-    if (!is_string($role) || !is_string($function)) {
-        throw new InvalidArgumentException('Invalid sidebar workflow identity');
-    }
-
-    $looseWriteActions = [];
-    if (!estab_permission_role_checks_enforced()) {
-        $looseWriteActions = [
-            [
-                'key' => 'stab_schreiben',
-                'name' => 'stab_schreiben_x',
-                'label' => 'Schreiben',
-                'description' => 'Neue Ausgangsmeldung verfassen',
-            ],
-            [
-                'key' => 'stab_korrekturen',
-                'name' => 'stab_korrekturen_x',
-                'label' => 'Korrekturen',
-                'description' => 'Zurückgewiesene Meldungen überarbeiten',
-            ],
-            [
-                'key' => 'stab_sichten',
-                'name' => 'stab_sichten_x',
-                'label' => 'Sichten',
-                'description' => 'Meldungen fachlich sichten',
-            ],
-            [
-                'key' => 'ldf_nachrichten',
-                'name' => 'ldf_nachrichten_x',
-                'label' => 'Disposition',
-                'description' => 'Rufnamen und Beförderungswege festlegen',
-            ],
-            [
-                'key' => 'fm_eingang',
-                'name' => 'fm_eingang_x',
-                'label' => 'Eingang',
-                'description' => 'Eingehende Meldung erfassen',
-            ],
-            [
-                'key' => 'fm_ausgang',
-                'name' => 'fm_ausgang_x',
-                'label' => 'Ausgang',
-                'description' => 'Ausgehende Meldungen befördern',
-            ],
-        ];
+    $mode = $identity['estab_permission_mode'] ?? null;
+    if ($mode === 'STRICT') {
+        $assignmentId = filter_var(
+            $identity['duty_assignment_id'] ?? null,
+            FILTER_VALIDATE_INT,
+            ['options' => ['min_range' => 1, 'max_range' => PHP_INT_MAX]]
+        );
+        if (!is_int($assignmentId)) {
+            return [];
+        }
+    } elseif ($mode !== null && $mode !== 'LOOSE') {
+        return [];
     }
 
     $actions = [];
-    if ($role === 'Stab') {
-        if ($function === 'Si') {
-            $actions[] = [
+    $seen = [];
+    $append = static function (array $action) use (&$actions, &$seen): void {
+        $key = (string) ($action['key'] ?? '');
+        $actingFunction = is_string($action['acting_function'] ?? null)
+            ? $action['acting_function']
+            : '';
+        $deduplicationKey = $key . "\0" . $actingFunction;
+        if ($key === '' || isset($seen[$deduplicationKey])) {
+            return;
+        }
+        $seen[$deduplicationKey] = true;
+        $actions[] = $action;
+    };
+
+    foreach (estab_auth_effective_function_roles($identity) as $tuple) {
+        $role = $tuple['rolle'];
+        $function = $tuple['funktion'];
+        if ($role === 'Stab' && $function === 'Si') {
+            $append([
                 'key' => 'stab_sichten',
                 'name' => 'stab_sichten_x',
                 'label' => 'Sichten',
                 'description' => 'Neue Meldungen prüfen',
-            ];
-            $actions[] = [
+            ]);
+            $append([
                 'key' => 'si_admin',
                 'name' => 'si_admin_x',
                 'label' => '2. Sichtung',
                 'description' => 'Zweite Sichtung öffnen',
-            ];
-        } else {
-            $actions[] = [
+            ]);
+        } elseif (estab_auth_has_staff_message_workspace($function, $role)) {
+            $functionLabel = estab_function_display_name($function);
+            $append([
                 'key' => 'stab_schreiben',
                 'name' => 'stab_schreiben_x',
-                'label' => 'Schreiben',
-                'description' => 'Neue Meldung verfassen',
-            ];
-            $actions[] = [
+                'label' => 'Schreiben als ' . $functionLabel,
+                'description' => 'Neue Meldung für diese Funktion verfassen',
+                'acting_function' => $function,
+            ]);
+            $append([
                 'key' => 'stab_lesen',
                 'name' => 'stab_lesen_x',
-                'label' => 'Lesen',
-                'description' => 'Meldungseingang anzeigen',
-            ];
+                'label' => 'Lesen als ' . $functionLabel,
+                'description' => 'Meldungseingang dieser Funktion anzeigen',
+                'acting_function' => $function,
+            ]);
         }
-    } elseif ($role === 'Fernmelder' && $function === 'LdF') {
-        $actions[] = [
-            'key' => 'ldf_nachrichten',
-            'name' => 'ldf_nachrichten_x',
-            'label' => 'Disposition',
-            'description' => 'Rufnamen und Beförderungswege festlegen',
-        ];
-    } elseif ($role === 'Fernmelder' && $function === 'A/W') {
-        $actions[] = [
-            'key' => 'fm_eingang',
-            'name' => 'fm_eingang_x',
-            'label' => 'Eingang',
-            'description' => 'Eingehende Meldung erfassen',
-        ];
-        $actions[] = [
-            'key' => 'fm_ausgang',
-            'name' => 'fm_ausgang_x',
-            'label' => 'Ausgang',
-            'description' => 'Ausgehende Meldungen bearbeiten',
-        ];
-        $actions[] = [
-            'key' => 'fm_admin',
-            'name' => 'fm_admin_x',
-            'label' => '2. Sichtung',
-            'description' => 'Zweite Sichtung öffnen',
-        ];
-        $actions[] = [
-            'key' => 'fm_anhang',
-            'name' => 'fm_anhang_x',
-            'label' => 'Anhänge',
-            'description' => 'Dateien auswählen und hochladen',
-        ];
-    } elseif ($role === 'FB') {
-        $actions[] = [
-            'key' => 'stab_schreiben',
-            'name' => 'stab_schreiben_x',
-            'label' => 'Schreiben',
-            'description' => 'Neue Meldung verfassen',
-        ];
-        $actions[] = [
-            'key' => 'stab_lesen',
-            'name' => 'stab_lesen_x',
-            'label' => 'Lesen',
-            'description' => 'Meldungseingang anzeigen',
-        ];
-    }
 
-    $existingKeys = array_fill_keys(
-        array_column($actions, 'key'),
-        true
-    );
-    foreach ($looseWriteActions as $action) {
-        if (!isset($existingKeys[$action['key']])) {
-            $actions[] = $action;
-            $existingKeys[$action['key']] = true;
+        if ($role === 'Fernmelder' && $function === 'LdF') {
+            $append([
+                'key' => 'ldf_nachrichten',
+                'name' => 'ldf_nachrichten_x',
+                'label' => 'Disposition',
+                'description' => 'Rufnamen und Beförderungswege festlegen',
+            ]);
+        }
+        if ($role === 'Fernmelder' && $function === 'A/W') {
+            $append([
+                'key' => 'fm_eingang',
+                'name' => 'fm_eingang_x',
+                'label' => 'Eingang',
+                'description' => 'Eingehende Meldung erfassen',
+            ]);
+            $append([
+                'key' => 'fm_ausgang',
+                'name' => 'fm_ausgang_x',
+                'label' => 'Ausgang',
+                'description' => 'Ausgehende Meldungen bearbeiten',
+            ]);
+            $append([
+                'key' => 'fm_admin',
+                'name' => 'fm_admin_x',
+                'label' => '2. Sichtung',
+                'description' => 'Zweite Sichtung öffnen',
+            ]);
+            $append([
+                'key' => 'fm_anhang',
+                'name' => 'fm_anhang_x',
+                'label' => 'Anhänge',
+                'description' => 'Dateien auswählen und hochladen',
+            ]);
         }
     }
 
-    $actions[] = [
+    $append([
         'key' => 'm2_benutzer',
         'name' => 'm2_benutzer_x',
         'label' => 'Benutzer',
         'description' => 'Konten und Anmeldestatus anzeigen',
-    ];
-
+    ]);
     return $actions;
 }
-
-/** Render the account's fixed function and role. */
+/** Render the mode-specific operational function without trusting requests. */
 function estab_sidebar_account_function_markup(
     array $session,
     ?array $identity
@@ -654,20 +646,78 @@ function estab_sidebar_account_function_markup(
     if ($identity === null) {
         return '';
     }
+    if (($identity['estab_permission_mode'] ?? null) === 'STRICT') {
+        $sessionAssignment = filter_var(
+            $session['estab_duty_assignment_id'] ?? null,
+            FILTER_VALIDATE_INT,
+            ['options' => ['min_range' => 1, 'max_range' => PHP_INT_MAX]]
+        );
+        $identityAssignment = filter_var(
+            $identity['duty_assignment_id'] ?? null,
+            FILTER_VALIDATE_INT,
+            ['options' => ['min_range' => 1, 'max_range' => PHP_INT_MAX]]
+        );
+        if (
+            !is_int($sessionAssignment)
+            || !is_int($identityAssignment)
+            || $sessionAssignment !== $identityAssignment
+        ) {
+            return '';
+        }
+        return '<aside class="estab-sidebar-duty-hat"'
+            . ' data-estab-active-duty-hat'
+            . ' data-estab-duty-assignment="'
+            . estab_auth_html((string) $identityAssignment) . '">'
+            . '<span>Aktive Dienstfunktion</span>'
+            . '<strong>' . estab_auth_html(
+                estab_function_identity_display_name(
+                    (string) $identity['funktion'],
+                    (string) $identity['rolle']
+                )
+            ) . '</strong>'
+            . '<a href="' . estab_auth_html(
+                estab_application_url('4fach/fuehrungsstelle.php')
+            ) . '" target="_top">Dienstfunktion wechseln</a>'
+            . '</aside>';
+    }
+    if (
+        isset($identity['estab_permission_mode'])
+        && ($identity['estab_permission_mode'] ?? null) !== 'LOOSE'
+    ) {
+        return '';
+    }
+    $additional = [];
+    foreach (estab_auth_effective_function_roles($identity) as $tuple) {
+        if (
+            hash_equals((string) $identity['funktion'], $tuple['funktion'])
+            && hash_equals((string) $identity['rolle'], $tuple['rolle'])
+        ) {
+            continue;
+        }
+        $additional[] = estab_function_identity_display_name(
+            $tuple['funktion'],
+            $tuple['rolle']
+        );
+    }
+    $additionalMarkup = $additional === []
+        ? ''
+        : '<span>Zusatzfunktionen: '
+            . estab_auth_html(implode(' · ', $additional)) . '</span>';
     return '<aside class="estab-sidebar-account-function"'
         . ' data-estab-account-function>'
-        . '<span>Angemeldete Funktion</span>'
+        . '<span>Primärfunktion</span>'
         . '<strong>' . estab_auth_html(
             estab_function_identity_display_name(
                 (string) $identity['funktion'],
                 (string) $identity['rolle']
             )
         ) . '</strong>'
+        . $additionalMarkup
         . '</aside>';
 }
 
 /**
- * Render queue, server time and online functions as one compact status card.
+ * Render queue, server time and account activity by primary function.
  */
 function estab_sidebar_status_markup(
     array $session,
@@ -679,12 +729,48 @@ function estab_sidebar_status_markup(
     ?string $soundUrl = null,
     ?string $notificationSoundUrl = null,
     string $freshnessState = 'current',
-    string $incidentMarkup = ''
+    string $incidentMarkup = '',
+    ?array $operationalIdentity = null
 ): string {
     $identity = estab_auth_session_identity($session);
     if ($identity === null) {
         return '';
     }
+    if (
+        is_array($operationalIdentity)
+        && is_string($operationalIdentity['benutzer'] ?? null)
+        && is_string($operationalIdentity['kuerzel'] ?? null)
+        && is_string($operationalIdentity['funktion'] ?? null)
+        && is_string($operationalIdentity['rolle'] ?? null)
+        && hash_equals($identity['benutzer'], $operationalIdentity['benutzer'])
+        && hash_equals($identity['kuerzel'], $operationalIdentity['kuerzel'])
+        && preg_match(
+            '/\A(?:A\/W|[A-Za-z0-9_]{1,10})\z/D',
+            $operationalIdentity['funktion']
+        ) === 1
+        && in_array(
+            $operationalIdentity['rolle'],
+            ['Stab', 'FB', 'Fernmelder'],
+            true
+        )
+    ) {
+        $identity = $operationalIdentity;
+    }
+    $permissionMode = $identity['estab_permission_mode']
+        ?? $session['estab_permission_mode']
+        ?? null;
+    $dutyAssignment = filter_var(
+        $identity['duty_assignment_id']
+            ?? $session['estab_duty_assignment_id']
+            ?? null,
+        FILTER_VALIDATE_INT,
+        ['options' => ['min_range' => 1, 'max_range' => PHP_INT_MAX]]
+    );
+    $strictDutyPresence = $permissionMode === 'STRICT'
+        && is_int($dutyAssignment);
+    $currentFunctionText = $strictDutyPresence
+        ? 'Ihre aktive Dienstfunktion'
+        : 'Ihre Primärfunktion';
     $queueLabel = trim($queueLabel);
     if (
         $queueLabel === ''
@@ -723,7 +809,9 @@ function estab_sidebar_status_markup(
     $inactive = [];
     $onlineUsers = 0;
     $currentPresence = 'expired';
-    foreach ($users as $user) {
+    $currentKey = null;
+    $presenceUsers = $users;
+    foreach ($presenceUsers as $index => $user) {
         if (
             !is_array($user)
             || !is_string($user['rolle'] ?? null)
@@ -739,19 +827,21 @@ function estab_sidebar_status_markup(
             (string) $identity['kuerzel'],
             strtolower(trim((string) ($user['kuerzel'] ?? '')))
         );
-        if ($isCurrentAccount) {
-            $currentPresence = $presence;
+        if ($isCurrentAccount && $strictDutyPresence) {
+            $user['rolle'] = $identity['rolle'];
+            $user['funktion'] = $identity['funktion'];
+            $presenceUsers[$index] = $user;
         }
-        $role = $isCurrentAccount
-            ? (string) $identity['rolle']
-            : trim($user['rolle']);
-        $function = $isCurrentAccount
-            ? (string) $identity['funktion']
-            : trim($user['funktion']);
+        $role = trim((string) $user['rolle']);
+        $function = trim((string) $user['funktion']);
         if ($role === '' || $function === '') {
             continue;
         }
         $key = $role . "\0" . $function;
+        if ($isCurrentAccount) {
+            $currentPresence = $presence;
+            $currentKey = $key;
+        }
         if ($presence === 'online') {
             $online[$key] = ($online[$key] ?? 0) + 1;
             $onlineUsers++;
@@ -760,11 +850,9 @@ function estab_sidebar_status_markup(
         }
     }
 
-    $currentKey = $identity['rolle'] . "\0" . $identity['funktion'];
-
     $chips = '';
     foreach (
-        estab_sidebar_positions($configuredPositions, $users, $identity, $now)
+        estab_sidebar_positions($configuredPositions, $presenceUsers, $now)
         as $position
     ) {
         $role = $position['rolle'];
@@ -773,7 +861,8 @@ function estab_sidebar_status_markup(
         $onlineCount = $online[$key] ?? 0;
         $inactiveCount = $inactive[$key] ?? 0;
         $sessionCount = $onlineCount + $inactiveCount;
-        $isCurrent = $key === $currentKey;
+        $isCurrent = is_string($currentKey)
+            && hash_equals($currentKey, $key);
         $isMixed = $onlineCount > 0 && $inactiveCount > 0;
         $isCurrentInactive = $isCurrent && $currentPresence === 'inactive';
         $state = $isCurrent
@@ -782,7 +871,7 @@ function estab_sidebar_status_markup(
                 ? 'online'
                 : ($inactiveCount > 0 ? 'inactive' : 'offline'));
         $stateText = $isCurrent
-            ? 'Ihre aktuelle Funktion, '
+            ? $currentFunctionText . ', '
                 . ($currentPresence === 'online' ? 'aktiv' : 'inaktiv')
             : ($isMixed
                 ? $onlineCount . ' aktiv, ' . $inactiveCount . ' inaktiv'
@@ -902,16 +991,19 @@ function estab_sidebar_status_markup(
         . estab_auth_html($freshnessText) . '</span>'
         . '</div>'
         . '<div class="estab-sidebar-presence-heading">'
-        . '<h2>Aktivitätsübersicht</h2>'
+        . '<h2>Aktivität nach Primärfunktion</h2>'
         . '<span data-estab-online-count="' . $onlineUsers . '">'
         . estab_auth_html($onlineText) . '</span>'
         . '</div>'
         . '<ul class="estab-sidebar-presence-grid"'
-        . ' aria-label="Besetzung der Funktionen">' . $chips . '</ul>'
-        . '<div class="estab-sidebar-presence-legend" aria-label="Legende">'
+        . ' aria-label="Anmeldeaktivität nach Primärfunktion">'
+        . $chips . '</ul>'
+        . '<div class="estab-sidebar-presence-legend"'
+        . ' aria-label="Legende zur Primärfunktion">'
         . '<span><i class="online" aria-hidden="true"></i>Aktiv</span>'
         . '<span><i class="inactive" aria-hidden="true"></i>Inaktiv (15 Min.)</span>'
-        . '<span><i class="current" aria-hidden="true"></i>Ihre Funktion</span>'
+        . '<span><i class="current" aria-hidden="true"></i>'
+        . estab_auth_html($currentFunctionText) . '</span>'
         . '<span><i class="offline" aria-hidden="true"></i>Abgemeldet</span>'
         . '</div>'
         . $soundControl

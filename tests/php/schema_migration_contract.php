@@ -82,6 +82,9 @@ $standardCategoriesMigration = $read(
 $telecomDraftDiscardMigration = $read(
     $root . '/docker/db/migrations/117-telecom-draft-discard.sql'
 );
+$operationalAuthorityMigration = $read(
+    $root . '/docker/db/migrations/118-operational-authority.sql'
+);
 $baseline = $read($root . '/docker/db/init/10-schema.sql');
 $verify = $read($root . '/docker/db/verify.sql');
 $health = $read($root . '/health.php');
@@ -109,6 +112,7 @@ $passwordPolicySql = $normaliseSql($passwordPolicyMigration);
 $selfRegistrationSql = $normaliseSql($selfRegistrationMigration);
 $standardCategoriesSql = $normaliseSql($standardCategoriesMigration);
 $telecomDraftDiscardSql = $normaliseSql($telecomDraftDiscardMigration);
+$operationalAuthoritySql = $normaliseSql($operationalAuthorityMigration);
 $baselineSql = $normaliseSql($baseline);
 $verifySql = $normaliseSql($verify);
 $readinessSql = $normaliseSql(estab_readiness_schema_query());
@@ -615,6 +619,336 @@ $assert(
             'telecommunications draft-discard migration was not recorded'
         ),
     'Schema integration omits migration-117 transition or immutability evidence'
+);
+
+$assert(
+    str_contains(
+        $operationalAuthoritySql,
+        'CREATE TABLE IF NOT EXISTS `nv_benutzer_zusatzfunktionen`'
+    )
+        && str_contains(
+            $operationalAuthoritySql,
+            '`benutzer_kuerzel` VARCHAR(6) NOT NULL'
+        )
+        && str_contains(
+            $operationalAuthoritySql,
+            '`funktion` VARCHAR(10) NOT NULL'
+        )
+        && str_contains(
+            $operationalAuthoritySql,
+            "`rolle` ENUM('Stab','FB','Fernmelder') NOT NULL"
+        )
+        && str_contains(
+            $operationalAuthoritySql,
+            '`vergeben_am` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6)'
+        )
+        && str_contains(
+            $operationalAuthoritySql,
+            '`vergeben_von` VARCHAR(128) NOT NULL'
+        )
+        && str_contains(
+            $operationalAuthoritySql,
+            'PRIMARY KEY (`benutzer_kuerzel`, `funktion`)'
+        )
+        && str_contains(
+            $operationalAuthoritySql,
+            'KEY `idx_benutzer_zusatzfunktion_funktion_rolle` (`funktion`, `rolle`)'
+        )
+        && str_contains(
+            $operationalAuthoritySql,
+            'REFERENCES `nv_benutzer` (`kuerzel`) ON UPDATE RESTRICT ON DELETE CASCADE'
+        ),
+    'Migration 118 does not create the canonical additional-function grant table'
+);
+$assert(
+    str_contains(
+        $operationalAuthoritySql,
+        'CREATE PROCEDURE estab_migrate_118_preflight()'
+    )
+        && str_contains(
+            $operationalAuthoritySql,
+            'Operational-authority migration blocked: foreign grant table collision'
+        )
+        && str_contains(
+            $operationalAuthoritySql,
+            'Operational-authority migration blocked: role trigger collision'
+        )
+        && str_contains(
+            $operationalAuthoritySql,
+            'CREATE PROCEDURE estab_migrate_118_validate_table()'
+        )
+        && str_contains(
+            $operationalAuthoritySql,
+            'CREATE PROCEDURE estab_migrate_118_postflight()'
+        )
+        && str_contains(
+            $operationalAuthoritySql,
+            'Operational-authority migration failed: role trigger mismatch'
+        ),
+    'Migration 118 is not resumable or does not reject foreign ownership collisions'
+);
+$helperGuardPosition = strpos(
+    $operationalAuthoritySql,
+    'BEGIN NOT ATOMIC DECLARE existing_helper_routines INTEGER DEFAULT 0'
+);
+$firstHelperDropPosition = strpos(
+    $operationalAuthoritySql,
+    'DROP PROCEDURE IF EXISTS estab_migrate_118_preflight'
+);
+$assert(
+    is_int($helperGuardPosition)
+        && is_int($firstHelperDropPosition)
+        && $helperGuardPosition < $firstHelperDropPosition
+        && str_contains(
+            $operationalAuthoritySql,
+            'Operational-authority migration blocked: foreign helper routine collision'
+        )
+        && str_contains(
+            $operationalAuthoritySql,
+            "routine_type = 'PROCEDURE' AND sql_data_access = 'READS SQL DATA'"
+        )
+        && str_contains(
+            $operationalAuthoritySql,
+            "security_type = 'INVOKER'"
+        )
+        && substr_count(
+            $operationalAuthorityMigration,
+            'estab:migration:118:helper:preflight:v1'
+        ) === 2
+        && substr_count(
+            $operationalAuthorityMigration,
+            'estab:migration:118:helper:validate-table:v1'
+        ) === 2
+        && substr_count(
+            $operationalAuthorityMigration,
+            'estab:migration:118:helper:postflight:v1'
+        ) === 2,
+    'Migration 118 can replace a foreign same-name helper routine before ownership validation'
+);
+$assert(
+    substr_count(
+        $operationalAuthorityMigration,
+        'CREATE TRIGGER `estab_etb_bi_einsatz`'
+    ) === 1
+        && substr_count(
+            $operationalAuthorityMigration,
+            'CREATE TRIGGER `estab_tbb_bi_einsatz`'
+        ) === 1
+        && substr_count(
+            $operationalAuthorityMigration,
+            'CREATE TRIGGER `estab_dv94_fernmeldeplan_insert`'
+        ) === 1
+        && substr_count(
+            $operationalAuthorityMigration,
+            'CREATE TRIGGER `estab_dv94_fernmeldeplan_immutable`'
+        ) === 1
+        && substr_count(
+            $operationalAuthorityMigration,
+            'CREATE TRIGGER `estab_dv94_messenger_insert`'
+        ) === 1
+        && substr_count(
+            $operationalAuthorityMigration,
+            'CREATE TRIGGER `estab_dv94_messenger_update`'
+        ) === 1,
+    'Migration 118 does not replace each final operational trigger exactly once'
+);
+foreach ([
+    'Manual ETB entry requires an active accepted duty assignment',
+    'Manual TTB entry requires an active accepted duty assignment',
+    'STRICT ETB entry requires duty shift provenance',
+    'STRICT TTB entry requires duty shift provenance',
+    'strict_assignment.`status` = BINARY \'ANGENOMMEN\'',
+    'strict_shift.`status` = BINARY \'AKTIV\'',
+    'creator_assignment.`status` = BINARY \'ANGENOMMEN\'',
+    'creator_shift.`status` = BINARY \'AKTIV\'',
+    'release_assignment.`status` = BINARY \'ANGENOMMEN\'',
+    'release_shift.`status` = BINARY \'AKTIV\'',
+    'messenger_assignment.`status` = BINARY \'ANGENOMMEN\'',
+    'supervisor_assignment.`status` = BINARY \'ANGENOMMEN\'',
+    'report_assignment.`status` = BINARY \'ANGENOMMEN\'',
+] as $strictAuthorityFragment) {
+    $assert(
+        str_contains($operationalAuthoritySql, $strictAuthorityFragment),
+        'Migration 118 omits strict duty authority: '
+            . $strictAuthorityFragment
+    );
+}
+foreach ([
+    'extra_function',
+    'extra_provenance',
+    'creator_extra',
+    'release_extra',
+    'messenger_extra',
+    'supervisor_extra',
+    'report_extra',
+] as $looseGrantAlias) {
+    $assert(
+        str_contains($operationalAuthoritySql, $looseGrantAlias),
+        'Migration 118 omits loose additional-function authority: '
+            . $looseGrantAlias
+    );
+}
+$assert(
+    str_contains($operationalAuthoritySql, 'required_tables <> 17')
+        && substr_count(
+            $operationalAuthorityMigration,
+            'FROM `nv_zugangsschicht_mitglieder` AS access_membership'
+        ) === 7
+        && substr_count(
+            $operationalAuthorityMigration,
+            'access_membership.`entfernt_am` IS NULL'
+        ) === 7
+        && substr_count(
+            $operationalAuthorityMigration,
+            'access_shift.`zugang_aktiv` = 1'
+        ) === 7
+        && substr_count(
+            $operationalAuthorityMigration,
+            'FOR UPDATE;'
+        ) === 7
+        && str_contains(
+            $operationalAuthoritySql,
+            'access_memberships > 0 AND enabled_access_memberships = 0'
+        )
+        && str_contains(
+            $operationalAuthoritySql,
+            'messenger_access_memberships > 0 AND messenger_enabled_access = 0'
+        )
+        && str_contains(
+            $operationalAuthoritySql,
+            'supervisor_access_memberships > 0 AND supervisor_enabled_access = 0'
+        ),
+    'Migration 118 does not enforce and lock optional LOOSE access membership '
+        . 'for every directly authorized operational account'
+);
+$assert(
+    substr_count(
+        $operationalAuthorityMigration,
+        'AS canonical_capability'
+    ) === 9
+        && substr_count(
+            $operationalAuthorityMigration,
+            'AS canonical_matrix'
+        ) === 9
+        && substr_count(
+            $operationalAuthorityMigration,
+            'AS conflicting_capability'
+        ) === 9
+        && substr_count(
+            $operationalAuthorityMigration,
+            'AS conflicting_matrix'
+        ) === 9
+        && substr_count(
+            $operationalAuthorityMigration,
+            'AS primary_capability'
+        ) === 9
+        && substr_count(
+            $operationalAuthorityMigration,
+            'AS primary_matrix'
+        ) === 9
+        && substr_count(
+            $operationalAuthorityMigration,
+            'AS primary_conflicting_capability'
+        ) === 9
+        && substr_count(
+            $operationalAuthorityMigration,
+            'AS primary_conflicting_matrix'
+        ) === 9
+        && str_contains(
+            $operationalAuthoritySql,
+            '@estab_logbook_system_write_incident_id'
+        )
+        && str_contains(
+            $operationalAuthoritySql,
+            '@estab_logbook_system_write_book'
+        )
+        && str_contains(
+            $operationalAuthoritySql,
+            '@estab_dv_actor_assignment_id'
+        )
+        && str_contains(
+            $operationalAuthoritySql,
+            '@estab_dv_target_assignment_id'
+        )
+        && str_contains(
+            $operationalAuthoritySql,
+            "'nv_empfmtx', 'nv_funktionsfaehigkeiten'"
+        )
+        && str_contains($operationalAuthoritySql, 'required_tables <> 17')
+        && str_contains(
+            $verify,
+            "action_statement LIKE '%canonical_capability%'"
+        )
+        && str_contains(
+            $verify,
+            "action_statement LIKE '%conflicting_matrix%'"
+        ),
+    'Migration 118 trusts a raw primary/additional function or unbound '
+        . 'system/assignment context, or omits its predecessor tables'
+);
+$assert(
+    str_contains(
+        $verify,
+        "action_statement LIKE '%nv_zugangsschicht_mitglieder%'"
+    )
+        && str_contains(
+            $verify,
+            "action_statement LIKE '%FOR UPDATE%'"
+        ),
+    'Runtime schema verification does not require the locked Migration 118 '
+        . 'access-shift gate'
+);
+foreach ([
+    'Discarded telecommunications drafts are immutable evidence',
+    'Invalid telecommunications plan status transition',
+    'OLD.`gueltig_ab` > CURRENT_TIMESTAMP',
+    'OLD.`gueltig_bis` < CURRENT_TIMESTAMP',
+    'NOT (BINARY OLD.`freigegeben_von` <=>',
+] as $preservedPlanInvariant) {
+    $assert(
+        str_contains($operationalAuthoritySql, $preservedPlanInvariant),
+        'Migration 118 regresses migration-117 plan invariant: '
+            . $preservedPlanInvariant
+    );
+}
+$assert(
+    str_contains(
+        $schemaIntegration,
+        'operational-authority grant table was not migrated canonically'
+    )
+        && str_contains(
+            $schemaIntegration,
+            'strict telecommunications plan accepted an account without an active S6 assignment'
+        )
+        && str_contains(
+            $schemaIntegration,
+            'loose telecommunications plan rejected an explicit S6 additional function'
+        )
+        && str_contains(
+            $schemaIntegration,
+            'loose telecommunications plan accepted an unrelated account'
+        )
+        && str_contains(
+            $schemaIntegration,
+            'conflicting catalogue role authorised a raw loose grant'
+        )
+        && str_contains(
+            $schemaIntegration,
+            'conflicting catalogue role authorised a loose primary function'
+        )
+        && str_contains(
+            $schemaIntegration,
+            'strict plan accepted a mismatched assignment marker'
+        )
+        && str_contains(
+            $schemaIntegration,
+            'wrong-incident ETB system marker was accepted'
+        )
+        && str_contains(
+            $schemaIntegration,
+            'wrong-book TTB system marker was accepted'
+        ),
+    'Schema integration omits migration-118 strict/loose authority evidence'
 );
 foreach ([
     'idx_benutzer_funktion_aktiv',
@@ -1947,6 +2281,13 @@ foreach ([
         '115-incident-permission-mode.sql',
         '116-standard-categories.sql',
         '117-telecom-draft-discard.sql',
+        '118-operational-authority.sql',
+        'nv_benutzer_zusatzfunktionen',
+        'estab:migration:118:additional-user-functions:v1',
+        'Manual ETB entry requires an active accepted duty assignment',
+        'Manual TTB entry requires an active accepted duty assignment',
+        'STRICT ETB entry requires duty shift provenance',
+        'STRICT TTB entry requires duty shift provenance',
         'Discarded telecommunications drafts are immutable evidence',
     ] as $fragment) {
         $assert(
@@ -2487,6 +2828,11 @@ foreach ([
     '115-incident-permission-mode.sql',
     '116-standard-categories.sql',
     '117-telecom-draft-discard.sql',
+    '118-operational-authority.sql',
+    'operational-authority grant table was not migrated canonically',
+    'strict telecommunications plan accepted an account without an active S6 assignment',
+    'loose telecommunications plan rejected an explicit S6 additional function',
+    'loose telecommunications plan accepted an unrelated account',
     'historical logbook rows did not retain unknown shift provenance',
     'partial logbook and optional access-shift migrations did not resume canonically',
     'blocked logbook shift collision was changed or recorded',
@@ -2519,8 +2865,14 @@ foreach ([
     'blocked self-registration table collision was changed or recorded',
     'self-registration migration did not recover after removing the collision',
     'incident permission mode was not migrated fail-closed and canonically',
-    'migration 114 rewrote one of the existing twenty-two ledger rows',
-    'Manual ETB/TBB entries without a duty shift were accepted by account function',
+    'migration 114 rewrote one of the existing twenty-three ledger rows',
+    'LOOSE manual ETB/TBB entries were accepted from their fixed account function',
+    'STRICT system ETB without a shift was accepted',
+    'STRICT ETB entry requires duty shift provenance',
+    'rejected STRICT system ETB without a shift changed logbook rows',
+    'STRICT system TTB without a shift was accepted',
+    'STRICT TTB entry requires duty shift provenance',
+    'rejected STRICT system TTB without a shift changed logbook rows',
     'Two access groups can be active and membership re-addition preserves its history',
     'withdrawn ETB assignee rejection was not explicit',
     'ETB duty shift from another incident was not rejected explicitly',
@@ -2537,7 +2889,7 @@ foreach ([
     'missing ETB head was not rejected explicitly',
     'missing TTB head was not rejected explicitly',
     'MariaDB default snapshot isolation is not enabled for concurrency tests',
-    'assert_equal "23"',
+    'assert_equal "24"',
 ] as $marker) {
     $assert(
         str_contains($schemaIntegration, $marker),
@@ -2604,7 +2956,7 @@ $assert(
         && str_contains($verifySql, "index_name <> 'PRIMARY') = 0")
         && str_contains(
             $verifySql,
-            '(SELECT COUNT(*) FROM `estab_schema_migrations`) = 23'
+            '(SELECT COUNT(*) FROM `estab_schema_migrations`) = 24'
         )
         && str_contains($verifySql, "'96-etb-duty-function.sql'")
         && str_contains(
@@ -2634,7 +2986,8 @@ $assert(
         )
         && str_contains($verifySql, "'116-standard-categories.sql'")
         && str_contains($verifySql, "'117-telecom-draft-discard.sql'")
-        && str_contains($verifySql, ") = 23) AS `schema_migrations_ok`")
+        && str_contains($verifySql, "'118-operational-authority.sql'")
+        && str_contains($verifySql, ") = 24) AS `schema_migrations_ok`")
         && str_contains(
             $verifySql,
             'Discarded telecommunications drafts are immutable evidence'
@@ -2661,7 +3014,7 @@ $assert(
         && str_contains($readinessSql, "index_name <> 'PRIMARY') = 0")
         && str_contains(
             $readinessSql,
-            '(SELECT COUNT(*) FROM estab_schema_migrations) = 23'
+            '(SELECT COUNT(*) FROM estab_schema_migrations) = 24'
         )
         && str_contains($readinessSql, "'96-etb-duty-function.sql'")
         && str_contains(
@@ -2705,7 +3058,11 @@ $assert(
         )
         && str_contains(
             $readinessSql,
-            "checksum REGEXP BINARY '^[0-9a-f]{64}$') = 23"
+            "'118-operational-authority.sql'"
+        )
+        && str_contains(
+            $readinessSql,
+            "checksum REGEXP BINARY '^[0-9a-f]{64}$') = 24"
         ),
     'Runtime readiness does not require the exact final ETB catalogue and ledger'
 );
@@ -2752,6 +3109,7 @@ $releaseMigrationFiles = [
     '115-incident-permission-mode.sql',
     '116-standard-categories.sql',
     '117-telecom-draft-discard.sql',
+    '118-operational-authority.sql',
 ];
 foreach ([
     'verify.sql' => $verifySql,
@@ -2919,6 +3277,10 @@ $assert(
             $readiness,
             "'117-telecom-draft-discard.sql'"
         )
+        && str_contains(
+            $readiness,
+            "'118-operational-authority.sql'"
+        )
         && str_contains($verify, "'50-global-incidents.sql'")
         && str_contains($verify, "'45-global-incidents-prepare.sql'")
         && str_contains($verify, "'55-global-incidents-finish.sql'")
@@ -2939,9 +3301,10 @@ $assert(
         && str_contains($verify, "'115-incident-permission-mode.sql'")
         && str_contains($verify, "'116-standard-categories.sql'")
         && str_contains($verify, "'117-telecom-draft-discard.sql'")
-        && str_contains($verify, 'estab_schema_migrations`) = 23')
-        && str_contains($readiness, 'estab_schema_migrations) = 23'),
-    'Migration ledger/readiness does not require all twenty-three release migrations'
+        && str_contains($verify, "'118-operational-authority.sql'")
+        && str_contains($verify, 'estab_schema_migrations`) = 24')
+        && str_contains($readiness, 'estab_schema_migrations) = 24'),
+    'Migration ledger/readiness does not require all twenty-four release migrations'
 );
 $assert(
     str_contains($readiness, "require_once __DIR__ . '/bootstrap.php'")

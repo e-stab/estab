@@ -219,22 +219,33 @@ serverseitig erzeugt. Der bei einer Rückgabe festgeschriebene
 Korrekturvermerk kann beim erneuten Einreichen nicht über ein verborgenes
 Browserfeld ersetzt werden.
 
-Der einsatzbezogene Berechtigungsmodus unterscheidet dabei Zuständigkeit und
-Formularsemantik. In **Streng** darf nur die jeweils vorgesehene feste
-Funktion/Rolle einen Schreibschritt ausführen. In **Locker** darf ein anderes
-konkret angemeldetes, aktives und ungesperrtes Konto einen bekannten
-Schreibschritt übernehmen; dessen echte Identität wird gespeichert. Die
+Der einsatzbezogene Berechtigungsmodus unterscheidet dabei die Quelle der
+Zuständigkeit, nicht die Formularsemantik. In **Streng** darf nur die jeweils
+vorgesehene, persönlich angenommene und aktuell ausgewählte Besetzung einer
+aktiven Dienstschicht einen Schreibschritt ausführen. In **Locker** ist keine
+formale Dienstschicht nötig; der Schritt erfordert weiterhin die passende
+feste Kontofunktion oder eine in der Benutzerverwaltung ausdrücklich
+vergebene Zusatzfunktion. Es erhält nicht pauschal jedes Konto Zugriff. Die
 Feldregeln werden dadurch nicht gelockert: Wer den Fernmelder-Eingangsschritt
 ausführt, kann weiterhin keinen Absender einschleusen, Si kann weiterhin
 keinen Ausgangsinhalt umschreiben und LdF-/Transport-/Rückgabezustände bleiben
 in ihrer Reihenfolge. Auch Einsatzgrenze, Objektbezug, Sperrinhaber, CSRF,
 Validierung, Anlagenintegrität und Ereignisnachweis bleiben unverändert.
-Allgemeine Leserechte, Nachweisung, Zweitsichtungsarchive, Kategorien- und
-Administrationsrechte werden durch **Locker** nicht erweitert. Nur die für
-eine ausdrücklich gewählte Schreibstufe nötige Workflow-Objektsicht wird
-zugelassen. Bei einer zurückgewiesenen Ausgangsmeldung darf in **Locker** eine
-andere Funktion die Korrektur übernehmen; der Ereignisnachweis bewahrt dabei
-ursprüngliche und neue verantwortliche Funktion getrennt.
+Lese-, Menü- und Schreibrechte folgen in **Locker** der festen und zusätzlichen
+Kontofunktion; Administrationsrechte werden dadurch nicht erweitert. Bei
+einer zurückgewiesenen Ausgangsmeldung darf in **Locker** nur eine mit der
+passenden festen oder zusätzlichen Funktion autorisierte Person die Korrektur
+übernehmen; der Ereignisnachweis bewahrt ursprüngliche und neue
+verantwortliche Funktion getrennt.
+
+Hat ein Konto mehrere gewöhnliche Stabs- oder Fachberaterfunktionen, bietet
+die Sidebar für jede zulässige Funktion getrennte Einstiege wie `Schreiben als
+S1` und `Lesen als S1` an. Die gewählte Funktion wird durch Formular, Liste,
+Status und Detailansicht weitergereicht und vor jeder geschützten Operation
+gegen feste Kontofunktion und aktuelle Zusatzfunktionen geprüft. Ein
+manipulierter, entzogener oder für das Objekt unzulässiger Funktionskontext
+scheitert geschlossen; die nachfolgende Objektprüfung bleibt zusätzlich
+verbindlich.
 
 Bereits mit genau dieser zurückgewiesenen Nachricht verknüpfte Anlagen
 bleiben während der Korrektur sichtbar und wiederverwendbar. Diese Ausnahme
@@ -285,7 +296,8 @@ zweiphasig:
    ein Zielpfad an den Uploader übergeben wird. Danach werden die Bytes ohne
    langen Einsatz-Lock verschoben sowie SHA-256 und Bytezahl ermittelt.
 2. Die kurze Finalisierungstransaktion beansprucht die Reservierung mit
-   Status 2, prüft aktiven Einsatz, Inhaber und Kontofunktion erneut und
+   Status 2, prüft aktiven Einsatz, Inhaber und die nach Einsatzmodus wirksame
+   Funktion erneut und
    finalisiert Metadaten, Integritätsnachweis, Serverzeit, sichtbaren Status 1
    sowie Audit atomar. Bei einem Rollback bleibt die Status-8-Reservierung
    unsichtbar.

@@ -1059,7 +1059,7 @@ class BrowserAcceptance:
         self.config = config
 
     def _authenticated_navigation_keys(self) -> list[str]:
-        """Return only areas available to the account's fixed function."""
+        """Return LOOSE areas from primary and explicit extra functions."""
         keys = list(self.navigation_keys)
         if self.config.login_function != "S2":
             keys.remove("message-overview")
@@ -1258,12 +1258,61 @@ class BrowserAcceptance:
                 const firstCard = document.querySelector(
                     ".estab-handbook-role-grid a"
                 );
+                const sessionBar = document.querySelector(
+                    "body > aside.estab-session-bar"
+                );
+                const navigation = document.querySelector(
+                    ".estab-navigation"
+                );
+                const navigationContent = document.querySelector(
+                    ".estab-navigation-content"
+                );
+                const layoutMetrics = element => {
+                    if (!element) return null;
+                    const rect = element.getBoundingClientRect();
+                    const style = getComputedStyle(element);
+                    return {
+                        left: rect.left,
+                        right: rect.right,
+                        width: rect.width,
+                        clientWidth: element.clientWidth,
+                        scrollWidth: element.scrollWidth,
+                        overflowX: style.overflowX,
+                        position: style.position
+                    };
+                };
                 const mainRect = bounds(main);
                 const searchRect = bounds(search);
                 const tocRect = bounds(toc);
                 const cardRect = bounds(firstCard);
+                const overflowElements = Array.from(
+                    document.body.querySelectorAll("*")
+                ).filter(element => {
+                    const style = getComputedStyle(element);
+                    const rect = element.getBoundingClientRect();
+                    return style.display !== "none" &&
+                        style.visibility !== "hidden" &&
+                        rect.width > 0 && rect.height > 0 &&
+                        (rect.left < -0.5 ||
+                            rect.right > innerWidth + 0.5);
+                }).slice(0, 20).map(element => {
+                    const rect = element.getBoundingClientRect();
+                    return {
+                        tag: element.tagName.toLowerCase(),
+                        id: element.id,
+                        classes: String(element.className),
+                        left: rect.left,
+                        right: rect.right,
+                        width: rect.width
+                    };
+                });
                 return {
                     innerWidth,
+                    documentClientWidth: document.documentElement.clientWidth,
+                    documentScrollWidth: document.documentElement.scrollWidth,
+                    sessionBar: layoutMetrics(sessionBar),
+                    navigation: layoutMetrics(navigation),
+                    navigationContent: layoutMetrics(navigationContent),
                     pageFits: document.documentElement.scrollWidth <=
                         document.documentElement.clientWidth + 1,
                     mainFits: mainRect.left >= -0.5 &&
@@ -1276,6 +1325,7 @@ class BrowserAcceptance:
                     tocScrollFree: toc.scrollWidth <= toc.clientWidth + 1 &&
                         toc.scrollHeight <= toc.clientHeight + 1,
                     cardTouchTarget: cardRect.height >= 44,
+                    overflowElements,
                     roleColumns: getComputedStyle(
                         document.querySelector(".estab-handbook-role-grid")
                     ).gridTemplateColumns.split(" ").length
@@ -1890,8 +1940,8 @@ class BrowserAcceptance:
             'button.estab-button-primary[type="submit"]',
             "A/W-Bestandskonto absenden",
         )
-        # The fixed A/W account function and active incident are sufficient;
-        # no formal duty assignment or selection screen lies in between.
+        # This browser fixture runs in the explicitly LOOSE central incident:
+        # the fixed A/W account function needs no duty-assignment selector.
         self._wait_for_authenticated_frames()
         self.cdp.click(
             "vorgaben",
@@ -3286,7 +3336,7 @@ class BrowserAcceptance:
         )
         self._wait_for_top_level_path(
             "/stabetb/etb.php",
-            "Einsatztagebuch wurde mit der festen Kontofunktion nicht direkt "
+            "Einsatztagebuch wurde im LOOSE-Modus mit Kontofunktion nicht direkt "
             "als angefordertes Ziel geöffnet",
         )
         self._assert_session_bar(
@@ -4756,6 +4806,13 @@ class BrowserAcceptance:
                 const cards = Array.from(document.querySelectorAll(
                     ".estab-export-card"
                 ));
+                const fullSessionBars = Array.from(document.querySelectorAll(
+                    "body > aside.estab-session-bar" +
+                    ":not(.estab-session-bar-compact)"
+                ));
+                const narrowViewport = matchMedia(
+                    "(max-width: 42rem)"
+                ).matches;
                 const navigation = document.querySelector(
                     ".estab-navigation"
                 );
@@ -4808,6 +4865,11 @@ class BrowserAcceptance:
                     sessionBar: metrics(document.querySelector(
                         ".estab-session-bar"
                     )),
+                    fullSessionBarCount: fullSessionBars.length,
+                    mobileHeaderNonSticky: fullSessionBars.length === 1 &&
+                        (!narrowViewport || getComputedStyle(
+                            fullSessionBars[0]
+                        ).position === "static"),
                     sessionTopline: metrics(document.querySelector(
                         ".estab-session-topline"
                     )),
@@ -4857,6 +4919,12 @@ class BrowserAcceptance:
         self._truth(
             state.get("cardsFit") is True and state.get("targetsFit") is True,
             f"{description}: Karten oder Bedienelemente ragen aus dem Viewport.",
+        )
+        self._truth(
+            state.get("fullSessionBarCount") == 1
+            and state.get("mobileHeaderNonSticky") is True,
+            f"{description}: Die mobile Status- und Navigationsleiste "
+            "verdeckt den Arbeitsbereich beim Scrollen.",
         )
         self._truth(
             int(state.get("targetCount", 0)) >= 1,

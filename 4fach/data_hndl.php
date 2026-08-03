@@ -269,7 +269,11 @@ function check_save_user (array $loginData, string &$loginError) {
         $loginError = "Dieses Konto ist einer anderen Funktion zugeordnet. Wählen Sie die administrativ zugewiesene Funktion.";
         return true;
       }
-      if (!estab_auth_shift_access_allowed ($connection, $login ["kuerzel"])) {
+      $loginPermissionMode = estab_auth_active_permission_mode ($connection);
+      if (
+        $loginPermissionMode === ESTAB_PERMISSION_MODE_LOOSE
+        && !estab_auth_shift_access_allowed ($connection, $login ["kuerzel"])
+      ) {
         $loginError = "Der Zugang dieses Kontos ist über die optionale Schichtplanung derzeit deaktiviert. Wenden Sie sich an die zuständige Stelle.";
         return true;
       }
@@ -775,12 +779,25 @@ function check_and_save ($data, $activeCommandPostName, $expectedIncidentId){
   if (!is_array ($attachmentReadIdentity)) {
     throw new EstabReadPermissionException ("Anmeldung erforderlich.");
   }
-  $messageActor = array (
-    "benutzer" => $sessionUser,
-    "kuerzel" => $sessionCode,
-    "funktion" => $sessionFunction,
-    "rolle" => $sessionRole,
+  // Resolve the exact acting function from the authenticated base account,
+  // its server-loaded LOOSE additions and the original closed browser route.
+  // Do this before the legacy normaliser's empty compatibility fields can be
+  // mistaken for browser overposts. Browser fields still never grant or
+  // extend the actor function.
+  $messageActor = estab_workflow_identity_for_selected_route (
+    $attachmentReadIdentity,
+    $GLOBALS ["workflowSelectedIdentity"] ?? null,
+    $browserData
   );
+  // From here on every function-scoped mark, state table and recipient copy
+  // must use the exact server-resolved route actor.  In LOOSE this may be one
+  // explicitly assigned additional function; the raw session still contains
+  // the account's fixed primary function and must not overwrite that actor.
+  $sessionCode = (string) ($messageActor ["kuerzel"] ?? "");
+  $sessionFunction = (string) ($messageActor ["funktion"] ?? "");
+  $sessionUser = (string) ($messageActor ["benutzer"] ?? "");
+  $sessionRole = (string) ($messageActor ["rolle"] ?? "");
+  $attachmentReadIdentity = $messageActor;
   $messageActionTask = (string) ($data ["task"] ?? "");
   $messageActionToken = null;
   if (
@@ -2179,14 +2196,14 @@ function check_and_save ($data, $activeCommandPostName, $expectedIncidentId){
 
  ==> Liste der gelesenen Nachrichten
 \*****************************************************************************/
-	function list_of_readed_msg (){
+	function list_of_readed_msg (array $actor){
 		if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><big>list_of_readed_msg</big><br>\n";}
     include ("../4fcfg/dbcfg.inc.php");
     include ("../4fcfg/e_cfg.inc.php");
     $stateTable = estab_message_state_table (
       $conf_4f_tbl ["usrtblprefix"],
-      (string) $_SESSION ["vStab_funktion"],
-      (string) $_SESSION ["vStab_kuerzel"],
+      (string) ($actor ["funktion"] ?? ""),
+      (string) ($actor ["kuerzel"] ?? ""),
       "read"
     );
     $connection = estab_message_connect ($conf_4f_db);
@@ -2211,7 +2228,7 @@ function check_and_save ($data, $activeCommandPostName, $expectedIncidentId){
 
  ==> Liste der erledigten Nachrichten
 \*****************************************************************************/
-	function list_of_done_msg (){
+	function list_of_done_msg (array $actor){
 		if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><big>list_of_done_msg</big><br>\n";}
 		
 		include ("../4fcfg/config.inc.php");
@@ -2220,8 +2237,8 @@ function check_and_save ($data, $activeCommandPostName, $expectedIncidentId){
 
       $stateTable = estab_message_state_table (
         $conf_4f_tbl ["usrtblprefix"],
-        (string) $_SESSION ["vStab_funktion"],
-        (string) $_SESSION ["vStab_kuerzel"],
+        (string) ($actor ["funktion"] ?? ""),
+        (string) ($actor ["kuerzel"] ?? ""),
         "done"
       );
       $connection = estab_message_connect ($conf_4f_db);

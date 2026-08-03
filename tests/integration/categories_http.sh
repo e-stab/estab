@@ -555,9 +555,10 @@ login_existing "$s1_cookies" "$s1_name" "$s1_code" "$s1_function" "$s1_password"
 login_existing "$s2_cookies" "$s2_name" "$s2_code" S2 "$s2_password"
 login_existing "$si_cookies" "$si_name" "$si_code" Si "$si_password"
 
-# Categories and message-state controls derive their permissions exclusively
-# from the fixed account function. The active incident remains mandatory; an
-# optional access shift or historical duty assignment is not an input gate.
+# In the explicitly LOOSE central incident, categories and message-state
+# controls derive their permissions only from primary and explicit personal
+# extra functions. The active incident remains mandatory; an optional access
+# shift or formal duty assignment is not an input gate.
 
 master_auto_increment=$(db_sql <<'SQL'
 SELECT COALESCE(`AUTO_INCREMENT`, 1)
@@ -815,7 +816,7 @@ assert_body_absent 'name="category_master_oben"'
 assert_body "option value=\"$function_category_id\""
 assert_body "option value=\"$user_category_id\""
 assert_body 'name="category_action" value="assign"'
-assert_body 'formaction="katgoedt.php"'
+assert_body "formaction=\"katgoedt.php?acting_function=${s1_function}\""
 
 # S1 cannot smuggle a master assignment into the direct POST.
 load_manager "$s1_cookies" fkt "$message_id"

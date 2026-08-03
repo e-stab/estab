@@ -55,10 +55,12 @@ die oben beschriebene Repository-Struktur änderte.
 
 Der eigenständige SVN-Pfad `/eStab_0.9/docu` war nie Teil des
 Anwendungstrunks und wurde daher nicht künstlich in dessen Commitfolge
-gemischt. Sein vollständiger Endbestand bei r85 liegt mit allen 95 Dateien
-unter `docs/legacy/svn-r85/`. Revisionen und letzter Änderungsstand bleiben in
-den Provenienzmetadaten sichtbar; zugesagt wird für diesen separaten Pfad der
-verifizierte Endbestand, keine nachträglich konstruierte
+gemischt. Sein vollständiger Endbestand bei r85 bleibt mit allen 95 Dateien im
+Git-Commit `9cd6fc0779ed72181d71aa9042f85c971c92f0c1` unter
+`docs/legacy/svn-r85/` erhalten. Der rund 128 MB große Baum wurde anschließend
+aus dem aktuellen Arbeitsbaum entfernt. Revisionen und letzter Änderungsstand
+bleiben in den Provenienzmetadaten sichtbar; zugesagt wird für diesen
+separaten Pfad der verifizierte Endbestand, keine nachträglich konstruierte
 Dokument-Einzelhistorie.
 
 ## Nachweise
@@ -69,8 +71,9 @@ Dokument-Einzelhistorie.
 - `verify_provenance.py` prüft anschließend ohne SVN-Server und ohne lokale
   SVN-Working-Copy insgesamt 13 Git-Ref-Snapshots – Trunk, vier
   Entwicklungszweige, sechs SVN-Tags und die beiden späteren
-  SourceForge-Release-Tags – sowie den importierten Dokument-Endbestand gegen
-  die deterministischen Manifeste unter `provenance/`.
+  SourceForge-Release-Tags – sowie den im fest gebundenen Commit archivierten
+  Dokument-Endbestand gegen die deterministischen Manifeste unter
+  `provenance/`.
 - `capture_svn_metadata.py` erzeugt ein Manifest der SVN-Properties, leeren
   Verzeichnisse und die Revision-zu-Commit-Tabelle.
 - `svn-trunk-r84.sha256` enthält einen sortierten SHA-256-Hash für jede der
@@ -99,8 +102,9 @@ Trunk-/Dokumentmanifeste und `sourceforge-releases.tsv` per SHA-256;
 Dateihash des SVN-Trunks und eines SourceForge-Release-Tags und versiegelt
 Manifest und Index bewusst neu. Die Prüfung muss beide Manipulationen dennoch
 am tatsächlichen Git-Ref erkennen. Die minimale PHP-Suite prüft zusätzlich
-Index, sämtliche Manifeste und den realen Dokumentbaum und belegt negative
-Manifest-, aufgezeichnete Releaseidentitäts- und Dokumentmanipulationen.
+Index, sämtliche Manifeste und den festgeschriebenen Archiv-Locator und belegt
+negative Manifest-, aufgezeichnete Releaseidentitäts- und
+Dokumentmanifest-Manipulationen.
 
 Den ursprünglichen Quellvergleich mit der lokalen SVN-Kopie wiederholen:
 
@@ -133,9 +137,11 @@ historisch ignorierte Handbuch als belegter Bestand versioniert, während
 generierte `4fdata`-Daten weiterhin ausgeschlossen sind. Die vier
 `svn:mergeinfo`-Werte bleiben ebenfalls im Property-Manifest erhalten.
 
-Die separate, rund 128 MB große Projektdokumentation lag nie im Trunk. Sie wird
-als eigener unveränderter r85-Endbestand unter `docs/legacy/svn-r85`
-übernommen und indexiert.
+Die separate, rund 128 MB große Projektdokumentation lag nie im Trunk. Sie ist
+als eigener unveränderter r85-Endbestand im Commit
+`9cd6fc0779ed72181d71aa9042f85c971c92f0c1` unter
+`docs/legacy/svn-r85` archiviert und indexiert, ohne den aktuellen Arbeitsbaum
+und das Containerimage zu vergrößern.
 
 ## Spätere offizielle Releases
 

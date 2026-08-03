@@ -27,7 +27,10 @@ require_once __DIR__ . "/../app/read_authorization.php";
 require_once __DIR__ . "/../app/session_ui.php";
 require_once __DIR__ . "/../app/workflow.php";
 
-function estab_attachment_current_identity (): array {
+function estab_attachment_current_identity (?array $originContext = null): array {
+  if (is_array ($originContext)) {
+    return estab_attachment_origin_authority_identity ($originContext);
+  }
   if (!isset ($_SESSION) || !is_array ($_SESSION)) {
     throw new EstabDvPermissionException ("Anmeldung erforderlich.");
   }
@@ -126,7 +129,7 @@ class fileupload extends file_upload {
         $conf_4f_tbl ["anhang"],
         $conf_4f ["hoheit"],
         $this->reservation_owner_id (),
-        estab_attachment_current_identity (),
+        estab_attachment_current_identity ($this->message_context),
         $this->filenamezero
       );
       return $this->fs_nextfilename;
@@ -257,7 +260,7 @@ class fileupload extends file_upload {
         $conf_4f_tbl ["anhang"],
         $filename,
         $this->reservation_owner_id (),
-        estab_attachment_current_identity ()
+        estab_attachment_current_identity ($this->message_context)
       );
     } finally {
       estab_attachment_close ($connection);
@@ -286,11 +289,14 @@ class fileupload extends file_upload {
   function save_in_db ($data) {
     require ("../4fcfg/dbcfg.inc.php");
     require ("../4fcfg/e_cfg.inc.php");
+    $actingIdentity = estab_attachment_current_identity (
+      $this->message_context
+    );
     $reservation = (string) ($data ["reservation"] ?? "");
     $metadata = estab_attachment_validate_metadata (
       $data,
       $reservation,
-      (string) ($_SESSION ["vStab_kuerzel"] ?? "")
+      (string) ($actingIdentity ["kuerzel"] ?? "")
     );
     $connection = estab_attachment_connection ($conf_4f_db);
     try {
@@ -299,16 +305,16 @@ class fileupload extends file_upload {
         $conf_4f_tbl ["anhang"],
         $this->reservation_owner_id (),
         $metadata,
-        estab_attachment_current_identity ()
+        $actingIdentity
       );
       if (!$saved) {
         return false;
       }
 
-      $details = (string) ($_SESSION ["vStab_benutzer"] ?? "").";".
-                 (string) ($_SESSION ["vStab_kuerzel"] ?? "").";".
-                 (string) ($_SESSION ["vStab_funktion"] ?? "").";".
-                 (string) ($_SESSION ["vStab_rolle"] ?? "").";".
+      $details = (string) ($actingIdentity ["benutzer"] ?? "").";".
+                 (string) ($actingIdentity ["kuerzel"] ?? "").";".
+                 (string) ($actingIdentity ["funktion"] ?? "").";".
+                 (string) ($actingIdentity ["rolle"] ?? "").";".
                  session_id ().";".
                  estab_auth_remote_ip ($_SERVER).";".
                  $metadata ["filename"].".".$metadata ["fileext"].";".
@@ -539,6 +545,12 @@ estab_navigation_require_session (
   true
 );
 $attachmentPageIdentity = estab_read_session_identity ($_SESSION);
+estab_navigation_require_selected_duty (
+  $_SESSION,
+  $attachmentPageIdentity,
+  "messages",
+  $_SERVER
+);
 $attachmentRequestMethod = strtoupper (
   (string) ($_SERVER ["REQUEST_METHOD"] ?? "GET")
 );
@@ -584,6 +596,7 @@ $attachmentOriginContext = null;
 $attachmentOriginMessage = null;
 $attachmentRequestFlowToken = null;
 $attachmentPageError = null;
+$attachmentPageReadTransaction = false;
 try {
   if (
     !$attachmentInternalRequest
@@ -612,8 +625,15 @@ try {
   require ("../4fcfg/dbcfg.inc.php");
   require ("../4fcfg/e_cfg.inc.php");
   $attachmentPageConnection = estab_attachment_connection ($conf_4f_db);
+  if (!$attachmentPageConnection->begin_transaction ()) {
+    throw new RuntimeException (
+      "Lesetransaktion konnte nicht begonnen werden."
+    );
+  }
+  $attachmentPageReadTransaction = true;
   $attachmentPageIncident = estab_incident_require_active (
-    $attachmentPageConnection
+    $attachmentPageConnection,
+    true
   );
   estab_permission_context_set_from_incident ($attachmentPageIncident);
   // Vordrucke rebuilt after the optional archive picker issue their next
@@ -625,17 +645,15 @@ try {
   $attachmentPageIdentity = estab_read_require_identity_scope (
     $attachmentPageConnection,
     $workflowIncidentId,
-    $attachmentPageIdentity
+    $attachmentPageIdentity,
+    true
   );
   $attachmentArchiveRoleAllowed =
     estab_workflow_is_staff_writer ($attachmentPageIdentity)
     || estab_workflow_is_telecommunications ($attachmentPageIdentity);
-  $attachmentLooseMessageFlowAllowed =
-    $attachmentRequestFlowToken !== null
-    && !estab_permission_role_checks_enforced ();
-  if (!$attachmentArchiveRoleAllowed && !$attachmentLooseMessageFlowAllowed) {
+  if (!$attachmentArchiveRoleAllowed) {
     throw new EstabReadPermissionException (
-      "Ihre angemeldete Funktion darf das Anhangarchiv nicht öffnen."
+      "Keine Ihrer aktuell wirksamen Funktionen darf das Anhangarchiv öffnen."
     );
   }
   $attachmentCommandPostName = estab_incident_command_post_name (
@@ -680,18 +698,6 @@ try {
           $attachmentOriginMessage,
           true
         )
-        || (
-          (
-            !estab_message_operation_relaxes_write_role (
-              "staff-correction"
-            )
-            || estab_permission_role_checks_enforced ()
-          )
-          && !estab_read_message_allowed (
-            $attachmentPageIdentity,
-            $attachmentOriginMessage
-          )
-        )
       ) {
         throw new EstabAttachmentContextException (
           "Der Korrekturdatensatz ist nicht mehr für diesen ".
@@ -715,6 +721,12 @@ try {
       "Für diese Anhang-Anforderung fehlt der serverseitige Ursprung."
     );
   }
+  if (!$attachmentPageConnection->commit ()) {
+    throw new RuntimeException (
+      "Lesetransaktion konnte nicht abgeschlossen werden."
+    );
+  }
+  $attachmentPageReadTransaction = false;
 } catch (EstabAttachmentContextException $exception) {
   error_log (
     "eStab attachment context rejected: ".$exception->getMessage ()
@@ -735,8 +747,8 @@ try {
   $attachmentPageError = array (
     403,
     "Keine Berechtigung für die Anhangverwaltung",
-    "Ihre angemeldete Funktion darf die Anhangverwaltung nicht ".
-      "öffnen oder ist nicht mehr aktiv.",
+    "Keine Ihrer aktuell wirksamen Funktionen darf die Anhangverwaltung ".
+      "öffnen oder die Berechtigung ist nicht mehr aktiv.",
   );
 } catch (EstabIncidentConfigurationException) {
   $attachmentPageError = array (
@@ -755,6 +767,9 @@ try {
   );
 } finally {
   if ($attachmentPageConnection instanceof mysqli) {
+    if ($attachmentPageReadTransaction) {
+      $attachmentPageConnection->rollback ();
+    }
     estab_attachment_close ($attachmentPageConnection);
   }
 }
@@ -881,8 +896,10 @@ if ( debug == true ){
       $attachmentOriginMessage
     );
     $formdata ["13_abseinheit"] = $attachmentCommandPostName;
-    $formdata ["14_zeichen"] = $_SESSION ["vStab_kuerzel"];
-    $formdata ["14_funktion"] = $_SESSION ["vStab_funktion"];
+    $formdata ["14_zeichen"] =
+      (string) $attachmentOriginContext ["kuerzel"];
+    $formdata ["14_funktion"] =
+      (string) $attachmentOriginContext ["funktion"];
     if ($attachmentOriginTask === "Stab_gesprnoti") {
       $formdata ["01_zeichen"] = $_SESSION ["vStab_kuerzel"];
     }
@@ -1024,22 +1041,29 @@ require_once ("./db_operation.php");  // Datenbank operationen
       if (!is_array ($identity)) {
         throw new EstabReadPermissionException ("Anmeldung erforderlich.");
       }
-      $readScope = estab_read_require_operational_scope (
+      return estab_read_with_locked_operational_scope (
         $connection,
-        $identity
-      );
-      $incidentId = (int) $readScope ["incident"]["active_einsatz_id"];
-      $attachments = estab_attachment_list_for_incident (
-        $connection,
-        $conf_4f_tbl ["anhang"],
-        $incidentId
-      );
-      return estab_read_filter_attachments_for_incident (
-        $connection,
-        $conf_4f_tbl ["nachrichten"],
-        $attachments,
-        $readScope ["identity"],
-        $incidentId
+        $identity,
+        static function (array $readScope) use (
+          $connection,
+          $conf_4f_tbl
+        ): array {
+          $incidentId = (int) (
+            $readScope ["incident"]["active_einsatz_id"]
+          );
+          $attachments = estab_attachment_list_for_incident (
+            $connection,
+            $conf_4f_tbl ["anhang"],
+            $incidentId
+          );
+          return estab_read_filter_attachments_for_incident (
+            $connection,
+            $conf_4f_tbl ["nachrichten"],
+            $attachments,
+            $readScope ["identity"],
+            $incidentId
+          );
+        }
       );
     } finally {
       estab_attachment_close ($connection);
@@ -1068,12 +1092,17 @@ require_once ("./db_operation.php");  // Datenbank operationen
       if (!is_array ($identity)) {
         return array ();
       }
-      $result = estab_read_attachment (
+      $result = estab_read_with_locked_operational_scope (
         $connection,
-        $conf_4f_tbl ["anhang"],
-        $conf_4f_tbl ["nachrichten"],
-        $requested,
-        $identity
+        $identity,
+        static fn (array $_scope): ?array => estab_read_attachment (
+          $connection,
+          $conf_4f_tbl ["anhang"],
+          $conf_4f_tbl ["nachrichten"],
+          $requested,
+          $identity,
+          true
+        )
       );
       return is_array ($result) ? array (1 => $result) : array ();
     } finally {
@@ -1335,7 +1364,9 @@ require_once ("./db_operation.php");  // Datenbank operationen
       && is_string ($originContext ["task"] ?? null)
       ? $originContext ["task"]
       : "";
-    $restoreIdentity = estab_auth_session_identity ($_SESSION);
+    $restoreIdentity = is_array ($originContext)
+      ? estab_attachment_origin_authority_identity ($originContext)
+      : estab_auth_session_identity ($_SESSION);
     if (in_array ($originTask, array ("FM-Eingang", "FM-Eingang_Anhang"), true)) {
       $data ["13_abseinheit"] = "";
     }
@@ -1463,7 +1494,7 @@ require_once ("./db_operation.php");  // Datenbank operationen
         estab_attachment_upload_browser_file (
           is_array ($upload) ? $upload : array (),
           $_POST ["fs_comment"] ?? "",
-          estab_attachment_current_identity (),
+          estab_attachment_current_identity ($messageContext),
           $expectedIncidentId,
           $conf_4f_db,
           $conf_4f_tbl ["anhang"],

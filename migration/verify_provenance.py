@@ -4,13 +4,14 @@
 The committed manifests were generated from Git refs which had first been
 compared byte-for-byte with the local Subversion working copy at r85.  Normal
 CI does not need that working copy: it checks the pinned Git objects and the
-imported documentation tree against the deterministic manifests.
+historical documentation subtree against the deterministic manifests.
 """
 
 from __future__ import annotations
 
 import argparse
 import base64
+import io
 import csv
 from dataclasses import dataclass
 import hashlib
@@ -21,6 +22,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tarfile
 import tempfile
 from typing import Any, Iterable
 
@@ -52,6 +54,8 @@ class Subject:
     release_version: str | None = None
     archive_sha256: str | None = None
     excluded_root_entries: tuple[str, ...] = ()
+    archive_git_commit: str | None = None
+    archive_git_subtree: str | None = None
 
 
 SUBJECTS = (
@@ -173,6 +177,10 @@ SUBJECTS = (
         "/eStab_0.9/docu",
         47,
         workspace_path="docs/legacy/svn-r85",
+        archive_git_commit=(
+            "9cd6fc0779ed72181d71aa9042f85c971c92f0c1"
+        ),
+        archive_git_subtree="docs/legacy/svn-r85",
     ),
     Subject(
         "sourceforge-release-ver0.9.26b",
@@ -514,6 +522,71 @@ def filesystem_rows(root: Path, subject: Subject) -> tuple[list[dict[str, object
     return rows, {}
 
 
+def archived_filesystem_rows(
+    repository: Path, subject: Subject
+) -> tuple[list[dict[str, object]], dict[str, str]]:
+    """Read the removed documentation payload from one pinned Git subtree."""
+    commit = subject.archive_git_commit
+    subtree = subject.archive_git_subtree
+    if (
+        commit is None
+        or re.fullmatch(r"[0-9a-f]{40,64}", commit) is None
+        or subtree is None
+        or subtree == ""
+        or subtree.startswith("/")
+        or any(part in ("", ".", "..") for part in subtree.split("/"))
+    ):
+        raise ProvenanceError(
+            f"{subject.identifier}: invalid documentation archive locator"
+        )
+    resolved = run_git(
+        repository,
+        ["rev-parse", "--verify", "--end-of-options", f"{commit}^{{commit}}"],
+    ).decode("ascii").strip()
+    if resolved != commit:
+        raise ProvenanceError(
+            f"{subject.identifier}: documentation archive commit mismatch"
+        )
+    archive = run_git(
+        repository,
+        ["archive", "--format=tar", commit, "--", subtree],
+    )
+    prefix = subtree.rstrip("/") + "/"
+    rows: list[dict[str, object]] = []
+    try:
+        with tarfile.open(fileobj=io.BytesIO(archive), mode="r:") as bundle:
+            for member in bundle.getmembers():
+                if member.isdir():
+                    continue
+                if not member.isfile() or not member.name.startswith(prefix):
+                    raise ProvenanceError(
+                        f"{subject.identifier}: unsupported archived entry "
+                        f"{member.name}"
+                    )
+                relative = member.name[len(prefix) :]
+                path_bytes = relative.encode("utf-8", "strict")
+                stream = bundle.extractfile(member)
+                if stream is None:
+                    raise ProvenanceError(
+                        f"{subject.identifier}: cannot read archived entry "
+                        f"{relative}"
+                    )
+                content = stream.read()
+                rows.append(
+                    entry(path_bytes, "file", len(content), sha256(content))
+                )
+    except (tarfile.TarError, UnicodeError) as error:
+        raise ProvenanceError(
+            f"{subject.identifier}: invalid documentation archive"
+        ) from error
+    rows.sort(key=lambda row: base64.b64decode(str(row["path_bytes_base64"])))
+    if len({str(row["path_bytes_base64"]) for row in rows}) != len(rows):
+        raise ProvenanceError(
+            f"{subject.identifier}: duplicate archived documentation path"
+        )
+    return rows, {}
+
+
 def manifest_header(
     subject: Subject,
     release: dict[str, object] | None = None,
@@ -539,6 +612,10 @@ def manifest_header(
         header["git_ref"] = subject.git_ref
     if subject.workspace_path is not None:
         header["workspace_path"] = subject.workspace_path
+    if subject.archive_git_commit is not None:
+        header["archive_git_commit"] = subject.archive_git_commit
+    if subject.archive_git_subtree is not None:
+        header["archive_git_subtree"] = subject.archive_git_subtree
     return header
 
 
@@ -564,6 +641,8 @@ def collect_subject(
 ) -> tuple[list[dict[str, object]], dict[str, str]]:
     if subject.kind == "git":
         return git_tree_rows(repository, subject)
+    if subject.archive_git_commit is not None:
+        return archived_filesystem_rows(repository, subject)
     assert subject.workspace_path is not None
     return filesystem_rows(repository / subject.workspace_path, subject)
 

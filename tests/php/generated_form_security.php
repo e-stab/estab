@@ -193,7 +193,7 @@ $assert(
     'PDF writer can still collide across incidents or publish partial bytes'
 );
 $assert(
-    str_contains($list, 'estab_read_require_operational_scope')
+    str_contains($list, 'estab_read_with_locked_operational_scope')
         && str_contains(
             $list,
             'estab_generated_form_list_for_incident'

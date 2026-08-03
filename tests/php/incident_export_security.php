@@ -574,10 +574,19 @@ $assert(
     'Incident dossier does not reuse the generated message-form renderer'
 );
 $assert(
-    str_contains($pdfRenderer, 'Optionale Zugangsschichten')
-        && str_contains($pdfRenderer, 'Historischer Dienstbetrieb (Legacy-Nachweis)')
+    str_contains(
+        $pdfRenderer,
+        'Formale Dienstschichten und optionale Zugangsschichten'
+    )
+        && str_contains($pdfRenderer, 'Im Berechtigungsmodus Streng stammen operative Identität')
+        && str_contains($pdfRenderer, 'persönlich angenommenen und ausgewählten')
+        && str_contains($pdfRenderer, 'feste Kontofunktion und explizite Zusatzfunktionen')
+        && str_contains($pdfRenderer, 'Optionale Zugangsschichten (lockerer Betrieb)')
+        && str_contains($pdfRenderer, "\$this->heading('Formaler Dienstbetrieb', 2)")
+        && str_contains($pdfRenderer, 'im strengen Betrieb aktuelle Autorisierungs-')
+        && str_contains($pdfRenderer, 'unverändert als historischer Nachweis erhalten')
         && str_contains($pdfRenderer, 'Access-shift memberships must be arrays.'),
-    'Incident dossier omits current access shifts or fails to distinguish legacy duty records'
+    'Incident dossier does not explain strict duty authority and loose access shifts correctly'
 );
 $assert(
     str_contains($pdfRenderer, "'estab_correction_book_lfd'")

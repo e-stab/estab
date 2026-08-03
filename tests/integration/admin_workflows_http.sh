@@ -59,6 +59,8 @@ active_before_load=$work_dir/active-before-load.txt
 users_before=$work_dir/users-before.txt
 users_after=$work_dir/users-after.txt
 backup_created=false
+counter_incident_id=0
+incident_restore_required=false
 
 test_number=$(printf '%s' "$project_name" | cksum | awk '{print $1}')
 case "$test_number" in
@@ -114,6 +116,17 @@ db_sql()
     '
 }
 
+admin_incident_fixture()
+{
+    "$compose_engine" compose run --rm --no-deps -T \
+        --env ESTAB_PERMISSION_MODE_INCIDENT_FIXTURE=1 \
+        --env "ESTAB_PERMISSION_MODE_INCIDENT_PROJECT=$project_name" \
+        --volume "$repo_root:/workspace:ro" \
+        --workdir /workspace \
+        app php -d auto_prepend_file= \
+            tests/integration/permission_mode_incident_fixture.php "$@"
+}
+
 matrix_auto_increment=1
 standard_matrix_auto_increment=1
 message_auto_increment=1
@@ -127,6 +140,11 @@ cleanup()
     status=$?
     trap - EXIT HUP INT TERM
     set +e
+    if [ "$incident_restore_required" = true ] && [ "$active_incident_id" -gt 0 ]; then
+        admin_incident_fixture restore "$active_incident_id" \
+            >/dev/null 2>&1 || status=1
+        incident_restore_required=false
+    fi
     if [ "$backup_created" = true ]; then
         db_sql >/dev/null 2>&1 <<SQL
 DROP TRIGGER IF EXISTS \`${rollback_trigger}\`;
@@ -503,7 +521,7 @@ SELECT GREATEST(
                       )) AS UNSIGNED))
              FROM `nv_betriebsereignisse` AS e
             WHERE e.`einsatz_id` = s.`active_einsatz_id`
-              AND e.`objekttyp` = 'EINSATZ'
+              AND e.`objekttyp` IN ('EINSATZ', 'DIENSTSCHICHT')
               AND e.`aktion` = 'message_counter_repaired'
          ), 0)
        )
@@ -526,7 +544,7 @@ SELECT GREATEST(
                       )) AS UNSIGNED))
              FROM `nv_betriebsereignisse` AS e
             WHERE e.`einsatz_id` = s.`active_einsatz_id`
-              AND e.`objekttyp` = 'EINSATZ'
+              AND e.`objekttyp` IN ('EINSATZ', 'DIENSTSCHICHT')
               AND e.`aktion` = 'message_counter_repaired'
          ), 0)
        )
@@ -1084,6 +1102,57 @@ cmp -s "$original_matrix" "$restored_matrix" || {
 
 # Two independent PHP sessions submit the same next number concurrently. The
 # database lock permits exactly one increase and rejects the stale request.
+# Counter recovery without a formal duty shift is tested in an incident that
+# is created as LOOSE from the outset. The populated incoming fixture keeps its
+# immutable permission mode and is reactivated after the concurrency proof.
+counter_fixture_identifier="CI-ADM-LOOSE-${test_number}-$$"
+incident_restore_required=true
+counter_incident_id=$(admin_incident_fixture \
+    create-loose "$counter_fixture_identifier")
+case "$counter_incident_id" in
+    '' | 0 | *[!0-9]*)
+        echo 'Admin HTTP: could not create isolated LOOSE counter incident' >&2
+        exit 1
+        ;;
+esac
+counter_fixture_state=$(db_sql <<SQL
+SELECT CONCAT(s.\`active_einsatz_id\`, '|', e.\`estab_permission_mode\`)
+  FROM \`nv_einsatz_status\` AS s
+  JOIN \`nv_einsaetze\` AS e ON e.\`einsatz_id\` = s.\`active_einsatz_id\`
+ WHERE s.\`singleton_id\` = 1;
+SQL
+)
+if [ "$counter_fixture_state" != "${counter_incident_id}|LOOSE" ]; then
+    printf 'Admin HTTP: isolated counter incident is not active LOOSE: %s\n' \
+        "$counter_fixture_state" >&2
+    exit 1
+fi
+counter_before=$(db_sql <<SQL
+SELECT GREATEST(
+         COALESCE((
+           SELECT MAX(m.\`04_nummer\`)
+             FROM \`nv_nachrichten\` AS m
+            WHERE m.\`einsatz_id\` = ${counter_incident_id}
+         ), 0),
+         COALESCE((
+           SELECT MAX(CAST(JSON_UNQUOTE(JSON_EXTRACT(
+                        e.\`details\`, '$.after.ea_nummer'
+                      )) AS UNSIGNED))
+             FROM \`nv_betriebsereignisse\` AS e
+            WHERE e.\`einsatz_id\` = ${counter_incident_id}
+              AND e.\`objekttyp\` IN ('EINSATZ', 'DIENSTSCHICHT')
+              AND e.\`aktion\` = 'message_counter_repaired'
+         ), 0)
+       );
+SQL
+)
+case "$counter_before" in
+    '' | *[!0-9]*)
+        echo 'Admin HTTP: isolated counter baseline is invalid' >&2
+        exit 1
+        ;;
+esac
+
 if [ "$counter_before" -ge 999999999 ]; then
     echo 'Admin HTTP: disposable counter has exhausted the supported range' >&2
     exit 1
@@ -1091,12 +1160,12 @@ fi
 counter_target=$((counter_before + 1))
 counter_message_rows_before=$(db_sql <<SQL
 SELECT COUNT(*) FROM \`nv_nachrichten\`
- WHERE \`einsatz_id\` = ${active_incident_id};
+ WHERE \`einsatz_id\` = ${counter_incident_id};
 SQL
 )
 counter_open_rows_before=$(db_sql <<SQL
 SELECT COUNT(*) FROM \`nv_nachrichten\`
- WHERE \`einsatz_id\` = ${active_incident_id}
+ WHERE \`einsatz_id\` = ${counter_incident_id}
    AND \`x00_status\` <> 8;
 SQL
 )
@@ -1145,10 +1214,10 @@ fi
 counter_message_state=$(db_sql <<SQL
 SELECT CONCAT(
          COUNT(*), '|',
-         SUM(CASE WHEN \`x00_status\` <> 8 THEN 1 ELSE 0 END)
+         COALESCE(SUM(CASE WHEN \`x00_status\` <> 8 THEN 1 ELSE 0 END), 0)
        )
   FROM \`nv_nachrichten\`
- WHERE \`einsatz_id\` = ${active_incident_id};
+ WHERE \`einsatz_id\` = ${counter_incident_id};
 SQL
 )
 if [ "$counter_message_state" != "${counter_message_rows_before}|${counter_open_rows_before}" ]; then
@@ -1167,13 +1236,21 @@ SELECT CONCAT(
          COALESCE(MAX(CASE
            WHEN \`ereignis_hash\` = (
              SELECT \`letzter_hash\`
-               FROM \`nv_betriebsereignis_kopf\`
-              WHERE \`einsatz_id\` = ${active_incident_id}
+              FROM \`nv_betriebsereignis_kopf\`
+              WHERE \`einsatz_id\` = ${counter_incident_id}
            )
+           THEN 1 ELSE 0 END), 0), '|',
+         COALESCE(MAX(CASE
+           WHEN JSON_UNQUOTE(JSON_EXTRACT(
+                  \`details\`, '$.permission_mode'
+                )) = 'LOOSE'
+            AND COALESCE(JSON_UNQUOTE(JSON_EXTRACT(
+                  \`details\`, '$.dienstschicht_id'
+                )), 'null') = 'null'
            THEN 1 ELSE 0 END), 0)
        )
   FROM \`nv_betriebsereignisse\`
- WHERE \`einsatz_id\` = ${active_incident_id}
+ WHERE \`einsatz_id\` = ${counter_incident_id}
    AND \`objekttyp\` = 'EINSATZ'
    AND \`aktion\` = 'message_counter_repaired'
    AND CAST(JSON_UNQUOTE(JSON_EXTRACT(
@@ -1181,11 +1258,18 @@ SELECT CONCAT(
        )) AS UNSIGNED) = ${counter_target};
 SQL
 )
-if [ "$counter_evidence" != "1|gemeinsam|${counter_target}|1" ]; then
+if [ "$counter_evidence" != "1|gemeinsam|${counter_target}|1|1" ]; then
     printf 'Admin HTTP: counter repair lacks one head-linked evidence event: %s\n' \
         "$counter_evidence" >&2
     exit 1
 fi
+restored_incident_id=$(admin_incident_fixture restore "$active_incident_id")
+if [ "$restored_incident_id" != "$active_incident_id" ]; then
+    printf 'Admin HTTP: original incident was not reactivated: %s\n' \
+        "$restored_incident_id" >&2
+    exit 1
+fi
+incident_restore_required=false
 
 # The graphic reset is now a separately authenticated POST-only transaction.
 assert_status 200 --config "$admin_curl_config" \
@@ -1234,15 +1318,33 @@ if [ "$matrix_audit_count" != 5 ]; then
     echo 'Admin HTTP: matrix load/save audit boundary is not exact' >&2
     exit 1
 fi
-scoped_admin_audit_count=$(db_sql <<SQL
-SELECT COUNT(*) FROM \`nv_protokoll\`
+scoped_admin_audit_state=$(db_sql <<SQL
+SELECT CONCAT(
+         COALESCE(SUM(CASE
+           WHEN \`p_was\` = 'Nachrichtennummer Sync'
+            AND \`einsatz_id\` = ${counter_incident_id}
+           THEN 1 ELSE 0 END), 0), '|',
+         COALESCE(SUM(CASE
+           WHEN \`p_was\` = 'Grafikstatus Reset'
+            AND \`einsatz_id\` = ${active_incident_id}
+           THEN 1 ELSE 0 END), 0), '|',
+         COALESCE(SUM(CASE
+           WHEN \`p_was\` = 'Nachrichtennummer Sync'
+            AND (\`einsatz_id\` IS NULL OR \`einsatz_id\` <> ${counter_incident_id})
+           THEN 1 ELSE 0 END), 0), '|',
+         COALESCE(SUM(CASE
+           WHEN \`p_was\` = 'Grafikstatus Reset'
+            AND (\`einsatz_id\` IS NULL OR \`einsatz_id\` <> ${active_incident_id})
+           THEN 1 ELSE 0 END), 0)
+       )
+  FROM \`nv_protokoll\`
  WHERE \`p_lfd\` > ${audit_floor}
-   AND \`p_was\` IN ('Nachrichtennummer Sync', 'Grafikstatus Reset')
-   AND \`einsatz_id\` = ${active_incident_id};
+   AND \`p_was\` IN ('Nachrichtennummer Sync', 'Grafikstatus Reset');
 SQL
 )
-if [ "$scoped_admin_audit_count" != 2 ]; then
-    echo 'Admin HTTP: operational admin audit is not bound to the active incident' >&2
+if [ "$scoped_admin_audit_state" != '1|1|0|0' ]; then
+    printf 'Admin HTTP: operational admin audit is not bound to its active incident: %s\n' \
+        "$scoped_admin_audit_state" >&2
     exit 1
 fi
 

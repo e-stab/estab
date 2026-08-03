@@ -335,6 +335,7 @@ function estab_admin_replace_matrix(
         $transactionActive = true;
         $oldRoles = estab_assignment_function_roles($connection, $matrixTable);
         $newRoles = estab_assignment_roles_from_matrix($matrix);
+        estab_auth_merge_function_role_catalog($connection, $newRoles, true);
         estab_admin_write_matrix($connection, $matrixTable, $matrix);
         $summary = estab_assignment_reconcile_accounts(
             $connection,
@@ -401,6 +402,7 @@ function estab_admin_replace_matrix_and_standard(
         $transactionActive = true;
         $oldRoles = estab_assignment_function_roles($connection, $matrixTable);
         $newRoles = estab_assignment_roles_from_matrix($matrix);
+        estab_auth_merge_function_role_catalog($connection, $newRoles, true);
         // Keep a stable lock order across both administrative save actions.
         estab_admin_write_matrix($connection, $matrixTable, $matrix);
         estab_admin_write_matrix($connection, $standardMatrixTable, $matrix);
@@ -655,6 +657,7 @@ function estab_admin_raise_message_counter(
             $incident = estab_incident_require_active($connection, true);
             estab_incident_lock_command_post_for_write($connection, $incident);
             $incidentId = (int) $incident['active_einsatz_id'];
+            $strictMode = estab_incident_duty_shift_required($incident);
             $current = estab_admin_fetch_counter_maxima(
                 $connection,
                 $messageTable,
@@ -671,15 +674,56 @@ function estab_admin_raise_message_counter(
                 }
             }
 
+            $evidenceObjectType = 'EINSATZ';
+            $evidenceObjectId = $incidentId;
+            $shiftId = null;
+            if ($strictMode) {
+                $shiftStatement = $connection->prepare(
+                    'SELECT `dienstschicht_id` FROM `nv_dienstschichten`'
+                    . " WHERE `einsatz_id` = ? AND `status` = 'AKTIV'"
+                    . ' ORDER BY `dienstschicht_id` DESC LIMIT 1 FOR UPDATE'
+                );
+                if (!$shiftStatement) {
+                    throw new RuntimeException(
+                        'Aktive Dienstschicht für die Zählerkorrektur konnte '
+                        . 'nicht vorbereitet werden.'
+                    );
+                }
+                try {
+                    $shiftStatement->bind_param('i', $incidentId);
+                    $shiftStatement->execute();
+                    $shiftRow = $shiftStatement->get_result()->fetch_assoc();
+                } finally {
+                    $shiftStatement->close();
+                }
+                if (!is_array($shiftRow)) {
+                    throw new EstabAdminConflictException(
+                        'Im strengen Berechtigungsmodus kann der '
+                        . 'Nachrichtenzähler erst mit einer aktiven '
+                        . 'Dienstschicht erhöht werden.'
+                    );
+                }
+                $shiftId = (int) ($shiftRow['dienstschicht_id'] ?? 0);
+                if ($shiftId < 1) {
+                    throw new RuntimeException(
+                        'Die aktive Dienstschicht hat keine gültige Kennung.'
+                    );
+                }
+                $evidenceObjectType = 'DIENSTSCHICHT';
+                $evidenceObjectId = $shiftId;
+            }
+
             // This is a recovery watermark in the immutable operational
             // chain. It must never masquerade as a received/sent message with
-            // invented A/W, LdF or Si marks. The active incident is the
-            // evidence object; optional access shifts are not a prerequisite.
+            // invented Fernmelder, LdF or Si marks. STRICT restores the formal
+            // duty-shift evidence from before shifts became optional. LOOSE
+            // binds the same evidence directly to the incident and never
+            // treats an optional access shift as a source of authority.
             estab_dv_event_append(
                 $connection,
                 $incidentId,
-                'EINSATZ',
-                $incidentId,
+                $evidenceObjectType,
+                $evidenceObjectId,
                 'message_counter_repaired',
                 $actor,
                 null,
@@ -691,6 +735,10 @@ function estab_admin_raise_message_counter(
                     'before' => $current,
                     'after' => $values,
                     'actor' => $actor,
+                    'permission_mode' => $strictMode
+                        ? ESTAB_PERMISSION_MODE_STRICT
+                        : ESTAB_PERMISSION_MODE_LOOSE,
+                    'dienstschicht_id' => $shiftId,
                 ]
             );
             $auditValue = $mode === 'gemeinsam'

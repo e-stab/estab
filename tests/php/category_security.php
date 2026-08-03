@@ -93,6 +93,58 @@ $assert($function['category_table'] === 'usr__fkt_s1_katego', 'function table no
 $assert($function['link_table'] === 'usr__fkt_s1_kategolink', 'function link table not session-derived');
 $assert($user['category_table'] === 'usr_s1_cat001_katego', 'user table not session-derived');
 $assert($user['link_table'] === 'usr_s1_cat001_kategolink', 'user link table not session-derived');
+$looseIdentity = [
+    'benutzer' => 'Kategorie Zusatzfunktion',
+    'kuerzel' => 'extra1',
+    'funktion' => 'LdF',
+    'rolle' => 'Fernmelder',
+    'estab_permission_mode' => 'LOOSE',
+    'estab_additional_functions' => [
+        ['funktion' => 'S6', 'rolle' => 'Stab'],
+    ],
+];
+$looseS6 = estab_category_identity_for_function($looseIdentity, 'S6');
+$assert(
+    $looseS6['funktion'] === 'S6'
+        && $looseS6['rolle'] === 'Stab'
+        && $looseS6['authorization_account_function'] === 'LdF',
+    'LOOSE additional function was not retained as category actor'
+);
+$looseFunctionScope = estab_category_scope('fkt', $looseS6, $tables);
+$assert(
+    $looseFunctionScope['category_table'] === 'usr__fkt_s6_katego'
+        && $looseFunctionScope['acting_function'] === 'S6'
+        && $looseFunctionScope['acting_role'] === 'Stab',
+    'LOOSE additional function was routed into the primary category tables'
+);
+$throws(
+    static fn () => estab_category_identity_for_function($looseIdentity, 'Si'),
+    EstabCategoryAuthorizationException::class,
+    'unassigned LOOSE category function accepted'
+);
+$strictIdentity = [
+    'benutzer' => 'Kategorie Dienstfunktion',
+    'kuerzel' => 'hat001',
+    'funktion' => 'S6',
+    'rolle' => 'Stab',
+    'duty_assignment_id' => 12,
+    'estab_permission_mode' => 'STRICT',
+    'estab_additional_functions' => [
+        // A stale value from an earlier LOOSE request must never survive a
+        // mode switch as an operational category selector.
+        ['funktion' => 'LdF', 'rolle' => 'Fernmelder'],
+    ],
+];
+$assert(
+    estab_category_identity_for_function($strictIdentity, 'S6')['funktion']
+        === 'S6',
+    'selected STRICT duty function rejected for categories'
+);
+$throws(
+    static fn () => estab_category_identity_for_function($strictIdentity, 'LdF'),
+    EstabCategoryAuthorizationException::class,
+    'STRICT category scope escaped the selected duty function'
+);
 $throws(
     static fn () => estab_category_scope(
         'user',
@@ -175,12 +227,34 @@ $helper = file_get_contents($root . '/app/category.php');
 $endpoint = file_get_contents($root . '/4fach/katgoedt.php');
 $facade = file_get_contents($root . '/4fach/katego.php');
 $form = file_get_contents($root . '/4fach/4fachform.php');
+$officialForm = file_get_contents($root . '/4fach/official_message_form.php');
 $list = file_get_contents($root . '/4fach/liste.php');
 $mainController = file_get_contents($root . '/4fach/mainindex.php');
+$workflow = file_get_contents($root . '/app/workflow.php');
 $apache = file_get_contents($root . '/docker/apache/estab.conf');
-foreach ([$helper, $endpoint, $facade, $form, $list, $mainController, $apache] as $source) {
+foreach ([$helper, $endpoint, $facade, $form, $officialForm, $list, $mainController, $workflow, $apache] as $source) {
     $assert(is_string($source), 'category security source file is unreadable');
 }
+$identityLockStart = strpos($helper, 'function estab_category_lock_operational_identity(');
+$messageLockStart = strpos($helper, 'function estab_category_lock_authorized_message(');
+$mutationStart = strpos($helper, 'function estab_category_mutate_authorized(');
+$assignmentStart = strpos($helper, 'function estab_category_assign(');
+$assert(
+    is_int($identityLockStart)
+        && is_int($messageLockStart)
+        && is_int($mutationStart)
+        && is_int($assignmentStart)
+        && $identityLockStart < $messageLockStart
+        && $messageLockStart < $mutationStart
+        && $mutationStart < $assignmentStart,
+    'locked category authorisation functions are missing or out of order'
+);
+$identityLockSource = is_int($identityLockStart) && is_int($messageLockStart)
+    ? substr($helper, $identityLockStart, $messageLockStart - $identityLockStart)
+    : '';
+$mutationSource = is_int($mutationStart) && is_int($assignmentStart)
+    ? substr($helper, $mutationStart, $assignmentStart - $mutationStart)
+    : '';
 
 $assert(
     substr_count($helper, '->prepare(') >= 12
@@ -211,9 +285,17 @@ $assert(
             $endpoint,
             'estab_read_require_operational_scope('
         )
-        && substr_count($endpoint, 'estab_read_message(') >= 3
+        && substr_count($endpoint, 'estab_read_message(') >= 2
         && str_contains($endpoint, 'estab_csrf_require_post($_SERVER, $_POST)')
         && str_contains($endpoint, "['create', 'update', 'delete', 'assign']")
+        && str_contains($endpoint, 'estab_category_identity_for_function(')
+        && str_contains($endpoint, 'estab_category_mutate_authorized(')
+        && !preg_match(
+            '/estab_category_(?:create|update|delete)\s*\(/',
+            $endpoint
+        )
+        && str_contains($endpoint, "\$_POST['acting_function']")
+        && str_contains($endpoint, "\$_GET['acting_function']")
         && str_contains($endpoint, "header('Location: ' . \$location, true, 303)")
         && !str_contains($endpoint, "\$_GET['category_action']"),
     'category endpoint lacks session, CSRF, POST allow-list or PRG enforcement'
@@ -221,19 +303,19 @@ $assert(
 $assert(
     str_contains($endpoint, 'estab_category_require_management($type, $identity, $redcopy)')
         && str_contains(
-            $endpoint,
-            "estab_message_object_allowed(\$identity, 'staff-read', \$message)"
+            $helper,
+            "estab_read_message_allowed_for_identity(\n"
         )
         && str_contains($helper, '$prefix . \'_fkt_\' . $function')
         && str_contains($helper, '$prefix . $function . \'_\' . $code')
-        && str_contains(
-            $helper,
-            "estab_message_object_allowed(\$identity, 'staff-read', \$message)"
-        )
-        && str_contains(
-            $helper,
-            'estab_dv_require_operational_account('
-        )
+        && str_contains($identityLockSource, 'estab_dv_require_operational_account(')
+        && str_contains($identityLockSource, 'estab_auth_fetch_additional_functions(')
+        && str_contains($identityLockSource, "\$scope['acting_function'] ?? ''")
+        && str_contains($identityLockSource, "\$scope['acting_role'] ?? ''")
+        && preg_match(
+            '/estab_auth_fetch_additional_functions\([^;]+\btrue\s*\)/s',
+            $identityLockSource
+        ) === 1
         && str_contains(
             $helper,
             'estab_category_redcopy_function('
@@ -252,13 +334,79 @@ $assert(
     'category authorisation is not revalidated against the locked incident'
 );
 $assert(
+    str_contains($mutationSource, 'return estab_incident_with_active_write(')
+        && str_contains(
+            $mutationSource,
+            'estab_category_lock_operational_identity('
+        )
+        && str_contains(
+            $mutationSource,
+            'estab_category_redcopy_function('
+        )
+        && preg_match(
+            '/estab_category_redcopy_function\([^;]+\btrue\s*\)/s',
+            $mutationSource
+        ) === 1
+        && str_contains(
+            $mutationSource,
+            'estab_category_lock_authorized_message('
+        )
+        && str_contains(
+            $mutationSource,
+            'estab_category_insert_in_transaction('
+        )
+        && str_contains(
+            $mutationSource,
+            'estab_category_update_in_transaction('
+        )
+        && str_contains(
+            $mutationSource,
+            'estab_category_delete_in_transaction('
+        ),
+    'category CRUD is not committed under one locked authorisation snapshot'
+);
+$assert(
     str_contains($facade, "name = 'category_' . \$this->dbtyp . '_' . \$position")
+        && str_contains($facade, 'estab_category_route_identity(')
         && str_contains($facade, "estab_auth_html(\$row['kategorie'])")
         && str_contains($form, 'name=\\"category_action\\"')
         && str_contains($form, 'value=\\"assign\\"')
         && str_contains($form, 'formaction=\\"katgoedt.php\\"')
+        && str_contains(
+            $form,
+            '$actingFunction = (string) $katego_master->stab_fkt;'
+        )
+        && str_contains($form, '"acting_function" => $actingFunction')
+        && str_contains(
+            $form,
+            '$berechtigt = estab_category_can_manage_master ('
+        )
+        && !str_contains($form, '$_SESSION ["vStab_funktion"]')
         && substr_count($form, 'estab_auth_html ($katearr_') === 3,
-    'four-part form does not use safe ID selects, raw category escaping and direct POST assignment'
+    'four-part form does not bind category management to the effective actor, '
+        . 'safe ID selects, raw category escaping and direct POST assignment'
+);
+$assert(
+    str_contains($officialForm, "['acting_function' => \$actingFunction]")
+        && str_contains($officialForm, "formaction=\"' . estab_message_html(\$assignmentAction)")
+        && str_contains(
+            $officialForm,
+            '<input type="hidden" name="acting_function"'
+        )
+        && str_contains(
+            $officialForm,
+            '$actingFunction = $this->official_message_acting_function();'
+        )
+        && str_contains(
+            $workflow,
+            'function estab_workflow_identity_for_acting_function('
+        )
+        && str_contains(
+            $workflow,
+            'estab_workflow_requested_acting_function($request)'
+        ),
+    'category assignment or message continuation lost the server-validated '
+        . 'acting-function scope'
 );
 $assert(
     str_contains($list, '"ma_ktgo" => $this->masterresult[$i]["lfd"]')

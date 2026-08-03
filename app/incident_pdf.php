@@ -2316,15 +2316,19 @@ final class EstabIncidentPdf extends vordruckaspdf
         array $accessShiftMemberships = []
     ): void {
         $this->beginSection('Dienstorganisation');
-        $this->heading('Optionale Zugangsschichten und historische Dienstnachweise', 1);
+        $this->heading('Formale Dienstschichten und optionale Zugangsschichten', 1);
         $this->paragraph(
-            'Zugangsschichten schalten ausschließlich die Anmeldung '
-            . 'zugeordneter Konten gemeinsam frei oder aus. Fachrechte '
-            . 'stammen aus der festen Kontofunktion; operative Eingaben '
-            . 'benötigen keine aktive Schicht.'
+            'Im Berechtigungsmodus Streng stammen operative Identität und '
+            . 'Rechte aus einer persönlich angenommenen und ausgewählten '
+            . 'Besetzung der aktiven formalen Dienstschicht. Im Modus '
+            . 'Locker ist keine formale Dienstschicht erforderlich; dort '
+            . 'gelten feste Kontofunktion und explizite Zusatzfunktionen. '
+            . 'Optionale Zugangsschichten schalten nur in diesem lockeren '
+            . 'Betrieb Zugänge gemeinsam frei oder aus und verleihen keine '
+            . 'Fachrechte.'
         );
 
-        $this->heading('Optionale Zugangsschichten', 2);
+        $this->heading('Optionale Zugangsschichten (lockerer Betrieb)', 2);
         if ($accessShifts === []) {
             $this->paragraph(
                 'Für diesen Einsatz sind keine optionalen Zugangsschichten '
@@ -2397,11 +2401,12 @@ final class EstabIncidentPdf extends vordruckaspdf
             $this->Ln(3);
         }
 
-        $this->heading('Historischer Dienstbetrieb (Legacy-Nachweis)', 2);
+        $this->heading('Formaler Dienstbetrieb', 2);
         $this->paragraph(
-            'Die folgenden früheren Dienstschichten, Funktionsbesetzungen '
-            . 'und Übergaben bleiben unverändert als historischer Nachweis '
-            . 'erhalten. Sie steuern keine aktuelle Berechtigung.'
+            'Die folgenden Dienstschichten, Funktionsbesetzungen und '
+            . 'Übergaben sind im strengen Betrieb aktuelle Autorisierungs- '
+            . 'und Nachweisevidenz. Nach Schichtende bleiben sie '
+            . 'unverändert als historischer Nachweis erhalten.'
         );
 
         $this->heading('Dienstschichten', 2);

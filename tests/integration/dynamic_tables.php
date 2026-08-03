@@ -360,6 +360,16 @@ $registrationUserTables = [
     $registrationUserBase . '_katego',
     $registrationUserBase . '_kategolink',
 ];
+$extraGrantUserBase = 'usr_s1_' . $registrationCode;
+$extraGrantUserTables = [
+    $extraGrantUserBase . '_read',
+    $extraGrantUserBase . '_katego',
+    $extraGrantUserBase . '_kategolink',
+];
+$registrationUserTables = array_merge(
+    $registrationUserTables,
+    $extraGrantUserTables
+);
 $quotedRegistrationTables = implode(',', array_map(
     static fn (string $table): string => "'" . $table . "'",
     $registrationTables
@@ -706,18 +716,24 @@ test_assert(
 );
 
 $currentBrowserSession = $secondAuthenticatedSession;
+$currentBrowserIdentity = estab_auth_current_session_identity(
+    $currentBrowserSession,
+    $validationDatabase,
+    'nv_benutzer',
+    $secondAuthenticatedSessionId
+);
 test_assert(
-    estab_auth_current_session_identity(
-        $currentBrowserSession,
-        $validationDatabase,
-        'nv_benutzer',
-        $secondAuthenticatedSessionId
-    ) === [
-        'benutzer' => $registrationName,
-        'kuerzel' => $registrationCode,
-        'funktion' => 'S2',
-        'rolle' => 'Stab',
-    ],
+    is_array($currentBrowserIdentity)
+        && ($currentBrowserIdentity['benutzer'] ?? null)
+            === $registrationName
+        && ($currentBrowserIdentity['kuerzel'] ?? null)
+            === $registrationCode
+        && ($currentBrowserIdentity['funktion'] ?? null) === 'S2'
+        && ($currentBrowserIdentity['rolle'] ?? null) === 'Stab'
+        && ($currentBrowserIdentity['estab_permission_mode'] ?? null)
+            === ESTAB_PERMISSION_MODE_LOOSE
+        && ($currentBrowserIdentity['estab_additional_functions'] ?? null)
+            === [],
     'Current browser was rejected by authoritative SID validation'
 );
 test_assert(
@@ -739,6 +755,163 @@ test_assert(
             $link
         ) === '1',
     'Stale-browser logout deactivated the newer account session'
+);
+
+// Granting a LOOSE extra function must provision its legacy workspace before
+// committing authority. A schema-lock failure may leave no grant, audit or
+// session revocation; the same administrative action must then be retryable.
+$extraRevision = estab_user_admin_extra_functions_revision([]);
+$extraSchemaLockName = estab_dynamic_schema_lock_name(
+    $database,
+    'usr__fkt_s1'
+);
+$escapedExtraSchemaLockName = mysql_real_escape_string(
+    $extraSchemaLockName,
+    $link
+);
+test_assert(
+    test_scalar(
+        "SELECT GET_LOCK('{$escapedExtraSchemaLockName}', 0)",
+        $link
+    ) === '1',
+    'Could not hold extra-function schema lock'
+);
+$grantConnection = estab_auth_connect($provisionConfig);
+$grantFailure = null;
+try {
+    $extraRoles = estab_user_admin_extra_function_roles(
+        $grantConnection,
+        'nv_empfmtx'
+    );
+    test_assert(
+        ($extraRoles['ETB'] ?? null) === 'Stab'
+            && ($extraRoles['S1'] ?? null) === 'Stab',
+        'ETB logbook-only or S1 staff extra function disappeared'
+    );
+    estab_user_admin_grant_extra_function(
+        $grantConnection,
+        $database,
+        'nv_benutzer',
+        'nv_protokoll',
+        $registrationCode,
+        'S1',
+        'S2',
+        'Stab',
+        $extraRevision,
+        '1',
+        'nv_empfmtx',
+        'usr_',
+        'dynamic-table-integration',
+        '127.0.0.1',
+        true
+    );
+} catch (RuntimeException $exception) {
+    $grantFailure = $exception->getMessage();
+} finally {
+    estab_auth_close($grantConnection);
+}
+$quotedExtraGrantUserTables = implode(',', array_map(
+    static fn (string $table): string => "'" . $table . "'",
+    $extraGrantUserTables
+));
+test_assert(
+    is_string($grantFailure)
+        && str_contains($grantFailure, 'Dynamische Tabellen')
+        && test_scalar(
+            "SELECT COUNT(*) FROM `nv_benutzer_zusatzfunktionen`"
+                . " WHERE `benutzer_kuerzel` = '{$registrationCode}'"
+                . " AND `funktion` = 'S1'",
+            $link
+        ) === '0'
+        && test_scalar(
+            "SELECT COUNT(*) FROM information_schema.tables"
+                . " WHERE table_schema = '{$escapedDatabase}'"
+                . " AND table_name IN ({$quotedExtraGrantUserTables})",
+            $link
+        ) === '0'
+        && test_scalar(
+            "SELECT COUNT(*) FROM `nv_benutzer`"
+                . " WHERE `kuerzel` = '{$registrationCode}'"
+                . " AND `aktiv` = 1 AND `sid` = '"
+                . mysql_real_escape_string(
+                    $secondAuthenticatedSessionId,
+                    $link
+                ) . "'",
+            $link
+        ) === '1'
+        && test_scalar(
+            "SELECT COUNT(*) FROM `nv_protokoll`"
+                . " WHERE `p_was` = 'Benutzerverwaltung'"
+                . " AND `p_ereignis` LIKE '%grant_extra_function%'"
+                . " AND `p_ereignis` LIKE '%\"target\":\""
+                . $registrationCode . "\"%'",
+            $link
+        ) === '0',
+    'failed extra-function schema reconciliation granted authority, audited '
+        . 'success or revoked the active session'
+);
+test_assert(
+    test_scalar(
+        "SELECT RELEASE_LOCK('{$escapedExtraSchemaLockName}')",
+        $link
+    ) === '1',
+    'Could not release extra-function schema lock'
+);
+
+$grantConnection = estab_auth_connect($provisionConfig);
+try {
+    $extraGrant = estab_user_admin_grant_extra_function(
+        $grantConnection,
+        $database,
+        'nv_benutzer',
+        'nv_protokoll',
+        $registrationCode,
+        'S1',
+        'S2',
+        'Stab',
+        $extraRevision,
+        '1',
+        'nv_empfmtx',
+        'usr_',
+        'dynamic-table-integration',
+        '127.0.0.1',
+        true
+    );
+} finally {
+    estab_auth_close($grantConnection);
+}
+test_assert(
+    ($extraGrant['funktion'] ?? null) === 'S1'
+        && ($extraGrant['rolle'] ?? null) === 'Stab'
+        && ($extraGrant['active_session_revoked'] ?? null) === true
+        && test_scalar(
+            "SELECT COUNT(*) FROM `nv_benutzer_zusatzfunktionen`"
+                . " WHERE `benutzer_kuerzel` = '{$registrationCode}'"
+                . " AND `funktion` = 'S1' AND `rolle` = 'Stab'",
+            $link
+        ) === '1'
+        && test_scalar(
+            "SELECT COUNT(*) FROM information_schema.tables"
+                . " WHERE table_schema = '{$escapedDatabase}'"
+                . " AND table_name IN ({$quotedExtraGrantUserTables})",
+            $link
+        ) === '3'
+        && test_scalar(
+            "SELECT COUNT(*) FROM `nv_benutzer`"
+                . " WHERE `kuerzel` = '{$registrationCode}'"
+                . " AND `aktiv` = 0 AND `sid` = ''",
+            $link
+        ) === '1'
+        && test_scalar(
+            "SELECT COUNT(*) FROM `nv_protokoll`"
+                . " WHERE `p_was` = 'Benutzerverwaltung'"
+                . " AND `p_ereignis` LIKE '%grant_extra_function%'"
+                . " AND `p_ereignis` LIKE '%\"target\":\""
+                . $registrationCode . "\"%'",
+            $link
+        ) === '1',
+    'successful extra-function grant did not atomically provision, audit and '
+        . 'revoke the active session'
 );
 
 $databaseFailureSession = $secondAuthenticatedSession;

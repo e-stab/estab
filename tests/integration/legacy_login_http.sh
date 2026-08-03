@@ -104,15 +104,19 @@ assert_body 'Der gewählte eStab-Bereich wird geöffnet'
 assert_body '4fach/index.php'
 
 # The compatibility switch changes only the pre-authentication CSRF boundary.
-# A successful historical login receives exactly the fixed function and role
-# stored on the account. Optional access shifts do not assign fachliche rights,
-# and no legacy duty assignment is selected or fabricated in the session.
+# In the explicitly LOOSE central CI incident, a successful historical login
+# receives exactly the fixed function and role stored on the account. Optional
+# access shifts do not assign fachliche rights, and no formal duty assignment
+# is selected or fabricated in the session.
 assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     "$base_url/4fach/fuehrungsstelle.php"
 assert_body 'data-estab-session-bar'
 assert_body "data-estab-user-name=\"$test_name\""
 assert_body 'data-estab-dv-operations'
-assert_body 'Zugewiesene Funktion'
+assert_body 'Kontofunktion'
+assert_body 'Wirksame Funktionen'
+assert_body 'Berechtigungsmodus'
+assert_body 'Locker'
 if grep -Eq 'operation_action[^>]*select_hat|name="dienstbesetzung_id"' \
     "$body"; then
     printf 'Legacy login HTTP: obsolete duty-selection UI is visible\n' >&2
@@ -127,8 +131,9 @@ if ! printf '%s' "$logout_csrf" | grep -Eq '^[a-f0-9]{64}$'; then
     exit 1
 fi
 
-# Generated forms are available immediately to the authenticated fixed account
-# while the incident is active; a formal duty shift is not a prerequisite.
+# In LOOSE, generated forms are available immediately to the authenticated
+# fixed account while the incident is active; a formal duty shift is not a
+# prerequisite.
 assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     "$base_url/4fach/vordrucke.php"
 assert_body 'Generierte Vordrucke'

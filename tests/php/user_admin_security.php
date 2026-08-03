@@ -58,6 +58,13 @@ $assert(
     ),
     'non-string account code was accepted'
 );
+$assert(
+    estab_auth_extra_function_is_eligible('ETB', 'Stab')
+        && estab_auth_extra_function_is_eligible('S6', 'Stab')
+        && estab_auth_has_staff_message_workspace('S6', 'Stab')
+        && !estab_auth_has_staff_message_workspace('ETB', 'Stab'),
+    'ETB cannot be granted as a logbook-only extra or owns a message workspace'
+);
 
 $assert(
     estab_user_admin_validate_name('  Müller, Ada  ') === 'Müller, Ada',
@@ -110,6 +117,94 @@ foreach (['', 'S3', 'S 1', "S1\0"] as $invalidFunction) {
         'unknown or malformed administrative function was accepted'
     );
 }
+$assert(
+    estab_user_admin_validate_extra_function_key('ALT/S6') === 'ALT/S6',
+    'orphaned extra-function key cannot be retained for safe revocation'
+);
+foreach (['', str_repeat('x', 11), "S6\0", "S6\n"] as $invalidExtraKey) {
+    $assert(
+        $throwsInvalidArgument(
+            static fn (): string =>
+                estab_user_admin_validate_extra_function_key($invalidExtraKey)
+        ),
+        'unsafe extra-function storage key was accepted'
+    );
+}
+$assert(
+    estab_user_admin_validate_extra_function_time(
+        '2026-08-02 13:14:15.123456'
+    ) === '2026-08-02 13:14:15.123456',
+    'valid extra-function revision timestamp was rejected'
+);
+foreach ([
+    '2026-08-02 13:14:15',
+    '2026-08-02T13:14:15.123456',
+    '2026-08-02 13:14:15.12345',
+] as $invalidExtraTime) {
+    $assert(
+        $throwsInvalidArgument(
+            static fn (): string =>
+                estab_user_admin_validate_extra_function_time($invalidExtraTime)
+        ),
+        'ambiguous extra-function revision timestamp was accepted'
+    );
+}
+$revisionRows = [
+    [
+        'funktion' => 'S6',
+        'rolle' => 'Stab',
+        'vergeben_am' => '2026-08-02 13:14:15.123456',
+        'vergeben_von' => 'admin',
+    ],
+    [
+        'funktion' => 'LdF',
+        'rolle' => 'Fernmelder',
+        'vergeben_am' => '2026-08-02 13:14:16.123456',
+        'vergeben_von' => 'admin',
+    ],
+];
+$extraRevision = estab_user_admin_extra_functions_revision($revisionRows);
+$assert(
+    preg_match('/\A[a-f0-9]{64}\z/D', $extraRevision) === 1
+        && hash_equals(
+            $extraRevision,
+            estab_user_admin_extra_functions_revision(array_reverse($revisionRows))
+        )
+        && !hash_equals(
+            $extraRevision,
+            estab_user_admin_extra_functions_revision([$revisionRows[0]])
+        )
+        && estab_user_admin_validate_extra_functions_revision($extraRevision)
+            === $extraRevision,
+    'extra-function set revision is not stable, complete or canonical'
+);
+$assert(
+    $throwsInvalidArgument(
+        static fn (): string =>
+            estab_user_admin_validate_extra_functions_revision(
+                strtoupper($extraRevision)
+            )
+    ),
+    'non-canonical extra-function set revision was accepted'
+);
+$assert(
+    $throwsRuntime(
+        static function (): void {
+            estab_user_admin_require_expected_primary_assignment(
+                ['funktion' => 'S6', 'rolle' => 'Stab'],
+                'LdF',
+                'Fernmelder'
+            );
+        }
+    ),
+    'stale primary assignment did not conflict'
+);
+estab_user_admin_require_expected_primary_assignment(
+    ['funktion' => 'S6', 'rolle' => 'Stab'],
+    'S6',
+    'Stab'
+);
+$assert(true, 'current primary assignment was rejected');
 
 $validPassword = 'lange Einsatz-Passphrase 2026!';
 $assert(
@@ -306,6 +401,71 @@ $assert(
     ),
     'empty new assignment reached the audit record'
 );
+$extraSnapshot = [
+    'funktion' => 'LdF',
+    'rolle' => 'Fernmelder',
+    'vergeben_am' => '2026-08-02 13:14:15.123456',
+    'vergeben_von' => 'admin@example.test',
+];
+$grantExtraAudit = json_decode(
+    estab_user_admin_extra_function_audit_details(
+        'grant_extra_function',
+        'admin@example.test',
+        'hd',
+        true,
+        '192.0.2.10',
+        null,
+        $extraSnapshot
+    ),
+    true,
+    8,
+    JSON_THROW_ON_ERROR
+);
+$assert(
+    ($grantExtraAudit['action'] ?? null) === 'grant_extra_function'
+        && array_key_exists('before', $grantExtraAudit)
+        && $grantExtraAudit['before'] === null
+        && ($grantExtraAudit['after'] ?? null) === $extraSnapshot
+        && ($grantExtraAudit['active_session_revoked'] ?? null) === true
+        && !array_key_exists('sid', $grantExtraAudit)
+        && !array_key_exists('password', $grantExtraAudit),
+    'extra-function grant audit is incomplete or contains session secrets'
+);
+$revokeExtraAudit = json_decode(
+    estab_user_admin_extra_function_audit_details(
+        'revoke_extra_function',
+        'admin@example.test',
+        'hd',
+        false,
+        '192.0.2.10',
+        $extraSnapshot,
+        null
+    ),
+    true,
+    8,
+    JSON_THROW_ON_ERROR
+);
+$assert(
+    ($revokeExtraAudit['before'] ?? null) === $extraSnapshot
+        && array_key_exists('after', $revokeExtraAudit)
+        && $revokeExtraAudit['after'] === null,
+    'extra-function revocation audit omits its exact before/after state'
+);
+$assert(
+    $throwsInvalidArgument(
+        static fn (): string =>
+            estab_user_admin_extra_function_audit_details(
+                'grant_extra_function',
+                'admin',
+                'hd',
+                false,
+                '',
+                $extraSnapshot,
+                null
+            )
+    ),
+    'invalid extra-function audit transition was accepted'
+);
 
 $lockName = estab_user_admin_account_lock_name('estab', 'nv_benutzer', 'hd');
 $expectedLock = 'estab:login:' . substr(
@@ -416,6 +576,30 @@ $functionRoleSource = $functionSource(
     $librarySource,
     'estab_user_admin_function_roles'
 );
+$extraFunctionRoleSource = $functionSource(
+    $librarySource,
+    'estab_user_admin_extra_function_roles'
+);
+$catalogMergeSource = $functionSource(
+    $authSource,
+    'estab_auth_merge_function_role_catalog'
+);
+$currentCatalogSource = $functionSource(
+    $authSource,
+    'estab_auth_current_function_role_catalog'
+);
+$additionalFunctionSource = $functionSource(
+    $authSource,
+    'estab_auth_fetch_additional_functions'
+);
+$grantExtraFunctionSource = $functionSource(
+    $librarySource,
+    'estab_user_admin_grant_extra_function'
+);
+$revokeExtraFunctionSource = $functionSource(
+    $librarySource,
+    'estab_user_admin_revoke_extra_function'
+);
 $assert(
     $listSource !== ''
         && str_contains($listSource, '`estab_gesperrt`')
@@ -428,6 +612,18 @@ $assert(
         && str_contains($listSource, 'AS `estab_sitzung_vorhanden`')
         && !str_contains($listSource, '`ip`'),
     'account list reads reusable credential or network-session material'
+);
+$assert(
+    $listSource !== ''
+        && str_contains($listSource, '`nv_benutzer_zusatzfunktionen`')
+        && str_contains($listSource, '`vergeben_am`')
+        && str_contains($listSource, '`vergeben_von`')
+        && str_contains($listSource, "'ist_gueltig'")
+        && str_contains($listSource, '$extraFunctionRoles[$function]')
+        && str_contains($listSource, '!hash_equals($primaryFunction')
+        && !str_contains($listSource, '`password`')
+        && !str_contains($listSource, '`sid` FROM'),
+    'extra-function list is not fail-closed or exposes reusable credentials'
 );
 $assert(
     $blockSource !== ''
@@ -473,6 +669,45 @@ $assert(
     'assignable functions are not derived from the server-controlled matrix'
 );
 $assert(
+    $extraFunctionRoleSource !== ''
+        && str_contains(
+            $extraFunctionRoleSource,
+            'estab_assignment_function_roles($connection, $matrixTable)'
+        )
+        && str_contains(
+            $extraFunctionRoleSource,
+            'estab_auth_merge_function_role_catalog('
+        )
+        && str_contains(
+            $extraFunctionRoleSource,
+            'estab_auth_extra_function_is_eligible('
+        )
+        && $catalogMergeSource !== ''
+        && str_contains($catalogMergeSource, '`nv_funktionsfaehigkeiten`')
+        && str_contains($catalogMergeSource, "' FOR UPDATE'")
+        && str_contains($catalogMergeSource, 'widersprechen')
+        && str_contains($catalogMergeSource, 'uksort(')
+        && $currentCatalogSource !== ''
+        && str_contains($currentCatalogSource, 'estab_auth_table($matrixTable)')
+        && str_contains(
+            $currentCatalogSource,
+            'estab_auth_merge_function_role_catalog($connection, $roles)'
+        )
+        && $additionalFunctionSource !== ''
+        && str_contains(
+            $additionalFunctionSource,
+            'estab_auth_current_function_role_catalog($connection)'
+        )
+        && str_contains($additionalFunctionSource, '$canonicalRoles[$function]')
+        && str_contains(
+            $additionalFunctionSource,
+            'estab_auth_extra_function_is_eligible($function, $role)'
+        )
+        && str_contains($additionalFunctionSource, 'continue;')
+        && !str_contains($additionalFunctionSource, ' OR EXISTS ('),
+    'extra-function catalogue does not merge both authoritative sources safely'
+);
+$assert(
     $createSource !== ''
         && str_contains($createSource, 'estab_user_admin_validate_assignment')
         && str_contains($createSource, 'estab_auth_hash_password(')
@@ -507,6 +742,95 @@ $assert(
         && str_contains($reassignSource, '$connection->rollback()'),
     'function reassignment is not server-derived, atomic, audited and session-revoking'
 );
+$assert(
+    $grantExtraFunctionSource !== ''
+        && str_contains(
+            $grantExtraFunctionSource,
+            'estab_assignment_acquire_policy_lock('
+        )
+        && str_contains(
+            $grantExtraFunctionSource,
+            'estab_user_admin_acquire_account_lock('
+        )
+        && str_contains($grantExtraFunctionSource, '$connection->begin_transaction()')
+        && substr_count(
+            $grantExtraFunctionSource,
+            '$connection->begin_transaction()'
+        ) === 2
+        && str_contains(
+            $grantExtraFunctionSource,
+            'estab_dynamic_schema_reconcile_hat('
+        )
+        && strpos(
+            $grantExtraFunctionSource,
+            'estab_dynamic_schema_reconcile_hat('
+        ) < strpos(
+            $grantExtraFunctionSource,
+            'INSERT INTO `nv_benutzer_zusatzfunktionen`'
+        )
+        && str_contains(
+            $grantExtraFunctionSource,
+            'estab_user_admin_require_expected_primary_assignment('
+        )
+        && str_contains($grantExtraFunctionSource, '$expectedAbsent')
+        && str_contains(
+            $grantExtraFunctionSource,
+            '$expectedExtraFunctionsRevision'
+        )
+        && str_contains(
+            $grantExtraFunctionSource,
+            'estab_user_admin_fetch_extra_functions_for_update('
+        )
+        && str_contains($grantExtraFunctionSource, 'kann nicht zusätzlich')
+        && str_contains(
+            $grantExtraFunctionSource,
+            'INSERT INTO `nv_benutzer_zusatzfunktionen`'
+        )
+        && str_contains(
+            $grantExtraFunctionSource,
+            'estab_user_admin_revoke_locked_session('
+        )
+        && str_contains($grantExtraFunctionSource, "'grant_extra_function'")
+        && str_contains($grantExtraFunctionSource, 'estab_auth_log_event(')
+        && str_contains($grantExtraFunctionSource, '$connection->commit()')
+        && str_contains($grantExtraFunctionSource, '$connection->rollback()'),
+    'extra-function grant is not authoritative, conflict-safe, audited and session-revoking'
+);
+$assert(
+    $revokeExtraFunctionSource !== ''
+        && str_contains(
+            $revokeExtraFunctionSource,
+            'estab_assignment_acquire_policy_lock('
+        )
+        && str_contains(
+            $revokeExtraFunctionSource,
+            'estab_user_admin_acquire_account_lock('
+        )
+        && str_contains($revokeExtraFunctionSource, '$connection->begin_transaction()')
+        && str_contains($revokeExtraFunctionSource, '$expectedGrantedAt')
+        && str_contains($revokeExtraFunctionSource, '$expectedGrantedBy')
+        && str_contains(
+            $revokeExtraFunctionSource,
+            '$expectedExtraFunctionsRevision'
+        )
+        && str_contains(
+            $revokeExtraFunctionSource,
+            'estab_user_admin_fetch_extra_functions_for_update('
+        )
+        && str_contains(
+            $revokeExtraFunctionSource,
+            'DELETE FROM `nv_benutzer_zusatzfunktionen`'
+        )
+        && str_contains(
+            $revokeExtraFunctionSource,
+            'estab_user_admin_revoke_locked_session('
+        )
+        && str_contains($revokeExtraFunctionSource, "'revoke_extra_function'")
+        && str_contains($revokeExtraFunctionSource, 'estab_auth_log_event(')
+        && str_contains($revokeExtraFunctionSource, '$connection->commit()')
+        && str_contains($revokeExtraFunctionSource, '$connection->rollback()'),
+    'extra-function revocation is not revision-safe, audited and session-revoking'
+);
 
 $assert(
     str_contains($pageSource, 'estab_admin_require_http_auth($_SERVER)')
@@ -514,11 +838,9 @@ $assert(
             $pageSource,
             'estab_csrf_require_post($_SERVER, $_POST)'
         )
-        && substr_count($pageSource, 'method="post" action="users.php"') >= 5
-        && preg_match(
-            "/\\['create',\\s*'reassign',\\s*'block',\\s*'unblock',\\s*'reset_password'\\]/",
-            $pageSource
-        ) === 1
+        && substr_count($pageSource, 'method="post" action="users.php"') >= 7
+        && str_contains($pageSource, "'grant_extra_function'")
+        && str_contains($pageSource, "'revoke_extra_function'")
         && substr_count(
             $pageSource,
             'estab_password_policy_load($connection)'
@@ -535,6 +857,22 @@ $assert(
         && str_contains($pageSource, 'estab_function_display_name(')
         && str_contains($pageSource, 'estab_user_admin_create_account(')
         && str_contains($pageSource, 'estab_user_admin_reassign(')
+        && str_contains($pageSource, 'estab_user_admin_grant_extra_function(')
+        && str_contains($pageSource, 'estab_user_admin_revoke_extra_function(')
+        && str_contains($pageSource, 'name="expected_primary_function"')
+        && str_contains($pageSource, 'name="expected_primary_role"')
+        && str_contains($pageSource, 'name="expected_extra_absent"')
+        && str_contains(
+            $pageSource,
+            'name="expected_extra_functions_revision"'
+        )
+        && str_contains($pageSource, 'name="expected_granted_at"')
+        && str_contains($pageSource, 'name="expected_granted_by"')
+        && str_contains($pageSource, 'name="confirm_extra_function"')
+        && str_contains($pageSource, 'data-estab-extra-function-invalid')
+        && str_contains($pageSource, 'Nicht mehr gültig · keine Berechtigung')
+        && str_contains($pageSource, 'nur im lockeren')
+        && str_contains($pageSource, 'Im strengen Modus')
         && str_contains($pageSource, 'data-estab-assignment-orphaned')
         && str_contains($pageSource, 'Zuordnung nicht mehr gültig')
         && str_contains(

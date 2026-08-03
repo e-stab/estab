@@ -66,11 +66,11 @@ $sections = [
             [
                 'key' => 'command-post',
                 'number' => '05',
-                'title' => 'Optionale Schichten',
-                'description' => 'Konten optional zu Schichten gruppieren '
-                    . 'und deren Zugang gemeinsam aktivieren oder '
-                    . 'deaktivieren. Feste Funktionen bleiben unverändert.',
-                'badge' => 'Zugangsplanung',
+                'title' => 'Schichtverwaltung',
+                'description' => 'Im Modus Streng verbindliche Dienstschichten '
+                    . 'und persönliche Funktionsbesetzungen verwalten; im Modus Locker '
+                    . 'optionale Zugangsschichten gemeinsam steuern.',
+                'badge' => 'Dienst- und Zugangsplanung',
                 'href' => 'fuehrungsstelle.php',
             ],
         ],

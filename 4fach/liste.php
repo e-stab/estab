@@ -8,8 +8,20 @@ require_once __DIR__ . "/../app/message_transport.php";
 require_once __DIR__ . "/../app/read_authorization.php";
 require_once __DIR__ . "/../app/message_list.php";
 require_once __DIR__ . "/../app/message_list_ui.php";
+require_once __DIR__ . "/../app/workflow.php";
 include ("katego.php");
 include ("../4fcfg/e_cfg.inc.php");
+
+/** Carry the already server-selected Stab/FB workspace into one list form. */
+function estab_list_acting_function_field () {
+  $function = estab_workflow_staff_acting_function (
+    $GLOBALS ["workflowSelectedIdentity"] ?? null
+  );
+  return $function === null
+    ? ""
+    : "<input type=\"hidden\" name=\"acting_function\" value=\"".
+      estab_auth_html ($function)."\">";
+}
 
 function estab_list_state_action ($action, $recordId, $todo, $image, $alt) {
   $safeAction = estab_auth_html ($action);
@@ -19,6 +31,7 @@ function estab_list_state_action ($action, $recordId, $todo, $image, $alt) {
   $safeAlt = estab_auth_html ($alt);
   echo "<form method=\"post\" action=\"mainindex.php\" target=\"_self\" style=\"display:inline\">";
   echo estab_csrf_field ();
+  echo estab_list_acting_function_field ();
   echo "<input type=\"hidden\" name=\"action\" value=\"".$safeAction."\">";
   echo "<input type=\"hidden\" name=\"00_lfd\" value=\"".$safeRecordId."\">";
   echo "<input type=\"hidden\" name=\"todo\" value=\"".$safeTodo."\">";
@@ -44,6 +57,7 @@ function estab_list_detail_action (
   $safeLabel = estab_message_html ($label);
   echo "<form method=\"post\" action=\"mainindex.php\" target=\"_self\" style=\"display:inline\">";
   echo estab_csrf_field ();
+  echo estab_list_acting_function_field ();
   echo "<input type=\"hidden\" name=\"".$safeRoute."\" value=\"".$safeValue."\">";
   echo "<input type=\"hidden\" name=\"00_lfd\" value=\"".$safeRecordId."\">";
   if ($modern) {
@@ -78,6 +92,15 @@ function estab_list_attachment_badge ($storedReferences) {
 
 /** Build and escape a category navigation URL without mixing data into HTML. */
 function estab_list_category_url ($baseUrl, array $parameters) {
+  $actingFunction = estab_workflow_staff_acting_function (
+    $GLOBALS ["workflowSelectedIdentity"] ?? null
+  );
+  if (
+    $actingFunction !== null
+    && !array_key_exists ("acting_function", $parameters)
+  ) {
+    $parameters ["acting_function"] = $actingFunction;
+  }
   $separator = strpos ((string) $baseUrl, "?") === false ? "?" : "&";
   return estab_message_html (
     (string) $baseUrl.$separator.http_build_query ($parameters, "", "&", PHP_QUERY_RFC3986)
@@ -227,6 +250,7 @@ class Listen extends kategorien {
   var $incidentId;
   var $filters;
   var $pageWindow;
+  var $operationalIdentity;
 
 
   // Listengestaltung
@@ -287,6 +311,7 @@ class Listen extends kategorien {
       $windowCount,
       $this->filters
     );
+    $this->operationalIdentity = null;
     if (isset($_SESSION["filter_darstellung"])) { $this->flt_status   = $_SESSION["filter_darstellung"]; } else { $this->flt_status = NULL; } ;
     if (isset($_SESSION["filter_anzahl"])) { $this->flt_msg_pro_seite = $_SESSION["filter_anzahl"] ;     } else { $this->flt_msg_pro_seite = NULL; } ;
     if (isset($_SESSION["startmit"])) { $this->flt_start_msg          = $_SESSION["startmit"];           } else { $this->flt_start_msg = NULL; } ;
@@ -354,6 +379,7 @@ class Listen extends kategorien {
       case "Stab_lesen":  // ******  S T A B    l e s e n *****
           if ( debug ) { echo "<b>file:liste.php:_92 fkt:darstellungsart - switch (this->listenart):Stab_lesen </b><br>"; }
           echo "\n<form action=\"".estab_message_html ($conf_4f ["MainURL"])."\" method=\"POST\" target=\"mainframe\" data-estab-list-filter>\n";
+          echo estab_list_acting_function_field ();
           echo "<table><tbody>";
           echo "<tr>";
           echo "<td>";
@@ -458,6 +484,7 @@ class Listen extends kategorien {
       case "FMADMIN":
           if ( debug ) { echo "<b>file:liste.php:194 fkt:darstellungsart - switch (this->listenart):SIADMIN/FMADMIN </b><br>"; }
           echo "\n<form action=\"".estab_message_html ($conf_4f ["MainURL"])."\" method=\"POST\" target=\"mainframe\" data-estab-list-filter>\n";
+          echo estab_list_acting_function_field ();
           echo "<table><tbody>";
           echo "<tr>";
           echo "<td>";
@@ -594,6 +621,10 @@ class Listen extends kategorien {
     if ($identity === null) {
       throw new EstabCategoryAuthorizationException ("Anmeldung erforderlich.");
     }
+    $identity = estab_category_route_identity (
+      $identity,
+      $GLOBALS ["workflowSelectedIdentity"] ?? null
+    );
     $this->categoryIdentity = $identity;
     $this->categoryScope = estab_category_scope ((string) $table, $identity, $conf_4f_tbl);
     $this->stab_fkt = $identity ["funktion"];
@@ -876,29 +907,47 @@ class Listen extends kategorien {
     include ("../4fcfg/e_cfg.inc.php");
 
     $messageConnection = estab_message_connect ($conf_4f_db);
+    $readTransactionActive = false;
     try {
+      if (!$messageConnection->begin_transaction ()) {
+        throw new RuntimeException ("Lesetransaktion konnte nicht begonnen werden.");
+      }
+      $readTransactionActive = true;
       $identity = estab_read_session_identity ($_SESSION);
       if ($identity === null) {
         throw new EstabReadPermissionException ("Anmeldung erforderlich.");
       }
+      $identity = estab_category_route_identity (
+        $identity,
+        $GLOBALS ["workflowSelectedIdentity"] ?? null
+      );
       $scope = estab_read_require_operational_scope (
         $messageConnection,
-        $identity
+        $identity,
+        true
       );
       $identity = $scope ["identity"];
+      $this->operationalIdentity = $identity;
       $incidentId = (int) $scope ["incident"] ["active_einsatz_id"];
 
       $messageTable = estab_message_table (
         (string) $conf_4f_tbl ["nachrichten"]
       );
       if (in_array ($listenart, array ("FMADMIN", "SIADMIN"), true)) {
-        return $this->get_admin_message_list (
+        $adminResult = $this->get_admin_message_list (
           $messageConnection,
           $messageTable,
           $identity,
           $incidentId,
           $listenart
         );
+        if (!$messageConnection->commit ()) {
+          throw new RuntimeException (
+            "Lesetransaktion konnte nicht abgeschlossen werden."
+          );
+        }
+        $readTransactionActive = false;
+        return $adminResult;
       }
       $parameters = array ($incidentId);
       $where = array ("m.`einsatz_id` = ?");
@@ -1002,7 +1051,16 @@ class Listen extends kategorien {
         list ($start, $pageSize) = estab_list_page_window (count ($result));
         $result = array_slice ($result, $start, $pageSize);
       }
+      if (!$messageConnection->commit ()) {
+        throw new RuntimeException (
+          "Lesetransaktion konnte nicht abgeschlossen werden."
+        );
+      }
+      $readTransactionActive = false;
     } finally {
+      if ($readTransactionActive) {
+        $messageConnection->rollback ();
+      }
       estab_auth_close ($messageConnection);
     }
     return $result === array () ? "" : $result;
@@ -1157,8 +1215,13 @@ class Listen extends kategorien {
         */
         $result = $this->get_list ("global");
         $this->darstellungs_art ( $this->listenart );
-        $dbschongelesen = list_of_readed_msg () ;
-        $dbschonerledigt = list_of_done_msg () ;
+        if (!is_array ($this->operationalIdentity)) {
+          throw new EstabReadPermissionException (
+            "Die wirksame Stabsfunktion ist nicht verfügbar."
+          );
+        }
+        $dbschongelesen = list_of_readed_msg ($this->operationalIdentity) ;
+        $dbschonerledigt = list_of_done_msg ($this->operationalIdentity) ;
         $this->kategoliste ();
         $this->listen_navi () ;  //Navigationsbutton
         if  ($result != "") {
@@ -1187,7 +1250,9 @@ class Listen extends kategorien {
           // zeilenweise Anzeige der Datenbankanfrage
           foreach ($result as $row){
              $hilf = $this->explodereceiver ( $row ["16_empf"] );
-             $receivercolor = $hilf [ $_SESSION ['vStab_funktion'] ] ?? ""; // Empfaenger dieser Zeile
+             $receivercolor = $hilf [
+               (string) $this->operationalIdentity ["funktion"]
+             ] ?? ""; // Empfänger dieser wirksamen Funktion
              $receiverbackground = estab_recipient_copy_background (
                $receivercolor,
                $cfg ["lbg"],
@@ -1365,23 +1430,30 @@ class Listen extends kategorien {
       case "KORREKTUR":
         $incidentId = $this->required_incident_id ();
         $messageConnection = estab_message_connect ($conf_4f_db);
+        $readTransactionActive = false;
         try {
+          if (!$messageConnection->begin_transaction ()) {
+            throw new RuntimeException (
+              "Lesetransaktion konnte nicht begonnen werden."
+            );
+          }
+          $readTransactionActive = true;
           $identity = estab_read_session_identity ($_SESSION);
           if ($identity === null) {
             throw new EstabReadPermissionException ("Anmeldung erforderlich.");
           }
           $scope = estab_read_require_operational_scope (
             $messageConnection,
-            $identity
+            $identity,
+            true
           );
           $identity = $scope ["identity"];
           estab_permission_context_set_from_incident ($scope ["incident"]);
           if (
             (int) $scope ["incident"] ["active_einsatz_id"] !== $incidentId
-            || estab_permission_role_checks_enforced ()
           ) {
             throw new EstabReadPermissionException (
-              "Die funktionsübergreifende Korrekturwarteschlange ist nur im lockeren Berechtigungsmodus verfügbar."
+              "Die Korrekturwarteschlange gehört nicht zum aktiven Einsatz."
             );
           }
           $result = estab_message_query_rows (
@@ -1404,19 +1476,25 @@ class Listen extends kategorien {
               " DESC, m.`12_abfzeit` ASC, m.`00_lfd` ASC",
             array ($incidentId)
           );
-          foreach ($result as $row) {
-            if (!estab_message_object_allowed (
+          $result = array_values (array_filter (
+            $result,
+            static fn (array $row): bool => estab_message_object_allowed (
               $identity,
               "staff-correction",
               $row,
               true
-            )) {
-              throw new LogicException (
-                "SQL/PHP visibility drift in correction queue"
-              );
-            }
+            )
+          ));
+          if (!$messageConnection->commit ()) {
+            throw new RuntimeException (
+              "Lesetransaktion konnte nicht abgeschlossen werden."
+            );
           }
+          $readTransactionActive = false;
         } finally {
+          if ($readTransactionActive) {
+            $messageConnection->rollback ();
+          }
           estab_auth_close ($messageConnection);
         }
 
@@ -1424,8 +1502,8 @@ class Listen extends kategorien {
              "aria-labelledby=\"estab-correction-queue-title\">";
         echo "<header class=\"estab-tool-panel-heading\">";
         echo "<h2 id=\"estab-correction-queue-title\">Zurückgewiesene Meldungen</h2>";
-        echo "<p>Diese Meldungen warten auf Überarbeitung. Im lockeren Modus ".
-             "kann jede angemeldete operative Funktion die Bearbeitung übernehmen.</p>";
+        echo "<p>Diese Meldungen warten auf Überarbeitung und wurden an eine ".
+             "deiner aktuell wirksamen Stabsfunktionen zurückgegeben.</p>";
         echo "</header>";
         if ($result === array ()) {
           echo "<div class=\"estab-message-list-empty\">".

@@ -92,6 +92,7 @@ $secondConnection = estab_auth_connect($config);
 $thirdConnection = estab_auth_connect($config);
 $originalMatrix = null;
 $matrixChanged = false;
+$capabilityFixtureInserted = false;
 $code = 'q' . substr(bin2hex(random_bytes(4)), 0, 5);
 $busyCreateCode = 'r' . substr(bin2hex(random_bytes(4)), 0, 5);
 $function = 'Q' . strtoupper(substr(bin2hex(random_bytes(4)), 0, 5));
@@ -140,6 +141,84 @@ try {
     $matrixWithFunction['cells'][$blankPosition]['role'] = 'Stab';
     $matrixWithFunction['cells'][$blankPosition]['auto'] = false;
     $matrixWithFunction['cells'][$blankPosition]['redcopy'] = false;
+
+    // A proposed matrix role may not contradict the capability catalogue.
+    // The rejection must happen inside the same transaction, before matrix,
+    // account or audit state can change.
+    $statement = $connection->prepare(
+        'INSERT INTO `nv_funktionsfaehigkeiten`'
+        . ' (`funktion`, `rolle`, `faehigkeit`, `bezeichnung`)'
+        . " VALUES (?, 'FB', 'FERNMELDEPLANUNG', ?)"
+    );
+    assignment_test_assert(
+        $statement instanceof mysqli_stmt,
+        'Could not prepare conflicting capability fixture'
+    );
+    try {
+        $capabilityDescription = 'Assignment-policy catalogue conflict';
+        $statement->bind_param('ss', $function, $capabilityDescription);
+        assignment_test_assert(
+            $statement->execute() && $statement->affected_rows === 1,
+            'Could not create conflicting capability fixture'
+        );
+        $capabilityFixtureInserted = true;
+    } finally {
+        $statement->close();
+    }
+    $matrixAuditBeforeConflict = assignment_test_scalar(
+        $connection,
+        'SELECT COUNT(*) FROM `nv_protokoll`'
+        . " WHERE `p_was` = 'Empfängermatrix'"
+    );
+    $catalogConflictRejected = false;
+    try {
+        estab_admin_replace_matrix(
+            $connection,
+            $database,
+            'nv_empfmtx',
+            'nv_benutzer',
+            'nv_protokoll',
+            $matrixWithFunction,
+            'assignment-integration',
+            '127.0.0.1'
+        );
+    } catch (RuntimeException $exception) {
+        $catalogConflictRejected = str_contains(
+            $exception->getMessage(),
+            'Fachfunktionskatalog widersprechen'
+        );
+    }
+    assignment_test_assert(
+        $catalogConflictRejected
+            && estab_admin_fetch_matrix($connection, 'nv_empfmtx')
+                === $originalMatrix
+            && assignment_test_scalar(
+                $connection,
+                'SELECT COUNT(*) FROM `nv_protokoll`'
+                . " WHERE `p_was` = 'Empfängermatrix'"
+            ) === $matrixAuditBeforeConflict,
+        'Conflicting capability catalogue changed matrix or audit state'
+    );
+    $statement = $connection->prepare(
+        'DELETE FROM `nv_funktionsfaehigkeiten`'
+        . ' WHERE BINARY `funktion` = BINARY ?'
+        . " AND `faehigkeit` = 'FERNMELDEPLANUNG'"
+    );
+    assignment_test_assert(
+        $statement instanceof mysqli_stmt,
+        'Could not prepare capability fixture cleanup'
+    );
+    try {
+        $statement->bind_param('s', $function);
+        assignment_test_assert(
+            $statement->execute() && $statement->affected_rows === 1,
+            'Could not remove conflicting capability fixture'
+        );
+        $capabilityFixtureInserted = false;
+    } finally {
+        $statement->close();
+    }
+
     estab_admin_replace_matrix(
         $connection,
         $database,
@@ -165,6 +244,55 @@ try {
         'nv_empfmtx',
         'assignment-integration',
         '127.0.0.1'
+    );
+
+    // Raw historical rows remain revocable evidence, but a role that is no
+    // longer in the canonical union must not become an effective function.
+    $statement = $connection->prepare(
+        'INSERT INTO `nv_benutzer_zusatzfunktionen`'
+        . ' (`benutzer_kuerzel`, `funktion`, `rolle`, `vergeben_von`)'
+        . " VALUES (?, 'S6', 'FB', 'assignment-integration')"
+    );
+    assignment_test_assert(
+        $statement instanceof mysqli_stmt,
+        'Could not prepare stale additional-function fixture'
+    );
+    try {
+        $statement->bind_param('s', $code);
+        assignment_test_assert(
+            $statement->execute() && $statement->affected_rows === 1,
+            'Could not create stale additional-function fixture'
+        );
+    } finally {
+        $statement->close();
+    }
+    assignment_test_assert(
+        estab_auth_fetch_additional_functions($connection, $code) === [],
+        'Runtime accepted a raw additional function with a non-canonical role'
+    );
+    $statement = $connection->prepare(
+        'UPDATE `nv_benutzer_zusatzfunktionen` SET `rolle` = \'Stab\''
+        . ' WHERE BINARY `benutzer_kuerzel` = BINARY ?'
+        . " AND BINARY `funktion` = BINARY 'S6'"
+    );
+    assignment_test_assert(
+        $statement instanceof mysqli_stmt,
+        'Could not prepare canonical additional-function fixture'
+    );
+    try {
+        $statement->bind_param('s', $code);
+        assignment_test_assert(
+            $statement->execute() && $statement->affected_rows === 1,
+            'Could not canonicalise additional-function fixture'
+        );
+    } finally {
+        $statement->close();
+    }
+    assignment_test_assert(
+        estab_auth_fetch_additional_functions($connection, $code) === [
+            ['funktion' => 'S6', 'rolle' => 'Stab'],
+        ],
+        'Runtime rejected an exact canonical additional function'
     );
     $sidOne = 'mxsid' . bin2hex(random_bytes(8));
     $statement = $secondConnection->prepare(
@@ -626,6 +754,18 @@ try {
         $connection->query(
             'DROP TRIGGER IF EXISTS `' . $rollbackTrigger . '`'
         );
+        if ($capabilityFixtureInserted) {
+            $statement = $connection->prepare(
+                'DELETE FROM `nv_funktionsfaehigkeiten`'
+                . ' WHERE BINARY `funktion` = BINARY ?'
+                . " AND `faehigkeit` = 'FERNMELDEPLANUNG'"
+            );
+            if ($statement instanceof mysqli_stmt) {
+                $statement->bind_param('s', $function);
+                $statement->execute();
+                $statement->close();
+            }
+        }
         $statement = $connection->prepare(
             'DELETE FROM `nv_benutzer` WHERE `kuerzel` IN (?, ?)'
         );

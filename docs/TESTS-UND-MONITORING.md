@@ -8,23 +8,25 @@ steht in der [Funktionsmatrix](FUNKTIONSNACHWEIS.md).
 
 Der aktuelle Autorisierungsvertrag ist in allen Ebenen gleich: Operative
 Eingaben benötigen in beiden Berechtigungsmodi einen aktiven offenen Einsatz
-und ein konkretes aktives, ungesperrtes Konto. Im Modus `STRICT` ist zusätzlich
-die fachlich passende feste Kontofunktion mit serverseitig abgeleiteter Rolle
-Pflicht. Im Modus `LOOSE` entfällt diese Funktion-/Rollenbedingung ausschließlich
-für die dafür vorgesehenen Schreibwege im Nachrichtenworkflow, in ETB/TBB, der
-S6-Planung und im Melderlauf. Authentisierung, Einsatz- und Objektgrenzen,
-rollenstrenge Lese-, Kategorie- und Administrationsrechte, CSRF, Validierung,
-Integrität, Audit, Append-only und Aufbewahrung bleiben unverändert. Eine aktive
-Dienst- oder Zugangsschicht, persönliche Besetzungsannahme oder Hutauswahl ist
-nicht erforderlich. Optionale Zugangsschichten werden getrennt mit unzugeordnetem
+und ein konkretes aktives, ungesperrtes Konto. Im Modus `STRICT` sind eine
+aktive formale Dienstschicht sowie eine persönlich angenommene und aktuell
+ausgewählte fachlich passende Besetzung Pflicht. Im Modus `LOOSE` ist keine
+formale Dienstschicht erforderlich; feste Kontofunktion oder explizit
+vergebene globale Zusatzfunktion müssen den Arbeitsschritt weiterhin erlauben.
+Authentisierung, Einsatz-, Funktions- und Objektgrenzen, CSRF, Validierung,
+Integrität, Audit, Append-only und Aufbewahrung bleiben unverändert.
+Zusatzfunktionen werden in `STRICT` ignoriert. Optionale Zugangsschichten
+werden nur in `LOOSE` getrennt mit unzugeordnetem
 Konto, OR-Semantik bei Mehrfachzuordnung, Aktivierung ohne Anmeldung,
 Deaktivierung mit Sitzungswiderruf und Vorrang der manuellen Kontosperre
-geprüft. Historische formale Schichtdaten bleiben Export-/Evidenzdaten.
-Der PDF-Abschnitt Dienstorganisation muss Zugangsschichten einschließlich
-aktueller und entfernter Zuordnungen sowie getrennt gekennzeichnete historische
-`nv_dienst*`-Daten enthalten. Hashkettentests erwarten Objekttyp
-`ZUGANGSSCHICHT` für Gruppenmutationen und `EINSATZ` für die schichtfreie
-Nachrichtenzähler-Reparatur.
+geprüft. Nach ihrem Ende bleiben formale Schichtdaten Export-/Evidenzdaten.
+Der PDF-Abschnitt Dienstorganisation muss formale Dienstschichten samt
+Besetzungen und Übergaben als aktuelle oder historische Evidenz sowie getrennt
+die Zugangsschichten einschließlich aktueller und entfernter Zuordnungen
+enthalten. Hashkettentests erwarten Objekttyp `ZUGANGSSCHICHT` für
+Gruppenmutationen. Die Nachrichtenzähler-Reparatur muss in `STRICT` eine
+aktive formale Dienstschicht verlangen und `DIENSTSCHICHT` schreiben; in
+`LOOSE` läuft sie ohne formale Dienstschicht mit Objekttyp `EINSATZ`.
 
 Die Kennwortrichtlinie wird als eigener globaler Sicherheitsvertrag geprüft:
 konfigurierbare Mindestlänge 8–128 Unicode-Codepoints, Default 12, höchstens
@@ -57,7 +59,7 @@ Anmelde-Audit erzeugt, während Bestandslogin und Sitzungen unberührt bleiben.
 | Image-Build | benötigte PHP-Erweiterungen und Apache-Konfiguration |
 | Datenbank | echtes MariaDB-Schema, Einsatz-Singleton/Trigger, Kontosperre, revisionsgesicherte Kennwort- und Selbstregistrierungs-Singletonzeilen, Indizes, aktive und persistente Standardmatrix, Engines, Collations und Zero-Date-Freiheit |
 | HTTP | Header, direkte Endpunktfläche, 303-Weiterleitung anonymer geschützter Aufrufe zum allowlist-gebundenen Bestandslogin samt sichtbarem Rückweg, 403-/400-/405-Grenzen, dauerhafte und befristete Selbstregistrierungssteuerung, sichtbare Sitzungsidentität, Präsenz/Leerlaufende, feste Funktions-/Rollenbindung, optionaler Gruppenzugang, Kennwortrichtlinien-Vorschau/-Bestätigung, verbindlicher Nachrichtenlauf, E-Mail-Anhang mit passiver Ansicht und bytegleichem Originaldownload, S6-Plan, Melderlauf, Kategorien- und ETB-/TBB-Rollengrenzen, Vordruckerzeugung sowie Admin-Export |
-| Echter Browser | öffentliche Übersicht, getrennte Konto-Flows, direkte ETB-/Nachrichten-/Anhang-/Kategorie-Anmeldung ohne Sackgasse oder verschachtelten Arbeitsbereich, sicherer Login-Abbruch, neun stabile Navigationsbereiche, aktive Markierung, reale Karten- und Bereichswechsel im selben Tab, überlappungsfreie Karten-Klickflächen und echter Hover bei sechs Breiten, genau zwei Anwendungs-`iframe`-Elemente, vollhohe Sidebar ohne verschachtelte Scrollflächen bei 1440 × 1000, 1280 × 720 und 700 × 760 CSS-Pixeln, fokuserhaltender Statusfragment-Refresh samt sichtbarem Fehler- und Erholungspfad, dauerhafte Warnstufe bei offenen Meldungen, gleich-originiges PCM-WAV, ausdrücklicher Hinweiston-Schalter samt Blockade-/Reload-/Synchronisations-/Race-Pfad und automatischem Signal, langlebiges Audioelement, passive E-Mail-Anlagenkarte ohne aktive Mail-DOM-/Remote-Inhalte, Rufnamen-Auswahlliste des Fernmelders mit echtem Fokus, Filterung und Tastaturauswahl, Matrixstandard- und Kennwortrichtlinien-Bestätigungen, responsive Adminübersicht mit elf Karten und acht Selbstregistrierungszeitfenstern, BOS-Disclosure, Logout sowie öffentliche und authentifizierte mobile Bedienung bei exakt 390 × 844 CSS-Pixeln |
+| Echter Browser | öffentliche Übersicht, getrennte Konto-Flows, direkte ETB-/Nachrichten-/Anhang-/Kategorie-Anmeldung ohne Sackgasse oder verschachtelten Arbeitsbereich, sicherer Login-Abbruch, neun stabile Navigationsbereiche, aktive Markierung, reale Karten- und Bereichswechsel im selben Tab, überlappungsfreie Karten-Klickflächen und echter Hover bei sechs Breiten, genau zwei Anwendungs-`iframe`-Elemente, vollhohe Sidebar ohne verschachtelte Scrollflächen bei 1440 × 1000, 1280 × 720 und 700 × 760 CSS-Pixeln, fokuserhaltender Statusfragment-Refresh samt sichtbarem Fehler- und Erholungspfad, dauerhafte Warnstufe bei offenen Meldungen, gleich-originiges PCM-WAV, ausdrücklicher Hinweiston-Schalter samt Blockade-/Reload-/Synchronisations-/Race-Pfad und automatischem Signal, langlebiges Audioelement, passive E-Mail-Anlagenkarte ohne aktive Mail-DOM-/Remote-Inhalte, Rufnamen-Auswahlliste des Fernmelders mit echtem Fokus, Filterung und Tastaturauswahl, Matrixstandard- und Kennwortrichtlinien-Bestätigungen, responsive Adminübersicht mit elf Karten und acht Selbstregistrierungszeitfenstern, BOS-Disclosure, Logout, eine mobil nicht über dem Arbeitsbereich klebende vollständige Status-/Navigationsleiste sowie Erstellen, Download und zweistufiges Löschen eines Exports ohne horizontalen Seitenüberlauf bei exakt 390 × 844 CSS-Pixeln |
 | Fachabnahme | kompletter Nachrichten-, Anhang-, PDF-, ETB-/TBB- und Restore-Ablauf |
 | Betrieb | kontinuierliche Readiness, Logs, Restarts, Kapazität und Backup-Alter |
 
@@ -122,7 +124,7 @@ administrativen Synology-/Docker-Aufruf vorgesehene Rootpfad
 `/var/lib/estab-deploy` bleibt zusätzlich im statischen Vertrag gebunden; die
 Tests schreiben dafür nicht in das `/var/lib` des Testcontainers.
 
-Die Suite lintet derzeit 274 aktive PHP-Dateien und führt die Prüfungen unter
+Die Suite lintet derzeit 277 aktive PHP-Dateien und führt die Prüfungen unter
 `tests/php/` aus. Dazu gehören unter anderem:
 
 - die versiegelten, deterministischen Provenienzmanifeste für 13
@@ -145,7 +147,7 @@ Die Suite lintet derzeit 274 aktive PHP-Dateien und führt die Prüfungen unter
 - kanonische Reihenfolge, sichere URL-Auflösung, aktive Route, ausschließlich
   erlaubte symbolische Anmeldeziele und das rollenabhängige Ausblenden der
   spezialisierten Meldungsübersicht beziehungsweise Nachweisung; nach der
-  Anmeldung sind je nach fester Kontofunktion neun oder zehn Links sichtbar,
+  Anmeldung sind nur die Links der modeabhängig wirksamen Funktionsmenge sichtbar,
 - zustandsabhängige Root-Menükarten mit genau einem Tastaturziel, sicherem
   Escaping, gleichem Browserkontext, sicherer Zielbeibehaltung und
   verständlicher Trennung von Anwendung, Administration und öffentlichen
@@ -181,7 +183,7 @@ Die Suite lintet derzeit 274 aktive PHP-Dateien und führt die Prüfungen unter
   der `old_que_*`-Basiswerte, Auslösung ausschließlich bei einer späteren
   Erhöhung, ausdrückliche Browserfreigabe, langlebiges Audioelement und
   sichtbare Status-/Fehlerrückmeldung,
-- Nachrichten-IDs, feste Kontofunktion, Rollen-/Objektregeln,
+- Nachrichten-IDs, modeabhängig wirksame Funktion, Rollen-/Objektregeln,
   Empfänger-Tokens, eigene Verfasser- und Verarbeitungsmarken, erlaubte
   Workflow-Aktionen, POST-/CSRF-Verträge, Prepared Statements, sichere
   UTF-8-/Legacy-Entity-Ausgabe und die inerten Payloads Quotes, Ampersand,
@@ -212,7 +214,7 @@ Die Suite lintet derzeit 274 aktive PHP-Dateien und führt die Prüfungen unter
   PHP-Konfiguration; außerdem Nachrichtenzähler- und
   PDF-Vordruckreset-Validierung samt Prepared-Statement-, Transaktions-,
   Auth-/CSRF- und PRG-Vertrag,
-- Kategorien-Typen, positive IDs, feste Kontofunktion,
+- Kategorien-Typen, positive IDs, modeabhängig wirksame Funktion,
   sessionabgeleitete Tabellenräume, Master-Rechte, doppelte Auswahllisten,
   HTML-Ausgabe sowie den Prepared-Statement-, Transaktions-,
   Nachrichten-Objektberechtigungs- und PRG-Vertrag,
@@ -235,7 +237,7 @@ Die Suite lintet derzeit 274 aktive PHP-Dateien und führt die Prüfungen unter
   `message/rfc822` erkannter und strukturell gültiger `.eml`-Dateien, fester
   20-MiB-Parsergrenze, Ablehnung umbenannter beziehungsweise fehlerhafter Mails
   sowie weiterhin nicht unterstütztem Outlook-`.msg`,
-- festfunktions- und objektgebundene Dateiauslieferung samt vererbter
+- funktions- und objektgebundene Dateiauslieferung samt vererbter
   Nachrichtenrechte, begrenzter Rechte für freie Anhänge, erneuter Prüfung bei
   Auswahl und finalem Nachrichtenspeichern sowie Traversal-, Symlink- und
   Header-Injection-Schutz; die passive E-Mail-Route ist zusätzlich an
@@ -298,40 +300,47 @@ ESTAB_BROWSER_TEST=required \
 tests/integration/ci.sh
 ```
 
-Der am 2. August 2026 vollständig beendete Abschlusslauf führte
-`bash tests/integration/ci.sh` mit allen 23 Migrationen bis einschließlich
-Migration 117 aus und endete nach dem vollständigen Backup-/Restore-Roundtrip
+Der am 3. August 2026 vollständig beendete Podman-Abschlusslauf führte
+`bash tests/integration/ci.sh` mit allen 24 Migrationen bis einschließlich
+Migration 118 aus und endete nach dem vollständigen Backup-/Restore-Roundtrip
 mit Exitcode 0 und `CI integration: OK`. Sein protokollierter Kernstand lautet:
 
 | Teilnachweis | Ergebnis |
 | --- | --- |
 | Schema | 42 Prüfungen |
-| Einsatzdomäne | 55 Assertions |
-| DV-Evidenz | 51 Assertions |
-| DV-Operations einschließlich `STRICT`/`LOOSE` und Fernmeldeplan | 171 Assertions, 99 Ereignisse |
-| Optionale Zugangsschichten | 25 Assertions |
+| Einsatzdomäne | 69 Assertions |
+| DV-Evidenz | 52 Assertions |
+| DV-Operations einschließlich `STRICT`/`LOOSE` und Fernmeldeplan | 236 Assertions, 95 Ereignisse |
+| Optionale Zugangsschichten | 29 Assertions |
 | Benutzerverwaltung | 98 Assertions |
 | Kennwortrichtlinie gegen MariaDB | 66 Assertions |
 | Selbstregistrierung | 31 Datenbank- und 28 Handler-Assertions |
-| Zuordnungs-/Empfängermatrix | 59 Assertions |
+| Zuordnungs-/Empfängermatrix | 74 Assertions |
 | PDF-Einsatzdossier | 35 Assertions |
 | Sichtbare Anhangdarstellung | 11 Assertions |
-| Einsatzbezogene Nachrichtenvorschläge | 29 Assertions |
+| Einsatzbezogene Nachrichtenvorschläge | 32 Assertions |
 | Nachrichtensuche mit 10.000 Zielzeilen | 145 Assertions |
-| Echter Browser | Chrome 150: allgemeiner UI-Lauf und S6-Fernmeldeplan-Versionierung erfolgreich; Fernmeldeplan zusätzlich bei `390 × 844` CSS-Pixeln geprüft |
+| Echter Browser | Chrome 150: öffentliche BOS- und Handbuchläufe, allgemeiner zwölfstufiger UI-Lauf, S6-Fernmeldeplan-Versionierung, Meldungsüberschrift und Nachrichtenvorschläge erfolgreich; mobile Exportverwaltung einschließlich nichtklebender Vollleiste und Löschung bei `390 × 844` CSS-Pixeln geprüft |
 
 HTTP-Surface, Selbstregistrierung, Auth-Smoke, Logbücher, Kategorien,
 Nachrichtenworkflow, Administrationsworkflow sowie Backup und Restore endeten
-ebenfalls erfolgreich. Das verpflichtende Browser-Gate lief in Chrome 150 und
-bestand die allgemeine UI sowie den vollständigen S6-Fernmeldeplan-Ablauf.
-Ein dediziertes Szenario für die Bedienung der `STRICT`/`LOOSE`-Umschaltung,
-ihre Warnanzeige oder einen Cross-Rollen-Schreibweg enthält es nicht. Diese
-Modusabnahme bleibt manuell beziehungsweise als eigene Automatisierung offen.
+ebenfalls erfolgreich. Das verpflichtende Browser-Gate lief in Chrome 150.
+Sein allgemeines authentifiziertes Fixture verwendet einen `LOOSE`-Einsatz
+und genau eine fest zugewiesene S1-Kontofunktion; die getrennten S2-, S6- und
+Fernmelder-Läufe verwenden ebenfalls jeweils genau eine feste Funktion. Damit
+sind Navigation und Fachzugang für diese Einzelfunktionsfälle belegt. Ein
+dediziertes Browserszenario für eine persönlich angenommene und ausgewählte
+`STRICT`-Dienstbesetzung, die Bedienung der Modusumschaltung samt Warnanzeige
+oder ein `LOOSE`-Konto mit mehreren festen/zusätzlichen Funktionen und
+expliziter Auswahl „Schreiben als“ beziehungsweise „Lesen als“ enthält der
+Lauf noch nicht. Diese Bedienpfade bleiben manuell beziehungsweise als eigene
+Browserautomatisierung offen; Domänen-, Datenbank- und HTTP-Gates prüfen ihre
+Autorisierungsgrenzen bereits automatisiert.
 
 Die anschließend separat mit der festgelegten unprivilegierten
 Containeridentität ausgeführte statische Suite endete mit Exitcode 0, lintete
-274 aktive PHP-Dateien und bestätigte insbesondere 80 Assertions zum
-Berechtigungsmodus, 29 Assertions zum exakten LOOSE-Anhang-Scope und 222
+277 aktive PHP-Dateien und bestätigte insbesondere 99 Assertions zum
+Berechtigungsmodus, 30 Assertions zum exakten LOOSE-Anhang-Scope und 249
 Assertions zum Single-Dispatch-Vertrag. Dieser lokale Podman-Lauf fand nicht
 auf einem
 nachgewiesenen SELinux-Enforcing-System statt und gilt daher ausdrücklich nicht
@@ -395,9 +404,9 @@ Schreibgrenzen sowie die amtlichen Nachrichtenvordruckfelder aus Migration 98.
 Der Schema-Test startet Migration 98 zweimal, prüft die exakt markierten
 Spalten `11_rufnummer` und `12_betreff`, deren leere Bestandswerte und den
 unveränderten historischen Nachrichteninhalt. Readiness und `verify.sql`
-verlangen alle dreiundzwanzig Ledgerzeilen einschließlich Version 117, die
-kanonische Berechtigungsmodusspalte samt Guard-/Fachtriggern sowie die exakten
-drei Such-/Listenindizes. Migration 99 wird vollständig, nach einem
+verlangen alle vierundzwanzig Ledgerzeilen einschließlich Version 118, die
+kanonische Berechtigungsmodusspalte samt Guard-/Fachtriggern, die
+Zusatzfunktionstabelle sowie die exakten drei Such-/Listenindizes. Migration 99 wird vollständig, nach einem
 simulierten phasenweisen Abbruch und nach einer fremden Indexkollision
 ausgeführt; erst der bereinigte Wiederanlauf darf den Ledgerstand schreiben.
 Migration 100 wird gegen einen zuvor aktiv markierten Legacy-Benutzer
@@ -498,8 +507,9 @@ Guard-Trigger und die sechs modebewussten Fachtrigger. Alle vorhandenen
 Einsätze müssen nach Upgrade `STRICT` sein. Eigene DDL-Zwischenstände dürfen
 konvergieren; eine fremde Spalte, ein fremder Guard-Trigger oder ein nicht
 eindeutig erkannter Vorgängertrigger muss ohne Ledgerabschluss blockieren.
-Der Integrationsteil prüft den unveränderten strengen Vertrag und anschließend
-den lockeren Positivfall bei weiterhin aktivem, ungesperrtem Konto sowie die
+Der Integrationsteil prüft in getrennten, modefesten Fixtures den
+unveränderten strengen Vertrag und den lockeren Positivfall bei weiterhin
+aktivem, ungesperrtem Konto sowie die
 in beiden Modi negativen Einsatz-, Zustands-, Identitäts-, Referenz- und
 Append-only-Grenzen. Ein Zweitlauf darf weder Modus noch Fachbestand ändern.
 
@@ -520,6 +530,21 @@ Schematest verlangt unveränderte Kopf- und leere Freigabefelder, weist jede
 kombinierte Mutation ab und prüft, dass die vorhandenen Eintragstrigger die
 archivierten Wege anschließend weder ändern noch löschen lassen. Zweitlauf,
 Readiness und `verify.sql` müssen denselben Trigger- und Ledgerstand bestätigen.
+
+Migration 118 ergänzt als vierundzwanzigste Ledgerzeile den aktuellen
+Autorisierungsvertrag. Der Schematest muss die
+kollisionsgeprüfte Tabelle `nv_benutzer_zusatzfunktionen`, ihren eindeutigen
+Kontofunktionsschlüssel und den ersetzten ETB-/TTB-, Fernmeldeplan- und
+Meldertriggerstand belegen. In `STRICT` müssen manuelle Schreibvorgänge ohne
+aktive, persönlich angenommene und ausgewählte Besetzung scheitern; die
+passende Besetzung muss funktionieren und Buchzeilen mit Schicht- und
+Schreiberprovenienz erzeugen. In `LOOSE` muss dasselbe ohne formale Schicht,
+aber nur mit passender fester oder expliziter Zusatzfunktion gelingen. Ein
+fachfremdes Konto und eine in `STRICT` nur als Zusatzfunktion vorhandene
+Fähigkeit müssen scheitern. Systembuchzeilen dürfen weiterhin ohne
+persönlichen Schreiber entstehen. Fremde Tabellen-/Triggerkollisionen,
+unterbrochener Wiederanlauf und Zweitlauf sind fail-closed beziehungsweise
+idempotent zu prüfen.
 
 Anschließend migriert der Hauptlauf ein leeres Schema,
 führt PHP-, Datenbank-, Rollen-, HTTP- und Administrationsnachweise aus, prüft
@@ -565,7 +590,9 @@ der App-Container kurz mit dem expliziten Wert `true` neu erstellt:
 `tests/integration/legacy_login_http.sh` belegt genau einen historischen
 Ein-Kennwort-Login, die weiterhin geschlossene Cross-Site-Grenze und den
 erreichbaren Führungsstellenbereich. Der Login übernimmt ausschließlich die
-feste Kontofunktion; eine Hutauswahl findet nicht statt. Der Lauf endet über den
+feste Kontofunktion. Im lockeren Modus ist keine Hutauswahl nötig; ein
+strenger operativer Lauf muss nach dem Login zusätzlich die angenommene
+Dienstbesetzung auswählen. Der Lauf endet über den
 normalen CSRF-geschützten Logout. Anschließend stellt die CI den sicheren
 Standard `false` wieder her, bevor Fachtests weiterlaufen.
 Das Gate verwendet standardmäßig die auch für Laptop, LAN und Reverse Proxy
@@ -778,46 +805,59 @@ Die Berechtigungsmodustests erweitern diesen Vertrag für
   Parallelwechsel oder ein zwischenzeitlicher Einsatzwechsel liefert einen
   Konflikt. Nur ein echter Wechsel erhöht die Revision und schreibt den
   Vorher-/Nachher-Auditdatensatz.
-- Im strengen Modus bleiben alle bisherigen positiven und negativen
-  Funktions-/Rollenfälle unverändert. Im lockeren Modus funktionieren dieselben
-  dafür freigegebenen Workflow-, ETB-/TTB-, S6-Plan- und
-  Melder-Schreibaktionen funktionsübergreifend mit einem konkreten aktiven und
-  ungesperrten Konto; die gespeicherte Identität darf nicht durch eine
-  behauptete Browserrolle ersetzt werden. Rollenstrenge Übersichten,
-  Nachweisung, Zweitsichtungsarchive, Kategorien- und Administrationsrechte
-  müssen dagegen in beiden Modi unverändert bleiben.
+- Eine echte Modusänderung gelingt nur in einem offenen Einsatz ohne jede
+  operative oder formale Eintragung. Die erste solche Eintragung sperrt den
+  Modus dauerhaft; auch das spätere Löschen einzelner Daten darf ihn nicht
+  wieder freigeben. Das erneute Speichern desselben Modus bleibt ohne neue
+  Revision und ohne Auditereignis idempotent. Dafür werden ein vollständig
+  leerer Umschalt-/Sperr-Fixture sowie getrennte, danach unveränderliche
+  `STRICT`- und `LOOSE`-Fixtures verwendet.
+- Im strengen Modus muss ein fachlicher Positivfall eine aktive formale
+  Dienstschicht, persönliche Annahme und die exakte Auswahl der passenden
+  Besetzung belegen. Feste Kontofunktion oder Zusatzfunktion allein dürfen
+  ihn nicht autorisieren. Im lockeren Modus funktionieren dieselben
+  Workflow-, ETB-/TTB-, S6-Plan- und Melderaktionen ohne formale Schicht nur,
+  wenn die benötigte Funktion fest oder als explizite Zusatzfunktion
+  zugewiesen ist. Ein lediglich aktives fachfremdes Konto bleibt negativ.
 - In beiden Modi bleiben fehlende/abgelaufene Sitzung, manuelle Kontosperre,
-  allein deaktivierter Gruppenzugang, kein aktiver oder geschlossener Einsatz,
+  kein aktiver oder geschlossener Einsatz,
   fremde Einsatz-ID, falsches CSRF, ungültige Eingabe, falscher
   Workflowzustand, fremder Sperrinhaber, ungültige Beziehungen,
-  Anhangintegrität, Append-only- und Aufbewahrungsgrenzen negative Fälle.
-- Reine Leseaufrufe behalten ihre Funktions-/Objektregeln. Nur die für eine
-  ausdrücklich gewählte Schreibstufe notwendige Workflow-Objektsicht ist im
-  lockeren Modus zulässig. Ein zurückgewiesener Ausgang muss durch eine andere
-  Funktion übernommen werden können; Ereignisnachweis und Datensatz müssen
+  Anhangintegrität, Append-only- und Aufbewahrungsgrenzen negative Fälle. Ein
+  allein deaktivierter Gruppenzugang ist nur in `LOOSE` negativ; `STRICT`
+  verwendet stattdessen den Dienstbesetzungsstatus.
+- Lese-, Menü- und Schreibrechte behalten ihre Funktions-/Objektregeln. Ein
+  zurückgewiesener Ausgang darf nur durch eine im jeweiligen Modus wirksame
+  passende Funktion übernommen werden; Ereignisnachweis und Datensatz müssen
   ursprüngliche und neue Verantwortlichkeit unterscheidbar bewahren. Statusleiste,
   Führungsstellenansicht, Administration und PDF-Dossier zeigen den
   gespeicherten Modus; `LOOSE` ist dabei als Warnzustand erkennbar.
-- Vorhandene Anlagen einer funktionsübergreifend übernommenen Korrektur müssen
+- Vorhandene Anlagen einer mit passender Zusatzfunktion übernommenen Korrektur müssen
   über die exakte Einsatz-/Nachrichtenbindung sichtbar, vorschau- und
   herunterladbar bleiben. Fremde Nachrichten, originlose Archivdateien, ein
-  anderes Konto sowie ein anschließender Wechsel auf `STRICT` müssen denselben
-  Scope an Formular-, Final-Write- und Streaming-Grenze verwerfen.
+  anderes Konto sowie der Entzug der maßgeblichen Zusatzfunktion müssen
+  denselben Scope an Formular-, Final-Write- und Streaming-Grenze verwerfen.
+  Ein getrennter `STRICT`-Fixture belegt, dass dieselbe Zusatzfunktion dort
+  keine Berechtigung erzeugt.
 
 Ein Modustest darf nicht nur einen ausgeblendeten Link prüfen. Er muss den
 Controller beziehungsweise Domänendienst und die modebewussten
-Datenbanktrigger jeweils positiv und negativ erreichen. Vor jedem weiteren
-rollenbezogenen Integrationstest wird der Einsatz explizit auf `STRICT`
-zurückgesetzt, damit eine lockere Fixture keine erwartete Ablehnung verdeckt.
+Datenbanktrigger jeweils positiv und negativ erreichen. Rollenbezogene
+Integrationstests verwenden getrennte, unveränderliche `STRICT`- und
+`LOOSE`-Einsätze; kein bereits betriebener Fixture wird für den nächsten Test
+zurückgesetzt.
 
-Im finalen Lauf bis Migration 117 stand Chrome 150 zur Verfügung und bestand
-den allgemeinen UI-Lauf sowie den S6-Fernmeldeplan-Ablauf. Dieser Lauf enthält
-jedoch keinen dedizierten Browsernachweis für die Umschaltung zwischen
-`STRICT` und `LOOSE`, die sichtbare Moduswarnung oder einen
-Cross-Rollen-Schreibfall. Die statischen Verträge, die echte MariaDB und
-authentifizierte HTTP-Anforderungen waren erfolgreich; die Modusbedienung
-gehört bis zu einem eigenen automatisierten Szenario in die manuelle
-Fachabnahme.
+Im finalen Lauf bis Migration 118 stand Chrome 150 zur Verfügung. Der
+allgemeine UI-Lauf verwendete einen `LOOSE`-Einsatz mit genau einer festen
+S1-Kontofunktion; auch die getrennten S2-, S6- und Fernmelder-Fixtures besaßen
+jeweils nur eine feste Funktion. Dieser Lauf enthält deshalb keinen
+dedizierten Browsernachweis für eine ausgewählte `STRICT`-Dienstbesetzung, die
+Umschaltung zwischen `STRICT` und `LOOSE` samt sichtbarer Moduswarnung oder die
+explizite Auswahl einer festen beziehungsweise zusätzlichen Funktion bei
+einem `LOOSE`-Mehrfunktionskonto. Die statischen Verträge, die echte MariaDB
+und authentifizierte HTTP-Anforderungen waren erfolgreich; diese
+Modusbedienung gehört bis zu einem eigenen automatisierten Szenario in die
+manuelle Fachabnahme.
 
 Im Haupt-CI-Bestand prüft `tests/integration/user_admin.php` zunächst
 Kontoanlage, serverseitig abgeleitete feste Funktionszuordnung,
@@ -1075,10 +1115,12 @@ Duplikate und ruft den gemeinsamen, advisory-lock-geschützten
 Schema-Reconciler zweimal auf. Anschließend prüft sie InnoDB, `utf8mb4`,
 nullable Datumswerte, Indizes, Strict Mode, Identifier-Angriffe und die
 vollständige Fixture-Bereinigung. Der ergänzende
-`tests/integration/dv_operations.php` beweist darüber hinaus, dass ein festes
-S3-Konto dieselben sechs Tabellen erhält, ein S2-Konto seine Funktion nicht
-durch historische Besetzungsdaten wechseln kann und ein ETB-Konto keine
-fachfremden Tabellen erhält:
+`tests/integration/dv_operations.php` ergänzt diesen Vertrag um die
+modeabhängige operative Identität: Die feste Kontofunktion wird nicht
+umgeschrieben, während in `STRICT` eine ausgewählte Dienstbesetzung und in
+`LOOSE` eine Zusatzfunktion die wirksamen Fachbereiche erweitern kann. Ein
+Konto ohne wirksame Nachrichtenfunktion darf keine fachfremden Tabellenräume
+nutzen:
 
 ```console
 ESTAB_TEST_DB_PASSWORD="$(tr -d '\r\n' < secrets/db_password.txt)" \
@@ -1172,7 +1214,9 @@ Der Test beweist für die implementierte Repository-Grenze:
 - der administrative Zähler-Lock blockiert einen regulären Writer und beide
   verwenden damit denselben Namespace,
 - die Zählerreparatur erzeugt ausschließlich ein hashverkettetes
-  Betriebsereignis, keine unevidenzierte Status-0-Nachricht; der nächste echte
+  Betriebsereignis, in `STRICT` nach aktiver formaler Dienstschicht mit
+  Objekttyp `DIENSTSCHICHT`, in `LOOSE` ohne formale Dienstschicht mit
+  Objekttyp `EINSATZ`, und keine unevidenzierte Status-0-Nachricht; der nächste echte
   Vordruck folgt unmittelbar auf den reparierten Papierwert und beide
   Nachweisketten bleiben gültig,
 - ein fremdes Fernmelderkürzel kann weder Sperre noch Save übernehmen und beim
@@ -1265,16 +1309,18 @@ Falls `ESTAB_ADMIN_USER` in `.env` geändert wurde, muss
 - exakt eine escaped Sitzungsleiste mit Name, Kürzel, Funktion, Rolle und
   Abmeldebutton auf Root-Einstieg, Hauptansicht, vollhoher Anwendungs-Sidebar,
   Meldungsübersicht, Nachweisung, Anhängen, Vordrucken, Kategorien sowie
-  ETB/TBB; jede operative Seite wird dabei mit dem passenden festen
-  Funktionskonto aufgerufen, der rechte
+  ETB/TBB; jede operative Seite wird dabei mit der nach Einsatzmodus
+  wirksamen Funktion aufgerufen, der rechte
   `mainframe` vermeidet Duplikate und anonyme Fachseiten bleiben ohne
   vorgetäuschte eStab-Identität,
-- direkter Einstieg nach der Anmeldung ohne Hutauswahl sowie weiterhin HTTP
-  403 für S1 auf Meldungsübersicht und Nachweisung; die positiven Gegenproben
-  verwenden feste Konten mit den Funktionen S2, LdF beziehungsweise Fernmelder,
-- jeder normale operative Schreibpfad revalidiert Konto, feste Funktion,
-  serverseitig abgeleitete Rolle, Sperrstatus und aktiven Einsatz; dieselben
-  positiven Schreibfälle funktionieren ohne aktive Schicht,
+- in `STRICT` Auswahl einer angenommenen Besetzung der aktiven Dienstschicht,
+  in `LOOSE` direkter Einstieg mit fester und zusätzlicher Kontofunktion;
+  weiterhin HTTP 403 für eine wirksame S1-Funktion auf Meldungsübersicht und
+  Nachweisung, positive Gegenproben mit S2, LdF beziehungsweise Fernmelder,
+- jeder normale operative Schreibpfad revalidiert Konto, wirksame Funktion,
+  serverseitig abgeleitete Rolle, Sperrstatus und aktiven Einsatz; positive
+  `STRICT`-Fälle erfordern die ausgewählte aktive Besetzung, `LOOSE`-Fälle
+  funktionieren ohne formale Schicht nur mit fester oder Zusatzfunktion,
 - HTTP 405 für Logout per GET, HTTP 403 bei fehlendem oder falschem CSRF,
   Cookie-/Sitzungsende und 303-Rückleitung bei Erfolg sowie die
   SID-Grenze, durch die eine alte Sitzung eine neuere Anmeldung desselben
@@ -1379,7 +1425,9 @@ Falls `ESTAB_ADMIN_USER` in `.env` geändert wurde, muss
 - Basic-Auth-Adminseite mit escaped technischem Benutzernamen, ausdrücklicher
   Trennung vom eStab-Funktionskonto; der Einsatzabschluss prüft einen
   unmittelbar zuvor gleichlang manipulierten Pflichtanhang und liefert HTTP
-  409; historische Schichten sind keine Abschlussblocker. Außerdem
+  409; der modeabhängige Abschlussvertrag weist in `STRICT` fehlende
+  Bucheröffnung oder offene formale Dienstorganisation ab und erlaubt in
+  `LOOSE` den Abschluss ohne formale Schicht. Außerdem
   Exportverwaltung: zwei vollständige
   Exporte erzeugen, PRG-Rückleitungen und CSRF-Grenzen prüfen, Manifest und
   jede CSV-Prüfsumme in beiden heruntergeladenen ZIPs verifizieren, den
@@ -1554,9 +1602,10 @@ insbesondere:
   mindestens 44 Pixel große Textbuttons. Ein positiver Arbeitszähler besitzt
   eine dauerhaft sichtbare Warnstufe.
 - Das Manifest enthält neun Bereiche und zwei Dienste. Nach der Anmeldung
-  erscheinen nur die für die feste Kontofunktion zulässigen neun
-  beziehungsweise zehn Links ohne
-  Disclosure dauerhaft; S2 erhält die Meldungsübersicht, LdF und Fernmelder die
+  erscheinen nur die für die wirksamen Funktionen zulässigen Links ohne
+  Disclosure dauerhaft; in `STRICT` liefert sie die ausgewählte
+  Dienstbesetzung, in `LOOSE` feste und zusätzliche Kontofunktionen. S2 erhält
+  die Meldungsübersicht, LdF und Fernmelder die
   Nachweisung, andere Funktionen keines der beiden Spezialziele. Alle sichtbaren
   Links sind mindestens 44 Pixel groß und besitzen weder eine eigene
   horizontale noch vertikale Scrollfläche. Bei `1440 × 1000`, `1280 × 720` und
@@ -1637,18 +1686,17 @@ tests/integration/logbooks_http.sh
 ```
 
 Er weist nach, dass anonyme Lesezugriffe HTTP 403 erhalten und operative
-Schreibversuche ohne aktiven Einsatz gesperrt sind. Mit aktivem Einsatz
-funktionieren dieselben Schreibvorgänge ohne aktive Dienst- oder
-Zugangsschicht. Beide Bücher zeigen den globalen Einsatzkopf und besitzen kein
-lokales Titelformular mehr. Im strengen Modus schreiben ETB ausschließlich
-feste Konten `ETB/Stab` oder `S2/Stab` mit `EINSATZTAGEBUCH`; das TTB
-ausschließlich Konten mit der Funktion `Fernmelder` und `BEFOERDERUNG`.
-Cross-Rollen-POSTs und manipulierte Funktion oder Rolle liefern dann HTTP 403.
-Ein getrennter lockerer Lauf muss dieselben Schreibaktionen mit anderer
-Festfunktion zulassen, aber konkrete aktive und ungesperrte Kontenidentität,
-Einsatzbezug, Nummerierung, Referenzen und Append-only-Trigger unverändert
-erzwingen. Gesperrte Konten liefern in beiden Modi HTTP 403. Eine Hutauswahl oder
-Besetzungs-ID kommt weder im positiven noch im negativen Vertrag vor.
+Schreibversuche ohne aktiven Einsatz gesperrt sind. Beide Bücher zeigen den
+globalen Einsatzkopf und besitzen kein lokales Titelformular mehr. Im strengen
+Modus schreiben ETB ausschließlich ausgewählte aktive Besetzungen `ETB/Stab`
+oder `S2/Stab` mit `EINSATZTAGEBUCH`; das TTB eine ausgewählte
+Fernmelder-Besetzung mit `BEFOERDERUNG`. Ohne aktive Schicht, Annahme oder
+Auswahl liefern die POSTs HTTP 403. Ein getrennter lockerer Lauf muss dieselben
+Schreibaktionen ohne formale Dienstschicht nur mit fester oder ausdrücklich
+vergebener Zusatzfunktion zulassen; ein fachfremdes Konto bleibt HTTP 403.
+Kontenidentität, Einsatzbezug, Nummerierung, Referenzen und
+Append-only-Trigger bleiben unverändert. Gesperrte Konten liefern in beiden
+Modi HTTP 403.
 Zusätzlich prüft der Test lokale statt globaler Nummern, A/B/E/K/W-Arten,
 strukturierte TBB-Inhaltsfelder, direkte Korrekturbezüge, serverseitige
 Längengrenzen, inerte historische GET-Schreibparameter und HTML-Escaping.
@@ -1676,22 +1724,25 @@ Nummer kanonisch ab.
 Eine optionale ETB-Bearbeitungszuordnung bleibt reine Such- und Anzeigehilfe;
 sie darf keine Rechte erweitern. Volltext- und separater Zuordnungsfilter
 müssen ihren Snapshot finden, die Webliste muss ihn HTML-neutral anzeigen und
-der amtliche PDF-Renderer darf ihn nicht enthalten. Neue manuelle und
-automatische ETB-/TTB-Zeilen dürfen die Legacy-Schicht- und
-Schreiberprovenienz `NULL` lassen. Belegte historische Werte bleiben
-unverändert exportierbar; eine Zugangsschicht darf niemals in diese Felder
-geschrieben werden.
+der amtliche PDF-Renderer darf ihn nicht enthalten. Neue manuelle
+ETB-/TTB-Zeilen müssen in `STRICT` Schicht und Schreiberbesetzung speichern;
+in `LOOSE` dürfen diese Felder `NULL` bleiben. Automatische Systemzeilen
+dürfen in beiden Modi ohne persönlichen Schreiber entstehen. Belegte
+historische Werte bleiben unverändert exportierbar; eine Zugangsschicht darf
+niemals in diese Felder geschrieben werden.
 
-Der Einsatz-Lebenszyklustest verlangt einen vollständigen Pflichtkopf und
-prüft, dass die Einsatzaktivierung ETB und TTB ohne Schichtvoraussetzung mit
-lokaler Nummer 1 und `NULL`-Schichtprovenienz eröffnet. Der formale
-Einsatzabschluss muss auch ohne frühere Schicht oder
-schichtbezogene Eröffnungszeilen möglich sein, nach sauberem Preflight je eine
-letzte Zeile mit tatsächlichem Ende erzeugen und die zehnjährige
-Mindestaufbewahrung setzen. Historische offene Dienstschichten oder
-Besetzungen sind keine Abschlussblocker.
+Der Einsatz-Lebenszyklustest verlangt einen vollständigen Pflichtkopf. In
+`STRICT` darf die Einsatzaktivierung allein noch keine Buchzeile erzeugen;
+erst die Aktivierung der ersten formalen Dienstschicht eröffnet ETB und TTB
+mit lokaler Nummer 1 und Schichtprovenienz. In `LOOSE` darf die
+Einsatzaktivierung beide Bücher ohne Schichtvoraussetzung und mit
+`NULL`-Schichtprovenienz eröffnen. Der formale Einsatzabschluss muss in
+`STRICT` fehlende Bucheröffnung oder offene formale Dienstorganisation
+abweisen, in `LOOSE` auch ohne frühere Schicht gelingen und nach sauberem
+Preflight je eine letzte Zeile mit tatsächlichem Ende sowie die zehnjährige
+Mindestaufbewahrung erzeugen.
 
-Der Zugangsschichttest legt optionale Gruppen an und prüft unzugeordnete
+Der Zugangsschichttest legt in `LOOSE` optionale Gruppen an und prüft unzugeordnete
 Konten, Mehrfachzuordnung per OR, Aktivierung ohne automatische Anmeldung,
 Deaktivierung mit Widerruf der betroffenen Sitzungen sowie eine andere aktive
 Gruppe als verbleibenden Zugang. Funktion und Rolle müssen unverändert bleiben;
@@ -1747,10 +1798,12 @@ ESTAB_CATEGORY_HTTP_TEST_ALLOW_MUTATION=true \
 tests/integration/categories_http.sh
 ```
 
-Nachgewiesen werden HTTP 403 ohne Sitzung oder mit unpassender fester
-Kontofunktion, positive IDs, inerte GET-Schreibparameter, Session-CSRF und
-HTTP-303-PRG. S1 darf mit seiner festen Kontofunktion Funktions- und
-Benutzerkategorien seines eigenen Tabellenraums verwalten, aber weder
+Nachgewiesen werden HTTP 403 ohne Sitzung oder mit unpassender nach
+Einsatzmodus wirksamer Funktion, positive IDs, inerte GET-Schreibparameter,
+Session-CSRF und HTTP-303-PRG. In `STRICT` stammt die Kategorienfunktion aus
+der ausgewählten Dienstbesetzung; in `LOOSE` aus fester oder expliziter
+Zusatzfunktion. S1 darf Funktions- und Benutzerkategorien seines eigenen
+Tabellenraums verwalten, aber weder
 Master-Kategorien ändern noch eine Master-Zuordnung einschleusen. S2/Rotkopie
 und `Si` erreichen die Masterverwaltung. CRUD, Zuordnung und Linkbereinigung
 werden direkt in MariaDB geprüft. Eine existierende Nachricht ohne exakten
@@ -1784,8 +1837,10 @@ dynamische Statustabellen und Vordrucke. Der Test startet deshalb nur mit
 namens `estab_ci` oder `estab_ci_*`. Das Projekt muss wegwerfbar,
 mit deaktivierter Selbstregistrierung und mit der historischen Standardmatrix
 initialisiert sein. Der vorangehende HTTP-Smoke aktiviert einen Einsatz. Der
-Nachrichtenrollentest verwendet feste Funktionskonten ohne Hutauswahl und ohne
-aktive Schicht; er deaktiviert den zentralen Schreibguard zu keinem Zeitpunkt.
+Nachrichtenrollentest verwendet in `STRICT` aktive angenommene und ausgewählte
+Dienstbesetzungen, in `LOOSE` feste Kontofunktionen und gezielt vergebene
+Zusatzfunktionen; er deaktiviert den zentralen Schreibguard zu keinem
+Zeitpunkt.
 
 Ein einzelner Lauf kann beispielsweise so gestartet werden:
 
@@ -1842,9 +1897,9 @@ Fail-closed-Vertrag, die zugängliche Combobox/Listbox samt nativer
 No-Script-Rückfalloption, ausgeschaltetes Browser-Autocomplete und HTML-sichere
 Ausgabe. Dazu gehören die festen LdF-Kontextfelder je Richtung, getrennte
 Wert-/Herkunftsattribute sowie die erneute Prüfung von Status, Sperrbesitz und
-fester Kontofunktion. Der isolierte MariaDB-Test
+modeabhängig wirksamer Funktion. Der isolierte MariaDB-Test
 `tests/integration/message_suggestions.php` belegt die erneute Prüfung von
-aktivem Einsatz sowie fester Kontofunktion und Rolle,
+aktivem Einsatz sowie modeabhängig wirksamer Funktion und Rolle,
 die Rollen- und Richtungsgrenzen, akzentverschiedene Werte sowie, dass Werte
 eines anderen Einsatzes nicht erscheinen. Er weist außerdem die Rangfolge
 „häufige abgeschlossene Nachrichtenpaare vor aktuell gültigem
@@ -1901,8 +1956,8 @@ Legacy-Entwürfe benötigen eine eindeutige Ereignisreihenfolge zur noch aktiven
 Quelle. Zulässige große UTF-8-Vermerke bleiben vollständig im verketteten
 Betriebsereignis; das Legacy-Protokoll enthält bei Überschreitung seiner
 TEXT-Grenze einen prüfbaren kompakten Verweis. Im Modus `LOOSE` wird die
-tatsächliche Kontofunktion statt einer S6-Vorgabe auditiert. Der erfolgreiche
-Lauf umfasst 171 Assertions und 99 verkettete Betriebsereignisse.
+tatsächlich wirksame feste oder zusätzliche Funktion auditiert. Der erfolgreiche
+Lauf umfasst 236 Assertions und 95 verkettete Betriebsereignisse.
 `tests/integration/message_workflow_http.sh`
 belegt denselben Ablauf über echte CSRF-geschützte HTTP-Formulare einschließlich
 Vorbelegung, 409-Konfliktseite und Erhalt der nicht gespeicherten Eingabe.
@@ -1962,7 +2017,7 @@ Status-8-Abschluss. Damit wird nicht nur der Formularhandler, sondern dieselbe
 Zugriffsregel in Listen-SQL, Objekt-Gate und atomarem State-SQL geprüft.
 
 `tests/php/read_authorization_security.php` und die HTTP-Gegenproben erweitern
-diese Grenze auf alle Ausgabepfade. Eine Kontositzung mit unpassender fester
+diese Grenze auf alle Ausgabepfade. Eine Kontositzung mit unpassender wirksamer
 Funktion darf keine operative Nachricht lesen. Normaler Stab/FB erhält
 nur die terminale Empfängerkopie oder den eigenen Ausgang; Si, LdF und
 Fernmelder nur ihre aktuelle Warteschlange/Sperre oder eine Nachricht mit eigener
@@ -2033,7 +2088,9 @@ Der Test verwendet das bereits im Datenbankcontainer gemountete Root-Secret
   beider Tabellen und die Auditanzahl überein,
 - zwei parallele, getrennte Admin-Sitzungen: genau eine darf denselben
   Nachrichtenzähler erhöhen; die andere erhält HTTP 409,
-- hashverketteter Zählernachweis ohne künstliche Fachnachricht, Audit und
+- modeabhängige Zählergrenze mit Pflicht zur aktiven formalen Dienstschicht
+  und Objekttyp `DIENSTSCHICHT` in `STRICT` sowie schichtfreiem Objekttyp
+  `EINSATZ` in `LOOSE`, hashverketteter Nachweis ohne künstliche Fachnachricht, Audit und
   POST-only-PDF-Vordruckreset.
 
 Ein Trap entfernt den temporären Fehlertrigger, stellt beide ursprünglichen
@@ -2087,20 +2144,20 @@ Mindestens zu prüfen:
   „historisch nicht erfasst“ prüfen, den tatsächlichen Namen einmalig
   administrativ bestätigen und nach der ersten operativen Eintragung jede
   weitere Änderung abweisen,
-- einen Einsatz im Standardmodus **Streng** anlegen und die bisherigen
-  Cross-Rollen-Schreibversuche abweisen; danach denselben offenen Einsatz nur
-  mit Warnungsbestätigung revisionsgesichert auf **Locker** stellen, die
-  sichtbare Warnung und das Vorher-/Nachher-Audit prüfen und genau diese
-  Schreibschritte mit einem fremden, aber aktiven und ungesperrten Konto
-  wiederholen. Anonyme/abgelaufene Sitzung, Kontosperre, deaktivierten alleinigen
+- die Berechtigungsmodi in getrennten Einsätzen abnehmen: In einem eigenen
+  Einsatz im Standardmodus **Streng** ohne ausgewählte Besetzung alle
+  operativen Schritte abweisen, danach eine aktive formale Dienstschicht sowie
+  persönlich angenommene passende Besetzungen auswählen und den Rollenablauf
+  positiv prüfen; Zusatzfunktionen bleiben dort wirkungslos. In einem eigenen
+  Einsatz im Modus **Locker** muss ein fremdes aktives Konto weiter scheitern;
+  erst die gezielte Vergabe einer passenden Zusatzfunktion darf den Schritt
+  freigeben. Ein vollständig leerer dritter Fixture prüft bestätigten
+  Moduswechsel, Audit, idempotentes Speichern desselben Werts und die
+  dauerhafte Sperre nach der ersten operativen oder formalen Eintragung.
+  Anonyme/abgelaufene Sitzung, Kontosperre, deaktivierten alleinigen
   Gruppenzugang, fehlenden aktiven Einsatz, falsches CSRF, fremden
-  Sperrinhaber, falschen Workflowzustand und einsatzfremdes Objekt weiterhin
-  abweisen; allgemeine Leserechte, Nachweisung, Zweitsichtungsarchive,
-  Kategorien- und Administrationsrechte dürfen sich nicht erweitern. Eine
-  zurückgewiesene Ausgangsmeldung dagegen mit einer anderen Funktion
-  übernehmen und beide Verantwortlichkeiten im Nachweis unterscheiden.
-  Anschließend
-  wieder **Streng** setzen und die negativen Rollenfälle erneut prüfen,
+  Sperrinhaber, falschen Workflowzustand und einsatzfremdes Objekt in den
+  jeweils passenden Fixtures weiterhin abweisen,
 - neuen Benutzer für jede tatsächlich verwendete Funktion in der
   Benutzerverwaltung anlegen, abmelden und mit demselben Kennwort erneut
   anmelden; eine abweichende Funktion vor und nach dem Logout abweisen,
@@ -2113,9 +2170,10 @@ Mindestens zu prüfen:
   Verschärfung vorhandenes Konto sowie der getrennte Basic-Auth-Zugang weiter
   funktionieren,
 - Berechtigungs-/Rollenzuordnung aus der Empfängermatrix kontrollieren,
-- jede verwendete Person mit dem vorgesehenen festen Funktionskonto anmelden;
-  abweichende Funktion/Rolle und fehlenden aktiven Einsatz abweisen, die
-  positiven Vorgänge ohne aktive Schicht zulassen,
+- jede verwendete Person mit ihrem persönlichen Konto anmelden; in `STRICT`
+  die vorgesehene angenommene Dienstbesetzung auswählen, in `LOOSE` feste und
+  zusätzliche Funktionen prüfen; abweichende Funktion/Rolle und fehlenden
+  aktiven Einsatz abweisen,
 - eingehende und ausgehende Nachricht mit Richtung, Gegenstelle,
   Prioritätsstufe, Empfängern und Inhalt erfassen,
 - den Bildschirmvordruck bei Desktopbreite und bei 390 Pixeln direkt mit den
@@ -2142,11 +2200,11 @@ Mindestens zu prüfen:
   Hinweis genau einmal physisch hören; mit ausgeschaltetem oder browserseitig
   blockiertem Ton zusätzlich die sichtbare Rückmeldung kontrollieren,
 - globale, funktionsbezogene und persönliche Kategorie anlegen, zuweisen,
-  suchen und entfernen; dieselben Seiten mit unpassender fester Kontofunktion
+  suchen und entfernen; dieselben Seiten mit unpassender wirksamer Funktion
   und einem fremden Nachrichtenbezug abweisen,
 - zulässigen Anhang hochladen, Vorschau/Download prüfen und eine unzulässige
   Datei ablehnen lassen; verknüpften und freien Anhang zusätzlich mit
-  berechtigtem sowie fremdem Festfunktionskonto über Liste, Vorschau, Download, Auswahl und
+  berechtigter sowie fachfremder wirksamer Funktion über Liste, Vorschau, Download, Auswahl und
   manipulierten finalen Nachrichtensave prüfen,
 - eine standardisierte `.eml` direkt am Nachrichtenvordruck hochladen, die
   passive Ansicht im echten Browser auf decodierte Kopfzeilen, lesbaren
@@ -2171,11 +2229,17 @@ Mindestens zu prüfen:
   gegen das Original prüfen; dabei
   Führungsstellenname, Einsatzkennung, Einsatzname und Berechtigungsmodus
   getrennt kontrollieren,
-- einen strengen Einsatz mit vollständigem ETB-/TTB-Pflichtkopf anlegen und schon vor
-  der ersten Zeile genau die Köpfe `ETB:1` und `TTB:1` prüfen; anschließend
-  ohne aktive Schicht die lokale Nummer 1 schreiben. ETB mit `ETB/Stab` und
-  `S2/Stab`, TTB mit der Funktion `Fernmelder` positiv, fremde Festfunktionen negativ
-  prüfen,
+- einen strengen Einsatz mit vollständigem ETB-/TTB-Pflichtkopf anlegen,
+  unmittelbar nach Einsatzaktivierung noch keine Buchzeile und nach
+  Aktivierung der ersten formalen Dienstschicht genau die schichtbezogenen
+  Eröffnungszeilen sowie die Köpfe `ETB:1` und `TTB:1` prüfen; danach nur mit
+  aktiver, angenommener und ausgewählter Besetzung ETB
+  mit `ETB/Stab` oder `S2/Stab` und TTB mit `Fernmelder` schreiben. In einem
+  lockeren Gegenlauf die schichtfreie Eröffnung bei Einsatzaktivierung sowie
+  feste und zusätzliche Funktionen positiv, fachfremde Konten negativ prüfen;
+  außerdem einen bereits aktiven, ungeöffneten und weiterhin vollständig von
+  operativen sowie formalen Eintragungen freien `STRICT`-Einsatz bestätigt auf
+  `LOOSE` umstellen und die atomare schichtfreie Bucheröffnung nachweisen,
 - im ETB ohne/A/B/E/K/W sowie Nachricht, Anhang, eine Referenz auf eine
   vorhandene lokale ETB-Nummer und eine Berichtigung als neue Zeile erfassen;
   Freitext, führende Nullen und unbekannte Nummern abweisen, Referenzketten
@@ -2190,14 +2254,16 @@ Mindestens zu prüfen:
   suchen; optional einen finalisierten unbenutzten Anhang zuordnen,
   `ETB {einsatz_id}-{estab_book_lfd}-1` in UI/PDF/Anlagenverzeichnis und das
   getrennte Kennzeichen wie `EL0001` prüfen sowie den Mehrfachlink abweisen,
-- optionale Zugangsschichten anlegen, ein unzugeordnetes Konto weiter zulassen,
+- in `LOOSE` optionale Zugangsschichten anlegen, ein unzugeordnetes Konto weiter zulassen,
   ein Konto mehreren Gruppen zuordnen und OR-Semantik prüfen; Aktivierung darf
   niemanden anmelden, Deaktivierung muss Sitzungen ohne anderen aktiven Zugang
   widerrufen und Funktion/Rolle unverändert lassen; manuelle Sperre muss
   Vorrang behalten,
-- neue ETB-/TTB-Zeilen mit `NULL` in der Legacy-Schicht-/Schreiberprovenienz
-  prüfen und belegte historische Werte weiter exportieren; einen Einsatz ohne
-  frühere Schicht und ohne schichtbezogene Eröffnungszeilen formal schließen;
+- neue manuelle ETB-/TTB-Zeilen in `STRICT` mit belegter
+  Schicht-/Schreiberprovenienz, in `LOOSE` mit zulässigem `NULL` prüfen und
+  belegte historische Werte weiter exportieren; in `STRICT` den Abschluss
+  ohne Bucheröffnung beziehungsweise mit offener Dienstorganisation abweisen,
+  in `LOOSE` einen Einsatz ohne frühere Schicht formal schließen;
   automatische Abschlusszeilen, Schreibsperre und zehnjährige
   Mindestaufbewahrung prüfen,
 - das PDF-Dossier öffnen und Fb Fü 2 im A4-Hochformat sowie Fb Fü 44 im
@@ -2209,13 +2275,14 @@ Mindestens zu prüfen:
   unbeschriebene Rest der jeweils letzten Buchseite diagonal gestrichen sein;
   die organisatorische Zeichnung festlegen und die formale THW-Freigabe
   separat dokumentieren; denselben Einsatz als Gesamtbuch und bei belegter
-  historischer Provenienz als frühere formale Dienstschicht exportieren, nur
+  Provenienz als formale Dienstschicht exportieren, nur
   ETB/TBB gefiltert sowie Umfang auf Deckblatt und im Audit nachweisen und alle
   übrigen Sektionen einsatzweit vergleichen,
 - bei getrennten ETB- und Si-Konten den Si-ETB-POST in **Streng** mit HTTP 403
-  abweisen und in **Locker** bei unveränderten Konto-/Einsatz-/Append-only-
-  Grenzen zulassen; feste Funktions-/Rollengrenzen und
-  Cross-Rollen-Schreibversuche in beiden Modi prüfen;
+  abweisen, in **Locker** zunächst ebenfalls abweisen, dann die Zusatzfunktion
+  ETB gezielt vergeben und bei unveränderten Konto-/Einsatz-/Append-only-
+  Grenzen zulassen; nach Rückkehr zu **Streng** muss die Zusatzfunktion
+  wirkungslos sein;
   Kommunikationsplan und lokal benötigte Zusatzmodule je repräsentativ
   anlegen/lesen,
 - administrative Exportübersicht am Desktop und bei 390 Pixel Breite öffnen,
@@ -2272,13 +2339,15 @@ sind:
 - aktive und Standardmatrix jeweils genau 20 eindeutige 5x4-Positionen,
   genau S2/Stab als Rotkopie-/Dokumentationsziel und keinerlei aktive
   Autosichtung enthalten,
-- die exakt definierten Benutzer-, Präsenz- und Anhangindizes sowie der
-  UTC-Aktivitätszeitstempel vorhanden sind,
+- die exakt definierten Benutzer-, Zusatzfunktions-, Präsenz- und
+  Anhangindizes, die kanonische Tabelle `nv_benutzer_zusatzfunktionen` sowie
+  der UTC-Aktivitätszeitstempel vorhanden sind,
 - alle ausgelieferten versionierten Migrationen mit gültigem SHA-256 als
   angewendet protokolliert sind,
 - der Singleton des globalen Einsatzstatus, alle Einsatz-Fremdschlüssel und
   -Trigger, die `STRICT`/`LOOSE`-Modusspalte, beide Modus-Guard-Trigger und
-  sechs modebewussten Fachtrigger, append-only Ereignisketten, formaler
+  sechs aktuelle modebewusste Fachtrigger mit Dienstbesetzungsautorität in
+  `STRICT` sowie Fest-/Zusatzfunktionsautorität in `LOOSE`, append-only Ereignisketten, formaler
   Abschluss/Aufbewahrung sowie die dauerhafte Kontosperr-Spalte kanonisch
   vorhanden sind,
 - pro Einsatz exakt zwei Buchkopfstände samt kanonischem Einsatz-Insert-

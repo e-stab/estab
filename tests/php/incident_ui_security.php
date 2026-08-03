@@ -59,7 +59,10 @@ $assert(
             $activeMarkup,
             'data-estab-incident-permission-mode="STRICT"'
         )
-        && str_contains($activeMarkup, 'Schreibrechte: <strong>Streng</strong>')
+        && str_contains(
+            $activeMarkup,
+            'Berechtigungsmodus: <strong>Streng</strong>'
+        )
         && str_contains($activeMarkup, '29.07.2026 12:34')
         && str_contains($activeMarkup, '&lt;Leitstelle&gt;')
         && str_contains(
@@ -96,10 +99,15 @@ $assert(
             $looseMarkup,
             'data-estab-incident-permission-mode="LOOSE"'
         )
-        && str_contains($looseMarkup, 'Schreibrechte: <strong>Locker</strong>')
         && str_contains(
             $looseMarkup,
-            'Funktions- und Rollenrechte werden bei fachlichen Schreibaktionen nicht erzwungen.'
+            'Berechtigungsmodus: <strong>Locker</strong>'
+        )
+        && str_contains(
+            $looseMarkup,
+            'Rechte folgen fester Kontofunktion und ausdrücklich '
+                . 'vergebenen Zusatzfunktionen; eine formale Dienstschicht '
+                . 'ist nicht erforderlich.'
         ),
     'LOOSE mode is not visibly and unambiguously identified'
 );

@@ -29,19 +29,170 @@ $originalBasePath = getenv('ESTAB_BASE_PATH');
 putenv('ESTAB_PUBLIC_URL=/');
 putenv('ESTAB_BASE_PATH=');
 
+$navigationSource = file_get_contents(
+    dirname(__DIR__, 2) . '/app/navigation.php'
+);
+$assert(is_string($navigationSource), 'navigation source cannot be read');
+$selectDutyStart = strpos(
+    $navigationSource,
+    'function estab_navigation_select_duty('
+);
+$selectDutyEnd = is_int($selectDutyStart)
+    ? strpos(
+        $navigationSource,
+        'function estab_navigation_login_destination_field(',
+        $selectDutyStart
+    )
+    : false;
+$selectDutySource = is_int($selectDutyStart)
+    && is_int($selectDutyEnd)
+    && $selectDutyEnd > $selectDutyStart
+    ? substr(
+        $navigationSource,
+        $selectDutyStart,
+        $selectDutyEnd - $selectDutyStart
+    )
+    : '';
+$assert(
+    $selectDutySource !== ''
+        && str_contains(
+            $selectDutySource,
+            "['GET', 'HEAD', 'POST']"
+        )
+        && str_contains(
+            $selectDutySource,
+            "\$session['estab_pending_navigation_key'] = \$destinationKey"
+        )
+        && str_contains(
+            $selectDutySource,
+            "unset(\$session['estab_pending_navigation_key'])"
+        )
+        && str_contains(
+            $selectDutySource,
+            "estab_navigation_url_for_key('command-post')"
+        )
+        && str_contains($selectDutySource, "'#meine-dienstfunktionen'")
+        && str_contains($selectDutySource, '303')
+        && !str_contains($selectDutySource, 'text/plain')
+        && !str_contains($selectDutySource, 'estab_auth_require_session('),
+    'missing STRICT function selection can still end in a plain-text dead end or replay an unsafe destination'
+);
+$assert(
+    estab_navigation_strict_duty_selection_required(null)
+        && estab_navigation_strict_duty_selection_required([
+            'estab_permission_mode' => 'STRICT',
+        ])
+        && estab_navigation_strict_duty_selection_required([
+            'estab_permission_mode' => 'STRICT',
+            'duty_assignment_id' => 0,
+        ])
+        && estab_navigation_strict_duty_selection_required([
+            'estab_permission_mode' => 'STRICT',
+            'duty_assignment_id' => '999999999999999999999999999999',
+        ])
+        && estab_navigation_strict_duty_selection_required([
+            'estab_permission_mode' => 'INVALID',
+            'duty_assignment_id' => 73,
+        ])
+        && !estab_navigation_strict_duty_selection_required([
+            'estab_permission_mode' => 'STRICT',
+            'duty_assignment_id' => 73,
+        ])
+        && !estab_navigation_strict_duty_selection_required([
+            'estab_permission_mode' => 'LOOSE',
+        ])
+        && !estab_navigation_strict_duty_selection_required([
+            'estab_permission_mode' => 'LOOSE',
+            'duty_assignment_id' => 'not-authority',
+        ]),
+    'STRICT/LOOSE direct-route duty-selection predicate is not fail-closed'
+);
+$strictLoginSession = [];
+$looseLoginSession = ['estab_pending_navigation_key' => 'tracking'];
+$invalidLoginSession = ['estab_pending_navigation_key' => 'tracking'];
+$assert(
+    estab_navigation_login_landing_key(
+        $strictLoginSession,
+        'STRICT',
+        'incident-log'
+    ) === 'command-post'
+        && ($strictLoginSession['estab_pending_navigation_key'] ?? null)
+            === 'incident-log'
+        && estab_navigation_login_landing_key(
+            $looseLoginSession,
+            'LOOSE',
+            'incident-log'
+        ) === 'incident-log'
+        && !isset($looseLoginSession['estab_pending_navigation_key']),
+    'post-login landing does not bootstrap STRICT through duty selection or continue LOOSE directly'
+);
+$assertThrows(
+    static function () use (&$invalidLoginSession): void {
+        estab_navigation_login_landing_key(
+            $invalidLoginSession,
+            'INVALID',
+            'incident-log'
+        );
+    },
+    'invalid post-login permission mode did not fail closed'
+);
+$assert(
+    !isset($invalidLoginSession['estab_pending_navigation_key']),
+    'invalid post-login permission mode retained a stale protected destination'
+);
+
+$directDutyRoutes = [
+    '4fach/anhang.php' => '"messages"',
+    '4fach/download.php' => '$loginDestination',
+    '4fach/katgoedt.php' => "'messages'",
+    '4fach/nachwea.php' => '"tracking"',
+    '4fach/vordrucke.php' => "'forms'",
+    '4fueltg/ue_ltg.php' => '"message-overview"',
+    'fmtbb/tbb.php' => '"technical-log"',
+    'stabetb/etb.php' => '"incident-log"',
+];
+foreach ($directDutyRoutes as $relativePath => $destinationSource) {
+    $routeSource = file_get_contents(
+        dirname(__DIR__, 2) . '/' . $relativePath
+    );
+    $assert(
+        is_string($routeSource)
+            && str_contains(
+                $routeSource,
+                'estab_navigation_require_selected_duty'
+            )
+            && str_contains($routeSource, '$_SESSION')
+            && str_contains($routeSource, $destinationSource)
+            && strpos(
+                $routeSource,
+                'estab_navigation_require_selected_duty'
+            ) > strpos($routeSource, 'estab_navigation_require_session'),
+        'protected direct route does not enforce the mode-aware STRICT '
+            . 'selection with its safe return target: ' . $relativePath
+    );
+}
+
 $areas = estab_navigation_areas();
 $services = estab_navigation_services();
 $s1NavigationIdentity = [
     'funktion' => 'S1',
     'rolle' => 'Stab',
+    'estab_permission_mode' => 'LOOSE',
 ];
 $s2NavigationIdentity = [
     'funktion' => 'S2',
     'rolle' => 'Stab',
+    'estab_permission_mode' => 'LOOSE',
 ];
 $ldfNavigationIdentity = [
     'funktion' => 'LdF',
     'rolle' => 'Fernmelder',
+    'estab_permission_mode' => 'LOOSE',
+];
+$s1WithS2NavigationIdentity = $s1NavigationIdentity + [
+    'estab_additional_functions' => [
+        ['funktion' => 'S2', 'rolle' => 'Stab'],
+    ],
 ];
 $assert(
     array_column($areas, 'key') === [
@@ -356,12 +507,66 @@ $assert(
         ),
     'account-function navigation exposes a foreign privileged area'
 );
+$additionalNavigation = estab_navigation_markup(
+    true,
+    ['SCRIPT_NAME' => '/4fueltg/ue_ltg.php'],
+    false,
+    false,
+    $s1WithS2NavigationIdentity
+);
+$assert(
+    str_contains($additionalNavigation, 'href="/4fueltg/ue_ltg.php"')
+        && !str_contains(
+            $additionalNavigation,
+            'href="/4fach/nachwea.php?nwalle"'
+        ),
+    'LOOSE navigation ignored an explicit S2 grant or exposed an ungranted area'
+);
+$strictWithoutHat = estab_navigation_markup(
+    true,
+    ['SCRIPT_NAME' => '/4fach/fuehrungsstelle.php'],
+    false,
+    false,
+    [
+        'funktion' => 'S2',
+        'rolle' => 'Stab',
+        'estab_permission_mode' => 'STRICT',
+    ]
+);
+$strictWithHat = estab_navigation_markup(
+    true,
+    ['SCRIPT_NAME' => '/4fueltg/ue_ltg.php'],
+    false,
+    false,
+    [
+        'funktion' => 'S2',
+        'rolle' => 'Stab',
+        'estab_permission_mode' => 'STRICT',
+        'duty_assignment_id' => 73,
+    ]
+);
+$assert(
+    substr_count($strictWithoutHat, 'data-estab-navigation-item') === 5
+        && str_contains(
+            $strictWithoutHat,
+            'href="/4fach/fuehrungsstelle.php"'
+        )
+        && !str_contains($strictWithoutHat, 'href="/4fach/index.php"')
+        && !str_contains($strictWithoutHat, 'href="/4fueltg/ue_ltg.php"')
+        && str_contains($strictWithHat, 'href="/4fach/index.php"')
+        && str_contains($strictWithHat, 'href="/4fueltg/ue_ltg.php"')
+        && !str_contains(
+            $strictWithHat,
+            'href="/4fach/nachwea.php?nwalle"'
+        ),
+    'STRICT navigation does not require an explicitly selected duty assignment'
+);
 $accountNavigation = estab_navigation_markup(
     true,
     ['SCRIPT_NAME' => '/4fach/fuehrungsstelle.php'],
     false,
     false,
-    ['funktion' => 'S1', 'rolle' => 'Stab']
+    $s1NavigationIdentity
 );
 $assert(
     substr_count(

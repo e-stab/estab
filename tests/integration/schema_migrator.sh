@@ -62,6 +62,7 @@ if [ ! -r "$fixture" ] \
     || [ ! -r "$ESTAB_MIGRATIONS_DIR/115-incident-permission-mode.sql" ] \
     || [ ! -r "$ESTAB_MIGRATIONS_DIR/116-standard-categories.sql" ] \
     || [ ! -r "$ESTAB_MIGRATIONS_DIR/117-telecom-draft-discard.sql" ] \
+    || [ ! -r "$ESTAB_MIGRATIONS_DIR/118-operational-authority.sql" ] \
     || [ ! -x "$ESTAB_MIGRATOR_BIN" ]; then
     echo "schema migrator test: fixture, baseline, or migrator is unavailable" >&2
     exit 1
@@ -79,7 +80,7 @@ pre_110_migrations=$(mktemp -d "${TMPDIR:-/tmp}/estab-pre-110-migrations.XXXXXX"
 
 for migration_path in "$ESTAB_MIGRATIONS_DIR"/*.sql; do
     case "$(basename "$migration_path")" in
-        110-etb-tbb-rules.sql|111-logbook-shift-assignment.sql|112-optional-access-shifts.sql|113-password-policy.sql|114-self-registration-policy.sql|115-incident-permission-mode.sql|116-standard-categories.sql|117-telecom-draft-discard.sql)
+        110-etb-tbb-rules.sql|111-logbook-shift-assignment.sql|112-optional-access-shifts.sql|113-password-policy.sql|114-self-registration-policy.sql|115-incident-permission-mode.sql|116-standard-categories.sql|117-telecom-draft-discard.sql|118-operational-authority.sql)
             continue
             ;;
     esac
@@ -353,11 +354,12 @@ SELECT GROUP_CONCAT(CONCAT(version, ':', checksum, ':', state)
    '110-etb-tbb-rules.sql', '111-logbook-shift-assignment.sql',
    '112-optional-access-shifts.sql', '113-password-policy.sql',
    '114-self-registration-policy.sql', '115-incident-permission-mode.sql',
-   '116-standard-categories.sql', '117-telecom-draft-discard.sql'
+   '116-standard-categories.sql', '117-telecom-draft-discard.sql',
+   '118-operational-authority.sql'
  )"
 )" \
     "migration 110 upgrade rewrote a released migration ledger row"
-assert_equal "1|1|1|1|1|1|1|1|1|3|1|2|1" "$(database_query "$logbook_upgrade_database" "
+assert_equal "1|1|1|1|1|1|1|1|1|1|3|1|2|1" "$(database_query "$logbook_upgrade_database" "
 SELECT CONCAT(
          (SELECT COUNT(*) FROM estab_schema_migrations
            WHERE version = '110-etb-tbb-rules.sql' AND state = 'applied'), '|',
@@ -381,6 +383,9 @@ SELECT CONCAT(
              AND state = 'applied'), '|',
          (SELECT COUNT(*) FROM estab_schema_migrations
            WHERE version = '117-telecom-draft-discard.sql'
+             AND state = 'applied'), '|',
+         (SELECT COUNT(*) FROM estab_schema_migrations
+           WHERE version = '118-operational-authority.sql'
              AND state = 'applied'), '|',
          (SELECT COUNT(*) FROM information_schema.statistics
            WHERE table_schema = DATABASE() AND table_name = 'nv_etb'
@@ -566,7 +571,7 @@ SELECT GROUP_CONCAT(kategorie ORDER BY BINARY kategorie SEPARATOR ',')
   FROM nv_masterkatego"
 )" \
     "fresh installation did not receive exact standard categories"
-assert_equal "7|7|1|1|23" "$(database_query "$fresh_database" "
+assert_equal "7|7|1|1|1|24" "$(database_query "$fresh_database" "
 SELECT CONCAT(
          COUNT(*), '|', COUNT(DISTINCT BINARY kategorie), '|',
          (SELECT COUNT(*) FROM estab_schema_migrations
@@ -575,6 +580,10 @@ SELECT CONCAT(
              AND checksum REGEXP BINARY '^[0-9a-f]{64}$'), '|',
          (SELECT COUNT(*) FROM estab_schema_migrations
            WHERE version = '117-telecom-draft-discard.sql'
+             AND state = 'applied'
+             AND checksum REGEXP BINARY '^[0-9a-f]{64}$'), '|',
+         (SELECT COUNT(*) FROM estab_schema_migrations
+           WHERE version = '118-operational-authority.sql'
              AND state = 'applied'
              AND checksum REGEXP BINARY '^[0-9a-f]{64}$'), '|',
          (SELECT COUNT(*) FROM estab_schema_migrations
@@ -602,7 +611,11 @@ database_query "$fresh_database" "
 INSERT INTO nv_benutzer
   (benutzer, kuerzel, funktion, rolle, aktiv, password, estab_gesperrt)
 VALUES
-  ('Migration 117 S6', 's6117', 'S6', 'Stab', 1, '', 0);
+  ('Migration 118 delegated S6', 's6117', 'LdF', 'Fernmelder', 1, '', 0),
+  ('Migration 118 S2', 's2118', 'S2', 'Stab', 1, '', 0),
+  ('Migration 118 Sichter', 'si118', 'Si', 'Stab', 1, '', 0),
+  ('Migration 118 LdF', 'ldf118', 'LdF', 'Fernmelder', 1, '', 0),
+  ('Migration 118 A/W', 'aw118', 'A/W', 'Fernmelder', 1, '', 0);
 INSERT INTO nv_einsaetze
   (kennung, name, beginn, ende, ort, organisation, fuehrungsstellenname,
    einsatzleitung, beschreibung, metadaten, erstellt_am, erstellt_von)
@@ -618,6 +631,66 @@ UPDATE nv_einsatz_status
        geaendert_am = NOW(6),
        geaendert_von = 'schema-migrator-test'
  WHERE singleton_id = 1;
+"
+if database_query "$fresh_database" "
+INSERT INTO nv_fernmeldeplaene
+  (einsatz_id, version, einsatzbezeichnung, herkunft, gueltig_ab,
+   gueltig_bis, betriebsleitung, bemerkungen, erstellt_von)
+VALUES
+  ((SELECT einsatz_id FROM nv_einsaetze
+     WHERE kennung = 'SCHEMA-TELECOM-DISCARD'),
+   99, 'Rejected strict plan without assignment',
+   'Schema migration integration', NOW(), NULL, 'No S6 assignment',
+   'Must not be stored', 's6117')" >"$failure_log" 2>&1; then
+    echo "schema migrator test: strict telecommunications plan accepted an account without an active S6 assignment" >&2
+    exit 1
+fi
+if ! grep -q 'Telecommunications plan creator account is invalid' \
+    "$failure_log"; then
+    echo "schema migrator test: strict telecommunications assignment failure was not explicit" >&2
+    sed -n '1,120p' "$failure_log" >&2
+    exit 1
+fi
+database_query "$fresh_database" "
+SET @discard_incident_id = (
+  SELECT einsatz_id FROM nv_einsaetze
+   WHERE kennung = 'SCHEMA-TELECOM-DISCARD'
+);
+INSERT INTO nv_dienstschichten
+  (einsatz_id, nummer, bezeichnung, status, erstellt_von)
+SELECT einsatz_id, 1, 'Migration 118 strict authority', 'GEPLANT',
+       'schema-migrator-test'
+  FROM nv_einsaetze WHERE kennung = 'SCHEMA-TELECOM-DISCARD';
+SET @authority_shift_id = LAST_INSERT_ID();
+INSERT INTO nv_dienstbesetzungen
+  (dienstschicht_id, benutzer_kuerzel, funktion, rolle, status,
+   zugewiesen_von)
+VALUES
+  (@authority_shift_id, 's6117', 'S6', 'Stab', 'ZUGEWIESEN',
+   'schema-migrator-test'),
+  (@authority_shift_id, 's2118', 'S2', 'Stab', 'ZUGEWIESEN',
+   'schema-migrator-test'),
+  (@authority_shift_id, 'si118', 'Si', 'Stab', 'ZUGEWIESEN',
+   'schema-migrator-test'),
+  (@authority_shift_id, 'ldf118', 'LdF', 'Fernmelder', 'ZUGEWIESEN',
+   'schema-migrator-test'),
+  (@authority_shift_id, 'aw118', 'A/W', 'Fernmelder', 'ZUGEWIESEN',
+   'schema-migrator-test');
+UPDATE nv_dienstbesetzungen
+   SET status = 'ANGENOMMEN', angenommen_am = NOW(6)
+ WHERE dienstschicht_id = @authority_shift_id;
+UPDATE nv_dienstschichten
+   SET status = 'AKTIV', aktiviert_am = NOW(6)
+ WHERE dienstschicht_id = @authority_shift_id;
+SET @authority_s6_assignment_id = (
+  SELECT dienstbesetzung_id FROM nv_dienstbesetzungen
+   WHERE dienstschicht_id = @authority_shift_id
+     AND BINARY benutzer_kuerzel = BINARY 's6117'
+     AND BINARY funktion = BINARY 'S6'
+     AND BINARY rolle = BINARY 'Stab'
+);
+SET @estab_dv_actor_assignment_id = @authority_s6_assignment_id;
+SET @estab_dv_target_assignment_id = NULL;
 INSERT INTO nv_fernmeldeplaene
   (einsatz_id, version, einsatzbezeichnung, herkunft, gueltig_ab,
    gueltig_bis, betriebsleitung, bemerkungen, erstellt_von)
@@ -625,7 +698,49 @@ VALUES
   (@discard_incident_id, 1, 'Migration 117 telecom discard',
    'Schema migration integration', '2026-01-02 03:04:05',
    '2026-01-03 03:04:05', 'S6 migration fixture',
-   'Immutable draft evidence', 's6117')"
+   'Immutable draft evidence', 's6117');
+SET @estab_dv_actor_assignment_id = NULL;
+SET @estab_dv_target_assignment_id = NULL"
+
+if database_query "$fresh_database" "
+SET @estab_dv_actor_assignment_id = (
+  SELECT assignment.dienstbesetzung_id
+    FROM nv_dienstbesetzungen AS assignment
+    JOIN nv_dienstschichten AS duty_shift
+      ON duty_shift.dienstschicht_id = assignment.dienstschicht_id
+   WHERE duty_shift.einsatz_id = (
+     SELECT einsatz_id FROM nv_einsaetze
+      WHERE kennung = 'SCHEMA-TELECOM-DISCARD'
+   )
+     AND BINARY assignment.benutzer_kuerzel = BINARY 's2118'
+     AND BINARY assignment.funktion = BINARY 'S2'
+     AND BINARY assignment.rolle = BINARY 'Stab'
+);
+SET @estab_dv_target_assignment_id = NULL;
+INSERT INTO nv_fernmeldeplaene
+  (einsatz_id, version, einsatzbezeichnung, herkunft, gueltig_ab,
+   gueltig_bis, betriebsleitung, bemerkungen, erstellt_von)
+SELECT einsatz_id, 98, 'Rejected mismatched strict assignment',
+       'Schema migration integration', NOW(), NULL,
+       'S6 actor with S2 marker', 'Must not be stored', 's6117'
+  FROM nv_einsaetze
+ WHERE kennung = 'SCHEMA-TELECOM-DISCARD'" >"$failure_log" 2>&1; then
+    echo "schema migrator test: strict plan accepted a mismatched assignment marker" >&2
+    exit 1
+fi
+if ! grep -q 'Telecommunications plan creator account is invalid' \
+    "$failure_log"; then
+    echo "schema migrator test: mismatched assignment marker failure was not explicit" >&2
+    sed -n '1,120p' "$failure_log" >&2
+    exit 1
+fi
+assert_equal "0" "$(database_query "$fresh_database" "
+SELECT COUNT(*) FROM nv_fernmeldeplaene
+ WHERE einsatz_id = (
+   SELECT einsatz_id FROM nv_einsaetze
+    WHERE kennung = 'SCHEMA-TELECOM-DISCARD'
+ ) AND version = 98")" \
+    "mismatched strict assignment marker persisted plan evidence"
 
 if database_query "$fresh_database" "
 UPDATE nv_fernmeldeplaene
@@ -713,6 +828,20 @@ SELECT CONCAT(
 # an immutable nullable release field to NULL must not bypass SQL three-valued
 # comparison semantics.
 database_query "$fresh_database" "
+SET @estab_dv_actor_assignment_id = (
+  SELECT assignment.dienstbesetzung_id
+    FROM nv_dienstbesetzungen AS assignment
+    JOIN nv_dienstschichten AS duty_shift
+      ON duty_shift.dienstschicht_id = assignment.dienstschicht_id
+   WHERE duty_shift.einsatz_id = (
+     SELECT einsatz_id FROM nv_einsaetze
+      WHERE kennung = 'SCHEMA-TELECOM-DISCARD'
+   )
+     AND BINARY assignment.benutzer_kuerzel = BINARY 's6117'
+     AND BINARY assignment.funktion = BINARY 'S6'
+     AND BINARY assignment.rolle = BINARY 'Stab'
+);
+SET @estab_dv_target_assignment_id = NULL;
 INSERT INTO nv_fernmeldeplaene
   (einsatz_id, version, einsatzbezeichnung, herkunft, gueltig_ab,
    gueltig_bis, betriebsleitung, bemerkungen, erstellt_von)
@@ -724,6 +853,8 @@ VALUES
    DATE_ADD(NOW(), INTERVAL 2 HOUR), 'S6 migration fixture',
    'ABC', 's6117');
 SET @release_plan_id = LAST_INSERT_ID();
+SET @estab_dv_actor_assignment_id = NULL;
+SET @estab_dv_target_assignment_id = NULL;
 INSERT INTO nv_fernmeldeplan_eintraege
   (fernmeldeplan_id, sortierung, betriebsstelle, rufname, medium,
    kanal, bandlage, verkehrsform, besondere_vermerke, bemerkungen)
@@ -731,6 +862,20 @@ VALUES
   (@release_plan_id, 1, 'Migration test station', 'Schema 117', 'Fu',
    'TMO 117', 'G/U', 'Gegenverkehr', '', '')"
 if database_query "$fresh_database" "
+SET @estab_dv_actor_assignment_id = (
+  SELECT assignment.dienstbesetzung_id
+    FROM nv_dienstbesetzungen AS assignment
+    JOIN nv_dienstschichten AS duty_shift
+      ON duty_shift.dienstschicht_id = assignment.dienstschicht_id
+   WHERE duty_shift.einsatz_id = (
+     SELECT einsatz_id FROM nv_einsaetze
+      WHERE kennung = 'SCHEMA-TELECOM-DISCARD'
+   )
+     AND BINARY assignment.benutzer_kuerzel = BINARY 's6117'
+     AND BINARY assignment.funktion = BINARY 'S6'
+     AND BINARY assignment.rolle = BINARY 'Stab'
+);
+SET @estab_dv_target_assignment_id = NULL;
 UPDATE nv_fernmeldeplaene
    SET status = 'AKTIV', freigegeben_am = NOW(6),
        freigegeben_von = 's6117'
@@ -761,13 +906,29 @@ UPDATE nv_fernmeldeplaene
    SELECT einsatz_id FROM nv_einsaetze
     WHERE kennung = 'SCHEMA-TELECOM-DISCARD'
  ) AND version = 2;
+SET @estab_dv_actor_assignment_id = (
+  SELECT assignment.dienstbesetzung_id
+    FROM nv_dienstbesetzungen AS assignment
+    JOIN nv_dienstschichten AS duty_shift
+      ON duty_shift.dienstschicht_id = assignment.dienstschicht_id
+   WHERE duty_shift.einsatz_id = (
+     SELECT einsatz_id FROM nv_einsaetze
+      WHERE kennung = 'SCHEMA-TELECOM-DISCARD'
+   )
+     AND BINARY assignment.benutzer_kuerzel = BINARY 's6117'
+     AND BINARY assignment.funktion = BINARY 'S6'
+     AND BINARY assignment.rolle = BINARY 'Stab'
+);
+SET @estab_dv_target_assignment_id = NULL;
 UPDATE nv_fernmeldeplaene
    SET status = 'AKTIV', freigegeben_am = NOW(6),
        freigegeben_von = 's6117'
  WHERE einsatz_id = (
    SELECT einsatz_id FROM nv_einsaetze
     WHERE kennung = 'SCHEMA-TELECOM-DISCARD'
- ) AND version = 2"
+ ) AND version = 2;
+SET @estab_dv_actor_assignment_id = NULL;
+SET @estab_dv_target_assignment_id = NULL"
 if database_query "$fresh_database" "
 UPDATE nv_fernmeldeplaene
    SET status = 'ERSETZT', freigegeben_von = NULL
@@ -834,6 +995,20 @@ UPDATE nv_fernmeldeplaene
     WHERE kennung = 'SCHEMA-TELECOM-DISCARD'
  ) AND version = 2;
 SET @end_second = DATE_ADD(CURRENT_TIMESTAMP, INTERVAL 2 SECOND);
+SET @estab_dv_actor_assignment_id = (
+  SELECT assignment.dienstbesetzung_id
+    FROM nv_dienstbesetzungen AS assignment
+    JOIN nv_dienstschichten AS duty_shift
+      ON duty_shift.dienstschicht_id = assignment.dienstschicht_id
+   WHERE duty_shift.einsatz_id = (
+     SELECT einsatz_id FROM nv_einsaetze
+      WHERE kennung = 'SCHEMA-TELECOM-DISCARD'
+   )
+     AND BINARY assignment.benutzer_kuerzel = BINARY 's6117'
+     AND BINARY assignment.funktion = BINARY 'S6'
+     AND BINARY assignment.rolle = BINARY 'Stab'
+);
+SET @estab_dv_target_assignment_id = NULL;
 INSERT INTO nv_fernmeldeplaene
   (einsatz_id, version, einsatzbezeichnung, herkunft, gueltig_ab,
    gueltig_bis, betriebsleitung, bemerkungen, erstellt_von)
@@ -845,6 +1020,8 @@ VALUES
    @end_second, 'S6 migration fixture',
    'DATETIME(0) inclusive end-second evidence', 's6117');
 SET @end_second_plan_id = LAST_INSERT_ID();
+SET @estab_dv_actor_assignment_id = NULL;
+SET @estab_dv_target_assignment_id = NULL;
 INSERT INTO nv_fernmeldeplan_eintraege
   (fernmeldeplan_id, sortierung, betriebsstelle, rufname, medium,
    kanal, bandlage, verkehrsform, besondere_vermerke, bemerkungen)
@@ -860,10 +1037,26 @@ SET @wait_for_end_second = GREATEST(
   ) / 1000000 + 0.1
 );
 DO SLEEP(@wait_for_end_second);
+SET @estab_dv_actor_assignment_id = (
+  SELECT assignment.dienstbesetzung_id
+    FROM nv_dienstbesetzungen AS assignment
+    JOIN nv_dienstschichten AS duty_shift
+      ON duty_shift.dienstschicht_id = assignment.dienstschicht_id
+   WHERE duty_shift.einsatz_id = (
+     SELECT einsatz_id FROM nv_einsaetze
+      WHERE kennung = 'SCHEMA-TELECOM-DISCARD'
+   )
+     AND BINARY assignment.benutzer_kuerzel = BINARY 's6117'
+     AND BINARY assignment.funktion = BINARY 'S6'
+     AND BINARY assignment.rolle = BINARY 'Stab'
+);
+SET @estab_dv_target_assignment_id = NULL;
 UPDATE nv_fernmeldeplaene
    SET status = 'AKTIV', freigegeben_am = CURRENT_TIMESTAMP(6),
        freigegeben_von = 's6117'
  WHERE fernmeldeplan_id = @end_second_plan_id;
+SET @estab_dv_actor_assignment_id = NULL;
+SET @estab_dv_target_assignment_id = NULL;
 UPDATE nv_fernmeldeplaene
    SET status = 'ERSETZT'
  WHERE fernmeldeplan_id = @end_second_plan_id"
@@ -882,6 +1075,227 @@ SELECT CONCAT(
  ) AND version = 3"
 )" \
     "exact stored telecommunications end second was rejected"
+
+# LOOSE remains independent from duty shifts but is never role-free. A
+# primary tuple or explicit additional function is required at both creation
+# and release, and the persisted actor remains the real account code.
+database_query "$fresh_database" "
+INSERT INTO nv_benutzer
+  (benutzer, kuerzel, funktion, rolle, aktiv, password, estab_gesperrt)
+VALUES
+  ('Migration 118 LdF grant', 'ld118', 'LdF', 'Fernmelder', 1, '', 0),
+  ('Migration 118 primary S6', 'sp118', 'S6', 'Stab', 1, '', 0),
+  ('Migration 118 unrelated', 's3118', 'S3', 'Stab', 1, '', 0);
+INSERT INTO nv_benutzer_zusatzfunktionen
+  (benutzer_kuerzel, funktion, rolle, vergeben_von)
+VALUES ('ld118', 'S6', 'Stab', 'schema-migrator-test');
+SET @authority_incident_id = (
+  SELECT einsatz_id FROM nv_einsaetze
+   WHERE kennung = 'SCHEMA-TELECOM-DISCARD'
+);
+SET @estab_permission_mode_admin_write_id = @authority_incident_id;
+UPDATE nv_einsaetze SET estab_permission_mode = 'LOOSE'
+ WHERE einsatz_id = @authority_incident_id;
+SET @estab_permission_mode_admin_write_id = NULL;
+INSERT INTO nv_zugangsschichten
+  (einsatz_id, bezeichnung, zugang_aktiv, erstellt_von, geaendert_von)
+VALUES
+  (@authority_incident_id, 'Migration 118 disabled access', 0,
+   'schema-migrator-test', 'schema-migrator-test');
+SET @authority_access_shift_id = LAST_INSERT_ID();
+INSERT INTO nv_zugangsschicht_mitglieder
+  (zugangsschicht_id, benutzer_kuerzel, zugeordnet_von)
+VALUES
+  (@authority_access_shift_id, 'ld118', 'schema-migrator-test')"
+if database_query "$fresh_database" "
+INSERT INTO nv_fernmeldeplaene
+  (einsatz_id, version, einsatzbezeichnung, herkunft, gueltig_ab,
+   gueltig_bis, betriebsleitung, bemerkungen, erstellt_von)
+SELECT einsatz_id, 4, 'Rejected unrelated loose plan',
+       'Schema migration integration', NOW(), NULL, 'Unrelated account',
+       'Must not be stored', 's3118'
+  FROM nv_einsaetze
+ WHERE kennung = 'SCHEMA-TELECOM-DISCARD'" >"$failure_log" 2>&1; then
+    echo "schema migrator test: loose telecommunications plan accepted an unrelated account" >&2
+    exit 1
+fi
+if ! grep -q 'Telecommunications plan creator account is invalid' \
+    "$failure_log"; then
+    echo "schema migrator test: loose telecommunications role failure was not explicit" >&2
+    sed -n '1,120p' "$failure_log" >&2
+    exit 1
+fi
+if database_query "$fresh_database" "
+INSERT INTO nv_fernmeldeplaene
+  (einsatz_id, version, einsatzbezeichnung, herkunft, gueltig_ab,
+   gueltig_bis, betriebsleitung, bemerkungen, erstellt_von)
+SELECT einsatz_id, 4, 'Rejected disabled loose access',
+       'Schema migration integration', NOW(), NULL, 'Disabled access group',
+       'Must not be stored', 'ld118'
+  FROM nv_einsaetze
+ WHERE kennung = 'SCHEMA-TELECOM-DISCARD'" >"$failure_log" 2>&1; then
+    echo "schema migrator test: disabled loose access shift permitted a direct operational write" >&2
+    exit 1
+fi
+if ! grep -q 'Plan creator access shift is inactive' "$failure_log"; then
+    echo "schema migrator test: disabled loose access shift failure was not explicit" >&2
+    sed -n '1,120p' "$failure_log" >&2
+    exit 1
+fi
+assert_equal "0" "$(database_query "$fresh_database" "
+SELECT COUNT(*) FROM nv_fernmeldeplaene
+ WHERE einsatz_id = (
+   SELECT einsatz_id FROM nv_einsaetze
+    WHERE kennung = 'SCHEMA-TELECOM-DISCARD'
+ ) AND version = 4")" \
+    "disabled loose access shift persisted operational evidence"
+database_query "$fresh_database" "
+UPDATE nv_zugangsschichten
+   SET zugang_aktiv = 1, geaendert_am = NOW(6),
+       geaendert_von = 'schema-migrator-test'
+ WHERE einsatz_id = (
+   SELECT einsatz_id FROM nv_einsaetze
+    WHERE kennung = 'SCHEMA-TELECOM-DISCARD'
+ ) AND bezeichnung = 'Migration 118 disabled access'"
+if ! database_query "$fresh_database" "
+INSERT INTO nv_fernmeldeplaene
+  (einsatz_id, version, einsatzbezeichnung, herkunft, gueltig_ab,
+   gueltig_bis, betriebsleitung, bemerkungen, erstellt_von)
+SELECT einsatz_id, 4, 'Loose plan through additional function',
+       'Schema migration integration', DATE_SUB(NOW(), INTERVAL 1 HOUR),
+       DATE_ADD(NOW(), INTERVAL 1 HOUR), 'LdF with S6 grant',
+       'Actual account identity is retained', 'ld118'
+  FROM nv_einsaetze
+ WHERE kennung = 'SCHEMA-TELECOM-DISCARD';
+SET @loose_grant_plan_id = LAST_INSERT_ID();
+INSERT INTO nv_fernmeldeplan_eintraege
+  (fernmeldeplan_id, sortierung, betriebsstelle, rufname, medium,
+   kanal, bandlage, verkehrsform, besondere_vermerke, bemerkungen)
+VALUES
+  (@loose_grant_plan_id, 1, 'Additional function station', 'Schema 118',
+   'Fu', 'TMO 118', 'G/U', 'Gegenverkehr', '', '');
+UPDATE nv_fernmeldeplaene
+   SET status = 'AKTIV', freigegeben_am = NOW(6),
+       freigegeben_von = 'ld118'
+ WHERE fernmeldeplan_id = @loose_grant_plan_id" >"$failure_log" 2>&1; then
+    echo "schema migrator test: loose telecommunications plan rejected an explicit S6 additional function" >&2
+    sed -n '1,120p' "$failure_log" >&2
+    exit 1
+fi
+assert_equal "AKTIV|ld118|ld118|S6|Stab|1" "$(
+    database_query "$fresh_database" "
+SELECT CONCAT(
+         plan.status, '|', plan.erstellt_von, '|', plan.freigegeben_von,
+         '|', extra.funktion, '|', extra.rolle, '|',
+         extra.vergeben_am = CAST(extra.vergeben_am AS DATETIME(6))
+       )
+  FROM nv_fernmeldeplaene AS plan
+  JOIN nv_benutzer_zusatzfunktionen AS extra
+    ON BINARY extra.benutzer_kuerzel = BINARY plan.erstellt_von
+   AND BINARY extra.funktion = BINARY 'S6'
+ WHERE plan.einsatz_id = (
+   SELECT einsatz_id FROM nv_einsaetze
+    WHERE kennung = 'SCHEMA-TELECOM-DISCARD'
+ ) AND plan.version = 4"
+)" \
+    "loose telecommunications additional-function evidence is incomplete"
+
+database_query "$fresh_database" "
+INSERT INTO nv_fernmeldeplaene
+  (einsatz_id, version, einsatzbezeichnung, herkunft, gueltig_ab,
+   gueltig_bis, betriebsleitung, bemerkungen, erstellt_von)
+SELECT einsatz_id, 5, 'Loose plan through primary function',
+       'Schema migration integration', NOW(), NULL, 'Primary S6 account',
+       'Canonical primary identity is retained', 'sp118'
+  FROM nv_einsaetze
+ WHERE kennung = 'SCHEMA-TELECOM-DISCARD';
+SET @loose_primary_plan_id = LAST_INSERT_ID();
+UPDATE nv_fernmeldeplaene SET status = 'ERSETZT'
+ WHERE fernmeldeplan_id = @loose_primary_plan_id"
+assert_equal "ERSETZT|sp118" "$(
+    database_query "$fresh_database" "
+SELECT CONCAT(status, '|', erstellt_von)
+  FROM nv_fernmeldeplaene
+ WHERE einsatz_id = (
+   SELECT einsatz_id FROM nv_einsaetze
+    WHERE kennung = 'SCHEMA-TELECOM-DISCARD'
+ ) AND version = 5"
+)" \
+    "loose telecommunications primary-function evidence is incomplete"
+
+# Neither a primary tuple nor a raw grant is authority by itself. If the
+# capability catalogue and active matrix disagree about a role, both paths
+# must fail closed instead of accepting whichever source happens to match.
+database_query "$fresh_database" "
+UPDATE nv_funktionsfaehigkeiten SET rolle = 'FB'
+ WHERE BINARY funktion = BINARY 'S6'"
+if database_query "$fresh_database" "
+INSERT INTO nv_fernmeldeplaene
+  (einsatz_id, version, einsatzbezeichnung, herkunft, gueltig_ab,
+   gueltig_bis, betriebsleitung, bemerkungen, erstellt_von)
+SELECT einsatz_id, 6, 'Rejected conflicting loose primary',
+       'Schema migration integration', NOW(), NULL, 'Conflicting primary S6',
+       'Must not be stored', 'sp118'
+  FROM nv_einsaetze
+ WHERE kennung = 'SCHEMA-TELECOM-DISCARD'" >"$failure_log" 2>&1; then
+    database_query "$fresh_database" "
+UPDATE nv_funktionsfaehigkeiten SET rolle = 'Stab'
+ WHERE BINARY funktion = BINARY 'S6'"
+    echo "schema migrator test: conflicting catalogue role authorised a loose primary function" >&2
+    exit 1
+fi
+if ! grep -q 'Telecommunications plan creator account is invalid' \
+    "$failure_log"; then
+    database_query "$fresh_database" "
+UPDATE nv_funktionsfaehigkeiten SET rolle = 'Stab'
+ WHERE BINARY funktion = BINARY 'S6'"
+    echo "schema migrator test: conflicting loose primary failure was not explicit" >&2
+    sed -n '1,120p' "$failure_log" >&2
+    exit 1
+fi
+if database_query "$fresh_database" "
+INSERT INTO nv_fernmeldeplaene
+  (einsatz_id, version, einsatzbezeichnung, herkunft, gueltig_ab,
+   gueltig_bis, betriebsleitung, bemerkungen, erstellt_von)
+SELECT einsatz_id, 6, 'Rejected conflicting loose grant',
+       'Schema migration integration', NOW(), NULL, 'Conflicting S6 grant',
+       'Must not be stored', 'ld118'
+  FROM nv_einsaetze
+ WHERE kennung = 'SCHEMA-TELECOM-DISCARD'" >"$failure_log" 2>&1; then
+    database_query "$fresh_database" "
+UPDATE nv_funktionsfaehigkeiten SET rolle = 'Stab'
+ WHERE BINARY funktion = BINARY 'S6'"
+    echo "schema migrator test: conflicting catalogue role authorised a raw loose grant" >&2
+    exit 1
+fi
+if ! grep -q 'Telecommunications plan creator account is invalid' \
+    "$failure_log"; then
+    database_query "$fresh_database" "
+UPDATE nv_funktionsfaehigkeiten SET rolle = 'Stab'
+ WHERE BINARY funktion = BINARY 'S6'"
+    echo "schema migrator test: conflicting loose grant failure was not explicit" >&2
+    sed -n '1,120p' "$failure_log" >&2
+    exit 1
+fi
+assert_equal "0" "$(database_query "$fresh_database" "
+SELECT COUNT(*) FROM nv_fernmeldeplaene
+ WHERE einsatz_id = (
+   SELECT einsatz_id FROM nv_einsaetze
+    WHERE kennung = 'SCHEMA-TELECOM-DISCARD'
+ ) AND version = 6")" \
+    "conflicting loose primary/grant persisted telecommunications evidence"
+database_query "$fresh_database" "
+UPDATE nv_funktionsfaehigkeiten SET rolle = 'Stab'
+ WHERE BINARY funktion = BINARY 'S6'"
+
+database_query "$fresh_database" "
+SET @estab_permission_mode_admin_write_id = (
+  SELECT einsatz_id FROM nv_einsaetze
+   WHERE kennung = 'SCHEMA-TELECOM-DISCARD'
+);
+UPDATE nv_einsaetze SET estab_permission_mode = 'STRICT'
+ WHERE einsatz_id = @estab_permission_mode_admin_write_id;
+SET @estab_permission_mode_admin_write_id = NULL"
 
 assert_equal "2|1|1|1|DISABLED|1|1|fresh-install" "$(
     database_query "$fresh_database" "
@@ -1822,7 +2236,7 @@ finish_checksum=$(
         awk '{print $1}'
 )
 assert_equal \
-    "23|23|$prepare_checksum|$incident_predecessor_checksum|$finish_checksum" \
+    "24|24|$prepare_checksum|$incident_predecessor_checksum|$finish_checksum" \
     "$(database_query "$predecessor_database" "
 SELECT CONCAT(
          COUNT(*), '|',
@@ -2062,7 +2476,7 @@ SELECT CONCAT(
        )")" \
     "second upgrade run changed existing global categories or links"
 
-assert_equal "23" "$(fixture_query "
+assert_equal "24" "$(fixture_query "
 SELECT COUNT(*) FROM estab_schema_migrations
  WHERE state = 'applied'
    AND checksum REGEXP BINARY '^[0-9a-f]{64}$'")" \
@@ -2085,6 +2499,196 @@ SELECT COUNT(*) FROM estab_schema_migrations
    AND state = 'applied'
    AND checksum REGEXP BINARY '^[0-9a-f]{64}$'")" \
     "telecommunications draft-discard migration was not recorded"
+assert_equal "1" "$(fixture_query "
+SELECT COUNT(*) FROM estab_schema_migrations
+ WHERE version = '118-operational-authority.sql'
+   AND state = 'applied'
+   AND checksum REGEXP BINARY '^[0-9a-f]{64}$'")" \
+    "operational-authority migration was not recorded"
+assert_equal "1|5|4|2|1|0|6|0" "$(fixture_query "
+SELECT CONCAT(
+         (SELECT COUNT(*) FROM information_schema.tables
+           WHERE table_schema = DATABASE()
+             AND table_name = 'nv_benutzer_zusatzfunktionen'
+             AND table_type = 'BASE TABLE'
+             AND engine = 'InnoDB'
+             AND table_collation = 'utf8mb4_unicode_ci'
+             AND table_comment =
+               'estab:migration:118:additional-user-functions:v1'), '|',
+         (SELECT COUNT(*) FROM information_schema.columns
+           WHERE table_schema = DATABASE()
+             AND table_name = 'nv_benutzer_zusatzfunktionen'), '|',
+         (SELECT COUNT(*) FROM information_schema.statistics
+           WHERE table_schema = DATABASE()
+             AND table_name = 'nv_benutzer_zusatzfunktionen'), '|',
+         (SELECT COUNT(*) FROM information_schema.table_constraints
+           WHERE constraint_schema = DATABASE()
+             AND table_name = 'nv_benutzer_zusatzfunktionen'), '|',
+         (SELECT COUNT(*) FROM information_schema.referential_constraints
+           WHERE constraint_schema = DATABASE()
+             AND table_name = 'nv_benutzer_zusatzfunktionen'
+             AND constraint_name =
+               'fk_benutzer_zusatzfunktion_benutzer'
+             AND referenced_table_name = 'nv_benutzer'
+             AND update_rule = 'RESTRICT'
+             AND delete_rule = 'CASCADE'), '|',
+         (SELECT COUNT(*) FROM nv_benutzer_zusatzfunktionen), '|',
+         (SELECT COUNT(*) FROM information_schema.triggers
+           WHERE trigger_schema = DATABASE()
+             AND trigger_name IN (
+               'estab_etb_bi_einsatz', 'estab_tbb_bi_einsatz',
+               'estab_dv94_fernmeldeplan_insert',
+               'estab_dv94_fernmeldeplan_immutable',
+               'estab_dv94_messenger_insert',
+               'estab_dv94_messenger_update'
+             )
+             AND action_statement LIKE
+               '%nv_benutzer_zusatzfunktionen%'), '|',
+         (SELECT COUNT(*) FROM information_schema.routines
+           WHERE routine_schema = DATABASE()
+             AND routine_name LIKE 'estab_migrate_118_%')
+       )")" \
+    "operational-authority grant table was not migrated canonically"
+
+# Migration 118 uses its canonical grant table as a durable phase marker. A
+# process loss after DROP TRIGGER must converge; a present foreign same-name
+# trigger must remain untouched and unacknowledged.
+fixture_query "
+DELETE FROM estab_schema_migrations
+ WHERE version = '118-operational-authority.sql';
+DROP TRIGGER estab_dv94_fernmeldeplan_insert"
+ESTAB_DB_NAME="$test_database" "$ESTAB_MIGRATOR_BIN"
+ESTAB_DB_NAME="$test_database" "$ESTAB_MIGRATOR_BIN"
+assert_equal "1|1|6" "$(fixture_query "
+SELECT CONCAT(
+         (SELECT COUNT(*) FROM estab_schema_migrations
+           WHERE version = '118-operational-authority.sql'
+             AND state = 'applied'
+             AND checksum REGEXP BINARY '^[0-9a-f]{64}$'), '|',
+         (SELECT COUNT(*) FROM information_schema.tables
+           WHERE table_schema = DATABASE()
+             AND table_name = 'nv_benutzer_zusatzfunktionen'
+             AND table_comment =
+               'estab:migration:118:additional-user-functions:v1'), '|',
+         (SELECT COUNT(*) FROM information_schema.triggers
+           WHERE trigger_schema = DATABASE()
+             AND trigger_name IN (
+               'estab_etb_bi_einsatz', 'estab_tbb_bi_einsatz',
+               'estab_dv94_fernmeldeplan_insert',
+               'estab_dv94_fernmeldeplan_immutable',
+               'estab_dv94_messenger_insert',
+               'estab_dv94_messenger_update'
+             )
+             AND action_statement LIKE
+               '%nv_benutzer_zusatzfunktionen%')
+       )")" \
+    "partial operational-authority trigger phase did not resume canonically"
+
+fixture_query "
+DELETE FROM estab_schema_migrations
+ WHERE version = '118-operational-authority.sql';
+DROP TRIGGER estab_dv94_messenger_insert;
+CREATE TRIGGER estab_dv94_messenger_insert
+BEFORE INSERT ON nv_melderauftraege FOR EACH ROW
+SET @estab_foreign_operational_authority_trigger = 1"
+if ESTAB_DB_NAME="$test_database" \
+    "$ESTAB_MIGRATOR_BIN" >"$failure_log" 2>&1; then
+    echo "schema migrator test: foreign operational-authority trigger was accepted" >&2
+    exit 1
+fi
+if ! grep -q \
+    'Operational-authority migration blocked: role trigger collision' \
+    "$failure_log"; then
+    echo "schema migrator test: operational-authority collision failure was not explicit" >&2
+    sed -n '1,120p' "$failure_log" >&2
+    exit 1
+fi
+assert_equal "1|0" "$(fixture_query "
+SELECT CONCAT(
+         (SELECT COUNT(*) FROM information_schema.triggers
+           WHERE trigger_schema = DATABASE()
+             AND trigger_name = 'estab_dv94_messenger_insert'
+             AND action_statement LIKE
+               '%estab_foreign_operational_authority_trigger%'), '|',
+         (SELECT COUNT(*) FROM estab_schema_migrations
+           WHERE version = '118-operational-authority.sql')
+       )")" \
+    "blocked operational-authority trigger collision was changed or recorded"
+fixture_query "DROP TRIGGER estab_dv94_messenger_insert"
+ESTAB_DB_NAME="$test_database" "$ESTAB_MIGRATOR_BIN"
+ESTAB_DB_NAME="$test_database" "$ESTAB_MIGRATOR_BIN"
+assert_equal "1|1" "$(fixture_query "
+SELECT CONCAT(
+         (SELECT COUNT(*) FROM estab_schema_migrations
+           WHERE version = '118-operational-authority.sql'
+             AND state = 'applied'), '|',
+         (SELECT COUNT(*) FROM information_schema.triggers
+           WHERE trigger_schema = DATABASE()
+             AND trigger_name = 'estab_dv94_messenger_insert'
+             AND action_statement LIKE '%messenger_assignment%'
+             AND action_statement LIKE '%messenger_extra%')
+       )")" \
+    "operational-authority trigger did not recover after collision removal"
+
+# All migration-118 helper names are ownership-checked before the first DROP.
+# An interrupted, correctly marked helper may be cleaned up on retry; a
+# foreign helper beside it must abort the migration without changing either.
+fixture_query "
+DELETE FROM estab_schema_migrations
+ WHERE version = '118-operational-authority.sql';
+CREATE PROCEDURE estab_migrate_118_preflight()
+READS SQL DATA
+SQL SECURITY INVOKER
+COMMENT 'estab:migration:118:helper:preflight:v1'
+SIGNAL SQLSTATE '45000'
+  SET MESSAGE_TEXT =
+    'Operational-authority migration blocked: retained owned helper';
+CREATE PROCEDURE estab_migrate_118_validate_table()
+COMMENT 'foreign-operational-authority-helper'
+SELECT 1"
+if ESTAB_DB_NAME="$test_database" \
+    "$ESTAB_MIGRATOR_BIN" >"$failure_log" 2>&1; then
+    echo "schema migrator test: foreign operational-authority helper was accepted" >&2
+    exit 1
+fi
+if ! grep -q \
+    'Operational-authority migration blocked: foreign helper routine collision' \
+    "$failure_log"; then
+    echo "schema migrator test: helper routine collision was not explicit" >&2
+    sed -n '1,120p' "$failure_log" >&2
+    exit 1
+fi
+assert_equal \
+    "estab:migration:118:helper:preflight:v1|foreign-operational-authority-helper|0" \
+    "$(fixture_query "
+SELECT CONCAT(
+         (SELECT routine_comment
+            FROM information_schema.routines
+           WHERE routine_schema = DATABASE()
+             AND routine_name = 'estab_migrate_118_preflight'), '|',
+         (SELECT routine_comment
+            FROM information_schema.routines
+           WHERE routine_schema = DATABASE()
+             AND routine_name = 'estab_migrate_118_validate_table'), '|',
+         (SELECT COUNT(*) FROM estab_schema_migrations
+           WHERE version = '118-operational-authority.sql')
+       )")" \
+    "blocked operational-authority helper routines were changed or recorded"
+fixture_query "
+DROP PROCEDURE estab_migrate_118_preflight;
+DROP PROCEDURE estab_migrate_118_validate_table"
+ESTAB_DB_NAME="$test_database" "$ESTAB_MIGRATOR_BIN"
+ESTAB_DB_NAME="$test_database" "$ESTAB_MIGRATOR_BIN"
+assert_equal "1|0" "$(fixture_query "
+SELECT CONCAT(
+         (SELECT COUNT(*) FROM estab_schema_migrations
+           WHERE version = '118-operational-authority.sql'
+             AND state = 'applied'), '|',
+         (SELECT COUNT(*) FROM information_schema.routines
+           WHERE routine_schema = DATABASE()
+             AND routine_name LIKE 'estab_migrate_118_%')
+       )")" \
+    "operational-authority helper collision did not recover cleanly"
 assert_equal "1|1|1|1|1|1|1|1|1|1|1|1|1|1|1|11" "$(fixture_query "
 SELECT CONCAT(
          (SELECT COUNT(*) FROM estab_schema_migrations
@@ -2891,7 +3495,7 @@ SELECT CONCAT(
     "password-policy migration did not recover after removing the collision"
 
 # Migration 114 must only ever replace its own missing ledger acknowledgement.
-# Snapshot every field of the existing twenty-two records so retries and rejected
+# Snapshot every field of the existing twenty-three records so retries and rejected
 # collisions prove that the released history remains byte-for-byte unchanged.
 pre_114_ledger_snapshot="$(fixture_query "
 SELECT GROUP_CONCAT(
@@ -2908,7 +3512,7 @@ SELECT GROUP_CONCAT(
        )
   FROM estab_schema_migrations
  WHERE version <> '114-self-registration-policy.sql'")"
-assert_equal "22|22" "$(fixture_query "
+assert_equal "23|23" "$(fixture_query "
 SELECT CONCAT(
          COUNT(*), '|',
          SUM(state = 'applied' AND checksum REGEXP BINARY '^[0-9a-f]{64}$')
@@ -3062,7 +3666,7 @@ SELECT GROUP_CONCAT(
        )
   FROM estab_schema_migrations
  WHERE version <> '114-self-registration-policy.sql'")" \
-    "migration 114 rewrote one of the existing twenty-two ledger rows"
+    "migration 114 rewrote one of the existing twenty-three ledger rows"
 
 fixture_query "
 ALTER TABLE nv_selbstregistrierung
@@ -3169,7 +3773,7 @@ SELECT GROUP_CONCAT(
        )
   FROM estab_schema_migrations
  WHERE version <> '114-self-registration-policy.sql'")" \
-    "migration 114 rewrote one of the existing twenty-two ledger rows"
+    "migration 114 rewrote one of the existing twenty-three ledger rows"
 
 # Reproduce interruption after some autocommitted migration-99 phases. The
 # canonical status/time index remains, the direction/number index is missing,
@@ -3688,6 +4292,50 @@ fixture_query "ALTER TABLE nv_etb
   DROP FOREIGN KEY fk_etb_assignee_assignment"
 ESTAB_DB_NAME="$test_database" "$ESTAB_MIGRATOR_BIN"
 
+# The predecessor-recovery probes above deliberately remove the migration-111
+# and migration-112 ledger rows and therefore finish with their owned trigger
+# definitions.  Migration 117 then owns the draft-discard transition layered
+# onto the plan trigger, and migration 118 owns all six operational authority
+# triggers. Restore both successor layers in order before exercising the
+# runtime authority boundary; otherwise this test would validate migration-112
+# behavior while leaving already-recorded successor rows untouched.
+fixture_query "
+DELETE FROM estab_schema_migrations
+ WHERE version IN (
+   '117-telecom-draft-discard.sql',
+   '118-operational-authority.sql'
+ )"
+ESTAB_DB_NAME="$test_database" "$ESTAB_MIGRATOR_BIN"
+ESTAB_DB_NAME="$test_database" "$ESTAB_MIGRATOR_BIN"
+assert_equal "1|2|6" "$(fixture_query "
+SELECT CONCAT(
+         (SELECT COUNT(*) FROM estab_schema_migrations
+           WHERE version = '118-operational-authority.sql'
+             AND state = 'applied'
+             AND checksum REGEXP BINARY '^[0-9a-f]{64}$'), '|',
+         (SELECT COUNT(*) FROM information_schema.triggers
+           WHERE trigger_schema = DATABASE()
+             AND trigger_name IN (
+               'estab_etb_bi_einsatz', 'estab_tbb_bi_einsatz'
+             )
+             AND action_statement LIKE
+                   '%estab_logbook_system_write_incident_id%'
+             AND action_statement LIKE
+                   '%estab_logbook_system_write_book%'), '|',
+         (SELECT COUNT(*) FROM information_schema.triggers
+           WHERE trigger_schema = DATABASE()
+             AND trigger_name IN (
+               'estab_etb_bi_einsatz', 'estab_tbb_bi_einsatz',
+               'estab_dv94_fernmeldeplan_insert',
+               'estab_dv94_fernmeldeplan_immutable',
+               'estab_dv94_messenger_insert',
+               'estab_dv94_messenger_update'
+             )
+             AND action_statement LIKE
+                   '%nv_benutzer_zusatzfunktionen%')
+       )")" \
+    "predecessor recovery did not restore the final operational-authority layer"
+
 assert_equal "1|1|1|2|4|0" "$(fixture_query "
 SELECT CONCAT(
          (SELECT COUNT(*)
@@ -4104,6 +4752,8 @@ VALUES
   (NOW(), 'Erster ETB-Eintrag', '', 'Legacy User', 'abc123', 'S2',
    NOW(6), 'ohne', @estab_width_shift_id,
    @estab_width_s2_assignment_id);
+SET @estab_logbook_system_write_incident_id = @estab_width_incident_id;
+SET @estab_logbook_system_write_book = 'TTB';
 INSERT INTO nv_tbb
   (tbb_time, tbb_aktion, tbb_bemerk, tbb_benutzer, tbb_kuerzel,
    tbb_funktion, estab_event_time, estab_entry_type, estab_message_id,
@@ -4113,6 +4763,8 @@ VALUES
    NOW(6), 'nachricht', @estab_width_message_id, 'BOS-Kanal 25',
    @estab_width_shift_id);
 SET @estab_first_tbb_id = LAST_INSERT_ID();
+SET @estab_logbook_system_write_incident_id = NULL;
+SET @estab_logbook_system_write_book = NULL;
 
 INSERT INTO nv_einsaetze
   (kennung, name, beginn, ende, ort, organisation, fuehrungsstellenname,
@@ -4169,6 +4821,8 @@ VALUES
   (NOW(), 'Eigenständiger ETB-Eintrag', '', 'Legacy User', 'abc123', 'S2',
    NOW(6), 'A', @estab_second_shift_id,
    @estab_second_s2_assignment_id);
+SET @estab_logbook_system_write_incident_id = @estab_second_incident_id;
+SET @estab_logbook_system_write_book = 'TTB';
 INSERT INTO nv_tbb
   (tbb_time, tbb_aktion, tbb_bemerk, tbb_benutzer, tbb_kuerzel,
    tbb_funktion, estab_event_time, estab_entry_type, estab_message_id,
@@ -4177,6 +4831,8 @@ VALUES
   (NOW(), 'Nachrichtenweg', '', 'eStab-System', 'system', '',
    NOW(6), 'nachricht', @estab_second_message_id, 'über Funk',
    @estab_second_shift_id);
+SET @estab_logbook_system_write_incident_id = NULL;
+SET @estab_logbook_system_write_book = NULL;
 
 UPDATE nv_einsatz_status
    SET active_einsatz_id = @estab_width_incident_id,
@@ -4285,17 +4941,99 @@ SELECT CONCAT(
        )")" \
     "second incident did not start independent ETB/TBB sequences at one"
 
+# Migration 118 restores the pre-efbc STRICT invariant for every logbook row,
+# including protected lifecycle/system writes. A connection marker may prove
+# system origin, but it may never replace the exact duty-shift provenance.
+strict_system_counts_before=$(fixture_query "
+SELECT CONCAT(
+         (SELECT COUNT(*) FROM nv_etb WHERE einsatz_id = (
+           SELECT einsatz_id FROM nv_einsaetze
+            WHERE kennung = 'SCHEMA-WIDTH-TEST')), '|',
+         (SELECT COUNT(*) FROM nv_tbb WHERE einsatz_id = (
+           SELECT einsatz_id FROM nv_einsaetze
+            WHERE kennung = 'SCHEMA-WIDTH-TEST'))
+       )")
+if fixture_query "
+UPDATE nv_einsatz_status
+   SET active_einsatz_id = (SELECT einsatz_id FROM nv_einsaetze
+                             WHERE kennung = 'SCHEMA-WIDTH-TEST'),
+       revision = revision + 1,
+       geaendert_am = NOW(6),
+       geaendert_von = 'strict-system-no-shift-test'
+ WHERE singleton_id = 1;
+SET @estab_logbook_system_write_incident_id = (
+  SELECT active_einsatz_id FROM nv_einsatz_status WHERE singleton_id = 1
+);
+SET @estab_logbook_system_write_book = 'ETB';
+INSERT INTO nv_etb
+  (etb_time, etb_aktion, etb_bemerk, etb_benutzer, etb_kuerzel,
+   etb_funktion, estab_event_time, estab_event_type)
+VALUES
+  (NOW(), 'STRICT-System ohne Schicht', '', 'eStab-System', 'system', '',
+   NOW(6), 'ohne')" >"$failure_log" 2>&1; then
+    echo "schema migrator test: STRICT system ETB without a shift was accepted" >&2
+    exit 1
+fi
+if ! grep -q 'STRICT ETB entry requires duty shift provenance' "$failure_log"; then
+    echo "schema migrator test: STRICT system ETB no-shift rejection was not explicit" >&2
+    sed -n '1,120p' "$failure_log" >&2
+    exit 1
+fi
+assert_equal "$strict_system_counts_before" "$(fixture_query "
+SELECT CONCAT(
+         (SELECT COUNT(*) FROM nv_etb WHERE einsatz_id = (
+           SELECT einsatz_id FROM nv_einsaetze
+            WHERE kennung = 'SCHEMA-WIDTH-TEST')), '|',
+         (SELECT COUNT(*) FROM nv_tbb WHERE einsatz_id = (
+           SELECT einsatz_id FROM nv_einsaetze
+            WHERE kennung = 'SCHEMA-WIDTH-TEST'))
+       )")" \
+    "rejected STRICT system ETB without a shift changed logbook rows"
+if fixture_query "
+SET @estab_logbook_system_write_incident_id = (
+  SELECT active_einsatz_id FROM nv_einsatz_status WHERE singleton_id = 1
+);
+SET @estab_logbook_system_write_book = 'TTB';
+INSERT INTO nv_tbb
+  (tbb_time, tbb_aktion, tbb_bemerk, tbb_benutzer, tbb_kuerzel,
+   tbb_funktion, estab_event_time, estab_entry_type, estab_operations)
+VALUES
+  (NOW(), 'STRICT-System ohne Schicht', '', 'eStab-System', 'system', '',
+   NOW(6), 'betriebsereignis', 'Fehlender Schichtnachweis')" \
+    >"$failure_log" 2>&1; then
+    echo "schema migrator test: STRICT system TTB without a shift was accepted" >&2
+    exit 1
+fi
+if ! grep -q 'STRICT TTB entry requires duty shift provenance' "$failure_log"; then
+    echo "schema migrator test: STRICT system TTB no-shift rejection was not explicit" >&2
+    sed -n '1,120p' "$failure_log" >&2
+    exit 1
+fi
+assert_equal "$strict_system_counts_before" "$(fixture_query "
+SELECT CONCAT(
+         (SELECT COUNT(*) FROM nv_etb WHERE einsatz_id = (
+           SELECT einsatz_id FROM nv_einsaetze
+            WHERE kennung = 'SCHEMA-WIDTH-TEST')), '|',
+         (SELECT COUNT(*) FROM nv_tbb WHERE einsatz_id = (
+           SELECT einsatz_id FROM nv_einsaetze
+            WHERE kennung = 'SCHEMA-WIDTH-TEST'))
+       )")" \
+    "rejected STRICT system TTB without a shift changed logbook rows"
+
 # Exercise migration 111's write boundary in an isolated incident so the
 # established numbering/concurrency fixtures below retain their exact counts.
 fixture_query "
+SET @estab_permission_mode_create_write = 1;
 INSERT INTO nv_einsaetze
   (kennung, name, beginn, ende, ort, organisation, fuehrungsstellenname,
-   einsatzleitung, beschreibung, metadaten, erstellt_am, erstellt_von)
+   einsatzleitung, beschreibung, metadaten, erstellt_am, erstellt_von,
+   estab_permission_mode)
 VALUES
   ('SCHEMA-SHIFT-RULES', 'Shift provenance rules', NOW(), NULL, '', '',
    'Shift rules command post', '',
    'Duty-shift provenance boundary fixture.', '{}', NOW(6),
-   'schema-migrator-test');
+   'schema-migrator-test', 'LOOSE');
+SET @estab_permission_mode_create_write = NULL;
 SET @estab_rules_incident_id = LAST_INSERT_ID();
 UPDATE nv_einsatz_status
    SET active_einsatz_id = @estab_rules_incident_id,
@@ -4500,7 +5238,7 @@ VALUES
   (NOW(), 'Ohne Schicht', '', 'Aufnahme Weitergabe', 'aw112', 'A/W',
    NOW(6), 'betriebsereignis', 'Optionale Schicht');
 ROLLBACK"
-# Manual ETB/TBB entries without a duty shift were accepted by account function.
+# LOOSE manual ETB/TBB entries were accepted from their fixed account function.
 if fixture_query "
 INSERT INTO nv_etb
   (etb_time, etb_aktion, etb_bemerk, etb_benutzer, etb_kuerzel,
@@ -4517,6 +5255,10 @@ if ! grep -q 'ETB duty shift targets another incident' "$failure_log"; then
     exit 1
 fi
 if fixture_query "
+SET @estab_logbook_system_write_incident_id = (
+  SELECT active_einsatz_id FROM nv_einsatz_status WHERE singleton_id = 1
+);
+SET @estab_logbook_system_write_book = 'TTB';
 INSERT INTO nv_tbb
   (tbb_time, tbb_aktion, tbb_bemerk, tbb_benutzer, tbb_kuerzel,
    tbb_funktion, estab_event_time, estab_entry_type, estab_operations,
@@ -4551,6 +5293,10 @@ if ! grep -q 'ETB writer does not belong to its duty shift' "$failure_log"; then
     exit 1
 fi
 if fixture_query "
+SET @estab_logbook_system_write_incident_id = (
+  SELECT active_einsatz_id FROM nv_einsatz_status WHERE singleton_id = 1
+);
+SET @estab_logbook_system_write_book = 'TTB';
 INSERT INTO nv_tbb
   (tbb_time, tbb_aktion, tbb_bemerk, tbb_benutzer, tbb_kuerzel,
    tbb_funktion, estab_event_time, estab_entry_type, estab_operations,
@@ -4725,17 +5471,29 @@ fi
 fixture_query "UPDATE nv_benutzer SET aktiv = 1 WHERE kuerzel = 'abc123'"
 
 fixture_query "
+SET @estab_logbook_system_write_incident_id = (
+  SELECT active_einsatz_id FROM nv_einsatz_status WHERE singleton_id = 1
+);
+SET @estab_logbook_system_write_book = 'ETB';
 INSERT INTO nv_etb
   (etb_time, etb_aktion, etb_bemerk, etb_benutzer, etb_kuerzel,
    etb_funktion, estab_event_time, estab_event_type)
 VALUES
   (NOW(), 'System ETB', '', 'eStab-System', 'system', '', NOW(6), 'ohne');
+SET @estab_logbook_system_write_incident_id = NULL;
+SET @estab_logbook_system_write_book = NULL;
+SET @estab_logbook_system_write_incident_id = (
+  SELECT active_einsatz_id FROM nv_einsatz_status WHERE singleton_id = 1
+);
+SET @estab_logbook_system_write_book = 'TTB';
 INSERT INTO nv_tbb
   (tbb_time, tbb_aktion, tbb_bemerk, tbb_benutzer, tbb_kuerzel,
    tbb_funktion, estab_event_time, estab_entry_type, estab_operations)
 VALUES
   (NOW(), 'System TTB', '', 'eStab-System', 'system', '', NOW(6),
    'betriebsereignis', 'Systemnachweis');
+SET @estab_logbook_system_write_incident_id = NULL;
+SET @estab_logbook_system_write_book = NULL;
 INSERT INTO nv_etb
   (etb_time, etb_aktion, etb_bemerk, etb_benutzer, etb_kuerzel,
    etb_funktion, estab_event_time, estab_event_type, estab_shift_id,
@@ -4754,6 +5512,44 @@ VALUES
   (NOW(), 'Manuelles TTB', '', 'Aufnahme Weitergabe', 'aw112', 'A/W', NOW(6),
    'betriebsereignis', 'Manueller Nachweis', $rules_shift_id,
    $rules_aw_assignment_id)"
+if fixture_query "
+SET @estab_logbook_system_write_incident_id = (
+  SELECT active_einsatz_id + 1 FROM nv_einsatz_status WHERE singleton_id = 1
+);
+SET @estab_logbook_system_write_book = 'ETB';
+INSERT INTO nv_etb
+  (etb_time, etb_aktion, etb_bemerk, etb_benutzer, etb_kuerzel,
+   etb_funktion, estab_event_time, estab_event_type)
+VALUES
+  (NOW(), 'Gefälschter Systemkontext', '', 'eStab-System', 'system', '',
+   NOW(6), 'ohne')" >"$failure_log" 2>&1; then
+    echo "schema migrator test: wrong-incident ETB system marker was accepted" >&2
+    exit 1
+fi
+if ! grep -q 'System ETB entry context is invalid' "$failure_log"; then
+    echo "schema migrator test: wrong-incident ETB marker failure was not explicit" >&2
+    sed -n '1,120p' "$failure_log" >&2
+    exit 1
+fi
+if fixture_query "
+SET @estab_logbook_system_write_incident_id = (
+  SELECT active_einsatz_id FROM nv_einsatz_status WHERE singleton_id = 1
+);
+SET @estab_logbook_system_write_book = 'ETB';
+INSERT INTO nv_tbb
+  (tbb_time, tbb_aktion, tbb_bemerk, tbb_benutzer, tbb_kuerzel,
+   tbb_funktion, estab_event_time, estab_entry_type, estab_operations)
+VALUES
+  (NOW(), 'Gefälschter Systemkontext', '', 'eStab-System', 'system', '',
+   NOW(6), 'betriebsereignis', 'Falsches Buch')" >"$failure_log" 2>&1; then
+    echo "schema migrator test: wrong-book TTB system marker was accepted" >&2
+    exit 1
+fi
+if ! grep -q 'System TTB entry context is invalid' "$failure_log"; then
+    echo "schema migrator test: wrong-book TTB marker failure was not explicit" >&2
+    sed -n '1,120p' "$failure_log" >&2
+    exit 1
+fi
 rules_manual_etb_id=$(fixture_query "
 SELECT \`etb_lfd-nr\` FROM nv_etb
  WHERE einsatz_id = (SELECT einsatz_id FROM nv_einsaetze
@@ -4761,6 +5557,10 @@ SELECT \`etb_lfd-nr\` FROM nv_etb
    AND estab_book_lfd = 2")
 for invalid_reference in "Freitext" "02" "99"; do
     if fixture_query "
+SET @estab_logbook_system_write_incident_id = (
+  SELECT active_einsatz_id FROM nv_einsatz_status WHERE singleton_id = 1
+);
+SET @estab_logbook_system_write_book = 'ETB';
 INSERT INTO nv_etb
   (etb_time, etb_aktion, etb_bemerk, etb_benutzer, etb_kuerzel,
    etb_funktion, estab_event_time, estab_event_type, estab_shift_id,
@@ -4785,6 +5585,10 @@ VALUES
 done
 for correction_reference in "NULL" "'1'"; do
     if fixture_query "
+SET @estab_logbook_system_write_incident_id = (
+  SELECT active_einsatz_id FROM nv_einsatz_status WHERE singleton_id = 1
+);
+SET @estab_logbook_system_write_book = 'ETB';
 INSERT INTO nv_etb
   (etb_time, etb_aktion, etb_bemerk, etb_benutzer, etb_kuerzel,
    etb_funktion, estab_event_time, estab_event_type, estab_shift_id,
@@ -5307,6 +6111,10 @@ if ! grep -q 'TTB message entry requires canonical message link' \
     exit 1
 fi
 if fixture_query "
+SET @estab_logbook_system_write_incident_id = (
+  SELECT active_einsatz_id FROM nv_einsatz_status WHERE singleton_id = 1
+);
+SET @estab_logbook_system_write_book = 'TTB';
 INSERT INTO nv_tbb
   (tbb_time, tbb_aktion, tbb_bemerk, tbb_benutzer, tbb_kuerzel,
    tbb_funktion, estab_event_time, estab_entry_type, estab_message_id,
@@ -5325,6 +6133,10 @@ if ! grep -q 'TTB message link requires canonical message entry' \
     exit 1
 fi
 if fixture_query "
+SET @estab_logbook_system_write_incident_id = (
+  SELECT active_einsatz_id FROM nv_einsatz_status WHERE singleton_id = 1
+);
+SET @estab_logbook_system_write_book = 'TTB';
 INSERT INTO nv_tbb
   (tbb_time, tbb_aktion, tbb_bemerk, tbb_benutzer, tbb_kuerzel,
    tbb_funktion, estab_event_time, estab_entry_type, estab_message_id,
@@ -5345,6 +6157,10 @@ if ! grep -q 'TTB message link requires system-generated evidence' \
     exit 1
 fi
 if fixture_query "
+SET @estab_logbook_system_write_incident_id = (
+  SELECT active_einsatz_id FROM nv_einsatz_status WHERE singleton_id = 1
+);
+SET @estab_logbook_system_write_book = 'TTB';
 INSERT INTO nv_tbb
   (tbb_time, tbb_aktion, tbb_bemerk, tbb_benutzer, tbb_kuerzel,
    tbb_funktion, estab_event_time, estab_entry_type, estab_message_id,
@@ -5362,6 +6178,10 @@ if ! grep -Eq 'Duplicate entry|idx_tbb_message' "$failure_log"; then
     exit 1
 fi
 if fixture_query "
+SET @estab_logbook_system_write_incident_id = (
+  SELECT active_einsatz_id FROM nv_einsatz_status WHERE singleton_id = 1
+);
+SET @estab_logbook_system_write_book = 'TTB';
 INSERT INTO nv_tbb
   (tbb_time, tbb_aktion, tbb_bemerk, tbb_benutzer, tbb_kuerzel,
    tbb_funktion, estab_event_time, estab_entry_type, estab_message_id,

@@ -221,13 +221,15 @@
       "total_bytes": 6917880
     },
     {
+      "archive_git_commit": "9cd6fc0779ed72181d71aa9042f85c971c92f0c1",
+      "archive_git_subtree": "docs/legacy/svn-r85",
       "entries_sha256": "db88b7ae724f2d86afa846d85ee7fcac8e6852d564b6210042ddd509f36051c5",
       "file_count": 95,
       "format": "estab-source-provenance-v1",
       "kind": "filesystem",
       "last_changed_revision": 47,
       "manifest": "legacy-documentation-r85.jsonl",
-      "manifest_sha256": "3e47ab6a1d6a34bcce1a92c3e7d0be97df7f81e96fda36d22496ce211cc2955c",
+      "manifest_sha256": "06030a0403e806404348f6af632a885e1047a87d1306576711ff153fcb0792fe",
       "snapshot_revision": 85,
       "source_kind": "svn",
       "source_path": "/eStab_0.9/docu",

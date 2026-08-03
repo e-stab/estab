@@ -27,8 +27,9 @@ Geprüft werden:
   Bestandslogin, den sichtbaren Hinweis auf die nicht gespeicherte Eingabe
   sowie dessen ebenfalls funktionierenden Abbruch zur Übersicht;
 - das Anmelden eines zuvor über die Benutzerverwaltungs-API provisionierten
-  Funktionskontos und den direkten Einstieg in den
-  Zwei-`iframe`-Nachrichtenarbeitsbereich ohne Schicht- oder Hutauswahl;
+  Einzelfunktionskontos und im explizit lockeren Testeinsatz den direkten
+  Einstieg in den Zwei-`iframe`-Nachrichtenarbeitsbereich ohne Auswahl einer
+  formalen Dienstbesetzung;
 - genau eine sichtbare, dauerhaft verfügbare Session-Bar im gesamten
   Nachrichtenarbeitsbereich sowie Name, Kürzel, Funktion, abgeleitete Rolle,
   gemeinsame Navigation und Abmeldebutton in der vollhohen
@@ -37,7 +38,7 @@ Geprüft werden:
   `mainframe`, eine Statuskarte mit rollenabhängigem Zähler, Serverzeit und
   Onlinebelegung sowie echte rollenabhängige Textbuttons;
 - die kanonischen neun Kernbereiche in stabiler Reihenfolge, nach der
-  Anmeldung jedoch nur die für die feste Kontofunktion freigegebenen
+  Anmeldung jedoch nur die für die modeabhängig wirksamen Funktionen freigegebenen
   Bereiche, sowie genau ein zum geöffneten Bereich passendes
   `aria-current="page"` und Top-Level-Ziele für alle sichtbaren Kernlinks;
 - den direkten Aufruf der für S1 gesperrten Nachweisung: Der Server behält
@@ -146,9 +147,13 @@ Geprüft werden:
   zunächst geschlossene und bewusst zweistufig geöffnete Löschbestätigung,
   den bestätigten Löschvorgang und das anschließende Verschwinden genau dieses
   Exports; Karten bleiben innerhalb des Viewports und alle Aktionen mindestens
-  44 × 44 Pixel groß; anschließend im Matrixeditor die beiden verständlichen
-  Bestätigungsdialoge für „Standard laden“ und „Standard ersetzen“ sowie den
-  unveränderten Editorwert und Seitenzustand nach ihrer Ablehnung.
+  44 × 44 Pixel groß. Mobil existiert genau eine vollständige
+  Status-/Navigationsleiste; unterhalb von 42 rem scrollt sie als nichtklebender
+  Seitenkopf aus dem Weg, ohne dass ihr Navigationsinhalt horizontales
+  Dokument-Scrolling erzeugt oder die Exportaktionen verdeckt. Anschließend
+  prüft der Lauf im Matrixeditor die beiden verständlichen Bestätigungsdialoge
+  für „Standard laden“ und „Standard ersetzen“ sowie den unveränderten
+  Editorwert und Seitenzustand nach ihrer Ablehnung.
 - den S6-Fernmeldeplan in einem eigenen Weg: eine aktive Fassung bleibt beim
   Bearbeitungsstart sichtbar, alle sichtbaren Kopfwerte und sämtliche Wege
   erscheinen im Entwurf identisch vorbefüllt, und ein unberührter
@@ -179,20 +184,23 @@ bos-info
 Die Navigation wird über `data-estab-navigation`, ihre Links über
 `data-estab-nav-key` und der aktive Bereich über `aria-current="page"`
 identifiziert. Der Link `overview` muss sichtbar mit `Übersicht` beschriftet
-sein. Nach Auswahl einer S1-Dienstfunktion werden `message-overview` und
-`tracking` ausgeblendet; S2 erhält `message-overview`, LdF und A/W erhalten
-`tracking`. Diese stabilen Attribute vermeiden, dass der Test von rein
+sein. Mit der im `LOOSE`-Einzelfunktionsfixture fest zugewiesenen
+S1-Kontofunktion werden `message-overview` und `tracking` ausgeblendet; S2
+erhält `message-overview`, LdF und Fernmelder erhalten `tracking`. Diese
+stabilen Attribute vermeiden, dass der Test von rein
 gestalterischen CSS-Klassen oder übersetzten Modulbeschreibungen abhängt.
 
 ## Voraussetzungen
 
 Die Anwendung muss laufen. Für den vollständigen Lauf muss ein ausschließlich
 dafür bestimmtes Bestandskonto bereits über die Benutzerverwaltung angelegt
-und fest der Funktion `S1` zugewiesen sein. Eine Dienstschicht oder persönliche
-Schichtannahme ist nicht erforderlich. Das Konto darf keiner ausschließlich
-deaktivierten Zugangsschicht angehören. Öffentliche Selbstregistrierung bleibt
-ausgeschaltet. Der Test verändert dieses Konto nicht und verwendet keine
-produktiven Zugangsdaten.
+und fest der Funktion `S1` zugewiesen sein. Der Standardlauf benötigt einen
+explizit auf `LOOSE` gesetzten Testeinsatz; deshalb ist dort keine formale
+Dienstschicht oder persönliche Schichtannahme erforderlich. Für den
+dokumentierten Einzelfunktionsnachweis darf das Konto keine Zusatzfunktion
+besitzen und keiner ausschließlich deaktivierten Zugangsschicht angehören.
+Öffentliche Selbstregistrierung bleibt ausgeschaltet. Der Test verändert
+dieses Konto nicht und verwendet keine produktiven Zugangsdaten.
 
 Chrome wird über `ESTAB_BROWSER_BINARY` oder automatisch an den üblichen
 macOS- und Linux-Pfaden gesucht.
@@ -371,10 +379,18 @@ außerdem sein temporäres Chrome-Profil.
 
 Der bestehende Konto-Flow wird durch einen echten Klick bis zum korrekten
 Bestandsloginformular und durch die erfolgreiche Anmeldung des zuvor
-provisionierten Wegwerf-Testkontos geprüft. Die feste Kontofunktion öffnet das
-vor der Anmeldung angeforderte Einsatztagebuch direkt; eine Schicht- oder
-Hutauswahl findet nicht statt. Der Lauf legt weder Konten noch Funktionen an;
-diese administrative Vorbedingung weist die HTTP-Integration separat nach.
+provisionierten Wegwerf-Testkontos geprüft. Im `LOOSE`-Einzelfunktionsfixture
+öffnet die feste Kontofunktion das vor der Anmeldung angeforderte
+Einsatztagebuch direkt; eine Auswahl einer formalen Dienstbesetzung ist nicht
+erforderlich. Der Lauf legt weder Konten noch Funktionen an; diese
+administrative Vorbedingung weist die HTTP-Integration separat nach.
+
+Dieser Browserlauf belegt weder die persönliche Annahme und Auswahl einer
+Besetzung in `STRICT` noch die explizite Auswahl „Schreiben als“ oder „Lesen
+als“ für ein `LOOSE`-Konto mit mehreren festen/zusätzlichen Funktionen. Die
+Autorisierungsgrenzen dieser Fälle werden statisch sowie gegen MariaDB und per
+authentifiziertem HTTP geprüft; ihre sichtbare Bedienung bleibt bis zu einem
+dedizierten Browserszenario Teil der manuellen Fachabnahme.
 
 Der Browserlauf prüft die vollständigen Klickpfade im Desktop-Viewport, die
 Sidebar zusätzlich bei `1440x1000`, `1280x720`, `700x760` und authentifiziert
@@ -383,7 +399,10 @@ zentrale öffentliche Übersicht ebenfalls bei exakt `390x844` CSS-Pixeln. Das
 belegt Navigation, Anmeldeeinstieg, den Zwei-`iframe`-Arbeitsbereich ohne
 verschachtelte Scrollflächen, die mobilen Vollviewport-Zeilen samt
 Rollenaktionswechsel und „Menü“-Rückweg, überlappungsfreie Karten samt Hover
-und Bediengrößen auf schmalen Displays.
+und Bediengrößen auf schmalen Displays. Die mobile Exportprobe belegt darüber
+hinaus, dass die vollständige Status-/Navigationsleiste nicht über dem
+Arbeitsbereich klebt, kein horizontales Dokument-Scrolling verursacht und
+Erstellen, Download sowie die zweistufige Löschung erreichbar bleiben.
 
 Die Kennwortrichtlinien- und Selbstregistrierungsseite werden dabei visuell
 und responsiv, aber ohne Zustandsänderung geprüft. Vorschau beziehungsweise

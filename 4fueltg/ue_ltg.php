@@ -27,8 +27,15 @@ include ("../4fcfg/para.inc.php");              //
 include ("../4fcfg/fkt_rolle.inc.php");
 
 $overviewReadIdentity = estab_read_session_identity ($_SESSION);
+estab_navigation_require_selected_duty (
+  $_SESSION,
+  $overviewReadIdentity,
+  "message-overview",
+  $_SERVER
+);
 $overviewAccessConnection = null;
 $overviewIncidentId = null;
+$overviewActingIdentity = null;
 $overviewAccessError = null;
 try {
   $overviewAccessConnection = estab_auth_connect ($conf_4f_db);
@@ -40,6 +47,7 @@ try {
   $overviewIncidentId = (int) (
     $overviewReadScope ["incident"]["active_einsatz_id"]
   );
+  $overviewActingIdentity = $overviewReadScope ["identity"];
 } catch (EstabNoActiveIncidentException) {
   $overviewAccessError = array (
     409,
@@ -989,6 +997,11 @@ var_dump ($this->formdata); echo "<br>";
 \*****************************************************************************/
   function ziele (){
   include ("../4fcfg/fkt_rolle.inc.php");
+    $overviewActingIdentity = $GLOBALS ["overviewActingIdentity"] ?? null;
+    $overviewActingFunction = is_array ($overviewActingIdentity)
+      && is_string ($overviewActingIdentity ["funktion"] ?? null)
+      ? $overviewActingIdentity ["funktion"]
+      : "";
 
     for ($i=1; $i <= 5 ; $i++){
       for ($j=1; $j <= 4 ; $j++){
@@ -1010,7 +1023,10 @@ var_dump ($this->formdata); echo "<br>";
 	    if ( $fkt != "" ){
           $empf_array [$i]['fkt'] = $fkt ;
           $empf_array [$i]['cpy'] = $cpycol ;
-          if ((isset ($_SESSION ['vStab_funktion'])) and ($fkt == $_SESSION ['vStab_funktion'])) { 
+          if (
+            $overviewActingFunction !== ""
+            && hash_equals ($overviewActingFunction, $fkt)
+          ) {
             $this->fktmsgbgcolor = $cpycol ;
           }
         }

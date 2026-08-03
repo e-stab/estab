@@ -35,8 +35,8 @@
     array ("acl"   => "",
                 "vis" => true,
                 "link"  => "./fuehrungsstelle.php",
-                "menue" => "Optionale Schichten",
-                "descr" => "Konten optional gruppieren und deren Zugang gemeinsam aktivieren oder deaktivieren; feste Funktionen bleiben unver&auml;ndert."),
+                "menue" => "Schichtverwaltung",
+                "descr" => "Im Modus Streng verbindliche Dienstschichten und pers&ouml;nliche Funktionsbesetzungen verwalten; im Modus Locker optionale Zugangsschichten gemeinsam steuern."),
 
     array ("acl"   => "",
                 "vis" => true,

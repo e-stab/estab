@@ -307,7 +307,7 @@ try {
                               $incident['fuehrungsstellenname']
                                   ?? 'historisch nicht erfasst'
                           )
-                          . ' · Schreibrechte: '
+                          . ' · Berechtigungsmodus: '
                           . estab_permission_mode_label(
                               $incident['estab_permission_mode'] ?? null
                           )
@@ -399,7 +399,7 @@ try {
                 ],
                 'duty' => [
                     'Dienstorganisation',
-                    'Optionale Zugangsschichten samt Zuordnungen sowie alle historischen Dienstschichten, Besetzungen und Übergaben',
+                    'Formale Dienstschichten samt Besetzungen und Übergaben sowie getrennt die optionalen Zugangsschichten des lockeren Betriebs',
                 ],
                 's6_plans' => [
                     'S6-Fernmeldeplanung',

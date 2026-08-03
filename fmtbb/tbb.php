@@ -13,7 +13,7 @@ technisches Betriebsbuch
   Szenario "Globaler Einsatz aktiv."
 
     + Anzeige des globalen Einsatzkopfs
-    + Lesender Zugriff mit fester Kontofunktion
+    + Lesender Zugriff mit der im Einsatzmodus wirksamen Funktion
     + Eintragsfunktion fuer A/W in der Rolle Fernmelder
 
   Szenario "Schaltflaeche TBB-Eintrag wird betaetigt"
@@ -38,6 +38,7 @@ class tbb_liste {
   var $tbb_kuerzel ;
   var $tbb_benutzer ;
   var $tbb_rolle ;
+  var $tbb_identity = array ();
   var $tbb_authorized ;
 
 /*****************************************************************************\
@@ -314,12 +315,7 @@ if (debug == true){ echo "tbb_tableexist==>"; var_dump($this->tbb_titel_tbl); ec
       $conf_tbl ["tbb"],
       "tbb",
       $validation ["data"],
-      array (
-        "funktion" => (string) $this->tbb_funktion,
-        "kuerzel" => (string) $this->tbb_kuerzel,
-        "benutzer" => (string) $this->tbb_benutzer,
-        "rolle" => (string) $this->tbb_rolle,
-      )
+      $this->tbb_identity
     );
   }
 
@@ -587,6 +583,12 @@ include ("../4fcfg/dbcfg.inc.php");
 include ("../4fcfg/e_cfg.inc.php");
 
 $identity = estab_read_session_identity ($_SESSION);
+estab_navigation_require_selected_duty (
+  $_SESSION,
+  $identity,
+  "technical-log",
+  $_SERVER
+);
 estab_session_ui_start ($_SESSION);
 
 $berechtigt = false;
@@ -659,6 +661,7 @@ $tbbobj->tbb_funktion = $identity ["funktion"];
 $tbbobj->tbb_kuerzel = $identity ["kuerzel"];
 $tbbobj->tbb_benutzer = $identity ["benutzer"];
 $tbbobj->tbb_rolle = $identity ["rolle"];
+$tbbobj->tbb_identity = $identity;
 
 if ($requestMethod === "POST") {
   if (!$berechtigt) {
@@ -769,8 +772,8 @@ if (!$tbbobj->tbb_titel_gesetzt) {
   } else {
     echo "<aside class=\"estab-tool-notice estab-tool-notice-warning\">\n";
     echo "<strong>TBB schreibgeschützt.</strong>\n<p>";
-    echo "Ihre feste Kontofunktion darf das Technische Betriebsbuch lesen, ".
-      "besitzt aber nicht die Fachzuständigkeit für Einträge.";
+    echo "Ihre aktuell wirksamen Funktionen erlauben das Lesen, besitzen ".
+      "aber nicht die Fachzuständigkeit für TTB-Einträge.";
     echo "</p>\n</aside>\n";
   }
   $tbbobj->printlist ($tbbobj->tbb_getdate ());

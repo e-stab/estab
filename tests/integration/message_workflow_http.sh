@@ -107,6 +107,8 @@ reply_marker="E2EREPLY_${identity_seed}_dv"
 forward_marker="E2EFORWARD_${identity_seed}_dv"
 fm_admin_note="FMADMIN_${identity_seed}_dv"
 si_admin_note="SIADMIN_${identity_seed}_dv"
+loose_incident_code="CI-MWF-LOOSE-${identity_seed}"
+strict_incident_code="CI-MWF-STRICT-${identity_seed}"
 
 for code in \
     "$aw_code" "$ldf_code" "$si_code" "$s1_code" "$s2_code" "$s3_code" \
@@ -166,7 +168,11 @@ s2_function_tables_before=0
 s3_function_tables_before=0
 si_function_tables_before=0
 pol_function_tables_before=0
-permission_mode_restore_required=false
+original_active_incident_id=0
+original_active_permission_mode=NONE
+active_incident_restore_required=false
+loose_incident_id=0
+strict_incident_id=0
 
 db_sql()
 {
@@ -202,31 +208,15 @@ db_sql()
     '
 }
 
-set_test_permission_mode()
+incident_fixture()
 {
-    requested_mode=$1
-    case "$requested_mode" in
-        STRICT | LOOSE) ;;
-        *)
-            echo 'Message workflow HTTP: invalid fixture permission mode' >&2
-            return 1
-            ;;
-    esac
-    db_sql >/dev/null <<SQL
-SET @estab_permission_mode_test_id = (
-  SELECT \`active_einsatz_id\`
-    FROM \`nv_einsatz_status\`
-   WHERE \`singleton_id\` = 1
-);
-SET @estab_permission_mode_admin_write_id =
-  @estab_permission_mode_test_id;
-UPDATE \`nv_einsaetze\`
-   SET \`estab_permission_mode\` = '${requested_mode}'
- WHERE \`einsatz_id\` = @estab_permission_mode_test_id
-   AND \`estab_status\` = 'open';
-SET @estab_permission_mode_admin_write_id = NULL;
-SET @estab_permission_mode_test_id = NULL;
-SQL
+    "$compose_engine" compose run --rm --no-deps -T \
+        --env ESTAB_MESSAGE_WORKFLOW_INCIDENT_FIXTURE=1 \
+        --env "ESTAB_MESSAGE_WORKFLOW_INCIDENT_PROJECT=$project_name" \
+        --volume "$repo_root:/workspace:ro" \
+        --workdir /workspace \
+        app php -d auto_prepend_file= \
+            tests/integration/message_workflow_incident_fixture.php "$@"
 }
 
 generated_form_check()
@@ -328,9 +318,10 @@ cleanup()
     set +e
     cleanup_status=0
 
-    if [ "$permission_mode_restore_required" = true ]; then
-        set_test_permission_mode STRICT >/dev/null 2>&1 || cleanup_status=1
-        permission_mode_restore_required=false
+    if [ "$active_incident_restore_required" = true ]; then
+        incident_fixture restore "$original_active_incident_id" \
+            >/dev/null 2>&1 || cleanup_status=1
+        active_incident_restore_required=false
     fi
 
     # Workflow messages and their hash-linked evidence are deliberately
@@ -359,6 +350,33 @@ request_status()
 {
     curl --silent --show-error --max-time 20 --connect-timeout 5 \
         --output "$body" --write-out '%{http_code}' "$@"
+}
+
+assert_strict_duty_redirect()
+{
+    cookie_jar=$1
+    label=$2
+    url=$3
+    headers=$work_dir/strict-duty-headers.txt
+    actual=$(request_status \
+        --dump-header "$headers" \
+        --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+        "$url")
+    if [ "$actual" != 303 ]; then
+        printf 'Message workflow HTTP: %s expected STRICT duty redirect, got %s\n' \
+            "$label" "$actual" >&2
+        sed -n '1,80p' "$headers" >&2
+        sed -n '1,120p' "$body" >&2
+        exit 1
+    fi
+    if ! grep -Eiq \
+        '^Location: .*/4fach/fuehrungsstelle\.php#meine-dienstfunktionen[[:space:]]*$' \
+        "$headers"; then
+        printf 'Message workflow HTTP: %s lost the safe duty-selector target\n' \
+            "$label" >&2
+        sed -n '1,80p' "$headers" >&2
+        exit 1
+    fi
 }
 
 assert_status()
@@ -501,7 +519,90 @@ assert_loose_single_dispatch()
     assert_body "$expected_marker" "$label target renderer"
 }
 
-prove_loose_dispatch_for_identity()
+assert_loose_dispatch_denied()
+{
+    cookie_jar=$1
+    csrf_token=$2
+    identity_label=$3
+    action_name=$4
+
+    assert_status 403 "LOOSE ${identity_label} rejects ${action_name}" \
+        --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+        --request POST \
+        --data-urlencode "csrf_token=$csrf_token" \
+        --data-urlencode "${action_name}=1" \
+        "$base_url/4fach/mainindex.php"
+}
+
+prove_loose_primary_dispatch_for_identity()
+{
+    cookie_jar=$1
+    identity_label=$2
+    profile=$3
+
+    load_dashboard "$cookie_jar" "LOOSE dashboard for $identity_label"
+    assert_single_html_document "LOOSE dashboard for $identity_label"
+    dispatch_csrf=$(csrf_from_body)
+
+    case "$profile" in
+        staff)
+            assert_loose_single_dispatch \
+                "$cookie_jar" "$dispatch_csrf" "$identity_label" \
+                stab_schreiben_x 'name="task" value="Stab_schreiben"'
+            assert_loose_single_dispatch \
+                "$cookie_jar" "$dispatch_csrf" "$identity_label" \
+                stab_korrekturen_x 'Offene Korrekturen'
+            assert_loose_dispatch_denied \
+                "$cookie_jar" "$dispatch_csrf" "$identity_label" stab_sichten_x
+            assert_loose_dispatch_denied \
+                "$cookie_jar" "$dispatch_csrf" "$identity_label" ldf_nachrichten_x
+            assert_loose_dispatch_denied \
+                "$cookie_jar" "$dispatch_csrf" "$identity_label" fm_eingang_x
+            ;;
+        viewer)
+            assert_loose_single_dispatch \
+                "$cookie_jar" "$dispatch_csrf" "$identity_label" \
+                stab_sichten_x 'Sichterliste'
+            assert_loose_dispatch_denied \
+                "$cookie_jar" "$dispatch_csrf" "$identity_label" stab_schreiben_x
+            assert_loose_dispatch_denied \
+                "$cookie_jar" "$dispatch_csrf" "$identity_label" ldf_nachrichten_x
+            assert_loose_dispatch_denied \
+                "$cookie_jar" "$dispatch_csrf" "$identity_label" fm_eingang_x
+            ;;
+        telecommunications)
+            assert_loose_single_dispatch \
+                "$cookie_jar" "$dispatch_csrf" "$identity_label" \
+                fm_eingang_x 'name="task" value="FM-Eingang"'
+            assert_loose_single_dispatch \
+                "$cookie_jar" "$dispatch_csrf" "$identity_label" \
+                fm_ausgang_x 'FMD Ausgang'
+            assert_loose_dispatch_denied \
+                "$cookie_jar" "$dispatch_csrf" "$identity_label" stab_schreiben_x
+            assert_loose_dispatch_denied \
+                "$cookie_jar" "$dispatch_csrf" "$identity_label" stab_sichten_x
+            assert_loose_dispatch_denied \
+                "$cookie_jar" "$dispatch_csrf" "$identity_label" ldf_nachrichten_x
+            ;;
+        lead)
+            assert_loose_single_dispatch \
+                "$cookie_jar" "$dispatch_csrf" "$identity_label" \
+                ldf_nachrichten_x 'LdF-Disposition'
+            assert_loose_dispatch_denied \
+                "$cookie_jar" "$dispatch_csrf" "$identity_label" stab_schreiben_x
+            assert_loose_dispatch_denied \
+                "$cookie_jar" "$dispatch_csrf" "$identity_label" stab_sichten_x
+            assert_loose_dispatch_denied \
+                "$cookie_jar" "$dispatch_csrf" "$identity_label" fm_eingang_x
+            ;;
+        *)
+            echo 'Message workflow HTTP: invalid LOOSE dispatch profile' >&2
+            exit 1
+            ;;
+    esac
+}
+
+prove_loose_all_granted_dispatch()
 {
     cookie_jar=$1
     identity_label=$2
@@ -946,10 +1047,16 @@ provision_and_login_user()
         --data-urlencode 'absenden_x=1' \
         "$base_url/4fach/mainindex.php"
     assert_no_runtime_error "login response for $function_name"
+    assert_body '4fach/index.php' \
+        "LOOSE login continues directly to messages for $function_name"
+    assert_body_absent \
+        'window.top.location.replace("/4fach/fuehrungsstelle.php")' \
+        "LOOSE login does not force duty selection for $function_name"
 
-    # The fixed account function is the fachliche permission source. Opening
-    # the command-post controller requires only this authenticated identity
-    # and the active incident, never a selected legacy duty assignment.
+    # Primary and explicitly granted additional functions are the fachliche
+    # permission sources. Opening the command-post controller requires only
+    # this authenticated identity and the active incident, never a selected
+    # formal duty assignment in LOOSE.
     assert_status 200 "command-post page for $function_name" \
         --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
         "$base_url/4fach/fuehrungsstelle.php"
@@ -957,8 +1064,10 @@ provision_and_login_user()
     assert_session_identity "$name" "$code" "$function_name" "$role"
     assert_body 'data-estab-dv-operations' \
         "command-post marker for $function_name"
-    assert_body 'Zugewiesene Funktion' \
+    assert_body 'Kontofunktion' \
         "fixed account function for $function_name"
+    assert_body 'Wirksame Funktionen' \
+        "effective account functions for $function_name"
 }
 
 finish_ldf_incoming()
@@ -1512,18 +1621,37 @@ return_viewer_outgoing()
     assert_no_runtime_error "returned Si formal review for $marker"
 }
 
-authoritative_sender=$(incident_authoritative_sender)
-if [ -z "$authoritative_sender" ] || printf '%s' "$authoritative_sender" | grep -q '|'; then
-    echo 'Message workflow HTTP: unsafe authoritative sender fixture' >&2
-    exit 1
-fi
-if [ "$authoritative_sender" = 'GLOBAL-CONFIG-MUST-NOT-APPEAR' ]; then
-    echo 'Message workflow HTTP: installation-wide organisation remained authoritative' >&2
-    exit 1
-fi
+original_active_incident_id=$(db_sql <<'SQL'
+SELECT COALESCE(`active_einsatz_id`, 0)
+  FROM `nv_einsatz_status`
+ WHERE `singleton_id` = 1;
+SQL
+)
+case "$original_active_incident_id" in
+    '' | *[!0-9]*)
+        echo 'Message workflow HTTP: invalid original active incident' >&2
+        exit 1
+        ;;
+esac
+original_active_permission_mode=$(db_sql <<'SQL'
+SELECT COALESCE(e.`estab_permission_mode`, 'NONE')
+  FROM `nv_einsatz_status` AS s
+  LEFT JOIN `nv_einsaetze` AS e
+    ON e.`einsatz_id` = s.`active_einsatz_id`
+ WHERE s.`singleton_id` = 1;
+SQL
+)
+case "$original_active_permission_mode" in
+    STRICT | LOOSE | NONE) ;;
+    *)
+        echo 'Message workflow HTTP: invalid original permission mode' >&2
+        exit 1
+        ;;
+esac
 
 # Prove this is a collision-free fixture before the first mutation. Dynamic
-# table names are part of the guard because a stale table must not be dropped.
+# table names and both immutable incident identities are part of the guard
+# because a stale fixture must never be reused or dropped.
 fixture_collision=$(db_sql <<SQL
 SELECT CONCAT(
   (SELECT COUNT(*) FROM \`nv_benutzer\`
@@ -1549,12 +1677,17 @@ SELECT CONCAT(
         'usr_s3_${s3_code}_read', 'usr_s3_${s3_code}_katego', 'usr_s3_${s3_code}_kategolink',
         'usr_si_${si_code}_read', 'usr_si_${si_code}_katego', 'usr_si_${si_code}_kategolink',
         'usr_pol_${pol_code}_read', 'usr_pol_${pol_code}_katego', 'usr_pol_${pol_code}_kategolink'
-      ))
+      )),
+  '|',
+  (SELECT COUNT(*) FROM \`nv_einsaetze\`
+    WHERE BINARY \`kennung\` IN (
+      BINARY '${loose_incident_code}', BINARY '${strict_incident_code}'
+    ))
 );
 SQL
 )
-if [ "$fixture_collision" != '0|0|0' ]; then
-    echo 'Message workflow HTTP: fixture identities or markers already exist' >&2
+if [ "$fixture_collision" != '0|0|0|0' ]; then
+    echo 'Message workflow HTTP: fixture identities, incidents or markers already exist' >&2
     exit 1
 fi
 
@@ -1634,6 +1767,44 @@ done
 
 mutation_started=true
 
+# The end-to-end workflow owns two immutable incident identities. LOOSE is
+# configured before its first lifecycle entry and carries every operational
+# write below. STRICT remains empty and exists only to prove that direct routes
+# reject an authenticated account without a selected, accepted duty function.
+# The previously active CI incident is restored in both the success and trap
+# paths without changing its permission mode.
+active_incident_restore_required=true
+loose_incident_id=$(incident_fixture \
+    create LOOSE "$loose_incident_code" 1)
+strict_incident_id=$(incident_fixture \
+    create STRICT "$strict_incident_code" 0)
+assert_numeric 'dedicated LOOSE message-workflow incident' "$loose_incident_id"
+assert_numeric 'dedicated STRICT route-guard incident' "$strict_incident_id"
+if [ "$loose_incident_id" = "$strict_incident_id" ]; then
+    echo 'Message workflow HTTP: incident fixtures are not isolated' >&2
+    exit 1
+fi
+active_incident_id=$loose_incident_id
+assert_db_equals "${loose_incident_id}|LOOSE|1" \
+    'dedicated LOOSE incident is active from creation' \
+    "SELECT CONCAT(e.\`einsatz_id\`, '|', e.\`estab_permission_mode\`, '|', s.\`active_einsatz_id\`=e.\`einsatz_id\`) FROM \`nv_einsaetze\` AS e CROSS JOIN \`nv_einsatz_status\` AS s WHERE e.\`einsatz_id\`=${loose_incident_id} AND s.\`singleton_id\`=1;"
+assert_db_equals '1|1' 'LOOSE activation created canonical ETB and TBB openings' \
+    "SELECT CONCAT((SELECT COUNT(*) FROM \`nv_etb\` WHERE \`einsatz_id\`=${loose_incident_id}), '|', (SELECT COUNT(*) FROM \`nv_tbb\` WHERE \`einsatz_id\`=${loose_incident_id}));"
+assert_db_equals "${strict_incident_id}|STRICT|0|0" \
+    'dedicated STRICT incident is inactive and operationally empty' \
+    "SELECT CONCAT(e.\`einsatz_id\`, '|', e.\`estab_permission_mode\`, '|', (SELECT COUNT(*) FROM \`nv_etb\` WHERE \`einsatz_id\`=e.\`einsatz_id\`), '|', (SELECT COUNT(*) FROM \`nv_tbb\` WHERE \`einsatz_id\`=e.\`einsatz_id\`)) FROM \`nv_einsaetze\` AS e WHERE e.\`einsatz_id\`=${strict_incident_id};"
+
+authoritative_sender=$(incident_authoritative_sender)
+if [ -z "$authoritative_sender" ] \
+    || printf '%s' "$authoritative_sender" | grep -q '|'; then
+    echo 'Message workflow HTTP: unsafe authoritative sender fixture' >&2
+    exit 1
+fi
+if [ "$authoritative_sender" = 'GLOBAL-CONFIG-MUST-NOT-APPEAR' ]; then
+    echo 'Message workflow HTTP: installation-wide organisation remained authoritative' >&2
+    exit 1
+fi
+
 # Create eight isolated functional accounts through the administrative domain
 # boundary, then exercise only the production bestandskonto login flow.
 # Keeping Si signed in makes both A/W forms use their genuine online-Si branch.
@@ -1646,67 +1817,141 @@ provision_and_login_user "$s6_cookies" "$s6_name" "$s6_code" S6 Stab
 provision_and_login_user "$pol_cookies" "$pol_name" "$pol_code" POL FB
 provision_and_login_user "$si_cookies" "$si_name" "$si_code" Si Stab
 
-# The workflow accounts deliberately have neither historical duty assignments
-# nor optional access-shift memberships. This proves the default case: an
-# unassigned account may work, its fixed function supplies the fachliche
-# permissions, and only the active incident is a mandatory operational gate.
-active_incident_id=$(db_sql <<'SQL'
-SELECT `active_einsatz_id`
-  FROM `nv_einsatz_status`
- WHERE `singleton_id` = 1;
-SQL
-)
-assert_numeric 'active incident for Führungsstellen HTTP workflow' \
-    "$active_incident_id"
+# The workflow accounts deliberately have neither formal duty assignments nor
+# optional access-shift memberships. They therefore work only in the dedicated
+# LOOSE incident, where the fixed account function plus explicit personal
+# additions supply the exact Fachrechte. The empty STRICT incident must keep
+# them at the duty-function selector.
 workflow_account_codes="'${aw_code}','${ldf_code}','${si_code}','${s1_code}','${s2_code}','${s3_code}','${s6_code}','${pol_code}'"
 assert_db_equals 0 'workflow accounts have no legacy duty assignments' \
     "SELECT COUNT(*) FROM \`nv_dienstbesetzungen\` WHERE \`benutzer_kuerzel\` IN (${workflow_account_codes});"
 assert_db_equals 0 'workflow accounts have no optional access-shift memberships' \
     "SELECT COUNT(*) FROM \`nv_zugangsschicht_mitglieder\` WHERE \`benutzer_kuerzel\` IN (${workflow_account_codes}) AND \`entfernt_am\` IS NULL;"
 
-# Exercise the production controller with every LOOSE write-navigation action
-# from each representative fixed account function. The response must contain
-# one document root: an explicit foreign-function view must suppress the
-# account's historical default view. This fixture-only mode change uses the
-# migration's narrow DML marker; the application requests themselves remain
+# Exercise the production controller first with each fixed LOOSE function,
+# then with an explicit multi-function grant. Foreign actions remain denied;
+# every granted action renders one document root. All application requests are
 # real authenticated, CSRF-protected HTTP requests.
-assert_db_equals STRICT 'permission-mode dispatch fixture starts strict' \
-    "SELECT \`estab_permission_mode\` FROM \`nv_einsaetze\` WHERE \`einsatz_id\`=${active_incident_id};"
-permission_mode_restore_required=true
-set_test_permission_mode LOOSE
-assert_db_equals LOOSE 'permission-mode dispatch fixture entered loose mode' \
+assert_db_equals LOOSE 'permission-mode dispatch fixture remains loose' \
     "SELECT \`estab_permission_mode\` FROM \`nv_einsaetze\` WHERE \`einsatz_id\`=${active_incident_id};"
 
-prove_loose_dispatch_for_identity "$s1_cookies" 'S1/Stab'
-prove_loose_dispatch_for_identity "$si_cookies" 'Si/Stab'
-prove_loose_dispatch_for_identity "$aw_cookies" 'A-W/Fernmelder'
-prove_loose_dispatch_for_identity "$ldf_cookies" 'LdF/Fernmelder'
-prove_loose_dispatch_for_identity "$pol_cookies" 'POL/FB'
+prove_loose_primary_dispatch_for_identity "$s1_cookies" 'S1/Stab' staff
+prove_loose_primary_dispatch_for_identity "$si_cookies" 'Si/Stab' viewer
+prove_loose_primary_dispatch_for_identity \
+    "$aw_cookies" 'A-W/Fernmelder' telecommunications
+prove_loose_primary_dispatch_for_identity "$ldf_cookies" 'LdF/Fernmelder' lead
+prove_loose_primary_dispatch_for_identity "$pol_cookies" 'POL/FB' staff
 
-set_test_permission_mode STRICT
-permission_mode_restore_required=false
-assert_db_equals STRICT 'permission-mode dispatch fixture restored strict mode' \
-    "SELECT \`estab_permission_mode\` FROM \`nv_einsaetze\` WHERE \`einsatz_id\`=${active_incident_id};"
-load_dashboard "$s1_cookies" 'STRICT dashboard after dispatch matrix'
+db_sql >/dev/null <<SQL
+INSERT INTO \`nv_benutzer_zusatzfunktionen\`
+  (\`benutzer_kuerzel\`, \`funktion\`, \`rolle\`, \`vergeben_von\`)
+VALUES
+  ('${s1_code}', 'Si', 'Stab', 'message-workflow-http'),
+  ('${s1_code}', 'LdF', 'Fernmelder', 'message-workflow-http'),
+  ('${s1_code}', 'A/W', 'Fernmelder', 'message-workflow-http');
+SQL
+assert_db_equals 3 'explicit S1 dispatch additions were stored' \
+    "SELECT COUNT(*) FROM \`nv_benutzer_zusatzfunktionen\` WHERE BINARY \`benutzer_kuerzel\`=BINARY '${s1_code}';"
+prove_loose_all_granted_dispatch "$s1_cookies" 'S1 with explicit additions'
+
+load_dashboard "$s1_cookies" 'LOOSE S1 before STRICT stale-grant probe'
 strict_dispatch_csrf=$(csrf_from_body)
-assert_status 403 'STRICT rejects S1 telecommunications view after restore' \
+activated_strict_incident_id=$(incident_fixture activate "$strict_incident_id")
+if [ "$activated_strict_incident_id" != "$strict_incident_id" ]; then
+    echo 'Message workflow HTTP: STRICT fixture activation selected another incident' >&2
+    exit 1
+fi
+assert_db_equals "STRICT|${strict_incident_id}|0|0" \
+    'empty STRICT fixture is active without operational data' \
+    "SELECT CONCAT(e.\`estab_permission_mode\`, '|', s.\`active_einsatz_id\`, '|', (SELECT COUNT(*) FROM \`nv_etb\` WHERE \`einsatz_id\`=e.\`einsatz_id\`), '|', (SELECT COUNT(*) FROM \`nv_tbb\` WHERE \`einsatz_id\`=e.\`einsatz_id\`)) FROM \`nv_einsaetze\` AS e CROSS JOIN \`nv_einsatz_status\` AS s WHERE e.\`einsatz_id\`=${strict_incident_id} AND s.\`singleton_id\`=1;"
+assert_strict_duty_redirect \
+    "$s1_cookies" 'STRICT attachment route without selected duty' \
+    "$base_url/4fach/anhang.php"
+assert_strict_duty_redirect \
+    "$s1_cookies" 'STRICT download route without selected duty' \
+    "$base_url/4fach/download.php?area=vordruck&file=missing.pdf"
+assert_strict_duty_redirect \
+    "$s1_cookies" 'STRICT category route without selected duty' \
+    "$base_url/4fach/katgoedt.php?dbtyp=fkt&msgno=1"
+assert_strict_duty_redirect \
+    "$s1_cookies" 'STRICT tracking route without selected duty' \
+    "$base_url/4fach/nachwea.php?nwalle=1"
+assert_strict_duty_redirect \
+    "$s1_cookies" 'STRICT generated-form route without selected duty' \
+    "$base_url/4fach/vordrucke.php"
+assert_strict_duty_redirect \
+    "$s1_cookies" 'STRICT message overview without selected duty' \
+    "$base_url/4fueltg/ue_ltg.php"
+assert_strict_duty_redirect \
+    "$s1_cookies" 'STRICT technical log without selected duty' \
+    "$base_url/fmtbb/tbb.php"
+assert_strict_duty_redirect \
+    "$s1_cookies" 'STRICT incident log without selected duty' \
+    "$base_url/stabetb/etb.php"
+
+# A fresh login in STRICT retains the validated original destination only in
+# server-side session state and first opens the duty selector. Reusing the S3
+# account here also proves that this is a login transition, not merely a guard
+# applied to a session that was already authenticated in LOOSE.
+: >"$s3_cookies"
+assert_status 200 'open fresh STRICT login with retained incident-log target' \
+    --cookie "$s3_cookies" --cookie-jar "$s3_cookies" \
+    --request POST \
+    --data-urlencode 'login_flow=existing' \
+    --data-urlencode 'next=incident-log' \
+    "$base_url/4fach/mainindex.php"
+strict_login_csrf=$(csrf_from_body)
+assert_status 200 'STRICT login first opens duty-function selector' \
+    --cookie "$s3_cookies" --cookie-jar "$s3_cookies" \
+    --request POST \
+    --data-urlencode "csrf_token=$strict_login_csrf" \
+    --data-urlencode 'login_flow=existing' \
+    --data-urlencode "benutzer=$s3_name" \
+    --data-urlencode "kuerzel=$s3_code" \
+    --data-urlencode 'funktion=S3' \
+    --data-urlencode "kennwort1=$role_password" \
+    --data-urlencode '2teskennwort=No' \
+    --data-urlencode 'absenden_x=1' \
+    --data-urlencode 'next=incident-log' \
+    "$base_url/4fach/mainindex.php"
+assert_no_runtime_error 'STRICT post-login duty selector response'
+assert_body '4fach/fuehrungsstelle.php' \
+    'STRICT post-login landing points to duty selector'
+assert_body_absent 'stabetb/etb.php' \
+    'STRICT post-login landing does not bypass retained target through ETB'
+assert_status 423 'STRICT requires a selected accepted duty function despite loose grants' \
     --cookie "$s1_cookies" --cookie-jar "$s1_cookies" \
     --request POST \
     --data-urlencode "csrf_token=$strict_dispatch_csrf" \
     --data-urlencode 'fm_eingang_x=1' \
     "$base_url/4fach/mainindex.php"
-load_dashboard "$aw_cookies" 'STRICT A-W dashboard after dispatch matrix'
-strict_dispatch_csrf=$(csrf_from_body)
-assert_status 403 'STRICT rejects A-W staff view after restore' \
-    --cookie "$aw_cookies" --cookie-jar "$aw_cookies" \
-    --request POST \
-    --data-urlencode "csrf_token=$strict_dispatch_csrf" \
-    --data-urlencode 'stab_schreiben_x=1' \
-    "$base_url/4fach/mainindex.php"
+assert_body 'data-estab-error-status="423"' \
+    'STRICT rejected POST remains inside the designed application shell'
+assert_body 'Wählen Sie vor dieser Eingabe eine persönlich angenommene Dienstfunktion aus.' \
+    'STRICT rejected POST explains the required duty selection'
+
+reactivated_loose_incident_id=$(incident_fixture activate "$loose_incident_id")
+if [ "$reactivated_loose_incident_id" != "$loose_incident_id" ]; then
+    echo 'Message workflow HTTP: LOOSE fixture reactivation selected another incident' >&2
+    exit 1
+fi
+assert_db_equals "LOOSE|${loose_incident_id}" \
+    'LOOSE workflow fixture is active again without changing its mode' \
+    "SELECT CONCAT(e.\`estab_permission_mode\`, '|', s.\`active_einsatz_id\`) FROM \`nv_einsaetze\` AS e CROSS JOIN \`nv_einsatz_status\` AS s WHERE e.\`einsatz_id\`=${loose_incident_id} AND s.\`singleton_id\`=1;"
+db_sql >/dev/null <<SQL
+DELETE FROM \`nv_benutzer_zusatzfunktionen\`
+ WHERE BINARY \`benutzer_kuerzel\` = BINARY '${s1_code}';
+SQL
+assert_db_equals 0 'explicit S1 dispatch additions were revoked' \
+    "SELECT COUNT(*) FROM \`nv_benutzer_zusatzfunktionen\` WHERE BINARY \`benutzer_kuerzel\`=BINARY '${s1_code}';"
+load_dashboard "$s1_cookies" 'LOOSE S1 after dispatch-grant revocation'
+revoked_dispatch_csrf=$(csrf_from_body)
+assert_loose_dispatch_denied \
+    "$s1_cookies" "$revoked_dispatch_csrf" 'S1 after revocation' fm_eingang_x
 
 # Cross the real authenticated Führungsstellen controller before the remaining
-# workflow. CSRF and the fixed S6 capability are enforced at the HTTP boundary
-# even though no duty assignment or access-shift membership is selected.
+# workflow. In LOOSE, CSRF and the exact S6 capability are enforced at the HTTP
+# boundary even though no formal duty assignment is selected.
 csrf_probe_plan_origin="CI_HTTP_CSRF_${identity_seed}"
 assert_status 403 'reject S6 plan POST without CSRF' \
     --cookie "$s6_cookies" --cookie-jar "$s6_cookies" \
@@ -1751,12 +1996,12 @@ assert_body 'S6 · Stab' 'fixed S6 account function'
 assert_status 403 'reject direct attachment administration as LdF' \
     --cookie "$ldf_cookies" --cookie-jar "$ldf_cookies" \
     "$base_url/4fach/anhang.php"
-assert_body 'darf die Anhangverwaltung nicht öffnen' \
+assert_body 'Keine Ihrer aktuell wirksamen Funktionen darf die Anhangverwaltung öffnen' \
     'direct LdF attachment rejection'
 assert_status 403 'reject direct attachment administration as Si' \
     --cookie "$si_cookies" --cookie-jar "$si_cookies" \
     "$base_url/4fach/anhang.php"
-assert_body 'darf die Anhangverwaltung nicht öffnen' \
+assert_body 'Keine Ihrer aktuell wirksamen Funktionen darf die Anhangverwaltung öffnen' \
     'direct Si attachment rejection'
 
 http_plan_origin="CI_HTTP_POST_${identity_seed}"
@@ -4341,6 +4586,17 @@ assert_body "Führungsstelle ${authoritative_sender} – Einsatz" \
 assert_body 'Übermittlungsweg' 'tracking transport-path column'
 assert_body "Funk · ${telecom_route_b_text}" \
     'tracking actual outgoing transport path'
+
+restored_active_incident_id=$(incident_fixture \
+    restore "$original_active_incident_id")
+if [ "$restored_active_incident_id" != "$original_active_incident_id" ]; then
+    echo 'Message workflow HTTP: original active incident was not restored' >&2
+    exit 1
+fi
+assert_db_equals "${original_active_incident_id}|${original_active_permission_mode}" \
+    'original active incident and immutable permission mode were restored' \
+    "SELECT CONCAT(COALESCE(s.\`active_einsatz_id\`, 0), '|', COALESCE(e.\`estab_permission_mode\`, 'NONE')) FROM \`nv_einsatz_status\` AS s LEFT JOIN \`nv_einsaetze\` AS e ON e.\`einsatz_id\`=s.\`active_einsatz_id\` WHERE s.\`singleton_id\`=1;"
+active_incident_restore_required=false
 
 if [ -n "$account_restore_state_file" ]; then
     umask 077

@@ -100,8 +100,8 @@ if ($identity !== null) {
     } catch (EstabReadPermissionException $exception) {
         $readGateStatus = 403;
         $readGateMessage =
-            'Die feste Kontofunktion oder der optionale Schichtzugang ist '
-            . 'nicht mehr gültig.';
+            'Die ausgewählte Strict-Dienstfunktion oder die im lockeren '
+            . 'Modus wirksame Konto-/Zusatzfunktion ist nicht mehr gültig.';
     } catch (Throwable $exception) {
         error_log(
             'eStab sidebar read gate failed: ' . $exception->getMessage()
@@ -210,7 +210,7 @@ function estab_vorgaben_status_markup(
                         $queueSessionKey,
                         $messageTable,
                         $userTablePrefix,
-                        $identity['funktion'],
+                        (string) ($queueProfile['funktion'] ?? ''),
                         $includeOutgoingForReview
                     );
                 }
@@ -259,7 +259,8 @@ function estab_vorgaben_status_markup(
         $soundUrl,
         $notificationSoundUrl,
         $freshnessState,
-        estab_incident_ui_markup($incidentState, true, true)
+        estab_incident_ui_markup($incidentState, true, true),
+        $identity
     );
 }
 
@@ -357,17 +358,24 @@ $refreshScript = $selectedIdentity === null
           </p>
         </div>
         <?php if ($actions !== []): ?>
-          <form
-            class="estab-sidebar-action-form"
-            data-estab-requires-incident
-            action="<?= estab_auth_html((string) $conf_4f['MainURL']) ?>"
-            method="post"
-            target="mainframe"
-          >
-            <?= estab_csrf_field() ?>
-            <?= estab_navigation_login_destination_field($loginDestination) ?>
-            <div class="estab-sidebar-actions">
-              <?php foreach ($actions as $action): ?>
+          <div class="estab-sidebar-actions">
+            <?php foreach ($actions as $action): ?>
+              <form
+                class="estab-sidebar-action-form"
+                data-estab-requires-incident
+                action="<?= estab_auth_html((string) $conf_4f['MainURL']) ?>"
+                method="post"
+                target="mainframe"
+              >
+                <?= estab_csrf_field() ?>
+                <?= estab_navigation_login_destination_field($loginDestination) ?>
+                <?php if (is_string($action['acting_function'] ?? null)): ?>
+                  <input
+                    type="hidden"
+                    name="acting_function"
+                    value="<?= estab_auth_html($action['acting_function']) ?>"
+                  >
+                <?php endif; ?>
                 <button
                   class="estab-sidebar-action"
                   type="submit"
@@ -382,9 +390,9 @@ $refreshScript = $selectedIdentity === null
                     <?= estab_auth_html($action['description']) ?>
                   </span>
                 </button>
-              <?php endforeach; ?>
-            </div>
-          </form>
+              </form>
+            <?php endforeach; ?>
+          </div>
         <?php else: ?>
           <p class="estab-sidebar-empty">
             Für diese Rolle sind hier keine Nachrichtenaktionen hinterlegt.

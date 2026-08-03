@@ -32,6 +32,7 @@ $flash = $_SESSION['estab_user_admin_flash'] ?? null;
 unset($_SESSION['estab_user_admin_flash']);
 $error = null;
 $functionRoles = [];
+$extraFunctionRoles = [];
 $passwordPolicy = null;
 
 if ($requestMethod === 'POST') {
@@ -49,7 +50,15 @@ if ($requestMethod === 'POST') {
         $error === null
         && !in_array(
             $action,
-            ['create', 'reassign', 'block', 'unblock', 'reset_password'],
+            [
+                'create',
+                'reassign',
+                'grant_extra_function',
+                'revoke_extra_function',
+                'block',
+                'unblock',
+                'reset_password',
+            ],
             true
         )
     ) {
@@ -118,6 +127,45 @@ if ($requestMethod === 'POST') {
                 $flashAction = !($result['changed'] ?? false)
                     ? 'assignment_unchanged'
                     : 'reassigned';
+            } elseif ($action === 'grant_extra_function') {
+                $result = estab_user_admin_grant_extra_function(
+                    $connection,
+                    (string) $conf_4f_db['datenbank'],
+                    $conf_4f_tbl['benutzer'],
+                    $conf_4f_tbl['protokoll'],
+                    $targetCode,
+                    $_POST['extra_function'] ?? null,
+                    $_POST['expected_primary_function'] ?? null,
+                    $_POST['expected_primary_role'] ?? null,
+                    $_POST['expected_extra_functions_revision'] ?? null,
+                    $_POST['expected_extra_absent'] ?? null,
+                    $conf_4f_tbl['empfmtx'],
+                    $conf_4f_tbl['usrtblprefix'],
+                    $actor,
+                    $remoteAddress,
+                    ($_POST['confirm_extra_function'] ?? null) === '1'
+                );
+                $flashAction = 'extra_function_granted';
+            } elseif ($action === 'revoke_extra_function') {
+                $result = estab_user_admin_revoke_extra_function(
+                    $connection,
+                    (string) $conf_4f_db['datenbank'],
+                    $conf_4f_tbl['benutzer'],
+                    $conf_4f_tbl['protokoll'],
+                    $targetCode,
+                    $_POST['extra_function'] ?? null,
+                    $_POST['expected_extra_role'] ?? null,
+                    $_POST['expected_granted_at'] ?? null,
+                    $_POST['expected_granted_by'] ?? null,
+                    $_POST['expected_primary_function'] ?? null,
+                    $_POST['expected_primary_role'] ?? null,
+                    $_POST['expected_extra_functions_revision'] ?? null,
+                    $conf_4f_tbl['empfmtx'],
+                    $actor,
+                    $remoteAddress,
+                    ($_POST['confirm_extra_function'] ?? null) === '1'
+                );
+                $flashAction = 'extra_function_revoked';
             } elseif ($action === 'reset_password') {
                 $requestPasswordPolicy = estab_password_policy_load($connection);
                 $newPassword = estab_user_admin_validate_password(
@@ -234,9 +282,14 @@ try {
                 $connection,
                 $conf_4f_tbl['empfmtx']
             );
+            $extraFunctionRoles = estab_user_admin_extra_function_roles(
+                $connection,
+                $conf_4f_tbl['empfmtx']
+            );
             $users = estab_user_admin_list(
                 $connection,
-                $conf_4f_tbl['benutzer']
+                $conf_4f_tbl['benutzer'],
+                $extraFunctionRoles
             );
         } finally {
             estab_assignment_release_policy_lock(
@@ -266,6 +319,8 @@ $flashMessages = [
     'created' => 'Das Konto wurde mit einer festen Funktionszuordnung angelegt.',
     'reassigned' => 'Die Funktionszuordnung wurde geändert.',
     'assignment_unchanged' => 'Diese Funktionszuordnung war bereits gesetzt.',
+    'extra_function_granted' => 'Die persönliche Zusatzfunktion wurde vergeben.',
+    'extra_function_revoked' => 'Die persönliche Zusatzfunktion wurde entzogen.',
     'blocked' => 'Das Konto wurde gesperrt.',
     'unblocked' => 'Das Konto wurde entsperrt. Die nächste Nutzung erfordert eine neue Anmeldung.',
     'password_reset' => 'Das Kennwort wurde sicher ersetzt. Die nächste Nutzung erfordert eine neue Anmeldung.',
@@ -313,10 +368,10 @@ if (
     <header class="estab-tool-hero">
       <p class="estab-tool-eyebrow">Technischer Administrationszugang</p>
       <h1>Benutzerverwaltung</h1>
-      <p>Konten mit einer festen Funktion anlegen, administrativ neu zuweisen,
-        sperren oder wieder freigeben und Kennwörter nach der zentralen
-        Richtlinie sicher zurücksetzen. Alle Änderungen werden gemeinsam mit
-        einem Audit-Eintrag gespeichert.</p>
+      <p>Konten mit einer festen Primärfunktion anlegen, persönliche
+        Zusatzfunktionen verwalten, Konten sperren oder wieder freigeben und
+        Kennwörter nach der zentralen Richtlinie sicher zurücksetzen. Alle
+        Änderungen werden gemeinsam mit einem Audit-Eintrag gespeichert.</p>
     </header>
 
     <aside
@@ -332,6 +387,14 @@ if (
         zugewiesen werden. Ändert sich nur die Rolle einer weiterhin gültigen
         Funktion, übernimmt das Konto die neue Rolle automatisch und eine
         bestehende Anmeldung endet.</p>
+      <p><strong>Zusatzfunktionen gelten nur im lockeren
+        Berechtigungsmodus eines Einsatzes.</strong> Im strengen Modus wird
+        ausschließlich die persönlich angenommene und aktuell ausgewählte
+        Funktion einer aktiven Dienstschicht ausgewertet. Jede Vergabe und
+        jeder Entzug beendet eine bestehende Anmeldung sofort, damit geänderte
+        Rechte erst nach einer neuen Anmeldung verwendet werden. Ungültig
+        gewordene Zusatzfunktionen erweitern keine Rechte und können hier
+        weiterhin sicher entfernt werden.</p>
     </aside>
 
     <?php if ($flashMessage !== null): ?>
@@ -377,9 +440,10 @@ if (
 
     <section class="estab-tool-panel" aria-labelledby="estab-create-user-title">
       <h2 id="estab-create-user-title">Benutzerkonto anlegen</h2>
-      <p>Vergeben Sie Identität, Startkennwort und die einzige Funktion, mit der
-        sich das neue Konto anmelden darf. Eine spätere Änderung ist nur hier
-        in der Administration möglich.</p>
+      <p>Vergeben Sie Identität, Startkennwort und die Primärfunktion, mit der
+        sich das neue Konto anmeldet. Persönliche Zusatzfunktionen können
+        anschließend am Konto ergänzt werden und wirken nur in Einsätzen mit
+        lockerem Berechtigungsmodus.</p>
       <?php if ($functionRoles === [] || !is_array($passwordPolicy)): ?>
         <p class="estab-tool-empty">Die verfügbaren Funktionen konnten nicht
           geladen werden oder die Kennwortrichtlinie ist nicht verfügbar.</p>
@@ -454,6 +518,7 @@ if (
               <th scope="col">Benutzer</th>
               <th scope="col">Funktion</th>
               <th scope="col">Rolle</th>
+              <th scope="col">Persönliche Zusatzfunktionen</th>
               <th scope="col">Status</th>
               <th scope="col">Aktionen</th>
             </tr>
@@ -480,6 +545,30 @@ if (
                       $storedRole
                   );
               $orphaned = $manageable && !$assignmentCurrent;
+              $extraAssignments = is_array($user['zusatzfunktionen'] ?? null)
+                  ? array_values(array_filter(
+                      $user['zusatzfunktionen'],
+                      static fn (mixed $extra): bool => is_array($extra)
+                  ))
+                  : [];
+              $extraFunctionsRevision = is_string(
+                  $user['zusatzfunktionen_revision'] ?? null
+              ) ? $user['zusatzfunktionen_revision'] : '';
+              $extraFunctionKeys = [];
+              foreach ($extraAssignments as $extraAssignment) {
+                  $extraFunctionKeys[(string) (
+                      $extraAssignment['funktion'] ?? ''
+                  )] = true;
+              }
+              $grantableExtraRoles = [];
+              foreach ($extraFunctionRoles as $function => $role) {
+                  if (
+                      !hash_equals($storedFunction, $function)
+                      && !isset($extraFunctionKeys[$function])
+                  ) {
+                      $grantableExtraRoles[$function] = $role;
+                  }
+              }
               $presence = estab_auth_presence_state($user);
               $active = !$blocked && !$orphaned && $presence === 'online';
               $idle = !$blocked && !$orphaned && $presence === 'inactive';
@@ -521,6 +610,46 @@ if (
                   <span class="estab-tool-badge estab-tool-badge-danger">
                     Neu zuweisen
                   </span>
+                <?php endif; ?>
+              </td>
+              <td data-label="Persönliche Zusatzfunktionen">
+                <?php if ($extraAssignments === []): ?>
+                  <span class="estab-tool-badge estab-tool-badge-neutral">
+                    Keine
+                  </span>
+                <?php else: ?>
+                  <div class="estab-tool-action-stack">
+                    <?php foreach ($extraAssignments as $extraAssignment): ?>
+                      <?php
+                        $extraFunction = (string) (
+                            $extraAssignment['funktion'] ?? ''
+                        );
+                        $extraRole = (string) ($extraAssignment['rolle'] ?? '');
+                        $extraCurrent =
+                            ($extraAssignment['ist_gueltig'] ?? false) === true;
+                      ?>
+                      <div <?= !$extraCurrent
+                          ? 'data-estab-extra-function-invalid' : '' ?>>
+                        <strong><?= estab_admin_html(
+                            estab_function_identity_display_name(
+                                $extraFunction,
+                                $extraRole
+                            )
+                        ) ?></strong>
+                        <?php if (!$extraCurrent): ?>
+                          <span
+                            class="estab-tool-badge estab-tool-badge-danger">
+                            Nicht mehr gültig · keine Berechtigung
+                          </span>
+                        <?php endif; ?>
+                        <small>Vergeben am <?= estab_admin_html(
+                            $extraAssignment['vergeben_am'] ?? ''
+                        ) ?> durch <?= estab_admin_html(
+                            $extraAssignment['vergeben_von'] ?? ''
+                        ) ?>.</small>
+                      </div>
+                    <?php endforeach; ?>
+                  </div>
                 <?php endif; ?>
               </td>
               <td data-label="Status">
@@ -592,6 +721,9 @@ if (
                             <?php foreach ($functionRoles as $function => $role): ?>
                               <option
                                 value="<?= estab_admin_html($function) ?>"
+                                <?= isset($extraFunctionKeys[$function])
+                                    && !hash_equals($storedFunction, $function)
+                                        ? 'disabled' : '' ?>
                                 <?= hash_equals(
                                     (string) ($user['funktion'] ?? ''),
                                     $function
@@ -612,6 +744,129 @@ if (
                         </button>
                       </form>
                     </details>
+                  <?php endif; ?>
+
+                  <?php if (
+                      $manageable
+                      && $grantableExtraRoles !== []
+                  ): ?>
+                    <details data-estab-extra-function-grant>
+                      <summary>Zusatzfunktion vergeben</summary>
+                      <p>Diese persönliche Funktion erweitert die Rechte nur
+                        in Einsätzen mit lockerem Berechtigungsmodus. Im
+                        strengen Modus bleibt ausschließlich die ausgewählte
+                        Funktion der aktiven Dienstschicht maßgeblich. Eine
+                        aktive Sitzung endet sofort.</p>
+                      <form method="post" action="users.php"
+                        data-estab-dirty-guard>
+                        <?= estab_csrf_field() ?>
+                        <input type="hidden" name="admin_action"
+                          value="grant_extra_function">
+                        <input type="hidden" name="target_code"
+                          value="<?= estab_admin_html($code) ?>">
+                        <input type="hidden" name="expected_primary_function"
+                          value="<?= estab_admin_html($storedFunction) ?>">
+                        <input type="hidden" name="expected_primary_role"
+                          value="<?= estab_admin_html($storedRole) ?>">
+                        <input type="hidden"
+                          name="expected_extra_functions_revision"
+                          value="<?= estab_admin_html(
+                              $extraFunctionsRevision
+                          ) ?>">
+                        <input type="hidden" name="expected_extra_absent"
+                          value="1">
+                        <label>
+                          Persönliche Zusatzfunktion
+                          <select name="extra_function" required>
+                            <option value="">Bitte wählen</option>
+                            <?php foreach (
+                                $grantableExtraRoles as $function => $role
+                            ): ?>
+                              <option value="<?= estab_admin_html($function) ?>">
+                                <?= estab_admin_html(
+                                    estab_function_identity_display_name(
+                                        $function,
+                                        $role
+                                    )
+                                ) ?>
+                              </option>
+                            <?php endforeach; ?>
+                          </select>
+                        </label>
+                        <label class="estab-tool-check">
+                          <input type="checkbox"
+                            name="confirm_extra_function" value="1" required>
+                          Ich bestätige die persönliche Zusatzberechtigung und
+                          die sofortige Abmeldung des Kontos.
+                        </label>
+                        <button class="estab-button estab-button-primary"
+                          type="submit">
+                          Zusatzfunktion vergeben und abmelden
+                        </button>
+                      </form>
+                    </details>
+                  <?php endif; ?>
+
+                  <?php if ($manageable && $extraAssignments !== []): ?>
+                    <?php foreach ($extraAssignments as $extraAssignment): ?>
+                      <?php
+                        $extraFunction = (string) (
+                            $extraAssignment['funktion'] ?? ''
+                        );
+                        $extraRole = (string) ($extraAssignment['rolle'] ?? '');
+                      ?>
+                      <details data-estab-extra-function-revoke>
+                        <summary><?= ($extraAssignment['ist_gueltig'] ?? false)
+                            ? 'Zusatzfunktion entziehen: '
+                            : 'Ungültige Zusatzfunktion entfernen: ' ?>
+                          <?= estab_admin_html(
+                              estab_function_display_name($extraFunction)
+                          ) ?></summary>
+                        <p>Die Zuordnung wird dauerhaft entfernt. Eine aktive
+                          Sitzung endet sofort; die Primärfunktion bleibt
+                          unverändert.</p>
+                        <form method="post" action="users.php"
+                          data-estab-dirty-guard>
+                          <?= estab_csrf_field() ?>
+                          <input type="hidden" name="admin_action"
+                            value="revoke_extra_function">
+                          <input type="hidden" name="target_code"
+                            value="<?= estab_admin_html($code) ?>">
+                          <input type="hidden" name="extra_function"
+                            value="<?= estab_admin_html($extraFunction) ?>">
+                          <input type="hidden" name="expected_extra_role"
+                            value="<?= estab_admin_html($extraRole) ?>">
+                          <input type="hidden" name="expected_granted_at"
+                            value="<?= estab_admin_html(
+                                $extraAssignment['vergeben_am'] ?? ''
+                            ) ?>">
+                          <input type="hidden" name="expected_granted_by"
+                            value="<?= estab_admin_html(
+                                $extraAssignment['vergeben_von'] ?? ''
+                            ) ?>">
+                          <input type="hidden"
+                            name="expected_primary_function"
+                            value="<?= estab_admin_html($storedFunction) ?>">
+                          <input type="hidden" name="expected_primary_role"
+                            value="<?= estab_admin_html($storedRole) ?>">
+                          <input type="hidden"
+                            name="expected_extra_functions_revision"
+                            value="<?= estab_admin_html(
+                                $extraFunctionsRevision
+                            ) ?>">
+                          <label class="estab-tool-check">
+                            <input type="checkbox"
+                              name="confirm_extra_function" value="1" required>
+                            Ich bestätige den Entzug und die sofortige
+                            Abmeldung des Kontos.
+                          </label>
+                          <button class="estab-button estab-button-danger"
+                            type="submit">
+                            Zusatzfunktion entziehen und abmelden
+                          </button>
+                        </form>
+                      </details>
+                    <?php endforeach; ?>
                   <?php endif; ?>
 
                   <?php if ($manageable && is_array($passwordPolicy)): ?>

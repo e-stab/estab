@@ -52,20 +52,27 @@ Die verbindlichen Regeln sind:
 8. Einsätze werden nicht gelöscht. Damit bleiben Referenzen, Exporte und
    Auditnachweise dauerhaft eindeutig.
 9. Operative Eingaben benötigen immer einen aktiven offenen Einsatz und ein
-   konkret authentifiziertes, aktives, ungesperrtes Konto mit wirksamem
-   Zugang. Im Berechtigungsmodus `STRICT` müssen zusätzlich feste
-   Kontofunktion und serverseitig abgeleitete Rolle fachlich passen. Im Modus
-   `LOOSE` entfallen ausschließlich diese funktions-/rollenbezogenen
-   Schreibprüfungen. Eine aktive Dienst- oder Zugangsschicht ist nicht
-   erforderlich.
+   konkret authentifiziertes, aktives und ungesperrtes Konto. Im
+   Berechtigungsmodus `STRICT` stammen operative Identität und Rechte
+   ausschließlich aus einer persönlich angenommenen, aktuell ausgewählten
+   Besetzung der aktiven formalen Dienstschicht. Im Modus `LOOSE` ist keine
+   formale Dienstschicht erforderlich; dort muss die feste Kontofunktion oder
+   eine ausdrücklich vergebene globale Zusatzfunktion fachlich passen.
+   Optionale Zugangsschichten können nur in `LOOSE` den Gruppenzugang
+   entziehen und verleihen keine Fachrechte.
 10. „Nicht aktiv“ und „formal abgeschlossen“ sind getrennte Zustände. Ein
     formaler Abschluss ist nur nach einer vollständigen Preflight-Prüfung
     möglich und sperrt sämtliche weiteren operativen Änderungen.
 11. ETB und TBB bilden je Einsatz je einen lokalen, bei 1 beginnenden und nur
-    anhängbaren Nummernstrom. Bei einem neuen, leeren Einsatz schreibt bereits
-    die Aktivierung je eine schichtfreie Eröffnungszeile. Der formale
-    Einsatzabschluss schreibt die Abschlusszeilen atomar mit dem Vorgang; eine
-    frühere Schicht ist weder für Eröffnung noch Abschluss Voraussetzung.
+    anhängbaren Nummernstrom. In `STRICT` eröffnet erst die Aktivierung der
+    ersten formalen Dienstschicht beide Bücher mit Schichtprovenienz. In
+    `LOOSE` kann bereits die Einsatzaktivierung schichtfreie Eröffnungszeilen
+    schreiben. Bei einem bereits aktiven und noch ungeöffneten `STRICT`-Einsatz,
+    der weiterhin keinerlei operative oder formale Eintragung besitzt, schreibt
+    der bestätigte Wechsel nach `LOOSE` diese beiden Zeilen atomar mit dem
+    Moduswechsel. Der formale Einsatzabschluss schreibt die Abschlusszeilen
+    atomar mit dem Vorgang; `STRICT` verlangt zuvor eröffnete Bücher und eine
+    beendete formale Dienstorganisation, `LOOSE` keine frühere Schicht.
 12. Jeder Einsatz besitzt ab seiner Erzeugung exakt zwei leere,
     fremdschlüsselgebundene Nummernköpfe `ETB:1` und `TTB:1`. Ein fehlender
     Kopf wird beim Buchen nicht repariert, sondern sperrt den Schreibvorgang.
@@ -75,12 +82,16 @@ Die verbindlichen Regeln sind:
 14. Jeder Einsatz besitzt genau einen Berechtigungsmodus. Neuinstallation,
     neue Einsätze und alle beim Upgrade vorhandenen Einsätze beginnen
     fail-closed mit `STRICT`. Nur die revisions- und auditgebundene
-    Administration darf einen offenen Einsatz umstellen; `LOOSE` verlangt
-    eine ausdrückliche Warnungsbestätigung. Der Modus ändert keine
-    allgemeinen Lese-, Richtungs-, Status-, Sperr-, Integritäts- oder
-    Aufbewahrungsregeln. Nur die für eine ausdrücklich gewählte Schreibstufe
-    notwendige Workflow-Objektsicht und funktionsbezogene Zuständigkeit werden
-    gelockert.
+    Administration darf einen offenen Einsatz ohne jede operative oder formale
+    Eintragung umstellen; `LOOSE` verlangt eine ausdrückliche
+    Warnungsbestätigung. Die erste solche Eintragung friert den Modus dauerhaft
+    ein; das spätere Löschen einzelner Daten hebt die Sperre nicht auf. Das
+    idempotente Speichern desselben Modus bleibt ohne neue Revision und ohne
+    Auditereignis möglich. Der Modus ändert keine
+    Richtungs-, Status-, Sperr-, Integritäts- oder Aufbewahrungsregeln. Auch in
+    `LOOSE` werden Menü-, Lese- und Schreibrechte nur durch konkret
+    zugewiesene feste oder zusätzliche Funktionen erteilt; der Modus allein
+    gibt kein Recht frei.
 
 ## Datenmodell
 
@@ -90,8 +101,9 @@ Die verbindlichen Regeln sind:
 | `nv_einsatz_status` | Genau eine Singleton-Zeile mit aktiver Einsatz-ID, monotoner Revision, Zeitpunkt und Akteur |
 | `nv_einsatz_ereignisse` | Unveränderliches Audit für Anlegen, Berechtigungsmodusänderungen, Führungsstellenänderungen, Aktivieren und Deaktivieren |
 | `nv_nachrichtenereignis_kopf`, `nv_nachrichtenereignisse` | Pro Nachricht verketteter, unveränderlicher Zustands- und Terminalnachweis |
-| `nv_zugangsschichten`, `nv_zugangsschicht_mitglieder` | Optionale einsatzbezogene Gruppen zum gemeinsamen Aktivieren und Deaktivieren von Zugängen; keine Fachrechtsquelle |
-| `nv_dienstschichten`, `nv_dienstbesetzungen`, `nv_dienstuebergaben` | Historische formale Dienstbetriebs-, Besetzungs- und Übergabeevidenz; nicht mehr Autorisierungsquelle |
+| `nv_zugangsschichten`, `nv_zugangsschicht_mitglieder` | Nur in `LOOSE` ausgewertete optionale einsatzbezogene Gruppen zum gemeinsamen Aktivieren und Deaktivieren von Zugängen; keine Fachrechtsquelle |
+| `nv_dienstschichten`, `nv_dienstbesetzungen`, `nv_dienstuebergaben` | Formale Dienstbetriebs-, persönliche Besetzungs- und Übergabeevidenz; in `STRICT` aktuelle Quelle von operativer Identität und Rechten |
+| `nv_benutzer_zusatzfunktionen` | Globale, administrativ vergebene Zusatzfunktionen je Konto; ausschließlich in `LOOSE` wirksam |
 | `nv_fernmeldeplaene`, `nv_fernmeldeplan_eintraege` | Versionierte, nach Freigabe unveränderliche S6-Kommunikationsplanung |
 | `nv_melderauftraege` | Vollständige Melderkette vom LdF-Auftrag bis zur Rückmeldung |
 | `nv_betriebsereignis_kopf`, `nv_betriebsereignisse` | Einsatzbezogene Hashkette für Schicht-, Besetzungs-, Plan- und Melderereignisse |
@@ -232,14 +244,14 @@ zurück. Ohne aktiven Einsatz wird
 Der gemeinsame Request-Guard ergänzt diese Einsatzgrenze um den
 Führungsstellenbetrieb: In beiden Modi scheitert eine normale operative
 Eingabe, wenn das konkrete Konto nicht aktiv beziehungsweise gesperrt ist,
-eine ausschließlich deaktivierte Zugangsschicht den Zugriff entzogen hat oder
-ein als Melder übernommener Auftrag die Person bis zur Rückkehr bindet. Nur im
-strengen Modus scheitern die modeabhängigen Workflow-, ETB-/TTB-, S6-Plan-
-und Melder-Schreibpfade außerdem an einer fachlich unpassenden festen
-Funktion/Rolle. Rollenstrenge Übersichten, Kategorien- und
-Administrationsrechte bleiben in beiden Modi unverändert. Eine aktive Schicht
-oder eine persönliche Schichtannahme wird
-nicht verlangt. Ausgenommen sind nur die eng begrenzten
+keine wirksame Funktion den Arbeitsschritt erlaubt oder ein als Melder
+übernommener Auftrag die Person bis zur Rückkehr bindet. `STRICT` verlangt
+außerdem eine persönlich angenommene und ausgewählte Besetzung der aktiven
+Dienstschicht; genau diese Besetzung liefert Funktion und Rolle. `LOOSE`
+verlangt stattdessen eine fachlich passende feste oder explizite
+Zusatzfunktion. Eine ausschließlich deaktivierte Zugangsschicht kann nur dort
+den Zugriff entziehen. Objekt-, Kategorien- und Administrationsgrenzen
+bleiben zusätzlich verbindlich. Ausgenommen sind nur die eng begrenzten
 Kontrollschritte Anmeldung/Abmeldung, Melder-Rückkehrkette, Administration und
 Wiederherstellung.
 
@@ -290,11 +302,15 @@ estab_incident_update_permission_mode(
 ```
 
 Die Modusänderung sperrt zuerst denselben globalen Einsatzstatus wie Aktivieren
-und operative Writer. Sie ist nur für offene Einsätze zulässig und bindet
-Einsatz-ID, erwarteten alten Modus und globale Revision. `LOOSE` wird ohne
-separate Bestätigung abgewiesen. Ein echter Wechsel erhöht die Revision und
-schreibt das Ereignis `berechtigung_geaendert` samt Vorher-/Nachherwert; ein
-unveränderter Wert erzeugt keinen Scheinwechsel.
+und operative Writer. Eine echte Änderung ist nur für einen offenen Einsatz
+ohne jede operative oder formale Eintragung zulässig und bindet Einsatz-ID,
+erwarteten alten Modus und globale Revision. `LOOSE` wird ohne separate
+Bestätigung abgewiesen. Ein echter Wechsel erhöht die Revision, schreibt das
+Ereignis `berechtigung_geaendert` samt Vorher-/Nachherwert und setzt die neue
+Modusgrundlage. Die erste operative oder formale Eintragung friert diese
+Grundlage dauerhaft ein; auch ein späteres Löschen entsperrt sie nicht. Ein
+unveränderter Wert bleibt idempotent und erzeugt weder Revision noch
+Scheinwechsel.
 
 Formaler Abschluss und Aufbewahrung:
 
@@ -319,10 +335,10 @@ estab_incident_set_legal_hold(
 Der Preflight blockiert unter anderem offene Nachrichten, Sperren,
 unvollständige Anhänge, fehlende oder vom SHA-256-/Größennachweis abweichende
 neue Anhangdateien, offene Melderaufträge, Planentwürfe und ungültige
-Nachrichten- oder Betriebsereignisketten. Historische formale Dienstschichten
-und Besetzungen sowie fehlende schichtbezogene Bucheröffnungen blockieren den
-Abschluss nicht; ein Einsatz kann auch ohne jemals angelegte Schicht formal
-geschlossen werden. Beim
+Nachrichten- oder Betriebsereignisketten. In `STRICT` blockieren fehlende
+Bucheröffnungen sowie eine noch offene formale Dienstorganisation den
+Abschluss. In `LOOSE` kann ein Einsatz auch ohne jemals angelegte formale
+Dienstschicht geschlossen werden. Beim
 Upgrade vorhandene, erreichbare Anhänge blockieren nicht allein aufgrund
 fehlender rückwirkender Beweiskraft; die Oberfläche zählt sie ausdrücklich als
 „Integrität beim Eingang nicht belegbar“.
@@ -345,16 +361,13 @@ Einsatz-API:
   Einsatz ohne bestätigten Führungsstellennamen erscheint ein roter Hinweis.
   Markierte operative Formulare werden im Browser deaktiviert; jeder
   POST-Controller prüft den Zustand zusätzlich serverseitig.
-- Die Führungsstellenansicht zeigt die feste Kontofunktion, den
-  Berechtigungsmodus und – sofern verwendet – die optionalen
-  Zugangsschichten. Im strengen Modus stammen Schreibrechte aus Funktion und
-  Rolle des Kontos; bei den vom lockeren Modus erfassten operativen
-  Schreibstufen bleiben beide Angaben Identitäts- und Auditprovenienz, sperren
-  den Vorgang aber nicht. Rollenstrenge Übersichten, Nachweisung,
-  Zweitsichtungsarchive, Kategorien- und Administrationsrechte bleiben
-  unverändert. Ohne aktive Schicht bleibt die Arbeit
-  möglich; ohne aktiven Einsatz bleibt jeder operative POST serverseitig
-  gesperrt.
+- Die Führungsstellenansicht zeigt Berechtigungsmodus und wirksame Funktionen.
+  In `STRICT` stammen sie aus der angenommenen und ausgewählten Besetzung der
+  aktiven Dienstschicht. In `LOOSE` werden feste Kontofunktion und explizite
+  Zusatzfunktionen angezeigt; optionale Zugangsschichten können dort den
+  Gruppenzugang steuern. Ohne passende wirksame Funktion bleiben Menü, Lesen
+  und Schreiben gesperrt. Ohne aktiven Einsatz bleibt jeder operative POST
+  ebenfalls serverseitig gesperrt.
 - Nachrichten, Sperren, Sichtung, Transport, Gelesen-/Erledigt-Zustände und
   Kategoriezuordnungen prüfen die aktive Nachricht innerhalb einer
   `estab_incident_with_active_write()`-Transaktion. Listen und Zähler lesen nur
@@ -381,10 +394,11 @@ Einsatz-API:
   Korrektur- und Anhangsbezüge, Ablage-/Originaldateiname sowie die
   vollständige ETB-Anlagennummer. Eine optionale Bearbeitungszuordnung ist nur
   Such- und Anzeigehilfe und erweitert keine Rechte. Beim Speichern werden
-  feste Kontofunktion, Rolle und Sperrstatus erneut geprüft; der lesbare
-  Snapshot bleibt aus dem amtlichen PDF ausgeschlossen. Im lockeren Modus
-  entfällt ausschließlich die funktions-/rollenbezogene Schreibprüfung;
-  Konto-, Einsatz-, Objekt-, Validierungs- und Append-only-Grenzen bleiben.
+  wirksame Funktion, Rolle und Sperrstatus erneut geprüft; der lesbare
+  Snapshot bleibt aus dem amtlichen PDF ausgeschlossen. In `STRICT` muss die
+  Funktion aus der aktiven ausgewählten Dienstbesetzung stammen, in `LOOSE`
+  aus der festen oder einer zusätzlichen Kontofunktion. Konto-, Einsatz-,
+  Objekt-, Validierungs- und Append-only-Grenzen bleiben.
 - Neue ETB-Referenzen bestehen ausschließlich aus der positiven lokalen
   Buchnummer eines bereits vorhandenen Eintrags desselben Einsatzes. Freitext,
   führende Nullen, globale Primärschlüssel und unbekannte Nummern scheitern.
@@ -403,22 +417,18 @@ Einsatz-API:
   Zeilensperren funktionieren unter der unveränderten MariaDB-Standardisolation
   `REPEATABLE READ`; für den Dossierexport bleiben konsistente Read-only-
   Snapshots aktiviert.
-- Im Nachrichtenworkflow kann `LOOSE` nur für eine ausdrücklich gewählte
-  Schreibstufe die dafür nötige Objektsicht eröffnen. Richtung, Status und
-  Sperrinhaber bleiben bindend. Eine zurückgewiesene Ausgangsmeldung darf eine
-  andere Funktion übernehmen; die unveränderliche Evidenz bewahrt dabei
-  ursprüngliche und neue Verantwortlichkeit. Reine Übersichten und
-  Archivansichten erhalten dadurch keine zusätzliche Leseberechtigung.
-- Im strengen Modus folgen die fachlichen Schreibrechte ausschließlich dem
-  Konto: ETB schreiben `ETB/Stab` oder `S2/Stab`; das TTB schreibt die Funktion
-  `Fernmelder`. Im lockeren Modus dürfen andere konkrete aktive und
-  ungesperrte Konten schreiben. Anwendung und Insert-Trigger prüfen in beiden
-  Modi Konto-/Kürzelidentität, Sperrstatus und aktiven Einsatz; Funktion und
-  Rolle werden nur in `STRICT` als Schreibgrenze ausgewertet. Eine aktive
-  Schicht oder Besetzungsannahme wird nicht verlangt.
-  Neue Zeilen dürfen die Legacy-Provenienzfelder für Dienstschicht und
-  Schreiberbesetzung `NULL` lassen; sie werden nicht mit einer Zugangsschicht
-  befüllt. Historische belegte Werte bleiben unverändert. Beide Tabellen
+- Im Nachrichtenworkflow muss jede Stufe auch in `LOOSE` durch eine passende
+  feste oder zusätzliche Funktion autorisiert sein. Richtung, Status,
+  Objektsicht und Sperrinhaber bleiben bindend. Die unveränderliche Evidenz
+  bewahrt ursprüngliche und neue Verantwortlichkeit.
+- ETB erfordert in beiden Modi `ETB/Stab` oder `S2/Stab`, das TTB
+  `Fernmelder`. In `STRICT` liefert die ausgewählte Dienstbesetzung diese
+  Funktion und neue manuelle Zeilen speichern Dienstschicht sowie
+  Schreiberbesetzung. In `LOOSE` liefert die feste oder eine zusätzliche
+  Kontofunktion die Berechtigung; die formalen Schichtfelder dürfen dort
+  `NULL` bleiben und werden niemals mit einer Zugangsschicht befüllt.
+  Automatische Systemzeilen dürfen in beiden Modi ohne persönlichen Schreiber
+  bleiben. Beide Tabellen
   weisen `UPDATE` und `DELETE` ab; Berichtigungen sind neue, direkt auf den
   Originaleintrag verweisende Zeilen.
 - Nummerierte Eingänge und tatsächlich beförderte Ausgänge schreiben
@@ -428,20 +438,25 @@ Einsatz-API:
   begründete Wegkorrektur hängt einen neuen, direkt auf den unveränderten
   Nachrichtennachweis verweisenden TBB-Korrektureintrag an und verändert die
   ausgegebene Ursprungsnummer nicht.
-- Zugangsschichten sind optionale Gruppen und keine Dienstbesetzungen. Ein
+- Zugangsschichten sind nur in `LOOSE` ausgewertete optionale Gruppen und
+  keine Dienstbesetzungen. Ein
   unzugeordnetes Konto bleibt zugelassen; bei mehreren Zuordnungen genügt eine
   aktive Gruppe. Aktivieren erzeugt keine Anmeldung. Deaktivieren widerruft
   betroffene Sitzungen, wenn keine andere aktive Zuordnung verbleibt. Die
   dauerhafte Kontosperre bleibt unabhängig und vorrangig.
 - Mutationen dieser Gruppen werden als `ZUGANGSSCHICHT` in der
-  Betriebsereigniskette nachgewiesen. Die schichtfreie Nachrichtenzähler-
-  Reparatur verwendet den Objekttyp `EINSATZ`.
-- Historische Dienstschichten, Besetzungen und Übergaben bleiben unverändert
-  als Betriebs- und Exportnachweis verfügbar. Der Dossierabschnitt
-  Dienstorganisation stellt sie getrennt als Legacy-Nachweis dar und enthält
-  zusätzlich alle aktuellen und entfernten Zugangsschichtzuordnungen. Die
-  Altdaten bestimmen weder aktuelle Fachrechte noch den Einsatzabschluss und
-  sperren keine Eingabe.
+  Betriebsereigniskette nachgewiesen. Die Nachrichtenzähler-Reparatur verlangt
+  in `STRICT` die aktive formale Dienstschicht und verwendet den Objekttyp
+  `DIENSTSCHICHT`; in `LOOSE` läuft sie ohne formale Dienstschicht mit
+  Objekttyp `EINSATZ`.
+- Dienstschichten, Besetzungen und Übergaben bleiben als aktueller
+  `STRICT`-Betriebs- und Exportnachweis verfügbar. Der Dossierabschnitt
+  Dienstorganisation stellt sie getrennt von allen aktuellen und entfernten
+  `LOOSE`-Zugangsschichtzuordnungen dar. Nach dem Ende einer formalen
+  Dienstschicht bleibt ihre Besetzung unverändert als historische Evidenz
+  erhalten, bestimmt dann aber keine aktuellen Fachrechte mehr. Formale
+  Dienstschichten blockieren den Einsatzabschluss nicht allein durch ihren
+  historischen Zustand.
 - Nachrichtenzähler-Reparatur und PDF-Vordruckreset benötigen einen aktiven
   Einsatz und ändern ausschließlich dessen Nachrichten. Login, Logout,
   Benutzer- und Konfigurationsverwaltung bleiben bewusst globale Vorgänge.
@@ -449,12 +464,12 @@ Einsatz-API:
   auch einen nicht aktiven historischen Einsatz lesen. Die
   Datenbankabfragen laufen in einem konsistenten Read-only-Snapshot und sind
   sämtlich auf diese ID vorbereitet. ETB und TBB können als Gesamtbuch oder
-  bei historisch belegter Provenienz für eine frühere formale Dienstschicht
-  ausgegeben werden. Dieser Legacy-Filter erfasst keine neuen Zeilen mit
-  `NULL`-Provenienz und keine Zugangsschicht. Er filtert nur diese beiden
+  bei belegter Provenienz für eine aktuelle oder historische formale
+  Dienstschicht ausgegeben werden. Dieser Dienstschichtfilter erfasst keine
+  Zeilen mit `NULL`-Provenienz und keine Zugangsschicht. Er filtert nur diese beiden
   Tabellen; alle anderen gewählten Dossierbereiche bleiben einsatzweit.
   Deckblatt und `pdf_export`-Audit speichern den aufgelösten Umfang samt
-  historischen Schichtmetadaten.
+  Schichtmetadaten.
 
 Historische, nicht mehr geroutete Duplikate und Beispiel-Uploader sind keine
 Laufzeitendpunkte. Werden lokal zusätzliche operative Module reaktiviert,
@@ -609,11 +624,12 @@ Konsistenzvertrag, keine Privileggrenze gegen einen Principal mit beliebigen
 SQL-Rechten; Datenbank-Zugangsdaten gehören zur vertrauenswürdigen
 Betriebsumgebung. Die Migration ersetzt nur die aktuell
 rollenprüfenden ETB-/TTB-, S6-Plan- und Melder-Trigger durch modebewusste
-Fassungen: `STRICT` bewahrt den Vertrag von Migration 112, `LOOSE` verlangt
-weiterhin das konkrete aktive und ungesperrte Konto sowie sämtliche Einsatz-,
-Zustands-, Beziehungs-, Nummern-, Provenienz- und Append-only-Regeln, verzichtet
-aber auf die dortige Funktions-/Rollenprüfung. Veröffentlichte
-Vorgängerdateien und historische Daten werden nicht umgeschrieben.
+Der durch Migration 115 eingeführte, inzwischen abgelöste Zwischenstand
+bewahrte in `STRICT` den Vertrag von Migration 112 und ließ in `LOOSE` die
+damalige Funktions-/Rollenprüfung aus. Dieser Absatz beschreibt ausschließlich
+die historische Upgradefolge, nicht den aktuellen Berechtigungsvertrag.
+Veröffentlichte Vorgängerdateien und historische Daten werden nicht
+umgeschrieben.
 
 Migration 116 ergänzt ausschließlich eine vollständig leere globale
 Kategorienliste um die editier- und löschbaren Vorgaben `Allgemein` sowie
@@ -622,6 +638,20 @@ Kategoriezuordnung. Ein vorhandener Betreiberkatalog bleibt vollständig
 unverändert; weil die Saat nur in dieser checksumgebundenen Einmalmigration
 liegt, werden auch später geänderte oder gelöschte Vorgaben nicht erneut
 angelegt.
+
+Migration 118 ersetzt den zuletzt wirksamen Autorisierungsvertrag, ohne die
+historischen Migrationen 112 oder 115 umzuschreiben. Sie ergänzt
+`nv_benutzer_zusatzfunktionen` für explizite globale Funktionszuweisungen und
+setzt die ETB-/TTB-, Fernmeldeplan- und Meldertrigger neu auf. In `STRICT`
+verlangen manuelle Fachschreibvorgänge eine persönlich angenommene Besetzung
+der aktiven Dienstschicht und speichern die passende Besetzungsprovenienz. In
+`LOOSE` entfällt nur die formale Dienstschichtpflicht; die benötigte Funktion
+und Rolle müssen weiterhin als feste Kontofunktion oder explizite
+Zusatzfunktion vorliegen. Systembuchzeilen dürfen schreiberlos bleiben. Die
+Schichtprovenienz bleibt für sie in `STRICT` dennoch Pflicht; nur in `LOOSE`
+dürfen Systemzeilen ohne formale Dienstschicht entstehen. Die
+Zusatzfunktionstabelle und alle ersetzten Trigger werden beim Upgrade
+kollisionsgeprüft.
 
 Migration 50 bleibt bytegenau auf der bereits im Ledger verwendeten
 Prüfsumme. Vor- oder Nachbedingungen werden ausschließlich in neuen
@@ -638,12 +668,12 @@ Wiederanlauffähigkeit und Wiederholbarkeit.
 `tests/integration/dv_evidence.php` beweist Abschluss-Preflight,
 Append-only-ETB/TBB, referenzierte Korrekturen, Hashketten, Terminalbindung,
 Mindestaufbewahrung und Legal Hold. `tests/integration/dv_operations.php`
-beweist Pflichtkopf, die im strengen Modus festen funktionsabhängigen Rechte,
+beweist Pflichtkopf, die in `STRICT` ausgewählte aktive Dienstbesetzung,
 S6-Versionierung, Melderbindung sowie die Schreibsperre ohne aktiven Einsatz
-und die erlaubte Arbeit ohne aktive Schicht. Ergänzende statische und
-integrative Berechtigungsmodustests müssen belegen, dass `LOOSE` nur
-Rollen-/Funktions-Schreibprüfungen lockert und alle übrigen Grenzen in beiden
-Modi identisch bleiben.
+oder ohne wirksame Funktion. Ergänzende statische und integrative
+Berechtigungsmodustests müssen belegen, dass `LOOSE` nur ohne formale
+Dienstschicht arbeitet, feste und explizite Zusatzfunktionen weiterhin
+erzwingt und alle Objekt-, Zustands- und Integritätsgrenzen bewahrt.
 `tests/integration/incident_export.php` erzeugt zusätzlich ETB, TBB,
 Nachricht und Anhang mit Eingangsnachweis in zwei Einsätzen, exportiert den inzwischen
 historischen ausgewählten Einsatz und extrahiert dessen PDF-`EmbeddedFile`

@@ -13,6 +13,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/auth.php';
 require_once __DIR__ . '/message_repository.php';
+require_once __DIR__ . '/read_authorization.php';
 
 const ESTAB_CATEGORY_TYPES = ['master', 'fkt', 'user'];
 const ESTAB_CATEGORY_NAME_MAX = 10;
@@ -32,6 +33,93 @@ final class EstabCategoryNotFoundException extends RuntimeException
 
 final class EstabCategoryConflictException extends RuntimeException
 {
+}
+
+/**
+ * Resolve one category scope to a currently effective operational function.
+ *
+ * The browser may carry the function selected by the server-side workflow so
+ * a LOOSE additional function keeps its own function-category tables across
+ * the separate category endpoint.  That value is only a selector: STRICT can
+ * resolve only its selected duty assignment, while LOOSE can resolve only the
+ * account's current primary or explicitly administered additional functions.
+ */
+function estab_category_identity_for_function(
+    array $identity,
+    mixed $functionValue
+): array {
+    if ($functionValue === null || $functionValue === '') {
+        return $identity;
+    }
+    if (
+        !is_string($functionValue)
+        || preg_match('/\A(?:A\/W|[A-Za-z0-9_]{1,10})\z/D', $functionValue)
+            !== 1
+    ) {
+        throw new EstabCategoryAuthorizationException(
+            'Die ausgewählte Kategorienfunktion ist ungültig.'
+        );
+    }
+    foreach (estab_auth_effective_function_roles($identity) as $tuple) {
+        if (!hash_equals($functionValue, $tuple['funktion'])) {
+            continue;
+        }
+        if (!isset(
+            $identity['authorization_account_function'],
+            $identity['authorization_account_role']
+        )) {
+            $identity['authorization_account_function'] =
+                (string) ($identity['funktion'] ?? '');
+            $identity['authorization_account_role'] =
+                (string) ($identity['rolle'] ?? '');
+        }
+        $identity['funktion'] = $tuple['funktion'];
+        $identity['rolle'] = $tuple['rolle'];
+        $identity['authorization_route_function'] = $tuple['funktion'];
+        $identity['authorization_route_role'] = $tuple['rolle'];
+        return $identity;
+    }
+    throw new EstabCategoryAuthorizationException(
+        'Die ausgewählte Kategorienfunktion ist für dieses Konto nicht wirksam.'
+    );
+}
+
+/** Accept a server-resolved route identity only for the same account. */
+function estab_category_route_identity(
+    array $accountIdentity,
+    mixed $routeIdentity
+): array {
+    if (!is_array($routeIdentity)) {
+        return $accountIdentity;
+    }
+    foreach (['benutzer', 'kuerzel'] as $field) {
+        if (
+            !is_string($accountIdentity[$field] ?? null)
+            || !is_string($routeIdentity[$field] ?? null)
+            || !hash_equals(
+                (string) $accountIdentity[$field],
+                (string) $routeIdentity[$field]
+            )
+        ) {
+            return $accountIdentity;
+        }
+    }
+    $selected = estab_category_identity_for_function(
+        $accountIdentity,
+        $routeIdentity['funktion'] ?? null
+    );
+    if (
+        !is_string($routeIdentity['rolle'] ?? null)
+        || !hash_equals(
+            (string) $selected['rolle'],
+            (string) $routeIdentity['rolle']
+        )
+    ) {
+        throw new EstabCategoryAuthorizationException(
+            'Die Kategorienfunktion stimmt nicht mit der aktuellen Route überein.'
+        );
+    }
+    return $selected;
 }
 
 /** Accept only one of the three application-owned category scopes. */
@@ -174,6 +262,8 @@ function estab_category_scope(
         'type' => $type,
         'category_table' => $categoryTable,
         'link_table' => $linkTable,
+        'acting_function' => (string) $identity['funktion'],
+        'acting_role' => (string) $identity['rolle'],
     ];
 }
 
@@ -350,7 +440,109 @@ function estab_category_fetch_assignment_id(
     return $row === null ? null : (int) $row['lfd'];
 }
 
-/** Insert a raw UTF-8 category and return its generated ID. */
+/** Insert a category inside the transaction currently owned by the caller. */
+function estab_category_insert_in_transaction(
+    mysqli $connection,
+    array $scope,
+    array $data
+): int {
+    $sql = 'INSERT INTO ' . estab_auth_table((string) $scope['category_table'])
+        . ' (`kategorie`, `beschreibung`) VALUES (?, ?)';
+    $statement = $connection->prepare($sql);
+    if (!$statement) {
+        throw new RuntimeException('Kategorie konnte nicht vorbereitet werden.');
+    }
+    try {
+        $statement->bind_param('ss', $data['kategorie'], $data['beschreibung']);
+        if (!$statement->execute()) {
+            if ($statement->errno === 1062) {
+                throw new EstabCategoryConflictException('Kategorie ist bereits vorhanden.');
+            }
+            throw new RuntimeException('Kategorie konnte nicht angelegt werden.');
+        }
+        $categoryId = (int) $connection->insert_id;
+    } finally {
+        $statement->close();
+    }
+    if ($categoryId < 1) {
+        throw new RuntimeException('Kategorie-ID konnte nicht ermittelt werden.');
+    }
+    return $categoryId;
+}
+
+/** Update a category inside the transaction currently owned by the caller. */
+function estab_category_update_in_transaction(
+    mysqli $connection,
+    array $scope,
+    int $categoryId,
+    array $data
+): void {
+    $table = estab_auth_table((string) $scope['category_table']);
+    estab_category_lock_existing($connection, $table, $categoryId);
+    $statement = $connection->prepare(
+        'UPDATE ' . $table . ' SET `kategorie` = ?, `beschreibung` = ? WHERE `lfd` = ?'
+    );
+    if (!$statement) {
+        throw new RuntimeException('Kategorieänderung konnte nicht vorbereitet werden.');
+    }
+    try {
+        $statement->bind_param('ssi', $data['kategorie'], $data['beschreibung'], $categoryId);
+        if (!$statement->execute()) {
+            if ($statement->errno === 1062) {
+                throw new EstabCategoryConflictException('Kategorie ist bereits vorhanden.');
+            }
+            throw new RuntimeException('Kategorie konnte nicht geändert werden.');
+        }
+    } finally {
+        $statement->close();
+    }
+}
+
+/** Delete a category and its links inside the caller-owned transaction. */
+function estab_category_delete_in_transaction(
+    mysqli $connection,
+    array $scope,
+    int $categoryId
+): void {
+    $categoryTable = estab_auth_table((string) $scope['category_table']);
+    $linkTable = estab_auth_table((string) $scope['link_table']);
+    estab_category_lock_existing($connection, $categoryTable, $categoryId);
+
+    $linkStatement = $connection->prepare('DELETE FROM ' . $linkTable . ' WHERE `katego` = ?');
+    if (!$linkStatement) {
+        throw new RuntimeException('Kategorieverknüpfungen konnten nicht vorbereitet werden.');
+    }
+    try {
+        $linkStatement->bind_param('i', $categoryId);
+        if (!$linkStatement->execute()) {
+            throw new RuntimeException('Kategorieverknüpfungen konnten nicht gelöscht werden.');
+        }
+    } finally {
+        $linkStatement->close();
+    }
+
+    $categoryStatement = $connection->prepare(
+        'DELETE FROM ' . $categoryTable . ' WHERE `lfd` = ? LIMIT 1'
+    );
+    if (!$categoryStatement) {
+        throw new RuntimeException('Kategorielöschung konnte nicht vorbereitet werden.');
+    }
+    try {
+        $categoryStatement->bind_param('i', $categoryId);
+        if (!$categoryStatement->execute() || $categoryStatement->affected_rows !== 1) {
+            throw new RuntimeException('Kategorie konnte nicht gelöscht werden.');
+        }
+    } finally {
+        $categoryStatement->close();
+    }
+}
+
+/**
+ * Standalone storage primitive for controlled imports and test fixtures.
+ *
+ * Request handlers must use estab_category_mutate_authorized(), which keeps
+ * the operational authorisation locks until the category mutation commits.
+ */
 function estab_category_create(
     mysqli $connection,
     array $scope,
@@ -361,27 +553,11 @@ function estab_category_create(
         throw new RuntimeException('Kategorietransaktion konnte nicht gestartet werden.');
     }
     try {
-        $sql = 'INSERT INTO ' . estab_auth_table((string) $scope['category_table'])
-            . ' (`kategorie`, `beschreibung`) VALUES (?, ?)';
-        $statement = $connection->prepare($sql);
-        if (!$statement) {
-            throw new RuntimeException('Kategorie konnte nicht vorbereitet werden.');
-        }
-        try {
-            $statement->bind_param('ss', $data['kategorie'], $data['beschreibung']);
-            if (!$statement->execute()) {
-                if ($statement->errno === 1062) {
-                    throw new EstabCategoryConflictException('Kategorie ist bereits vorhanden.');
-                }
-                throw new RuntimeException('Kategorie konnte nicht angelegt werden.');
-            }
-            $categoryId = (int) $connection->insert_id;
-        } finally {
-            $statement->close();
-        }
-        if ($categoryId < 1) {
-            throw new RuntimeException('Kategorie-ID konnte nicht ermittelt werden.');
-        }
+        $categoryId = estab_category_insert_in_transaction(
+            $connection,
+            $scope,
+            $data
+        );
         if (!$connection->commit()) {
             throw new RuntimeException('Kategorietransaktion konnte nicht abgeschlossen werden.');
         }
@@ -392,7 +568,7 @@ function estab_category_create(
     }
 }
 
-/** Update one category while serialising against delete/update races. */
+/** Standalone storage primitive for controlled imports and test fixtures. */
 function estab_category_update(
     mysqli $connection,
     array $scope,
@@ -403,29 +579,16 @@ function estab_category_update(
         throw new EstabCategoryInputException('Kategorie-ID ist ungültig.');
     }
     $data = estab_category_validate_payload($payload);
-    $table = estab_auth_table((string) $scope['category_table']);
     if (!$connection->begin_transaction()) {
         throw new RuntimeException('Kategorietransaktion konnte nicht gestartet werden.');
     }
     try {
-        estab_category_lock_existing($connection, $table, $categoryId);
-        $statement = $connection->prepare(
-            'UPDATE ' . $table . ' SET `kategorie` = ?, `beschreibung` = ? WHERE `lfd` = ?'
+        estab_category_update_in_transaction(
+            $connection,
+            $scope,
+            $categoryId,
+            $data
         );
-        if (!$statement) {
-            throw new RuntimeException('Kategorieänderung konnte nicht vorbereitet werden.');
-        }
-        try {
-            $statement->bind_param('ssi', $data['kategorie'], $data['beschreibung'], $categoryId);
-            if (!$statement->execute()) {
-                if ($statement->errno === 1062) {
-                    throw new EstabCategoryConflictException('Kategorie ist bereits vorhanden.');
-                }
-                throw new RuntimeException('Kategorie konnte nicht geändert werden.');
-            }
-        } finally {
-            $statement->close();
-        }
         if (!$connection->commit()) {
             throw new RuntimeException('Kategorietransaktion konnte nicht abgeschlossen werden.');
         }
@@ -435,7 +598,7 @@ function estab_category_update(
     }
 }
 
-/** Delete a category and all links to it as one atomic operation. */
+/** Standalone storage primitive for controlled imports and test fixtures. */
 function estab_category_delete(
     mysqli $connection,
     array $scope,
@@ -444,40 +607,15 @@ function estab_category_delete(
     if ($categoryId < 1) {
         throw new EstabCategoryInputException('Kategorie-ID ist ungültig.');
     }
-    $categoryTable = estab_auth_table((string) $scope['category_table']);
-    $linkTable = estab_auth_table((string) $scope['link_table']);
     if (!$connection->begin_transaction()) {
         throw new RuntimeException('Kategorietransaktion konnte nicht gestartet werden.');
     }
     try {
-        estab_category_lock_existing($connection, $categoryTable, $categoryId);
-        $linkStatement = $connection->prepare('DELETE FROM ' . $linkTable . ' WHERE `katego` = ?');
-        if (!$linkStatement) {
-            throw new RuntimeException('Kategorieverknüpfungen konnten nicht vorbereitet werden.');
-        }
-        try {
-            $linkStatement->bind_param('i', $categoryId);
-            if (!$linkStatement->execute()) {
-                throw new RuntimeException('Kategorieverknüpfungen konnten nicht gelöscht werden.');
-            }
-        } finally {
-            $linkStatement->close();
-        }
-
-        $categoryStatement = $connection->prepare(
-            'DELETE FROM ' . $categoryTable . ' WHERE `lfd` = ? LIMIT 1'
+        estab_category_delete_in_transaction(
+            $connection,
+            $scope,
+            $categoryId
         );
-        if (!$categoryStatement) {
-            throw new RuntimeException('Kategorielöschung konnte nicht vorbereitet werden.');
-        }
-        try {
-            $categoryStatement->bind_param('i', $categoryId);
-            if (!$categoryStatement->execute() || $categoryStatement->affected_rows !== 1) {
-                throw new RuntimeException('Kategorie konnte nicht gelöscht werden.');
-            }
-        } finally {
-            $categoryStatement->close();
-        }
         if (!$connection->commit()) {
             throw new RuntimeException('Kategorietransaktion konnte nicht abgeschlossen werden.');
         }
@@ -547,6 +685,201 @@ function estab_category_lock_message(
 }
 
 /**
+ * Lock and revalidate the exact operational identity used for category SQL.
+ *
+ * STRICT is proved by the selected, accepted assignment in the active shift;
+ * LOOSE is proved by the locked account row and, for an additional function,
+ * the still-present administrative grant. The caller must already own the
+ * active-incident transaction so none of these facts can change before commit.
+ *
+ * @param list<array<string, mixed>> $scopes
+ */
+function estab_category_lock_operational_identity(
+    mysqli $connection,
+    int $incidentId,
+    array $identity,
+    array $scopes
+): array {
+    $operationalIdentity = estab_dv_require_operational_account(
+        $connection,
+        $incidentId,
+        $identity
+    );
+    if (($operationalIdentity['estab_permission_mode'] ?? null) === 'LOOSE') {
+        $operationalIdentity['estab_additional_functions'] =
+            estab_auth_fetch_additional_functions(
+                $connection,
+                (string) $operationalIdentity['kuerzel'],
+                true
+            );
+        if (!estab_auth_identity_has_function(
+            $operationalIdentity,
+            (string) ($identity['funktion'] ?? ''),
+            (string) ($identity['rolle'] ?? '')
+        )) {
+            throw new EstabCategoryAuthorizationException(
+                'Die verwendete Zusatzfunktion wurde inzwischen entzogen.'
+            );
+        }
+    }
+
+    foreach ($scopes as $scope) {
+        if (!is_array($scope)) {
+            throw new EstabCategoryAuthorizationException(
+                'Kategorienbereich und wirksame Funktion stimmen nicht überein.'
+            );
+        }
+        estab_category_validate_type($scope['type'] ?? null);
+        estab_auth_table((string) ($scope['category_table'] ?? ''));
+        estab_auth_table((string) ($scope['link_table'] ?? ''));
+        if (
+            !hash_equals(
+                (string) $operationalIdentity['funktion'],
+                (string) ($scope['acting_function'] ?? '')
+            )
+            || !hash_equals(
+                (string) $operationalIdentity['rolle'],
+                (string) ($scope['acting_role'] ?? '')
+            )
+        ) {
+            throw new EstabCategoryAuthorizationException(
+                'Kategorienbereich und wirksame Funktion stimmen nicht überein.'
+            );
+        }
+    }
+    return $operationalIdentity;
+}
+
+/** Lock the referenced message and recheck the current actor's object access. */
+function estab_category_lock_authorized_message(
+    mysqli $connection,
+    string $messageTable,
+    int $messageId,
+    int $incidentId,
+    array $operationalIdentity
+): array {
+    $message = estab_category_lock_message(
+        $connection,
+        $messageTable,
+        $messageId,
+        $incidentId
+    );
+    if (!estab_read_message_allowed_for_identity(
+        $operationalIdentity,
+        $message
+    )) {
+        throw new EstabCategoryAuthorizationException(
+            'Keine Berechtigung für diese Meldung.'
+        );
+    }
+    return $message;
+}
+
+/**
+ * Create, update or delete a category under one locked authorisation snapshot.
+ *
+ * The active incident/mode, account or exact STRICT assignment, optional LOOSE
+ * grant, master-category authority and referenced message remain locked until
+ * the mutation commits. A permission change can therefore happen before this
+ * transaction (and be observed) or afterwards, but never between check/write.
+ */
+function estab_category_mutate_authorized(
+    mysqli $connection,
+    string $action,
+    int $messageId,
+    string $messageTable,
+    array $identity,
+    array $scope,
+    ?int $categoryId,
+    array $payload,
+    string $matrixTable = 'nv_empfmtx'
+): ?int {
+    if ($messageId < 1) {
+        throw new EstabCategoryInputException('Meldungs-ID ist ungültig.');
+    }
+    if (!in_array($action, ['create', 'update', 'delete'], true)) {
+        throw new EstabCategoryInputException('Unbekannte Kategorienaktion.');
+    }
+    $type = estab_category_validate_type($scope['type'] ?? null);
+    if ($action === 'create') {
+        if ($categoryId !== null) {
+            throw new EstabCategoryInputException('Kategorie-ID ist für das Anlegen ungültig.');
+        }
+    } elseif ($categoryId === null || $categoryId < 1) {
+        throw new EstabCategoryInputException('Kategorie-ID ist ungültig.');
+    }
+    $data = $action === 'delete'
+        ? []
+        : estab_category_validate_payload($payload);
+
+    return estab_incident_with_active_write(
+        $connection,
+        static function (array $incident) use (
+            $connection,
+            $action,
+            $messageId,
+            $messageTable,
+            $identity,
+            $scope,
+            $categoryId,
+            $data,
+            $matrixTable,
+            $type
+        ): ?int {
+            $incidentId = (int) $incident['active_einsatz_id'];
+            $operationalIdentity = estab_category_lock_operational_identity(
+                $connection,
+                $incidentId,
+                $identity,
+                [$scope]
+            );
+            $lockedRedcopy = $type === 'master'
+                ? estab_category_redcopy_function(
+                    $connection,
+                    $matrixTable,
+                    true
+                )
+                : null;
+            estab_category_require_management(
+                $type,
+                $operationalIdentity,
+                $lockedRedcopy
+            );
+            estab_category_lock_authorized_message(
+                $connection,
+                $messageTable,
+                $messageId,
+                $incidentId,
+                $operationalIdentity
+            );
+
+            if ($action === 'create') {
+                return estab_category_insert_in_transaction(
+                    $connection,
+                    $scope,
+                    $data
+                );
+            }
+            if ($action === 'update') {
+                estab_category_update_in_transaction(
+                    $connection,
+                    $scope,
+                    (int) $categoryId,
+                    $data
+                );
+                return $categoryId;
+            }
+            estab_category_delete_in_transaction(
+                $connection,
+                $scope,
+                (int) $categoryId
+            );
+            return $categoryId;
+        }
+    );
+}
+
+/**
  * Replace one or more message/category links atomically.
  *
  * $assignments maps a category type to an integer ID or null. Every selected
@@ -586,10 +919,11 @@ function estab_category_assign(
             $matrixTable
         ): void {
             $incidentId = (int) $incident['active_einsatz_id'];
-            estab_dv_require_operational_account(
+            $operationalIdentity = estab_category_lock_operational_identity(
                 $connection,
                 $incidentId,
-                $identity
+                $identity,
+                array_values($scopes)
             );
             if (array_key_exists('master', $assignments)) {
                 $lockedRedcopy = estab_category_redcopy_function(
@@ -599,21 +933,17 @@ function estab_category_assign(
                 );
                 estab_category_require_management(
                     'master',
-                    $identity,
+                    $operationalIdentity,
                     $lockedRedcopy
                 );
             }
-            $message = estab_category_lock_message(
+            estab_category_lock_authorized_message(
                 $connection,
                 $messageTable,
                 $messageId,
-                $incidentId
+                $incidentId,
+                $operationalIdentity
             );
-            if (!estab_message_object_allowed($identity, 'staff-read', $message)) {
-                throw new EstabCategoryAuthorizationException(
-                    'Keine Berechtigung für diese Meldung.'
-                );
-            }
             foreach ($assignments as $type => $categoryId) {
                 $scope = $scopes[$type];
                 if ($categoryId !== null) {

@@ -118,7 +118,6 @@ $users = [
 $positions = estab_sidebar_positions(
     $configuredPositions,
     $users,
-    $identity,
     $now
 );
 $assert(
@@ -132,13 +131,10 @@ $assert(
     'sidebar positions are not ordered, deduplicated, trimmed, or validated'
 );
 
-$identityOnly = estab_sidebar_positions([], [], [
-    'rolle' => 'Stab',
-    'funktion' => 'S6',
-]);
+$identityOnly = estab_sidebar_positions([], [], $now);
 $assert(
-    $identityOnly === [['rolle' => 'Stab', 'funktion' => 'S6']],
-    'current identity disappeared when absent from the configured matrix'
+    $identityOnly === [],
+    'sidebar invented a presence function without a database account row'
 );
 
 $queueProfiles = [
@@ -162,9 +158,9 @@ $queueProfiles = [
         'rolle' => 'FB',
         'funktion' => 'THW',
     ]),
-    'admin' => estab_sidebar_queue_profile([
-        'rolle' => 'Administrator',
-        'funktion' => 'Admin',
+    'etb' => estab_sidebar_queue_profile([
+        'rolle' => 'Stab',
+        'funktion' => 'ETB',
     ]),
     'anonymous' => estab_sidebar_queue_profile(null),
 ];
@@ -174,31 +170,43 @@ $assert(
             'session_key' => 'old_que_ldf',
             'sound_file' => 'notify_aw.wav',
             'label' => 'Bei LdF',
+            'funktion' => 'LdF',
         ],
         'aw' => [
             'session_key' => 'old_que_aw',
             'sound_file' => 'notify_aw.wav',
             'label' => 'Im Ausgang',
+            'funktion' => 'A/W',
         ],
         'si' => [
             'session_key' => 'old_que_si',
             'sound_file' => 'notify_si.wav',
             'label' => 'Zu sichten',
+            'funktion' => 'Si',
         ],
         'stab' => [
             'session_key' => 'old_que_stab',
             'sound_file' => 'notify_stab.wav',
             'label' => 'Offene Meldungen',
+            'funktion' => 'S1',
         ],
         'fb' => [
             'session_key' => 'old_que_stab',
             'sound_file' => 'notify_stab.wav',
             'label' => 'Offene Meldungen',
+            'funktion' => 'THW',
         ],
-        'admin' => null,
+        'etb' => null,
         'anonymous' => null,
     ],
     'role-specific queue, label, or notification sound mapping changed'
+);
+$assertThrows(
+    static fn (): ?array => estab_sidebar_queue_profile([
+        'rolle' => 'Administrator',
+        'funktion' => 'Admin',
+    ]),
+    'non-operational administrator identity accepted for an operational queue'
 );
 $assertThrows(
     static fn (): ?array => estab_sidebar_queue_profile([
@@ -571,7 +579,11 @@ $assert(
             'data-estab-status-freshness="current"'
         )
         && str_contains($markup, '>Status aktuell</span>')
-        && str_contains($markup, '<h2>Aktivitätsübersicht</h2>')
+        && str_contains($markup, '<h2>Aktivität nach Primärfunktion</h2>')
+        && str_contains(
+            $markup,
+            'aria-label="Anmeldeaktivität nach Primärfunktion"'
+        )
         && str_contains($markup, 'data-estab-notify="0"')
         && !str_contains($markup, 'data-estab-sound-toggle'),
     'sidebar status omitted queue, deterministic server time, date, or heading'
@@ -587,11 +599,81 @@ $assert(
         && str_contains($markup, 'data-estab-presence-function="A/W"')
         && str_contains($markup, 'Aktiv</span>')
         && str_contains($markup, 'Inaktiv (15 Min.)</span>')
-        && str_contains($markup, 'Ihre Funktion</span>')
+        && str_contains($markup, 'Ihre Primärfunktion</span>')
         && str_contains($markup, 'Abgemeldet</span>')
         && str_contains($markup, 'estab-sidebar-presence-mixed')
         && str_contains($markup, '>1 aktiv · 1 inaktiv</small>'),
     'sidebar presence summary lost counts, state text, or its visible legend'
+);
+
+$primaryFunctionPositions = $configuredPositions + [
+    10 => ['rolle' => 'Stab', 'fkt' => 'S6'],
+    11 => ['rolle' => 'Stab', 'fkt' => 'ETB'],
+];
+$strictHatSession = $session;
+$strictHatSession['vStab_funktion'] = 'S6';
+$strictHatSession['estab_permission_mode'] = 'STRICT';
+$strictHatSession['estab_duty_assignment_id'] = 701;
+$strictPresenceMarkup = estab_sidebar_status_markup(
+    $strictHatSession,
+    $primaryFunctionPositions,
+    $users,
+    'Offen',
+    0,
+    $now
+);
+$assert(
+    str_contains(
+        $strictPresenceMarkup,
+        'data-estab-presence-state="current"'
+            . ' data-estab-presence-role="Stab"'
+            . ' data-estab-presence-function="S6"'
+    )
+        && str_contains(
+            $strictPresenceMarkup,
+            'data-estab-presence-state="offline"'
+                . ' data-estab-presence-role="Stab"'
+                . ' data-estab-presence-function="S1"'
+        )
+        && str_contains($strictPresenceMarkup, 'data-estab-online-count="3"')
+        && str_contains(
+            $strictPresenceMarkup,
+            'Stab, Funktion S6: Ihre aktive Dienstfunktion, aktiv'
+        ),
+    'STRICT presence does not replace the account primary function with the '
+        . 'selected duty hat exactly once'
+);
+
+$looseAdditionalSession = $session;
+$looseAdditionalSession['estab_permission_mode'] = 'LOOSE';
+$looseAdditionalSession['estab_additional_functions'] = [
+    ['rolle' => 'Stab', 'funktion' => 'ETB'],
+];
+$loosePresenceMarkup = estab_sidebar_status_markup(
+    $looseAdditionalSession,
+    $primaryFunctionPositions,
+    $users,
+    'Offen',
+    0,
+    $now
+);
+$assert(
+    str_contains(
+        $loosePresenceMarkup,
+        'data-estab-presence-state="current"'
+            . ' data-estab-presence-role="Stab"'
+            . ' data-estab-presence-function="S1"'
+    )
+        && str_contains(
+            $loosePresenceMarkup,
+            'data-estab-presence-state="offline"'
+                . ' data-estab-presence-role="Stab"'
+                . ' data-estab-presence-function="ETB"'
+        )
+        && str_contains($loosePresenceMarkup, 'data-estab-online-count="3"')
+        && str_contains($loosePresenceMarkup, '>1 aktiv · 1 inaktiv</small>'),
+    'LOOSE additional function was falsely counted as account presence or '
+        . 'changed online/inactive totals'
 );
 
 $inactiveCurrentUsers = $users;
@@ -739,6 +821,10 @@ $assert(
         && str_contains($unavailableMarkup, '>–</strong>')
         && str_contains($unavailableMarkup, 'data-estab-online-count="0"')
         && str_contains(
+            $unavailableMarkup,
+            'data-estab-presence-state="offline"'
+        )
+        && !str_contains(
             $unavailableMarkup,
             'data-estab-presence-state="current"'
         ),
@@ -1154,6 +1240,79 @@ $assert(
         ],
     'staff sidebar lost a legacy writing, reading, or user action'
 );
+$multiStaffActions = estab_sidebar_workflow_actions([
+    'rolle' => 'Stab',
+    'funktion' => 'S1',
+    'estab_permission_mode' => 'LOOSE',
+    'estab_additional_functions' => [
+        ['rolle' => 'Stab', 'funktion' => 'S2'],
+    ],
+], 'ROLLE');
+$assert(
+    $workflowKeys($multiStaffActions) === [
+        'stab_schreiben',
+        'stab_lesen',
+        'stab_schreiben',
+        'stab_lesen',
+        'm2_benutzer',
+    ]
+        && array_map(
+            static fn (array $action): ?string =>
+                $action['acting_function'] ?? null,
+            $multiStaffActions
+        ) === [
+            'S1',
+            'S1',
+            'S2',
+            'S2',
+            null,
+        ]
+        && array_column($multiStaffActions, 'label') === [
+            'Schreiben als S1',
+            'Lesen als S1',
+            'Schreiben als S2',
+            'Lesen als S2',
+            'Benutzer',
+        ],
+    'LOOSE staff actions were deduplicated across S1/S2 or are not clearly '
+        . 'function-labelled'
+);
+$sidebarControllerSource = file_get_contents(
+    dirname(__DIR__, 2) . '/4fach/vorgaben.php'
+);
+$messageFormSource = file_get_contents(
+    dirname(__DIR__, 2) . '/4fach/official_message_form.php'
+);
+$messageListSource = file_get_contents(
+    dirname(__DIR__, 2) . '/4fach/liste.php'
+);
+$assert(
+    is_string($sidebarControllerSource)
+        && is_string($messageFormSource)
+        && is_string($messageListSource)
+        && str_contains(
+            $sidebarControllerSource,
+            "name=\"acting_function\""
+        )
+        && str_contains(
+            $sidebarControllerSource,
+            "\$action['acting_function']"
+        )
+        && str_contains(
+            $messageFormSource,
+            'official_message_acting_function()'
+        )
+        && str_contains(
+            $messageFormSource,
+            'name="acting_function"'
+        )
+        && substr_count(
+            $messageListSource,
+            'estab_list_acting_function_field ()'
+        ) >= 4,
+    'selected staff function is not carried through sidebar, form and list '
+        . 'continuations'
+);
 $assert(
     $workflowKeys(estab_sidebar_workflow_actions([
         'rolle' => 'Stab',
@@ -1205,15 +1364,45 @@ $assert(
     'sidebar exposes role actions outside the authenticated role menu'
 );
 $assert(
-    $workflowKeys(estab_sidebar_workflow_actions([
+    estab_sidebar_workflow_actions([
         'rolle' => 'Stab',
         'funktion' => 'S1',
-    ], 'ROLLE')) === [
-        'stab_schreiben',
-        'stab_lesen',
-        'm2_benutzer',
-    ],
-    'sidebar requires an optional shift before exposing account actions'
+        'estab_permission_mode' => 'STRICT',
+    ], 'ROLLE') === []
+        && estab_sidebar_workflow_actions([
+            'rolle' => 'Stab',
+            'funktion' => 'S1',
+            'estab_permission_mode' => 'INVALID',
+            'duty_assignment_id' => 701,
+        ], 'ROLLE') === []
+        && $workflowKeys(estab_sidebar_workflow_actions([
+            'rolle' => 'Stab',
+            'funktion' => 'S1',
+            'estab_permission_mode' => 'STRICT',
+            'duty_assignment_id' => 701,
+        ], 'ROLLE')) === [
+            'stab_schreiben',
+            'stab_lesen',
+            'm2_benutzer',
+        ],
+    'STRICT sidebar actions are not bound to a selected duty assignment'
+);
+$assert(
+    $workflowKeys(estab_sidebar_workflow_actions([
+        'rolle' => 'Stab',
+        'funktion' => 'ETB',
+        'estab_permission_mode' => 'STRICT',
+        'duty_assignment_id' => 702,
+    ], 'ROLLE')) === ['m2_benutzer']
+        && $workflowKeys(estab_sidebar_workflow_actions([
+            'rolle' => 'Fernmelder',
+            'funktion' => 'LdF',
+            'estab_permission_mode' => 'LOOSE',
+            'estab_additional_functions' => [
+                ['rolle' => 'Stab', 'funktion' => 'ETB'],
+            ],
+        ], 'ROLLE')) === ['ldf_nachrichten', 'm2_benutzer'],
+    'ETB exposed normal Stab/FB message actions in STRICT or LOOSE'
 );
 
 $permissionContextKey = ESTAB_PERMISSION_CONTEXT_KEY;
@@ -1222,65 +1411,68 @@ estab_permission_context_set_from_incident([
     'estab_permission_mode' => 'LOOSE',
     'revision' => 8,
 ]);
-$looseWriteKeys = [
-    'stab_schreiben',
-    'stab_korrekturen',
-    'stab_sichten',
-    'ldf_nachrichten',
-    'fm_eingang',
-    'fm_ausgang',
-];
 $looseStaffKeys = $workflowKeys(estab_sidebar_workflow_actions([
     'rolle' => 'Stab',
     'funktion' => 'S1',
+    'estab_permission_mode' => 'LOOSE',
 ], 'ROLLE'));
 $looseRadioKeys = $workflowKeys(estab_sidebar_workflow_actions([
     'rolle' => 'Fernmelder',
     'funktion' => 'A/W',
+    'estab_permission_mode' => 'LOOSE',
 ], 'ROLLE'));
 $looseViewerKeys = $workflowKeys(estab_sidebar_workflow_actions([
     'rolle' => 'Stab',
     'funktion' => 'Si',
+    'estab_permission_mode' => 'LOOSE',
 ], 'ROLLE'));
 $looseAdminKeys = $workflowKeys(estab_sidebar_workflow_actions([
     'rolle' => 'Administrator',
     'funktion' => 'Admin',
 ], 'ROLLE'));
-foreach (
-    [
-        'staff' => $looseStaffKeys,
-        'radio' => $looseRadioKeys,
-        'viewer' => $looseViewerKeys,
-        'admin' => $looseAdminKeys,
-    ] as $looseIdentityName => $looseKeys
-) {
-    $assert(
-        array_diff($looseWriteKeys, $looseKeys) === [],
-        'LOOSE sidebar omits a write operation for ' . $looseIdentityName
-    );
-}
+$looseLdfWithS6Keys = $workflowKeys(estab_sidebar_workflow_actions([
+    'rolle' => 'Fernmelder',
+    'funktion' => 'LdF',
+    'estab_permission_mode' => 'LOOSE',
+    'estab_additional_functions' => [
+        ['rolle' => 'Stab', 'funktion' => 'S6'],
+    ],
+], 'ROLLE'));
 $assert(
-    in_array('stab_lesen', $looseStaffKeys, true)
-        && !in_array('fm_admin', $looseStaffKeys, true)
-        && !in_array('si_admin', $looseStaffKeys, true)
-        && in_array('fm_admin', $looseRadioKeys, true)
-        && !in_array('stab_lesen', $looseRadioKeys, true)
-        && !in_array('si_admin', $looseRadioKeys, true)
-        && in_array('si_admin', $looseViewerKeys, true)
-        && !in_array('stab_lesen', $looseViewerKeys, true)
-        && !in_array('fm_admin', $looseViewerKeys, true)
-        && !in_array('stab_lesen', $looseAdminKeys, true)
-        && !in_array('fm_admin', $looseAdminKeys, true)
-        && !in_array('si_admin', $looseAdminKeys, true),
-    'LOOSE sidebar widened read or second-sighting actions beyond the fixed account role'
+    estab_permission_role_checks_enforced()
+        && $looseStaffKeys === [
+            'stab_schreiben',
+            'stab_lesen',
+            'm2_benutzer',
+        ]
+        && $looseRadioKeys === [
+            'fm_eingang',
+            'fm_ausgang',
+            'fm_admin',
+            'fm_anhang',
+            'm2_benutzer',
+        ]
+        && $looseViewerKeys === [
+            'stab_sichten',
+            'si_admin',
+            'm2_benutzer',
+        ]
+        && $looseAdminKeys === ['m2_benutzer']
+        && $looseLdfWithS6Keys === [
+            'ldf_nachrichten',
+            'stab_schreiben',
+            'stab_lesen',
+            'm2_benutzer',
+        ],
+    'LOOSE sidebar is not the exact union of the base and explicit additional functions'
 );
 unset($GLOBALS[$permissionContextKey]);
-$assertThrows(
-    static fn (): array => estab_sidebar_workflow_actions([
+$assert(
+    $workflowKeys(estab_sidebar_workflow_actions([
         'rolle' => ['invalid'],
         'funktion' => 'S1',
-    ], 'ROLLE'),
-    'invalid sidebar workflow identity accepted'
+    ], 'ROLLE')) === ['m2_benutzer'],
+    'malformed fachliche identity exposed operational sidebar actions'
 );
 $fixedFunctionMarkup = estab_sidebar_account_function_markup([], [
     'rolle' => 'Stab',
@@ -1288,12 +1480,27 @@ $fixedFunctionMarkup = estab_sidebar_account_function_markup([], [
 ]);
 $assert(
     str_contains($fixedFunctionMarkup, 'data-estab-account-function')
-        && str_contains($fixedFunctionMarkup, 'Angemeldete Funktion')
+        && str_contains($fixedFunctionMarkup, 'Primärfunktion')
         && str_contains($fixedFunctionMarkup, 'S1 · Stab')
         && !str_contains($fixedFunctionMarkup, 'duty-assignment')
         && !str_contains($fixedFunctionMarkup, 'fuehrungsstelle.php')
         && !str_contains($fixedFunctionMarkup, 'wechseln'),
     'sidebar presents the fixed account function as a selectable shift role'
+);
+$additionalFunctionMarkup = estab_sidebar_account_function_markup([], [
+    'rolle' => 'Fernmelder',
+    'funktion' => 'LdF',
+    'estab_permission_mode' => 'LOOSE',
+    'estab_additional_functions' => [
+        ['rolle' => 'Stab', 'funktion' => 'S6'],
+        ['rolle' => 'Stab', 'funktion' => 'S6'],
+    ],
+]);
+$assert(
+    str_contains($additionalFunctionMarkup, '<strong>LdF · Fernmelder</strong>')
+        && str_contains($additionalFunctionMarkup, 'Zusatzfunktionen: S6 · Stab')
+        && substr_count($additionalFunctionMarkup, 'S6') === 1,
+    'sidebar does not disclose deduplicated effective LOOSE additional functions'
 );
 $radioFunctionMarkup = estab_sidebar_account_function_markup([], [
     'rolle' => 'Fernmelder',
@@ -1308,6 +1515,40 @@ $assert(
 $assert(
     estab_sidebar_account_function_markup([], null) === '',
     'sidebar renders an account function without an authenticated identity'
+);
+$strictFunctionMarkup = estab_sidebar_account_function_markup(
+    ['estab_duty_assignment_id' => 701],
+    [
+        'rolle' => 'Stab',
+        'funktion' => 'S6',
+        'estab_permission_mode' => 'STRICT',
+        'duty_assignment_id' => 701,
+    ]
+);
+$assert(
+    str_contains($strictFunctionMarkup, 'data-estab-active-duty-hat')
+        && str_contains(
+            $strictFunctionMarkup,
+            'data-estab-duty-assignment="701"'
+        )
+        && str_contains($strictFunctionMarkup, 'Aktive Dienstfunktion')
+        && str_contains($strictFunctionMarkup, 'S6 · Stab')
+        && str_contains($strictFunctionMarkup, 'Dienstfunktion wechseln')
+        && str_contains($strictFunctionMarkup, 'fuehrungsstelle.php')
+        && !str_contains($strictFunctionMarkup, 'Primärfunktion'),
+    'STRICT sidebar lost the selected duty function or safe switch control'
+);
+$assert(
+    estab_sidebar_account_function_markup(
+        ['estab_duty_assignment_id' => 702],
+        [
+            'rolle' => 'Stab',
+            'funktion' => 'S6',
+            'estab_permission_mode' => 'STRICT',
+            'duty_assignment_id' => 701,
+        ]
+    ) === '',
+    'STRICT sidebar displayed a duty function from mismatched session state'
 );
 
 $wavMetadata = static function (string $path): array {
@@ -1393,8 +1634,10 @@ $assert(
 );
 $assert(
     str_contains($stylesheet, '.estab-sidebar-account-function')
-        && str_contains($stylesheet, '.estab-sidebar-account-function span'),
-    'fixed account function has no consistent sidebar card styling'
+        && str_contains($stylesheet, '.estab-sidebar-account-function span')
+        && str_contains($stylesheet, '.estab-sidebar-duty-hat')
+        && str_contains($stylesheet, '.estab-sidebar-duty-hat span'),
+    'mode-specific function cards have no consistent sidebar styling'
 );
 
 echo "sidebar UI security: OK ({$assertions} assertions)\n";

@@ -49,9 +49,28 @@ $terminal = [
 $s1 = $identity('s10001', 'S1', 'Stab');
 $s10 = $identity('s10010', 'S10', 'Stab');
 $etb = $identity('etb001', 'ETB', 'Stab');
+$looseS1WithS2 = $s1 + [
+    'estab_permission_mode' => 'LOOSE',
+    'estab_additional_functions' => [
+        ['funktion' => 'S2', 'rolle' => 'Stab'],
+    ],
+];
+$looseS1WithAw = $s1 + [
+    'estab_permission_mode' => 'LOOSE',
+    'estab_additional_functions' => [
+        ['funktion' => 'A/W', 'rolle' => 'Fernmelder'],
+    ],
+];
 $assert(
     estab_read_identity_capability($etb) === 'EINSATZTAGEBUCH',
     'fixed ETB account function is not bound to its narrow database capability'
+);
+$assert(
+    !estab_read_message_allowed(
+        $etb,
+        array_replace($terminal, ['16_empf' => 'alle_rt,'])
+    ),
+    'ETB capability was widened into a normal Stab message read right'
 );
 $assert(
     estab_read_message_allowed($s1, $terminal),
@@ -60,6 +79,15 @@ $assert(
 $assert(
     !estab_read_message_allowed($s10, $terminal),
     'substring recipient gained read access'
+);
+$s2OnlyTerminal = array_replace($terminal, ['16_empf' => 'S2_rt,']);
+$assert(
+    estab_read_message_allowed($looseS1WithS2, $s2OnlyTerminal)
+        && !estab_read_message_allowed(
+            $s1 + ['estab_permission_mode' => 'LOOSE'],
+            $s2OnlyTerminal
+        ),
+    'LOOSE read access is not limited to fixed and explicitly granted functions'
 );
 $assert(
     estab_read_message_allowed(
@@ -145,6 +173,14 @@ $aw = $identity('aw0001', 'A/W', 'Fernmelder');
 $assert(
     estab_read_message_allowed($aw, $pendingTransport),
     'A/W transport queue was hidden'
+);
+$assert(
+    estab_read_message_allowed($looseS1WithAw, $pendingTransport)
+        && !estab_read_message_allowed(
+            $s1 + ['estab_permission_mode' => 'LOOSE'],
+            $pendingTransport
+        ),
+    'LOOSE telecommunications queue is visible without an explicit A/W grant'
 );
 $assert(
     estab_read_message_allowed($aw, $terminal),
@@ -312,22 +348,28 @@ $assert(
 
 $overview = estab_navigation_item_for_key('message-overview');
 $tracking = estab_navigation_item_for_key('tracking');
+$looseS1 = $s1 + ['estab_permission_mode' => 'LOOSE'];
+$looseEtb = $etb + ['estab_permission_mode' => 'LOOSE'];
+$looseS2 = $identity('s20001', 'S2', 'Stab') + [
+    'estab_permission_mode' => 'LOOSE',
+];
+$looseLdf = $ldf + ['estab_permission_mode' => 'LOOSE'];
+$looseAw = $aw + ['estab_permission_mode' => 'LOOSE'];
 $assert(
     is_array($overview)
-        && !estab_navigation_duty_access_allowed($overview, $s1)
-        && !estab_navigation_duty_access_allowed($overview, $etb)
-        && estab_navigation_duty_access_allowed(
-            $overview,
-            $identity('s20001', 'S2', 'Stab')
-        ),
-    'overview navigation is not limited to fixed S2/LAGE_DOKUMENTATION'
+        && !estab_navigation_duty_access_allowed($overview, $looseS1)
+        && !estab_navigation_duty_access_allowed($overview, $looseEtb)
+        && estab_navigation_duty_access_allowed($overview, $looseS2)
+        && estab_navigation_duty_access_allowed($overview, $looseS1WithS2),
+    'overview navigation is not limited to effective S2/LAGE_DOKUMENTATION'
 );
 $assert(
     is_array($tracking)
-        && !estab_navigation_duty_access_allowed($tracking, $s1)
-        && estab_navigation_duty_access_allowed($tracking, $ldf)
-        && estab_navigation_duty_access_allowed($tracking, $aw),
-    'tracking navigation is not limited to fixed LdF/A-W functions'
+        && !estab_navigation_duty_access_allowed($tracking, $looseS1)
+        && estab_navigation_duty_access_allowed($tracking, $looseLdf)
+        && estab_navigation_duty_access_allowed($tracking, $looseAw)
+        && estab_navigation_duty_access_allowed($tracking, $looseS1WithAw),
+    'tracking navigation is not limited to effective LdF/A-W functions'
 );
 
 $root = dirname(__DIR__, 2);
@@ -383,6 +425,12 @@ $sources = [
     'read-boundary' => (string) file_get_contents(
         $root . '/app/read_authorization.php'
     ),
+    'auth' => (string) file_get_contents(
+        $root . '/app/auth.php'
+    ),
+    'dv-operations' => (string) file_get_contents(
+        $root . '/app/dv_operations.php'
+    ),
     'retired-overview' => (string) file_get_contents(
         $root . '/4fach/all_msg.php'
     ),
@@ -397,6 +445,44 @@ $assert(
     str_contains($sources['overview'], '"message-overview"')
         && str_contains($sources['overview'], 'estab_read_require_area'),
     'message overview lacks its privileged area gate'
+);
+$overviewDetailStart = strpos(
+    $sources['overview'],
+    'class nachrichten4fach'
+);
+$overviewTargetsStart = is_int($overviewDetailStart)
+    ? strpos($sources['overview'], 'function ziele (){', $overviewDetailStart)
+    : false;
+$overviewTargetsEnd = is_int($overviewTargetsStart)
+    ? strpos(
+        $sources['overview'],
+        '/*****************************************************************************',
+        $overviewTargetsStart
+    )
+    : false;
+$overviewTargets = (
+    is_int($overviewTargetsStart)
+    && is_int($overviewTargetsEnd)
+    && $overviewTargetsEnd > $overviewTargetsStart
+) ? substr(
+    $sources['overview'],
+    $overviewTargetsStart,
+    $overviewTargetsEnd - $overviewTargetsStart
+) : '';
+$assert(
+    str_contains(
+        $sources['overview'],
+        '$overviewActingIdentity = $overviewReadScope ["identity"];'
+    )
+        && $overviewTargets !== ''
+        && str_contains(
+            $overviewTargets,
+            '$GLOBALS ["overviewActingIdentity"] ?? null'
+        )
+        && str_contains($overviewTargets, 'hash_equals ($overviewActingFunction, $fkt)')
+        && !str_contains($overviewTargets, '$_SESSION'),
+    'overview detail derives copy presentation from raw session function '
+        . 'instead of the server-authorized STRICT hat or LOOSE grant'
 );
 $assert(
     str_contains($sources['tracking'], '"tracking"')
@@ -534,10 +620,67 @@ $assert(
             $sources['read-boundary'],
             'estab_dv_require_account_capability('
         )
-        && !str_contains($sources['read-boundary'], 'duty_assignment_id')
-        && !str_contains($sources['read-boundary'], 'nv_dienstbesetzungen')
-        && !str_contains($sources['read-boundary'], 'nv_dienstschichten'),
-    'central reads do not enforce active incident, fixed account and capability without a formal shift'
+        && str_contains(
+            $sources['read-boundary'],
+            'function estab_read_effective_capability_scope('
+        )
+        && str_contains($sources['read-boundary'], 'duty_assignment_id')
+        && str_contains($sources['read-boundary'], '`nv_dienstbesetzungen`')
+        && str_contains($sources['read-boundary'], '`nv_dienstschichten`')
+        && str_contains(
+            $sources['read-boundary'],
+            '`nv_benutzer_zusatzfunktionen`'
+        ),
+    'central reads do not prove STRICT selected hats or LOOSE explicit effective functions'
+);
+$assert(
+    str_contains(
+        $sources['read-boundary'],
+        'function estab_read_with_locked_operational_scope('
+    )
+        && str_contains($sources['read-boundary'], 'begin_transaction()')
+        && str_contains(
+            $sources['read-boundary'],
+            '$scope = estab_read_require_operational_scope('
+        )
+        && str_contains($sources['read-boundary'], '$result = $operation($scope)')
+        && str_contains(
+            $sources['dv-operations'],
+            'bool $lockAuthority = false'
+        )
+        && str_contains(
+            $sources['dv-operations'],
+            'estab_incident_status($connection, $lockAuthority)'
+        )
+        && str_contains(
+            $sources['dv-operations'],
+            '$shape[\'kuerzel\'],' . "\n" . '            $lockAuthority'
+        )
+        && str_contains(
+            $sources['auth'],
+            'function estab_auth_shift_access_state('
+        )
+        && str_contains($sources['auth'], "FOR UPDATE'")
+        && str_contains(
+            $sources['forms'],
+            'estab_read_with_locked_operational_scope('
+        )
+        && str_contains(
+            $sources['attachments'],
+            'estab_read_with_locked_operational_scope ('
+        )
+        && str_contains(
+            $sources['message-controller'],
+            'estab_read_with_locked_operational_scope ('
+        )
+        && str_contains(
+            $sources['message-list'],
+            'estab_read_require_operational_scope ('
+                . "\n" . '        $messageConnection,'
+                . "\n" . '        $identity,'
+                . "\n" . '        true'
+        ),
+    'object selection does not retain mode authority through its transaction'
 );
 $assert(
     str_contains(
@@ -563,9 +706,12 @@ $assert(
         $sources['sidebar'],
         'estab_message_staff_access_sql'
     )
-        && !str_contains($sources['sidebar'], 'duty_assignment_id')
+        && str_contains(
+            $sources['sidebar'],
+            'estab_auth_effective_function_roles('
+        )
         && str_contains($sources['sidebar'], 'data-estab-account-function'),
-    'sidebar queues/actions are not exact-recipient and fixed-account scoped'
+    'sidebar queues/actions are not exact-recipient and effective-function scoped'
 );
 $commandPostScope = strpos(
     $sources['command-post'],
@@ -588,15 +734,19 @@ $assert(
             $sources['command-post'],
             'estab_dv_has_write_capability('
         )
-        && !str_contains($sources['command-post'], 'duty_assignment_id')
-        && !str_contains($sources['command-post'], "'select_hat'")
-        && !str_contains($sources['command-post'], "'accept_hat'")
+        && str_contains($sources['command-post'], 'duty_assignment_id')
+        && str_contains($sources['command-post'], "'select_hat'")
+        && str_contains($sources['command-post'], "'accept_hat'")
+        && str_contains(
+            $sources['command-post'],
+            '$strictMode = estab_incident_duty_shift_required($status)'
+        )
         && is_int($commandPostScope)
         && is_int($telecomRead)
         && is_int($messengerRead)
         && $commandPostScope < $telecomRead
         && $commandPostScope < $messengerRead,
-    'command-post bootstrap exposes unrelated data or still requires a formal duty assignment'
+    'command-post bootstrap exposes data before STRICT selection or applies it to LOOSE'
 );
 foreach (['ETB' => $sources['etb'], 'TBB' => $sources['tbb']] as $name => $source) {
     $gate = strpos($source, 'estab_read_require_operational_scope (');
@@ -624,16 +774,23 @@ $assert(
         && substr_count(
             $sources['categories'],
             'estab_read_message('
-        ) >= 3,
+        ) >= 2
+        && str_contains(
+            $sources['categories'],
+            'estab_category_mutate_authorized('
+        )
+        && str_contains(
+            $sources['categories'],
+            'estab_category_assign('
+        ),
     'category GET/POST actions are not bound to the selected message object'
 );
 $assert(
     str_contains(
         $sources['status-fragment'],
         'estab_read_require_operational_scope('
-    )
-        && !str_contains($sources['status-fragment'], 'duty_assignment_id'),
-    'live sidebar status is exposed without fixed-account scope or still requires a formal shift'
+    ),
+    'live sidebar status is exposed without an operational identity scope'
 );
 $assert(
     str_contains($sources['retired-overview'], 'http_response_code(410)')

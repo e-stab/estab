@@ -530,11 +530,17 @@ Bedienabnahme auf dem tatsächlichen NAS-Endgerät bleibt zusätzlich nötig.
    Exitcode 0 beendet sein. Danach `/health.php` und die Administration
    prüfen, den ersten Einsatz anlegen und aktivieren, benötigte Funktionskonten
    in der Benutzerverwaltung anlegen und deren feste Zuordnung kontrollieren.
-   Die fachliche Abnahme kann danach unmittelbar mit den festen Funktionen der
-   Konten beginnen; eine Dienstschicht oder Funktions-Hut-Auswahl ist nicht
-   erforderlich. Optional können Konten unter **Optionale Schichten** zu
-   Zugangsgruppen zusammengefasst und gemeinsam freigegeben oder abgemeldet
-   werden. Diese Gruppen verändern keine Fachberechtigung.
+   Im voreingestellten Modus **Streng** anschließend unter
+   **Schichtverwaltung** eine formale Dienstschicht aktivieren, Funktionen
+   persönlich besetzen und die angenommene Besetzung im Funktionskonto
+   auswählen. Nur im ausdrücklich bestätigten Modus **Locker** entfällt diese
+   formale Schichtpflicht; dort gelten feste und gezielt vergebene globale
+   Zusatzfunktionen. Optionale Zugangsschichten können im lockeren Betrieb
+   Konten gruppieren und gemeinsam freigeben oder abmelden, verändern aber
+   keine Fachberechtigung. Den Modus vor jeder operativen oder formalen
+   Eintragung verbindlich festlegen: Die erste solche Eintragung friert ihn für
+   diesen Einsatz dauerhaft ein, auch wenn Daten später gelöscht werden. Das
+   unveränderte Speichern desselben Modus bleibt idempotent.
 
 Synologys
 [Projektassistent](https://kb.synology.com/de-de/DSM/help/ContainerManager/docker_project?version=7)

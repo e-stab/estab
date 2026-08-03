@@ -52,6 +52,18 @@ $viewerIdentity = [
     'funktion' => 'Si',
     'rolle' => 'Stab',
 ];
+$staffIdentity['estab_permission_mode'] = ESTAB_PERMISSION_MODE_STRICT;
+$staffIdentity['duty_assignment_id'] = 401;
+$telecommunicationsIdentity['estab_permission_mode'] =
+    ESTAB_PERMISSION_MODE_STRICT;
+$telecommunicationsIdentity['duty_assignment_id'] = 402;
+$viewerIdentity['estab_permission_mode'] = ESTAB_PERMISSION_MODE_STRICT;
+$viewerIdentity['duty_assignment_id'] = 403;
+estab_permission_context_set_from_incident([
+    'active_einsatz_id' => 9,
+    'estab_permission_mode' => ESTAB_PERMISSION_MODE_STRICT,
+    'revision' => 6,
+]);
 
 $directActionSession = [];
 $directActionToken = estab_attachment_direct_action_issue(
@@ -62,6 +74,50 @@ $directActionToken = estab_attachment_direct_action_issue(
     null,
     1000
 );
+$authorityBoundDirectToken = estab_attachment_direct_action_issue(
+    $directActionSession,
+    $staffIdentity,
+    9,
+    'Stab_schreiben',
+    null,
+    1000
+);
+$successorDirectIdentity = $staffIdentity;
+$successorDirectIdentity['duty_assignment_id'] = 499;
+$assertContextRejected(
+    static fn () => estab_attachment_direct_action_replay_result(
+        $directActionSession,
+        $authorityBoundDirectToken,
+        $successorDirectIdentity,
+        9,
+        'Stab_schreiben',
+        null,
+        1001
+    ),
+    'direct attachment draft token survived an exact assignment handover'
+);
+estab_permission_context_set_from_incident([
+    'active_einsatz_id' => 9,
+    'estab_permission_mode' => ESTAB_PERMISSION_MODE_STRICT,
+    'revision' => 7,
+]);
+$assertContextRejected(
+    static fn () => estab_attachment_direct_action_replay_result(
+        $directActionSession,
+        $authorityBoundDirectToken,
+        $staffIdentity,
+        9,
+        'Stab_schreiben',
+        null,
+        1001
+    ),
+    'direct attachment draft token survived an incident status revision'
+);
+estab_permission_context_set_from_incident([
+    'active_einsatz_id' => 9,
+    'estab_permission_mode' => ESTAB_PERMISSION_MODE_STRICT,
+    'revision' => 6,
+]);
 $assert(
     preg_match('/\A[a-f0-9]{64}\z/D', $directActionToken) === 1
         && ($directActionSession['anhang_direct_actions'][$directActionToken]['state'] ?? null)
@@ -419,19 +475,39 @@ $assert(
 $staffWriteContext = estab_attachment_origin_context_create(
     $staffIdentity,
     9,
-    ['task' => 'Stab_schreiben', '00_lfd' => '']
+    [
+        'task' => 'Stab_schreiben',
+        '00_lfd' => '',
+        'permission_mode' => 'LOOSE',
+        'permission_revision' => '999',
+        'duty_assignment_id' => '999',
+        'account_function' => 'A/W',
+        'account_role' => 'Fernmelder',
+        'function_source' => 'PRIMARY',
+        'authority_fingerprint' => str_repeat('0', 64),
+    ]
 );
 $assert(
     $staffWriteContext['task'] === 'Stab_schreiben'
-        && $staffWriteContext['version'] === 2
+        && $staffWriteContext['version'] === 3
         && $staffWriteContext['record_id'] === null
         && $staffWriteContext['incident_id'] === 9
-        && !array_key_exists('duty_assignment_id', $staffWriteContext)
+        && $staffWriteContext['permission_mode'] === 'STRICT'
+        && $staffWriteContext['permission_revision'] === 6
+        && $staffWriteContext['duty_assignment_id'] === 401
+        && $staffWriteContext['account_function'] === null
+        && $staffWriteContext['account_role'] === null
+        && $staffWriteContext['function_source'] === 'DUTY_ASSIGNMENT'
+        && preg_match(
+            '/\A[a-f0-9]{64}\z/D',
+            $staffWriteContext['authority_fingerprint']
+        ) === 1
         && preg_match(
             '/\A[a-f0-9]{32}\z/D',
             $staffWriteContext['flow_token']
         ) === 1,
-    'new staff attachment origin is not bound to its server identity and incident'
+    'new staff attachment origin trusts browser authority instead of its '
+        . 'server identity and incident snapshot'
 );
 $validatedWriteContext = estab_attachment_origin_context_validate(
     $staffWriteContext,
@@ -447,6 +523,60 @@ $validatedWriteContext = estab_attachment_origin_context_validate(
 $assert(
     $validatedWriteContext === $staffWriteContext,
     'valid attachment continuation does not preserve the exact origin context'
+);
+$successorStaffIdentity = $staffIdentity;
+$successorStaffIdentity['duty_assignment_id'] = 404;
+$assertContextRejected(
+    static fn () => estab_attachment_origin_context_validate(
+        $staffWriteContext,
+        $successorStaffIdentity,
+        9
+    ),
+    'STRICT attachment origin survived an exact duty-assignment handover'
+);
+estab_permission_context_set_from_incident([
+    'active_einsatz_id' => 9,
+    'estab_permission_mode' => ESTAB_PERMISSION_MODE_STRICT,
+    'revision' => 7,
+]);
+$assertContextRejected(
+    static fn () => estab_attachment_origin_context_validate(
+        $staffWriteContext,
+        $staffIdentity,
+        9
+    ),
+    'attachment origin survived deactivation/reactivation status revision'
+);
+estab_permission_context_set_from_incident([
+    'active_einsatz_id' => 9,
+    'estab_permission_mode' => ESTAB_PERMISSION_MODE_STRICT,
+    'revision' => 6,
+]);
+$tamperedAuthorityContext = $staffWriteContext;
+$tamperedAuthorityContext['duty_assignment_id'] = 404;
+$assertContextRejected(
+    static fn () => estab_attachment_origin_context_validate(
+        $tamperedAuthorityContext,
+        $successorStaffIdentity,
+        9
+    ),
+    'session authority fields can be changed without invalidating the fingerprint'
+);
+$semanticallyInvalidAuthorityContext = $staffWriteContext;
+$semanticallyInvalidAuthorityContext['function_source'] = 'PRIMARY';
+$semanticallyInvalidAuthorityContext['authority_fingerprint'] =
+    estab_attachment_origin_context_fingerprint(
+        $semanticallyInvalidAuthorityContext
+    );
+$assertContextRejected(
+    static function () use ($semanticallyInvalidAuthorityContext): void {
+        $session = [];
+        estab_attachment_origin_context_store(
+            $session,
+            $semanticallyInvalidAuthorityContext
+        );
+    },
+    'session storage accepted a re-fingerprinted inconsistent STRICT authority'
 );
 $conversationContext = estab_attachment_origin_context_create(
     $staffIdentity,
@@ -1169,38 +1299,152 @@ estab_permission_context_set_from_incident([
     'estab_permission_mode' => 'LOOSE',
     'revision' => 7,
 ]);
-$looseCrossRoleOrigins = [
+$looseStaffWithAw = array_replace($staffIdentity, [
+    'estab_permission_mode' => 'LOOSE',
+    'duty_assignment_id' => null,
+    'authorization_account_function' => 'S1',
+    'authorization_account_role' => 'Stab',
+    'estab_additional_functions' => [
+        ['funktion' => 'A/W', 'rolle' => 'Fernmelder'],
+    ],
+]);
+$looseTelecomWithS1 = array_replace($telecommunicationsIdentity, [
+    'estab_permission_mode' => 'LOOSE',
+    'duty_assignment_id' => null,
+    'authorization_account_function' => 'A/W',
+    'authorization_account_role' => 'Fernmelder',
+    'estab_additional_functions' => [
+        ['funktion' => 'S1', 'rolle' => 'Stab'],
+    ],
+]);
+$looseViewerWithAw = array_replace($viewerIdentity, [
+    'estab_permission_mode' => 'LOOSE',
+    'duty_assignment_id' => null,
+    'authorization_account_function' => 'Si',
+    'authorization_account_role' => 'Stab',
+    'estab_additional_functions' => [
+        ['funktion' => 'A/W', 'rolle' => 'Fernmelder'],
+    ],
+]);
+$looseViewerWithS1 = array_replace($viewerIdentity, [
+    'estab_permission_mode' => 'LOOSE',
+    'duty_assignment_id' => null,
+    'authorization_account_function' => 'Si',
+    'authorization_account_role' => 'Stab',
+    'estab_additional_functions' => [
+        ['funktion' => 'S1', 'rolle' => 'Stab'],
+    ],
+]);
+$looseGrantedOrigins = [
     estab_attachment_origin_context_create(
-        $staffIdentity,
+        estab_workflow_identity_as_tuple(
+            $looseStaffWithAw,
+            ['funktion' => 'A/W', 'rolle' => 'Fernmelder']
+        ),
         9,
         ['task' => 'FM-Eingang', '00_lfd' => '']
     ),
     estab_attachment_origin_context_create(
-        $telecommunicationsIdentity,
+        estab_workflow_identity_as_tuple(
+            $looseTelecomWithS1,
+            ['funktion' => 'S1', 'rolle' => 'Stab']
+        ),
         9,
         ['task' => 'Stab_schreiben', '00_lfd' => '']
     ),
     estab_attachment_origin_context_create(
-        $viewerIdentity,
+        estab_workflow_identity_as_tuple(
+            $looseViewerWithAw,
+            ['funktion' => 'A/W', 'rolle' => 'Fernmelder']
+        ),
         9,
         ['task' => 'FM-Eingang_Anhang', '00_lfd' => '']
     ),
     estab_attachment_origin_context_create(
-        $viewerIdentity,
+        estab_workflow_identity_as_tuple(
+            $looseViewerWithS1,
+            ['funktion' => 'S1', 'rolle' => 'Stab']
+        ),
         9,
         ['task' => 'Stab_gesprnoti', '00_lfd' => '']
     ),
 ];
 $assert(
-    array_column($looseCrossRoleOrigins, 'task') === [
+    array_column($looseGrantedOrigins, 'task') === [
         'FM-Eingang',
         'Stab_schreiben',
         'FM-Eingang_Anhang',
         'Stab_gesprnoti',
+    ]
+        && array_column($looseGrantedOrigins, 'permission_mode') === [
+            'LOOSE', 'LOOSE', 'LOOSE', 'LOOSE',
+        ]
+        && array_column($looseGrantedOrigins, 'permission_revision') === [
+            7, 7, 7, 7,
+        ]
+        && array_column($looseGrantedOrigins, 'function_source') === [
+            'ADDITIONAL', 'ADDITIONAL', 'ADDITIONAL', 'ADDITIONAL',
+        ]
+        && array_column($looseGrantedOrigins, 'duty_assignment_id') === [
+            null, null, null, null,
+        ],
+    'LOOSE mode does not admit each explicitly granted attachment write flow'
+);
+$assert(
+    estab_attachment_origin_context_validate(
+        $looseGrantedOrigins[0],
+        $looseStaffWithAw,
+        9
+    ) === $looseGrantedOrigins[0],
+    'LOOSE attachment flow does not survive with its explicit function grant'
+);
+$assertContextRejected(
+    static fn () => estab_attachment_origin_context_validate(
+        $looseGrantedOrigins[0],
+        $staffIdentity,
+        9
+    ),
+    'revoked LOOSE additional function retained its attachment flow'
+);
+$looseStaffChangedPrimary = array_replace($looseStaffWithAw, [
+    'funktion' => 'A/W',
+    'rolle' => 'Fernmelder',
+    'authorization_account_function' => 'A/W',
+    'authorization_account_role' => 'Fernmelder',
+    'estab_additional_functions' => [
+        ['funktion' => 'S1', 'rolle' => 'Stab'],
     ],
-    'LOOSE mode does not admit every signed cross-role attachment write flow'
+]);
+$assertContextRejected(
+    static fn () => estab_attachment_origin_context_validate(
+        $looseGrantedOrigins[0],
+        $looseStaffChangedPrimary,
+        9
+    ),
+    'LOOSE attachment origin changed an additional tuple into a primary grant'
 );
 unset($GLOBALS[$permissionContextKey]);
+$assertContextRejected(
+    static fn () => estab_attachment_origin_context_create(
+        $staffIdentity,
+        9,
+        ['task' => 'Stab_schreiben', '00_lfd' => '']
+    ),
+    'attachment origin was created without a DB-derived permission context'
+);
+$assertContextRejected(
+    static fn () => estab_attachment_origin_context_validate(
+        $staffWriteContext,
+        $staffIdentity,
+        9
+    ),
+    'attachment origin was resumed without a DB-derived permission context'
+);
+estab_permission_context_set_from_incident([
+    'active_einsatz_id' => 9,
+    'estab_permission_mode' => ESTAB_PERMISSION_MODE_STRICT,
+    'revision' => 6,
+]);
 $assertContextRejected(
     static fn () => estab_attachment_origin_context_create(
         $staffIdentity,
@@ -2563,7 +2807,11 @@ $assert(
         )
         && str_contains(
             $controllerSource,
-            'estab_read_message_allowed ('
+            'estab_message_object_allowed ('
+        )
+        && str_contains(
+            $controllerSource,
+            '$attachmentPageIdentity'
         )
         && str_contains(
             $controllerSource,
@@ -2738,21 +2986,17 @@ $assert(
         )
         && str_contains(
             $controllerSource,
-            '$attachmentLooseMessageFlowAllowed ='
+            'if (!$attachmentArchiveRoleAllowed)'
         )
         && str_contains(
             $controllerSource,
-            '$attachmentRequestFlowToken !== null'
+            'estab_attachment_origin_context_validate ('
         )
         && str_contains(
             $controllerSource,
-            '&& !estab_permission_role_checks_enforced ();'
-        )
-        && str_contains(
-            $controllerSource,
-            'if (!$attachmentArchiveRoleAllowed && !$attachmentLooseMessageFlowAllowed)'
+            '$attachmentPageIdentity'
         ),
-    'LOOSE mode exposes the attachment archive without a signed message flow or blocks cross-role roundtrips'
+    'attachment archive or signed flow is not bound to the current effective function'
 );
 $assert(
     str_contains(
@@ -2761,13 +3005,17 @@ $assert(
     )
         && str_contains(
             $controllerSource,
-            '$formdata ["14_zeichen"] = $_SESSION ["vStab_kuerzel"];'
+            '$formdata ["14_zeichen"] ='
         )
         && str_contains(
             $controllerSource,
-            '$formdata ["14_funktion"] = $_SESSION ["vStab_funktion"];'
+            '(string) $attachmentOriginContext ["kuerzel"]'
+        )
+        && str_contains(
+            $controllerSource,
+            '(string) $attachmentOriginContext ["funktion"]'
         ),
-    'attachment return loses visible session-bound author or receipt marks'
+    'attachment return loses the server-bound acting function or receipt marks'
 );
 $assert(
     str_contains($controllerSource, '$distributionRequest = array ();')

@@ -185,10 +185,21 @@ $assert(
             "'message_counter_repaired'"
         )
         && str_contains($helper, "'EINSATZ'")
-        && !str_contains(
+        && str_contains($helper, "'DIENSTSCHICHT'")
+        && str_contains(
             $helper,
-            'Could not prepare active shift for counter repair'
+            'Aktive Dienstschicht für die Zählerkorrektur konnte '
         )
+        && str_contains(
+            $helper,
+            '$strictMode = estab_incident_duty_shift_required($incident)'
+        )
+        && str_contains($helper, 'if ($strictMode) {')
+        && str_contains($helper, "AND `status` = 'AKTIV'")
+        && str_contains($helper, '$evidenceObjectType')
+        && str_contains($helper, '$evidenceObjectId')
+        && str_contains($helper, "'permission_mode' => \$strictMode")
+        && str_contains($helper, "'dienstschicht_id' => \$shiftId")
         && str_contains(
             $helper,
             'estab_dv_event_append('
@@ -227,6 +238,10 @@ $assert(
     str_contains($helper, 'estab_assignment_acquire_policy_lock(')
         && substr_count(
             $helper,
+            'estab_auth_merge_function_role_catalog($connection, $newRoles, true)'
+        ) === 2
+        && substr_count(
+            $helper,
             'estab_assignment_reconcile_accounts('
         ) === 2
         && str_contains($matrixPage, "\$conf_4f_tbl['benutzer']")
@@ -236,7 +251,8 @@ $assert(
         && str_contains($assignmentPolicy, "`sid` = ''")
         && !str_contains($assignmentPolicy, 'SET `funktion` =')
         && !str_contains($assignmentPolicy, 'DROP TABLE'),
-    'matrix update does not reconcile roles and revoke orphaned assignments safely'
+    'matrix update does not validate the capability catalogue, reconcile roles '
+        . 'and revoke orphaned assignments safely'
 );
 $assert(
     str_contains($helper, 'function estab_admin_replace_matrix_and_standard(')

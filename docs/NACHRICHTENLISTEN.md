@@ -64,17 +64,17 @@ erneutes Anwenden der Suche beziehungsweise der Filter kontrolliert geladen.
 
 | Ansicht | Zugriff | Detailaktion |
 | --- | --- | --- |
-| `/4fueltg/ue_ltg.php` | festes Konto `S2/Stab` mit `LAGE_DOKUMENTATION` | einsatzgebundener Lesevordruck |
-| „2. Sichtung“ als Si | festes Konto `Si/Stab` | geschützter `SI-Adminmeldung`-POST |
-| „2. Sichtung“ als Fernmelder | festes Konto mit Funktion `Fernmelder` | geschützter `FM-Adminmeldung`-POST |
+| `/4fueltg/ue_ltg.php` | wirksame Funktion `S2/Stab` mit `LAGE_DOKUMENTATION` | einsatzgebundener Lesevordruck |
+| „2. Sichtung“ als Si | wirksame Funktion `Si/Stab` | geschützter `SI-Adminmeldung`-POST |
+| „2. Sichtung“ als Fernmelder | wirksame Funktion `Fernmelder` | geschützter `FM-Adminmeldung`-POST |
 
-Die Funktionsangaben in der Tabelle gelten in beiden Berechtigungsmodi.
-**Locker** erweitert weder die Meldungsübersicht noch die
-Zweitsichtungsarchive oder deren Detailaktionen. Einsatz-ID, feste
-Kontofunktion, persönliche Objektregel, Status, Sperrinhaber, POST und CSRF
-bleiben hier unverändert verbindlich. Die Lockerung betrifft ausschließlich
-fest definierte operative Schreibstufen im laufenden Workflow, nicht diese
-rollenbezogenen Übersichten.
+Die Funktionsangaben in der Tabelle gelten in beiden Berechtigungsmodi. In
+`STRICT` muss die Funktion aus der persönlich angenommenen und ausgewählten
+Besetzung einer aktiven Dienstschicht stammen. In `LOOSE` muss sie feste
+Kontofunktion oder ausdrücklich vergebene Zusatzfunktion sein. Der lockere
+Modus gibt keine Übersicht und keine Detailaktion pauschal frei. Einsatz-ID,
+persönliche Objektregel, Status, Sperrinhaber, POST und CSRF bleiben
+unverändert verbindlich.
 
 Alle Abfragen sind an die beim Berechtigungsgate erfasste ID des aktiven
 Einsatzes gebunden. In der zweiten Sichtung wird zusätzlich schon vor Zählung

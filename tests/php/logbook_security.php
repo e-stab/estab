@@ -474,6 +474,58 @@ $assert(
         && substr_count($helper, '->bind_param(') >= 3,
     'logbook database values are not consistently parameterized'
 );
+$insertStart = strpos($helper, 'function estab_logbook_insert_entry(');
+$insertEnd = is_int($insertStart)
+    ? strpos(
+        $helper,
+        'function estab_logbook_redcopy_function(',
+        $insertStart
+    )
+    : false;
+$insertSource = is_int($insertStart)
+    && is_int($insertEnd)
+    && $insertEnd > $insertStart
+    ? substr($helper, $insertStart, $insertEnd - $insertStart)
+    : '';
+$writerResolutionPosition = strpos(
+    $insertSource,
+    '$writerIdentity = estab_dv_require_write_capability('
+);
+$writerContextPosition = strpos(
+    $insertSource,
+    'estab_logbook_manual_writer_context('
+);
+$writerPersistencePosition = strpos(
+    $insertSource,
+    "\$function = (string) (\$writerIdentity['funktion'] ?? '');"
+);
+$assert(
+    $insertSource !== ''
+        && is_int($writerResolutionPosition)
+        && is_int($writerContextPosition)
+        && is_int($writerPersistencePosition)
+        && $writerResolutionPosition < $writerContextPosition
+        && $writerContextPosition < $writerPersistencePosition
+        && preg_match(
+            '/estab_logbook_manual_writer_context\(\s*'
+                . '\$connection,\s*\$incidentId,\s*'
+                . '\$writerIdentity,\s*\$kind\s*\)/s',
+            $insertSource
+        ) === 1
+        && str_contains(
+            $insertSource,
+            "\$code = (string) (\$writerIdentity['kuerzel'] ?? '');"
+        )
+        && str_contains(
+            $insertSource,
+            "\$user = (string) (\$writerIdentity['benutzer'] ?? '');"
+        )
+        && !str_contains(
+            $insertSource,
+            "\$function = (string) (\$identity['funktion'] ?? '');"
+        ),
+    'logbook insert discards the exact STRICT/LOOSE function that authorized the write'
+);
 $assert(
     str_contains($helper, "WHERE `mtx_rc2` IN ('t', '1')"),
     'ETB red-copy lookup does not support current and historical flags'
@@ -514,15 +566,34 @@ $assert(
 $assert(
     str_contains($helper, 'function estab_logbook_manual_writer_context(')
         && str_contains($helper, 'function estab_logbook_is_designated_writer(')
+        && str_contains(
+            $helper,
+            'estab_incident_duty_shift_required($incident)'
+        )
+        && str_contains($helper, "duty_shift.`status` = 'AKTIV'")
+        && str_contains($helper, "assignment.`status` = 'ANGENOMMEN'")
+        && str_contains($helper, "\$identity['duty_assignment_id'] ?? null")
+        && str_contains(
+            $helper,
+            'estab_logbook_designated_writer_assignment('
+        )
         && str_contains($helper, "'shift_id' => null")
         && str_contains($helper, "'writer_assignment_id' => null")
-        && str_contains($helper, "in_array(\$function, ['ETB', 'S2'], true)")
-        && str_contains($helper, "\$function === 'A/W'")
+        && str_contains(
+            $helper,
+            "estab_auth_identity_has_function(\$selected, 'ETB', 'Stab')"
+        )
+        && str_contains(
+            $helper,
+            "estab_auth_identity_has_function(\$selected, 'S2', 'Stab')"
+        )
+        && str_contains($helper, "'A/W'")
+        && str_contains($helper, "'Fernmelder'")
         && str_contains($helper, "\$orderSql = '`estab_book_lfd` DESC';")
         && str_contains($helper, '`estab_personnel_duty`')
         && str_contains($helper, '`estab_message_route`')
         && str_contains($helper, '`estab_receipt`'),
-    'fixed-account writer rule, incident-local ordering, or official TTB fields are missing'
+    'STRICT/LOOSE writer rule, incident-local ordering, or official TTB fields are missing'
 );
 $assert(
     str_contains($helper, 'function estab_logbook_ttb_manual_entry_types(): array')
@@ -538,14 +609,16 @@ $assert(
         && str_contains($helper, 'function estab_logbook_etb_assignee_context(')
         && str_contains($helper, 'function estab_logbook_active_assignment_options(')
         && str_contains($helper, 'estab_logbook_assignment_snapshot($row)')
+        && str_contains($helper, '$strictMode = estab_incident_duty_shift_required($incident)')
         && str_contains($helper, "assignment.`status` <> 'ZURUECKGEZOGEN'")
-        && !str_contains($helper, "duty_shift.`status` = 'AKTIV'")
+        && str_contains($helper, "duty_shift.`status` = 'AKTIV'")
+        && str_contains($helper, "assignment.`status` = 'ANGENOMMEN'")
         && str_contains($helper, 'LIMIT 1 FOR UPDATE')
         && str_contains($helper, '`estab_shift_id`')
         && str_contains($helper, '`estab_writer_assignment_id`')
         && str_contains($helper, '`estab_assignee_assignment_id`')
         && str_contains($helper, '`estab_assignment`'),
-    'manual logbook rows require a shift or do not lock optional assignee metadata'
+    'manual logbook rows do not separate STRICT active assignments from LOOSE historical metadata'
 );
 $assignmentOptionsStart = strpos(
     $helper,
@@ -585,23 +658,35 @@ $assert(
         $manualWriterSource,
         'estab_logbook_is_designated_writer('
     )
+        && str_contains(
+            $manualWriterSource,
+            'estab_incident_duty_shift_required($incident)'
+        )
+        && str_contains($manualWriterSource, 'duty_assignment_id')
+        && str_contains($manualWriterSource, '`nv_dienstbesetzungen`')
+        && str_contains($manualWriterSource, "duty_shift.`status` = 'AKTIV'")
+        && str_contains($manualWriterSource, "assignment.`status` = 'ANGENOMMEN'")
         && str_contains($manualWriterSource, "'shift_id' => null")
         && str_contains(
             $manualWriterSource,
             "'writer_assignment_id' => null"
         )
-        && !str_contains($manualWriterSource, 'nv_dienstbesetzungen')
-        && !str_contains($manualWriterSource, 'duty_assignment_id')
-        && !str_contains($assignmentOptionsSource, 'account.`aktiv` = 1')
-        && !str_contains($assignmentOptionsSource, "duty_shift.`status` = 'AKTIV'")
+        && str_contains(
+            $assignmentOptionsSource,
+            '$strictMode = estab_incident_duty_shift_required($incident)'
+        )
+        && str_contains($assignmentOptionsSource, "duty_shift.`status` = 'AKTIV'")
+        && str_contains($assignmentOptionsSource, "assignment.`status` = 'ANGENOMMEN'")
         && str_contains(
             $assignmentOptionsSource,
             "assignment.`status` <> 'ZURUECKGEZOGEN'"
         )
-        && !str_contains($assigneeSource, 'account.`aktiv` = 1')
-        && !str_contains($assigneeSource, "duty_shift.`status` = 'AKTIV'")
+        && str_contains($assigneeSource, '$strictMode')
+        && str_contains($assigneeSource, "duty_shift.`status` = 'AKTIV'")
+        && str_contains($assigneeSource, "assignment.`status` = 'ANGENOMMEN'")
+        && str_contains($assigneeSource, "assignment.`status` <> 'ZURUECKGEZOGEN'")
         && str_contains($assigneeSource, 'duty_shift.`einsatz_id` = ?'),
-    'fixed writer rights or optional historical assignee policy is unsafe'
+    'STRICT writer/assignee or LOOSE historical assignment policy is unsafe'
 );
 $assert(
     str_contains($lifecycle, 'function estab_logbook_lifecycle_open_books(')
@@ -613,6 +698,10 @@ $assert(
         && str_contains($lifecycle, 'function estab_logbook_lifecycle_close_books(')
         && str_contains($lifecycle, 'function estab_logbook_lifecycle_message_transport(')
         && str_contains(
+            $operationsDomain,
+            'estab_logbook_lifecycle_open_books('
+        )
+        && !str_contains(
             $operationsDomain,
             'estab_logbook_lifecycle_open_books_if_empty('
         )
@@ -643,6 +732,21 @@ $assert(
             'estab_logbook_lifecycle_message_transport('
         ) === 2,
     'automatic opening, handover, close, or message-transport evidence is not wired'
+);
+$assert(
+    substr_count(
+        $lifecycle,
+        '// Preserve LAST_INSERT_ID before the marker cleanup query.'
+    ) === 2
+        && substr_count(
+            $lifecycle,
+            'return estab_logbook_lifecycle_with_system_write_context('
+        ) >= 2
+        && substr_count(
+            $lifecycle,
+            'return (int) $connection->insert_id;'
+        ) >= 2,
+    'automatic ETB/TBB inserts lose their generated ID during marker cleanup'
 );
 
 foreach (['ETB' => $etb, 'TBB' => $tbb] as $name => $source) {
@@ -698,9 +802,20 @@ foreach (['ETB' => $etb, 'TBB' => $tbb] as $name => $source) {
             )
             && str_contains($source, 'if ($requestMethod === "POST")')
             && str_contains($source, 'if (!$berechtigt)')
+            && str_contains(
+                $source,
+                'estab_navigation_require_selected_duty'
+            )
             && !str_contains($source, 'estab_navigation_select_duty')
-            && !str_contains($source, 'duty_assignment_id'),
-        "{$name} fixed-account read/write boundary is missing or still shift-bound"
+            && str_contains(
+                $source,
+                '$' . $prefix . 'obj->' . $prefix . '_identity = $identity;'
+            )
+            && str_contains(
+                $source,
+                '$this->' . $prefix . '_identity'
+            ),
+        "{$name} read/write boundary drops the mode-aware duty gate or server-resolved STRICT/LOOSE identity"
     );
     $assert(
         strpos($source, 'estab_read_require_operational_scope (')
@@ -771,14 +886,21 @@ foreach (['ETB' => $etb, 'TBB' => $tbb] as $name => $source) {
             )
             && str_contains(
                 $source,
-                '"rolle" => (string) $this->' . $prefix . '_rolle'
+                'var $' . $prefix . '_identity = array ();'
             )
             && str_contains(
                 $source,
-                '"funktion" => (string) $this->' . $prefix . '_funktion'
+                '$' . $prefix . 'obj->' . $prefix . '_identity = $identity;'
             )
-            && !str_contains($source, '_duty_assignment_id'),
-        "{$name} drops the fixed authenticated function/role before the guard"
+            && str_contains(
+                $source,
+                'estab_logbook_insert_entry ('
+            )
+            && str_contains(
+                $source,
+                '$this->' . $prefix . '_identity'
+            ),
+        "{$name} drops selected-hat/additional-function provenance before the guard"
     );
     $assert(
         !str_contains($source, '$_POST ["duty_assignment_id"]')

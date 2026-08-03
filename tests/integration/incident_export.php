@@ -8,6 +8,7 @@ if (getenv('ESTAB_INCIDENT_EXPORT_INTEGRATION') !== '1') {
 }
 
 require_once dirname(__DIR__, 2) . '/app/incident_export.php';
+require_once dirname(__DIR__, 2) . '/app/logbook_lifecycle.php';
 
 mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
 
@@ -91,7 +92,7 @@ function incident_export_integration_insert_logbook_pair(
             . ' `etb_bemerk`, `etb_benutzer`, `etb_kuerzel`, `etb_funktion`,'
             . ' `estab_event_time`, `estab_event_type`)'
             . " VALUES (?, ?, NOW(), ?, ?, 'eStab-System', 'system',"
-            . " 'System', NOW(6), 'ohne')"
+            . " '', NOW(6), 'ohne')"
     );
     try {
         $action = $marker . '-ETB';
@@ -103,8 +104,15 @@ function incident_export_integration_insert_logbook_pair(
             $action,
             $remark
         );
-        $statement->execute();
-        $etbId = (int) $connection->insert_id;
+        $etbId = estab_logbook_lifecycle_with_system_write_context(
+            $connection,
+            $incidentId,
+            'ETB',
+            static function () use ($statement, $connection): int {
+                $statement->execute();
+                return (int) $connection->insert_id;
+            }
+        );
     } finally {
         $statement->close();
     }
@@ -115,7 +123,7 @@ function incident_export_integration_insert_logbook_pair(
             . ' `tbb_bemerk`, `tbb_benutzer`, `tbb_kuerzel`, `tbb_funktion`,'
             . ' `estab_event_time`, `estab_entry_type`, `estab_operations`)'
             . " VALUES (?, ?, NOW(), ?, ?, 'eStab-System', 'system',"
-            . " 'System', NOW(6), 'betriebsereignis', ?)"
+            . " '', NOW(6), 'betriebsereignis', ?)"
     );
     try {
         $action = $marker . '-TBB';
@@ -128,8 +136,15 @@ function incident_export_integration_insert_logbook_pair(
             $remark,
             $action
         );
-        $statement->execute();
-        $ttbId = (int) $connection->insert_id;
+        $ttbId = estab_logbook_lifecycle_with_system_write_context(
+            $connection,
+            $incidentId,
+            'TTB',
+            static function () use ($statement, $connection): int {
+                $statement->execute();
+                return (int) $connection->insert_id;
+            }
+        );
     } finally {
         $statement->close();
     }
@@ -210,7 +225,7 @@ function incident_export_integration_insert_logbook_corrections(
             . ' `estab_event_time`, `estab_event_type`,'
             . ' `estab_reference`, `estab_correction_of`)'
             . " VALUES (?, ?, NOW(), ?, ?, 'eStab-System', 'system',"
-            . " 'System', NOW(6), 'korrektur', ?, ?)"
+            . " '', NOW(6), 'korrektur', ?, ?)"
     );
     try {
         $action = $marker . '-ETB';
@@ -225,8 +240,15 @@ function incident_export_integration_insert_logbook_corrections(
             $reference,
             $originalEtbId
         );
-        $statement->execute();
-        $etbId = (int) $connection->insert_id;
+        $etbId = estab_logbook_lifecycle_with_system_write_context(
+            $connection,
+            $incidentId,
+            'ETB',
+            static function () use ($statement, $connection): int {
+                $statement->execute();
+                return (int) $connection->insert_id;
+            }
+        );
     } finally {
         $statement->close();
     }
@@ -238,7 +260,7 @@ function incident_export_integration_insert_logbook_corrections(
             . ' `estab_event_time`, `estab_entry_type`, `estab_operations`,'
             . ' `estab_correction_of`)'
             . " VALUES (?, ?, NOW(), ?, ?, 'eStab-System', 'system',"
-            . " 'System', NOW(6), 'korrektur', ?, ?)"
+            . " '', NOW(6), 'korrektur', ?, ?)"
     );
     try {
         $action = $marker . '-TBB';
@@ -252,8 +274,15 @@ function incident_export_integration_insert_logbook_corrections(
             $action,
             $originalTtbId
         );
-        $statement->execute();
-        $ttbId = (int) $connection->insert_id;
+        $ttbId = estab_logbook_lifecycle_with_system_write_context(
+            $connection,
+            $incidentId,
+            'TTB',
+            static function () use ($statement, $connection): int {
+                $statement->execute();
+                return (int) $connection->insert_id;
+            }
+        );
     } finally {
         $statement->close();
     }
@@ -506,11 +535,16 @@ function incident_export_integration_activate(
     if ((int) ($status['active_einsatz_id'] ?? 0) === $incidentId) {
         return $status;
     }
+    $target = estab_incident_find($connection, $incidentId);
+    if (!is_array($target)) {
+        throw new RuntimeException('Incident export fixture target is missing');
+    }
     return estab_incident_activate(
         $connection,
         $incidentId,
         (int) $status['revision'],
-        $actor
+        $actor,
+        estab_incident_loose_mode($target)
     );
 }
 
@@ -681,9 +715,12 @@ try {
             'beschreibung' =>
                 'Negativkontrolle für einsatzgebundene PDF-SELECTs.',
             'metadaten' => '{"zweck":"incident-pdf-cross-scope"}',
+            'estab_permission_mode' => ESTAB_PERMISSION_MODE_LOOSE,
         ],
         $actor,
-        false
+        false,
+        null,
+        true
     );
     $otherIncidentId = (int) $otherCreated['einsatz_id'];
     incident_export_integration_activate(
@@ -725,9 +762,12 @@ try {
             'beschreibung' =>
                 'Isolierter Einsatz für den MariaDB-PDF-Exportnachweis.',
             'metadaten' => '{"zweck":"incident-pdf-integration"}',
+            'estab_permission_mode' => ESTAB_PERMISSION_MODE_LOOSE,
         ],
         $actor,
-        false
+        false,
+        null,
+        true
     );
     $selectedIncidentId = (int) $created['einsatz_id'];
     $assert(

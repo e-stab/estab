@@ -49,6 +49,29 @@ function dv_operations_redirect(
     exit;
 }
 
+/** Continue to the originally requested area after selecting a STRICT hat. */
+function dv_operations_redirect_after_hat(array $selectedIdentity): never
+{
+    $candidate = $_SESSION['estab_pending_navigation_key'] ?? null;
+    unset($_SESSION['estab_pending_navigation_key']);
+    $key = estab_navigation_login_destination_key($candidate);
+    if ($key !== null && $key !== 'command-post') {
+        $item = estab_navigation_item_for_key($key);
+        if (
+            is_array($item)
+            && estab_navigation_duty_access_allowed($item, $selectedIdentity)
+        ) {
+            header(
+                'Location: ' . estab_navigation_url_for_key($key),
+                true,
+                303
+            );
+            exit;
+        }
+    }
+    dv_operations_redirect('hat_selected', 'meine-dienstfunktionen');
+}
+
 function dv_operations_html(mixed $value): string
 {
     return estab_auth_html($value);
@@ -279,6 +302,62 @@ if ($requestMethod === 'POST') {
         $incident = estab_incident_require_active($connection);
         estab_permission_context_set_from_incident($incident);
         $incidentId = (int) $incident['active_einsatz_id'];
+        $code = (string) $identity['kuerzel'];
+        if ($action === 'accept_hat') {
+            $acceptedHat = estab_dv_accept_hat(
+                $connection,
+                $incidentId,
+                estab_dv_positive_id(
+                    $_POST['dienstbesetzung_id'] ?? null,
+                    'Dienstbesetzung'
+                ),
+                $code,
+                $conf_4f_tbl['protokoll'],
+                $conf_4f_tbl['empfmtx'],
+                $conf_4f_tbl['usrtblprefix']
+            );
+            dv_operations_redirect(
+                ($acceptedHat['active_shift_extension'] ?? false) === true
+                    ? 'hat_extension_accepted'
+                    : 'hat_accepted',
+                'meine-dienstfunktionen'
+            );
+        }
+        if ($action === 'select_hat') {
+            $selectedHat = estab_dv_select_session_hat(
+                $connection,
+                $_SESSION,
+                $incidentId,
+                estab_dv_positive_id(
+                    $_POST['dienstbesetzung_id'] ?? null,
+                    'Dienstbesetzung'
+                ),
+                $conf_4f_tbl['protokoll'],
+                $conf_4f_tbl['empfmtx'],
+                $conf_4f_tbl['usrtblprefix']
+            );
+            dv_operations_redirect_after_hat($selectedHat);
+        }
+        if ($action === 'confirm_handover') {
+            estab_dv_confirm_handover_shift(
+                $connection,
+                $incidentId,
+                estab_dv_positive_id(
+                    $_POST['dienstuebergabe_anfrage_id'] ?? null,
+                    'Übergabeanforderung'
+                ),
+                estab_dv_positive_id(
+                    $_POST['dienstbesetzung_id'] ?? null,
+                    'Bestätigende Dienstbesetzung'
+                ),
+                $identity,
+                $conf_4f_tbl['protokoll']
+            );
+            dv_operations_redirect(
+                'shift_handover_confirmed',
+                'meine-dienstfunktionen'
+            );
+        }
         if ($action === 'create_plan') {
             estab_dv_create_telecom_plan(
                 $connection,
@@ -506,6 +585,11 @@ $isLdf = false;
 $isAw = false;
 $selectedIdentity = null;
 $plansLoaded = false;
+$strictMode = true;
+$activeDutyShift = null;
+$hats = [];
+$handoverRequests = [];
+$confirmableHandovers = [];
 try {
     $connection = estab_auth_connect($conf_4f_db);
     $status = estab_incident_status($connection);
@@ -513,46 +597,86 @@ try {
         estab_permission_context_set_from_incident($status);
         $incidentId = (int) $status['active_einsatz_id'];
         $code = (string) $identity['kuerzel'];
-        $readScope = estab_read_require_operational_scope(
-            $connection,
-            estab_read_session_identity($_SESSION) ?? []
-        );
-        $selectedIdentity = $readScope['identity'];
-        $operationIdentity = $selectedIdentity;
-        $isS6 = estab_dv_has_write_capability(
-            $connection,
-            $incidentId,
-            $selectedIdentity,
-            'FERNMELDEPLANUNG',
-            false
-        );
-        $isLdf = estab_dv_has_write_capability(
-            $connection,
-            $incidentId,
-            $selectedIdentity,
-            'FERNMELDEBETRIEB',
-            false
-        );
-        $isAw = estab_dv_has_write_capability(
-            $connection,
-            $incidentId,
-            $selectedIdentity,
-            'BEFOERDERUNG',
-            false
-        );
-        $plans = estab_dv_telecom_plans($connection, $incidentId);
-        $plansLoaded = true;
-        $jobs = estab_dv_messenger_jobs(
-            $connection,
-            $incidentId,
-            ($isLdf || $isAw) ? null : $code
-        );
-        if ($isLdf) {
-            $users = estab_dv_messenger_candidates(
+        $strictMode = estab_incident_duty_shift_required($status);
+        if ($strictMode) {
+            $activeDutyShift = estab_dv_active_shift_summary(
                 $connection,
                 $incidentId
             );
-            $messageStatement = $connection->prepare(
+            $hats = estab_dv_user_hats($connection, $incidentId, $code);
+            $handoverRequests = estab_dv_user_handover_requests(
+                $connection,
+                $incidentId,
+                $code
+            );
+            foreach ($handoverRequests as $handoverRequest) {
+                if (($handoverRequest['status'] ?? null) !== 'INITIIERT') {
+                    continue;
+                }
+                foreach ($hats as $hat) {
+                    if (
+                        (int) ($hat['dienstschicht_id'] ?? 0)
+                            === (int) $handoverRequest['an_dienstschicht_id']
+                        && ($hat['status'] ?? null) === 'ANGENOMMEN'
+                        && ($hat['schicht_status'] ?? null) === 'GEPLANT'
+                    ) {
+                        $confirmableHandovers[] = [
+                            'request' => $handoverRequest,
+                            'assignment' => $hat,
+                        ];
+                    }
+                }
+            }
+        }
+        try {
+            $readScope = estab_read_require_operational_scope(
+                $connection,
+                estab_read_session_identity($_SESSION) ?? []
+            );
+            $selectedIdentity = $readScope['identity'];
+        } catch (EstabReadPermissionException $exception) {
+            if (!$strictMode) {
+                throw $exception;
+            }
+            // STRICT deliberately exposes the personal duty bootstrap before
+            // an accepted active assignment has been selected.
+        }
+        if (is_array($selectedIdentity)) {
+            $operationIdentity = $selectedIdentity;
+            $isS6 = estab_dv_has_write_capability(
+                $connection,
+                $incidentId,
+                $selectedIdentity,
+                'FERNMELDEPLANUNG',
+                false
+            );
+            $isLdf = estab_dv_has_write_capability(
+                $connection,
+                $incidentId,
+                $selectedIdentity,
+                'FERNMELDEBETRIEB',
+                false
+            );
+            $isAw = estab_dv_has_write_capability(
+                $connection,
+                $incidentId,
+                $selectedIdentity,
+                'BEFOERDERUNG',
+                false
+            );
+            $plans = estab_dv_telecom_plans($connection, $incidentId);
+            $plansLoaded = true;
+            $jobs = estab_dv_messenger_jobs(
+                $connection,
+                $incidentId,
+                ($isLdf || $isAw) ? null : $code
+            );
+            if ($isLdf) {
+                $users = estab_dv_messenger_candidates(
+                    $connection,
+                    $incidentId
+                );
+                $messageStatement = $connection->prepare(
                     'SELECT n.`00_lfd`, n.`04_nummer`, n.`10_anschrift`,'
                     . ' n.`12_inhalt` FROM `nv_nachrichten` AS n'
                     . ' WHERE n.`einsatz_id` = ?'
@@ -568,20 +692,21 @@ try {
                     . ' )'
                     . ' ORDER BY n.`04_nummer`, n.`00_lfd`'
                 );
-            if (!$messageStatement) {
-                throw new RuntimeException(
-                    'Melderfähige Nachrichten konnten nicht vorbereitet '
-                    . 'werden.'
-                );
-            }
-            try {
-                $messageStatement->bind_param('i', $incidentId);
-                $messageStatement->execute();
-                $messageResult = $messageStatement->get_result();
-                $eligibleMessages = $messageResult->fetch_all(MYSQLI_ASSOC);
-                $messageResult->free();
-            } finally {
-                $messageStatement->close();
+                if (!$messageStatement) {
+                    throw new RuntimeException(
+                        'Melderfähige Nachrichten konnten nicht vorbereitet '
+                        . 'werden.'
+                    );
+                }
+                try {
+                    $messageStatement->bind_param('i', $incidentId);
+                    $messageStatement->execute();
+                    $messageResult = $messageStatement->get_result();
+                    $eligibleMessages = $messageResult->fetch_all(MYSQLI_ASSOC);
+                    $messageResult->free();
+                } finally {
+                    $messageStatement->close();
+                }
             }
         }
     }
@@ -608,6 +733,14 @@ if (
 }
 
 $flashMessages = [
+    'hat_accepted' => 'Die Dienstfunktion wurde persönlich angenommen.',
+    'hat_extension_accepted' =>
+        'Die Ergänzung der aktiven Schicht wurde persönlich angenommen und '
+        . 'in den Betriebsbüchern nachgewiesen.',
+    'hat_selected' => 'Die aktive Arbeitsfunktion wurde gewechselt.',
+    'shift_handover_confirmed' =>
+        'Sie haben die Schichtübernahme persönlich bestätigt. Die '
+        . 'Nachfolgeschicht ist jetzt aktiv.',
     'plan_created' => 'Der erste Fernmeldeplanentwurf wurde angelegt.',
     'plan_revision_started' => 'Der aktive Fernmeldeplan wurde vollständig '
         . 'in einen bearbeitbaren Entwurf kopiert.',
@@ -689,14 +822,38 @@ foreach ($plans as $plan) {
       ) ?></strong>
     </div>
     <div>
-      <span>Zugewiesene Funktion</span>
-      <strong><?= dv_operations_html(
+      <span><?= $strictMode
+          ? 'Aktive Arbeitsfunktion'
+          : 'Kontofunktion' ?></span>
+      <strong><?php if ($strictMode && !is_array($selectedIdentity)): ?>
+        Noch nicht ausgewählt
+      <?php else: ?><?= dv_operations_html(
           estab_function_identity_display_name(
-              (string) $identity['funktion'],
-              (string) $identity['rolle']
+              (string) ($selectedIdentity['funktion'] ?? $identity['funktion']),
+              (string) ($selectedIdentity['rolle'] ?? $identity['rolle'])
           )
-      ) ?></strong>
+      ) ?><?php endif; ?></strong>
     </div>
+    <div>
+      <span>Berechtigungsmodus</span>
+      <strong><?= $strictMode ? 'Streng' : 'Locker' ?></strong>
+    </div>
+    <?php if (!$strictMode && is_array($selectedIdentity)): ?>
+      <?php
+        $effectiveFunctions = array_map(
+            static fn (array $tuple): string =>
+                estab_function_identity_display_name(
+                    $tuple['funktion'],
+                    $tuple['rolle']
+                ),
+            estab_auth_effective_function_roles($selectedIdentity)
+        );
+      ?>
+      <div>
+        <span>Wirksame Funktionen</span>
+        <strong><?= dv_operations_html(implode(' · ', $effectiveFunctions)) ?></strong>
+      </div>
+    <?php endif; ?>
   </section>
 
   <?php if ($error !== null): ?>
@@ -725,6 +882,157 @@ foreach ($plans as $plan) {
       </a>
     </section>
   <?php else: ?>
+    <?php if ($strictMode): ?>
+      <?php if (!is_array($activeDutyShift)): ?>
+        <section class="estab-tool-status estab-tool-status-danger" role="alert">
+          <strong>Keine Dienstschicht aktiv.</strong>
+          <span>Operative Eingaben sind gesperrt. Die Administration muss
+            eine geplante Dienstschicht aktivieren.</span>
+        </section>
+      <?php endif; ?>
+
+      <section id="meine-dienstfunktionen" class="estab-tool-panel"
+        data-estab-duty-functions>
+        <header class="estab-tool-panel-heading">
+          <h2>Meine Dienstfunktionen</h2>
+          <p>Im strengen Modus wird eine Zuweisung erst nach Ihrer
+            persönlichen Annahme wirksam. Wählen Sie anschließend genau die
+            Funktion, in der Sie aktuell arbeiten.</p>
+        </header>
+        <?php if ($hats === []): ?>
+          <p class="estab-tool-empty">Ihrem Konto ist in der aktuellen oder
+            geplanten Schicht noch keine Funktion zugewiesen.</p>
+        <?php else: ?>
+          <div class="estab-tool-table-wrap estab-tool-table-responsive">
+            <table class="estab-tool-table">
+              <caption class="estab-visually-hidden">
+                Persönlich zugewiesene Dienstfunktionen
+              </caption>
+              <thead><tr>
+                <th scope="col">Schicht</th>
+                <th scope="col">Funktion</th>
+                <th scope="col">Status</th>
+                <th scope="col">Aktion</th>
+              </tr></thead>
+              <tbody>
+              <?php foreach ($hats as $hat): ?>
+                <?php
+                  $isSelectedHat = is_array($selectedIdentity)
+                      && (int) ($selectedIdentity['duty_assignment_id'] ?? 0)
+                          === (int) $hat['dienstbesetzung_id'];
+                ?>
+                <tr<?= $isSelectedHat ? ' data-estab-selected-duty-hat' : '' ?>>
+                  <td data-label="Schicht">#<?= (int) $hat['nummer'] ?> ·
+                    <?= dv_operations_html($hat['bezeichnung']) ?><br>
+                    <?= dv_operations_html($hat['schicht_status']) ?></td>
+                  <td data-label="Funktion"><?= dv_operations_html(
+                      estab_function_identity_display_name(
+                          $hat['funktion'],
+                          $hat['rolle']
+                      )
+                  ) ?></td>
+                  <td data-label="Status"><?= $isSelectedHat
+                      ? 'Aktiv ausgewählt'
+                      : dv_operations_html($hat['status']) ?></td>
+                  <td data-label="Aktion">
+                    <?php if (
+                        $hat['status'] === 'ZUGEWIESEN'
+                        && in_array(
+                            $hat['schicht_status'],
+                            ['GEPLANT', 'AKTIV'],
+                            true
+                        )
+                    ): ?>
+                      <form method="post" action="fuehrungsstelle.php">
+                        <?= estab_csrf_field() ?>
+                        <input type="hidden" name="operation_action"
+                          value="accept_hat">
+                        <input type="hidden" name="dienstbesetzung_id"
+                          value="<?= (int) $hat['dienstbesetzung_id'] ?>">
+                        <button class="estab-button estab-button-primary"
+                          type="submit"><?= $hat['schicht_status'] === 'AKTIV'
+                              ? 'Ergänzung annehmen'
+                              : 'Verbindlich annehmen' ?></button>
+                      </form>
+                    <?php elseif (
+                        $hat['status'] === 'ANGENOMMEN'
+                        && $hat['schicht_status'] === 'AKTIV'
+                        && !$isSelectedHat
+                    ): ?>
+                      <form method="post" action="fuehrungsstelle.php">
+                        <?= estab_csrf_field() ?>
+                        <input type="hidden" name="operation_action"
+                          value="select_hat">
+                        <input type="hidden" name="dienstbesetzung_id"
+                          value="<?= (int) $hat['dienstbesetzung_id'] ?>">
+                        <button class="estab-button" type="submit">
+                          Als Arbeitsfunktion wählen
+                        </button>
+                      </form>
+                    <?php else: ?>
+                      <span><?= $isSelectedHat
+                          ? 'Diese Funktion ist wirksam.'
+                          : 'Keine Aktion verfügbar' ?></span>
+                    <?php endif; ?>
+                  </td>
+                </tr>
+              <?php endforeach; ?>
+              </tbody>
+            </table>
+          </div>
+        <?php endif; ?>
+      </section>
+
+      <?php if ($confirmableHandovers !== []): ?>
+        <section class="estab-tool-panel" aria-labelledby="handover-title">
+          <header class="estab-tool-panel-heading">
+            <h2 id="handover-title">Schichtübernahme bestätigen</h2>
+            <p>Die Administration hat die Übergabe initiiert. Erst die
+              persönliche Bestätigung aktiviert die Nachfolgeschicht.</p>
+          </header>
+          <?php foreach ($confirmableHandovers as $confirmation): ?>
+            <?php
+              $handoverRequest = $confirmation['request'];
+              $assignment = $confirmation['assignment'];
+            ?>
+            <form class="estab-tool-form" method="post"
+              action="fuehrungsstelle.php">
+              <?= estab_csrf_field() ?>
+              <input type="hidden" name="operation_action"
+                value="confirm_handover">
+              <input type="hidden" name="dienstuebergabe_anfrage_id"
+                value="<?= (int) $handoverRequest['dienstuebergabe_anfrage_id'] ?>">
+              <input type="hidden" name="dienstbesetzung_id"
+                value="<?= (int) $assignment['dienstbesetzung_id'] ?>">
+              <p><strong>Schicht #<?= (int) $handoverRequest['von_nummer'] ?>
+                an Schicht #<?= (int) $handoverRequest['an_nummer'] ?></strong></p>
+              <p><?= nl2br(dv_operations_html(
+                  $handoverRequest['zusammenfassung']
+              )) ?></p>
+              <button class="estab-button estab-button-primary" type="submit">
+                Übernahme als <?= dv_operations_html(
+                    estab_function_identity_display_name(
+                        $assignment['funktion'],
+                        $assignment['rolle']
+                    )
+                ) ?> bestätigen
+              </button>
+            </form>
+          <?php endforeach; ?>
+        </section>
+      <?php endif; ?>
+
+      <?php if (!is_array($selectedIdentity)): ?>
+        <section class="estab-tool-status estab-tool-status-danger"
+          role="alert" data-estab-duty-selection-required>
+          <strong>Keine Arbeitsfunktion ausgewählt.</strong>
+          <span>Nehmen Sie oben eine zugewiesene Funktion an und wählen Sie
+            sie aus. Erst danach sind operative Bereiche freigeschaltet.</span>
+        </section>
+      <?php endif; ?>
+    <?php endif; ?>
+
+    <?php if (!$strictMode || is_array($selectedIdentity)): ?>
     <section class="estab-tool-panel" data-estab-active-telecom-plan>
       <header class="estab-tool-panel-heading">
         <h2>Aktiver Fernmeldeplan</h2>
@@ -1509,6 +1817,7 @@ foreach ($plans as $plan) {
         <?php endforeach; ?>
       <?php endif; ?>
     </section>
+    <?php endif; ?>
   <?php endif; ?>
 
   <footer class="estab-tool-footer">

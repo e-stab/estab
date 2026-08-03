@@ -1049,21 +1049,31 @@ SELECT
          (trigger_name = 'estab_dv94_fernmeldeplan_insert'
           AND action_statement LIKE
             '%Telecommunications plan creator account is invalid%'
-          AND action_statement NOT LIKE '%creator_shift%')
+          AND action_statement LIKE '%creator_assignment%'
+          AND action_statement LIKE '%creator_shift%'
+          AND action_statement LIKE '%creator_extra%')
          OR (trigger_name = 'estab_dv94_fernmeldeplan_immutable'
           AND action_statement LIKE
             '%Telecommunications plan release account is invalid%'
           AND action_statement LIKE
             '%Discarded telecommunications drafts are immutable evidence%'
-          AND action_statement NOT LIKE '%release_shift%')
+          AND action_statement LIKE '%release_assignment%'
+          AND action_statement LIKE '%release_shift%'
+          AND action_statement LIKE '%release_extra%')
          OR (trigger_name = 'estab_dv94_messenger_insert'
           AND action_statement LIKE
             '%Messenger assignment account functions are invalid%'
-          AND action_statement NOT LIKE '%messenger_shift%')
+          AND action_statement LIKE '%messenger_assignment%'
+          AND action_statement LIKE '%messenger_shift%'
+          AND action_statement LIKE '%supervisor_assignment%'
+          AND action_statement LIKE '%messenger_extra%'
+          AND action_statement LIKE '%supervisor_extra%')
          OR (trigger_name = 'estab_dv94_messenger_update'
           AND action_statement LIKE
             '%Messenger report account function is invalid%'
-          AND action_statement NOT LIKE '%report_shift%')
+          AND action_statement LIKE '%report_assignment%'
+          AND action_statement LIKE '%report_shift%'
+          AND action_statement LIKE '%report_extra%')
        )) = 4
    AND
    (SELECT COUNT(*)
@@ -1362,11 +1372,14 @@ SELECT
                    '%ETB correction requires canonical local reference%'
              AND action_statement LIKE
                    '%SET NEW.`estab_assignment` = assignment_snapshot%'
-             AND action_statement NOT LIKE '%duty_shift.`status`%'
              AND action_statement LIKE
-                   '%assignment.`status` <> BINARY ''ZURUECKGEZOGEN''%'
-             AND action_statement NOT LIKE
-                   '%assignment.`status` = BINARY ''ANGENOMMEN''%')
+                   '%Manual ETB entry requires an active accepted duty assignment%'
+             AND action_statement LIKE
+                   '%STRICT ETB entry requires duty shift provenance%'
+             AND action_statement LIKE '%strict_assignment%ANGENOMMEN%'
+             AND action_statement LIKE '%strict_shift%AKTIV%'
+             AND action_statement LIKE
+                   '%nv_benutzer_zusatzfunktionen%')
          OR (trigger_name = 'estab_tbb_bi_einsatz'
              AND action_statement LIKE '%TTB optional duty provenance must be complete%'
              AND action_statement LIKE
@@ -1377,8 +1390,14 @@ SELECT
                    '%TTB writer duty provenance is invalid%'
              AND action_statement LIKE
                    '%TTB message entry requires canonical message link%'
-             AND action_statement NOT LIKE '%duty_shift.`status`%'
-             AND action_statement NOT LIKE '%assignment.`status`%'))) = 2
+             AND action_statement LIKE
+                   '%Manual TTB entry requires an active accepted duty assignment%'
+             AND action_statement LIKE
+                   '%STRICT TTB entry requires duty shift provenance%'
+             AND action_statement LIKE '%strict_assignment%ANGENOMMEN%'
+             AND action_statement LIKE '%strict_shift%AKTIV%'
+             AND action_statement LIKE
+                   '%nv_benutzer_zusatzfunktionen%'))) = 2
    AND
    (SELECT COUNT(*) FROM `nv_etb`
      WHERE `einsatz_id` IS NULL OR `estab_book_lfd` < 1) = 0
@@ -1731,6 +1750,81 @@ SELECT
          'estab:migration:115:incident-permission-mode:v1') = 1
    AND
    (SELECT COUNT(*)
+      FROM information_schema.tables
+     WHERE table_schema = DATABASE()
+       AND table_name = 'nv_benutzer_zusatzfunktionen'
+       AND table_type = 'BASE TABLE'
+       AND engine = 'InnoDB'
+       AND table_collation = 'utf8mb4_unicode_ci'
+       AND table_comment =
+         'estab:migration:118:additional-user-functions:v1') = 1
+   AND
+   (SELECT COUNT(*)
+      FROM information_schema.columns
+     WHERE table_schema = DATABASE()
+       AND table_name = 'nv_benutzer_zusatzfunktionen'
+       AND is_nullable = 'NO'
+       AND extra = ''
+       AND (
+         (column_name = 'benutzer_kuerzel'
+          AND ordinal_position = 1
+          AND column_type = 'varchar(6)'
+          AND character_set_name = 'utf8mb4'
+          AND collation_name = 'utf8mb4_unicode_ci'
+          AND column_default IS NULL)
+         OR (column_name = 'funktion'
+          AND ordinal_position = 2
+          AND column_type = 'varchar(10)'
+          AND character_set_name = 'utf8mb4'
+          AND collation_name = 'utf8mb4_unicode_ci'
+          AND column_default IS NULL)
+         OR (column_name = 'rolle'
+          AND ordinal_position = 3
+          AND column_type = 'enum(''Stab'',''FB'',''Fernmelder'')'
+          AND character_set_name = 'utf8mb4'
+          AND collation_name = 'utf8mb4_unicode_ci'
+          AND column_default IS NULL)
+         OR (column_name = 'vergeben_am'
+          AND ordinal_position = 4
+          AND data_type = 'datetime'
+          AND datetime_precision = 6
+          AND LOWER(column_default) = 'current_timestamp(6)')
+         OR (column_name = 'vergeben_von'
+          AND ordinal_position = 5
+          AND column_type = 'varchar(128)'
+          AND character_set_name = 'utf8mb4'
+          AND collation_name = 'utf8mb4_unicode_ci'
+          AND column_default IS NULL)
+       )) = 5
+   AND
+   (SELECT COUNT(*)
+      FROM information_schema.statistics
+     WHERE table_schema = DATABASE()
+       AND table_name = 'nv_benutzer_zusatzfunktionen'
+       AND (
+         (index_name = 'PRIMARY' AND non_unique = 0 AND (
+           (seq_in_index = 1 AND column_name = 'benutzer_kuerzel')
+           OR (seq_in_index = 2 AND column_name = 'funktion')
+         ))
+         OR (
+           index_name = 'idx_benutzer_zusatzfunktion_funktion_rolle'
+           AND non_unique = 1 AND (
+             (seq_in_index = 1 AND column_name = 'funktion')
+             OR (seq_in_index = 2 AND column_name = 'rolle')
+           )
+         )
+       )) = 4
+   AND
+   (SELECT COUNT(*)
+      FROM information_schema.referential_constraints
+     WHERE constraint_schema = DATABASE()
+       AND table_name = 'nv_benutzer_zusatzfunktionen'
+       AND constraint_name = 'fk_benutzer_zusatzfunktion_benutzer'
+       AND referenced_table_name = 'nv_benutzer'
+       AND update_rule = 'RESTRICT'
+       AND delete_rule = 'CASCADE') = 1
+   AND
+   (SELECT COUNT(*)
       FROM information_schema.triggers
      WHERE trigger_schema = DATABASE()
        AND (
@@ -1759,12 +1853,68 @@ SELECT
           AND action_statement LIKE '%estab_permission_mode%')
        )) = 8
    AND
+   (SELECT COUNT(*)
+     FROM information_schema.triggers
+     WHERE trigger_schema = DATABASE()
+       AND action_statement LIKE '%nv_benutzer_zusatzfunktionen%'
+       AND action_statement LIKE '%canonical_capability%'
+       AND action_statement LIKE '%conflicting_matrix%'
+       AND action_statement LIKE '%primary_conflicting_matrix%'
+       AND action_statement LIKE '%nv_zugangsschicht_mitglieder%'
+       AND action_statement LIKE '%FOR UPDATE%'
+       AND (
+         (trigger_name = 'estab_etb_bi_einsatz'
+          AND action_statement LIKE
+            '%Manual ETB entry requires an active accepted duty assignment%'
+          AND action_statement LIKE
+            '%STRICT ETB entry requires duty shift provenance%'
+          AND action_statement LIKE '%strict_assignment%ANGENOMMEN%'
+          AND action_statement LIKE '%strict_shift%AKTIV%'
+          AND action_statement LIKE
+            '%estab_logbook_system_write_incident_id%'
+          AND action_statement LIKE '%estab_logbook_system_write_book%')
+         OR (trigger_name = 'estab_tbb_bi_einsatz'
+          AND action_statement LIKE
+            '%Manual TTB entry requires an active accepted duty assignment%'
+          AND action_statement LIKE
+            '%STRICT TTB entry requires duty shift provenance%'
+          AND action_statement LIKE '%strict_assignment%ANGENOMMEN%'
+          AND action_statement LIKE '%strict_shift%AKTIV%'
+          AND action_statement LIKE
+            '%estab_logbook_system_write_incident_id%'
+          AND action_statement LIKE '%estab_logbook_system_write_book%')
+         OR (trigger_name = 'estab_dv94_fernmeldeplan_insert'
+          AND action_statement LIKE '%creator_assignment%'
+          AND action_statement LIKE '%creator_extra%'
+          AND action_statement LIKE '%estab_dv_actor_assignment_id%'
+          AND action_statement LIKE '%estab_dv_target_assignment_id%')
+         OR (trigger_name = 'estab_dv94_fernmeldeplan_immutable'
+          AND action_statement LIKE '%release_assignment%'
+          AND action_statement LIKE '%release_extra%'
+          AND action_statement LIKE '%estab_dv_actor_assignment_id%'
+          AND action_statement LIKE '%estab_dv_target_assignment_id%'
+          AND action_statement LIKE
+            '%Discarded telecommunications drafts are immutable evidence%')
+         OR (trigger_name = 'estab_dv94_messenger_insert'
+          AND action_statement LIKE '%messenger_assignment%'
+          AND action_statement LIKE '%supervisor_assignment%'
+          AND action_statement LIKE '%messenger_extra%'
+          AND action_statement LIKE '%supervisor_extra%'
+          AND action_statement LIKE '%estab_dv_actor_assignment_id%'
+          AND action_statement LIKE '%estab_dv_target_assignment_id%')
+         OR (trigger_name = 'estab_dv94_messenger_update'
+          AND action_statement LIKE '%report_assignment%'
+          AND action_statement LIKE '%report_extra%'
+          AND action_statement LIKE '%estab_dv_actor_assignment_id%'
+          AND action_statement LIKE '%estab_dv_target_assignment_id%')
+       )) = 6
+   AND
    (SELECT COUNT(*) FROM `nv_einsaetze`
      WHERE BINARY `estab_permission_mode` NOT IN (
        BINARY 'STRICT', BINARY 'LOOSE'
      )) = 0)
        AS `incident_permission_mode_ok`,
-  ((SELECT COUNT(*) FROM `estab_schema_migrations`) = 23
+  ((SELECT COUNT(*) FROM `estab_schema_migrations`) = 24
    AND
    (SELECT COUNT(*)
       FROM `estab_schema_migrations`
@@ -1791,10 +1941,11 @@ SELECT
        '114-self-registration-policy.sql',
        '115-incident-permission-mode.sql',
        '116-standard-categories.sql',
-       '117-telecom-draft-discard.sql'
+       '117-telecom-draft-discard.sql',
+       '118-operational-authority.sql'
      )
        AND `state` = 'applied'
-       AND `checksum` REGEXP BINARY '^[0-9a-f]{64}$') = 23)
+       AND `checksum` REGEXP BINARY '^[0-9a-f]{64}$') = 24)
        AS `schema_migrations_ok`;
 
 SELECT `table_name`, `engine`, `table_collation`

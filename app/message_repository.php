@@ -664,9 +664,9 @@ function estab_message_append_transition_evidence(
             estab_message_terminal_snapshot_sha256($terminalMessage);
     }
     // The guard runs inside the same active-incident transaction as the
-    // message mutation. If a duty shift is active, a forged/stale basic
-    // account context therefore rolls the domain update back together with
-    // its evidence instead of racing an incident or hat change.
+    // message mutation. It revalidates the exact selected STRICT assignment
+    // or exact fixed/additional LOOSE function. A stale mode or authority
+    // therefore rolls the domain update back together with its evidence.
     estab_dv_require_operational_account(
         $connection,
         $incidentId,
@@ -1318,9 +1318,9 @@ function estab_message_operator_stage_parameters(
 /**
  * Revalidate the account and the current incident's stage policy atomically.
  *
- * STRICT binds status 1 to LdF and outgoing status 2 to Fernmelder. LOOSE
- * deliberately omits only that fixed function/role predicate; account,
- * incident, optional access-shift and messenger-availability checks remain.
+ * Both modes bind status 1 to LdF and outgoing status 2 to A/W. STRICT
+ * resolves that function from the selected duty assignment; LOOSE accepts a
+ * fixed or explicitly administered additional account function.
  *
  * @return array{benutzer:string,kuerzel:string,funktion:string,rolle:string}
  */
@@ -1334,30 +1334,18 @@ function estab_message_require_operator_stage_actor(
     // Validate the closed direction/status vocabulary even in LOOSE.
     estab_message_operator_stage_predicate($direction, $status);
     $incidentId = (int) ($incident['active_einsatz_id'] ?? 0);
-    $operationalActor = estab_dv_require_operational_account(
+    $requiredFunction = $status === 1 ? 'LdF' : 'A/W';
+    $operationalActor = estab_dv_require_write_capability(
         $connection,
         $incidentId,
-        $actor
+        $actor,
+        $status === 1 ? 'FERNMELDEBETRIEB' : 'BEFOERDERUNG'
     );
-    if (!estab_incident_role_permissions_enforced($incident)) {
-        return $operationalActor;
-    }
-
-    $requiredFunction = $status === 1 ? 'LdF' : 'A/W';
     if (
-        !hash_equals(
-            $requiredFunction,
-            (string) $operationalActor['funktion']
-        )
-        || !hash_equals(
-            'Fernmelder',
-            (string) $operationalActor['rolle']
-        )
+        $operationalActor['funktion'] !== $requiredFunction
+        || $operationalActor['rolle'] !== 'Fernmelder'
     ) {
-        throw new EstabDvPermissionException(
-            'Diese Nachrichtenstufe ist im strengen Berechtigungsmodus '
-                . 'der festgelegten Fernmeldefunktion vorbehalten.'
-        );
+        throw new LogicException('Capability resolved to an invalid stage actor');
     }
     return $operationalActor;
 }
@@ -2320,9 +2308,9 @@ function estab_message_update_pending_review(
 /**
  * Resubmit one formally returned outgoing message under its staff function.
  *
- * STRICT permits another account only within the original staff function.
- * LOOSE permits another operational function to take over the correction.
- * Old and new responsibility remain explicit in the transition snapshot.
+ * Both modes bind the correction to the original staff function. In LOOSE
+ * that function may be an explicitly granted personal additional function;
+ * the mode never permits an unrelated function to take over the object.
  */
 function estab_message_resubmit_returned_outgoing(
     mysqli $connection,
@@ -2393,8 +2381,6 @@ function estab_message_resubmit_returned_outgoing(
                 $incident,
                 $expectedIncidentId
             );
-            $rolePermissionsEnforced =
-                estab_incident_role_permissions_enforced($incident);
             $fields = estab_message_bind_command_post(
                 $fields,
                 $incident,
@@ -2431,12 +2417,9 @@ function estab_message_resubmit_returned_outgoing(
             }
             if (
                 !is_array($originalMessage)
-                || (
-                    $rolePermissionsEnforced
-                    && !hash_equals(
-                        (string) ($originalMessage['14_funktion'] ?? ''),
-                        $authorFunction
-                    )
+                || !hash_equals(
+                    (string) ($originalMessage['14_funktion'] ?? ''),
+                    $authorFunction
                 )
             ) {
                 return false;
@@ -2485,11 +2468,8 @@ function estab_message_resubmit_returned_outgoing(
                     (int) $incident['active_einsatz_id'],
                 ]
             );
-            $authorPredicate = '';
-            if ($rolePermissionsEnforced) {
-                $authorPredicate = ' AND `14_funktion` = ?';
-                $updateParameters[] = $authorFunction;
-            }
+            $authorPredicate = ' AND `14_funktion` = ?';
+            $updateParameters[] = $authorFunction;
             $updateParameters = array_merge(
                 $updateParameters,
                 ['', '', '', '']
@@ -3010,14 +2990,30 @@ function estab_message_state_set_for_recipient(
                 $incidentId,
                 $actor
             );
-            $function = (string) $operationalActor['funktion'];
-            $recipientPattern = estab_message_recipient_pattern($function);
+            if (($operationalActor['estab_permission_mode'] ?? null) === 'LOOSE') {
+                $operationalActor['estab_additional_functions'] =
+                    estab_auth_fetch_additional_functions(
+                        $connection,
+                        $operationalActor['kuerzel'],
+                        true
+                    );
+            }
+            $function = (string) ($operationalActor['funktion'] ?? '');
+            $role = (string) ($operationalActor['rolle'] ?? '');
+            if (
+                !estab_auth_has_staff_message_workspace($function, $role)
+            ) {
+                throw new EstabDvPermissionException(
+                    'Diese Aktion erfordert eine wirksame Stabsfunktion.'
+                );
+            }
             $lockName = estab_message_acquire_state_lock(
                 $connection,
                 $stateTable,
                 $recordId
             );
             try {
+                $recipientPattern = estab_message_recipient_pattern($function);
                 $statement = estab_message_execute(
                     $connection,
                     'INSERT INTO ' . estab_message_table($stateTable)
@@ -3098,18 +3094,36 @@ function estab_message_state_unset_for_recipient(
                 $incidentId,
                 $actor
             );
-            $function = (string) $operationalActor['funktion'];
-            $recipientPattern = estab_message_recipient_pattern($function);
+            if (($operationalActor['estab_permission_mode'] ?? null) === 'LOOSE') {
+                $operationalActor['estab_additional_functions'] =
+                    estab_auth_fetch_additional_functions(
+                        $connection,
+                        $operationalActor['kuerzel'],
+                        true
+                    );
+            }
+            $function = (string) ($operationalActor['funktion'] ?? '');
+            $role = (string) ($operationalActor['rolle'] ?? '');
+            if (
+                !estab_auth_has_staff_message_workspace($function, $role)
+            ) {
+                throw new EstabDvPermissionException(
+                    'Diese Aktion erfordert eine wirksame Stabsfunktion.'
+                );
+            }
             $lockName = estab_message_acquire_state_lock(
                 $connection,
                 $stateTable,
                 $recordId
             );
             try {
+                $recipientPattern = estab_message_recipient_pattern($function);
                 $statement = estab_message_execute(
                     $connection,
-                    'DELETE s FROM ' . estab_message_table($stateTable) . ' AS s'
-                        . ' INNER JOIN ' . estab_message_table($messageTable)
+                    'DELETE s FROM '
+                        . estab_message_table($stateTable) . ' AS s'
+                        . ' INNER JOIN '
+                        . estab_message_table($messageTable)
                         . ' AS m ON m.`00_lfd` = s.`nachnum`'
                         . ' WHERE s.`nachnum` = ? AND m.`einsatz_id` = ?'
                         . ' AND ' . estab_message_staff_access_sql('m'),
@@ -3124,7 +3138,8 @@ function estab_message_state_unset_for_recipient(
                 }
 
                 // No state row is an idempotent success only for an active
-                // incident object that remains visible to this function.
+                // incident object that remains visible to one effective
+                // staff function.
                 $verification = estab_message_execute(
                     $connection,
                     'SELECT COUNT(*) FROM '
@@ -3194,7 +3209,22 @@ function estab_message_is_recipient(array $message, string $function): bool
     return false;
 }
 
-/** Return whether LOOSE may replace only this operation's fixed role gate. */
+/** @return list<string> */
+function estab_message_effective_staff_functions(array $identity): array
+{
+    $functions = [];
+    foreach (estab_auth_effective_function_roles($identity) as $tuple) {
+        if (estab_auth_has_staff_message_workspace(
+            $tuple['funktion'],
+            $tuple['rolle']
+        )) {
+            $functions[$tuple['funktion']] = true;
+        }
+    }
+    return array_keys($functions);
+}
+
+/** Return whether an exact write stage may carry linked attachment access. */
 function estab_message_operation_relaxes_write_role(string $operation): bool
 {
     return in_array($operation, [
@@ -3218,25 +3248,29 @@ function estab_message_object_allowed(
     array $message,
     bool $allowLooseWriteMode = false
 ): bool {
-    $rolesRelaxed = $allowLooseWriteMode
-        && estab_message_operation_relaxes_write_role($operation)
-        && !estab_permission_role_checks_enforced();
-    $isTelecommunications = $rolesRelaxed || (
-        ($identity['funktion'] ?? '') === 'A/W'
-        && ($identity['rolle'] ?? '') === 'Fernmelder'
+    unset($allowLooseWriteMode);
+    $isTelecommunications = estab_auth_identity_has_function(
+        $identity,
+        'A/W',
+        'Fernmelder'
     );
-    $isTelecommunicationsLead = $rolesRelaxed || (
-        ($identity['funktion'] ?? '') === 'LdF'
-        && ($identity['rolle'] ?? '') === 'Fernmelder'
+    $isTelecommunicationsLead = estab_auth_identity_has_function(
+        $identity,
+        'LdF',
+        'Fernmelder'
     );
-    $isViewer = $rolesRelaxed || (
-        ($identity['funktion'] ?? '') === 'Si'
-        && ($identity['rolle'] ?? '') === 'Stab'
-    );
-    $isStaff = $rolesRelaxed || (
-        ($identity['funktion'] ?? '') !== 'Si'
-        && in_array(($identity['rolle'] ?? ''), ['Stab', 'FB'], true)
-    );
+    $isViewer = estab_auth_identity_has_function($identity, 'Si', 'Stab');
+    $isStaff = false;
+    $staffFunctions = [];
+    foreach (estab_auth_effective_function_roles($identity) as $tuple) {
+        if (estab_auth_has_staff_message_workspace(
+            $tuple['funktion'],
+            $tuple['rolle']
+        )) {
+            $isStaff = true;
+            $staffFunctions[$tuple['funktion']] = true;
+        }
+    }
     $status = filter_var(
         $message['x00_status'] ?? null,
         FILTER_VALIDATE_INT
@@ -3292,30 +3326,25 @@ function estab_message_object_allowed(
         && $direction === 'A'
         && (string) ($message['14_zeichen'] ?? '') !== ''
         && (string) ($message['14_funktion'] ?? '') !== ''
-        && (
-            $rolesRelaxed
-            || hash_equals(
-                (string) ($message['14_funktion'] ?? ''),
-                (string) ($identity['funktion'] ?? '')
-            )
-        )
+        && isset($staffFunctions[(string) $message['14_funktion']])
         && estab_datetime_is_unset($message['02_zeit'] ?? null)
         && (string) ($message['02_zeichen'] ?? '') === ''
         && estab_datetime_is_unset($message['03_datum'] ?? null)
         && (string) ($message['03_zeichen'] ?? '') === ''
         && $hasViewerApproval
         && (string) ($message['x01_abschluss'] ?? 'f') === 'f';
-    $isTerminalStaffRecipient = $status === 8
-        && estab_message_is_recipient(
-            $message,
-            (string) ($identity['funktion'] ?? '')
-        );
+    $isTerminalStaffRecipient = false;
+    if ($status === 8) {
+        foreach (array_keys($staffFunctions) as $staffFunction) {
+            if (estab_message_is_recipient($message, $staffFunction)) {
+                $isTerminalStaffRecipient = true;
+                break;
+            }
+        }
+    }
     $isOutgoingAuthor = $direction === 'A'
         && (string) ($message['14_funktion'] ?? '') !== ''
-        && hash_equals(
-            (string) ($message['14_funktion'] ?? ''),
-            (string) ($identity['funktion'] ?? '')
-        );
+        && isset($staffFunctions[(string) $message['14_funktion']]);
 
     return match ($operation) {
         'staff-read', 'staff-state' =>

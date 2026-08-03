@@ -9,6 +9,27 @@
  */
 trait EstabOfficialMessageFormView
 {
+    /** Carry one server-selected Stab/FB workspace through form round-trips. */
+    function official_message_acting_function(): ?string
+    {
+        $identity = $GLOBALS['workflowSelectedIdentity'] ?? null;
+        if (function_exists('estab_workflow_staff_acting_function')) {
+            return estab_workflow_staff_acting_function($identity);
+        }
+        if (
+            !is_array($identity)
+            || !is_string($identity['funktion'] ?? null)
+            || !is_string($identity['rolle'] ?? null)
+            || !estab_auth_has_staff_message_workspace(
+                $identity['funktion'],
+                $identity['rolle']
+            )
+        ) {
+            return null;
+        }
+        return $identity['funktion'];
+    }
+
     /** @return list<string> */
     function official_message_attachment_references(): array
     {
@@ -120,7 +141,10 @@ trait EstabOfficialMessageFormView
                         'Der direkte Upload besitzt keine gültige Sitzung.'
                     );
                 }
-                $identity = estab_auth_session_identity($_SESSION);
+                $identity = $GLOBALS['workflowSelectedIdentity'] ?? null;
+                if (!is_array($identity)) {
+                    $identity = estab_auth_session_identity($_SESSION);
+                }
                 $incidentId = $GLOBALS['workflowIncidentId'] ?? null;
                 if (!is_array($identity)) {
                     throw new EstabAttachmentContextException(
@@ -597,7 +621,7 @@ HTML;
             ],
             17 => [
                 'title' => 'Zeichen / Funktion',
-                'text' => 'Immer ausfüllen. Beglaubigen Sie die Nachricht mit Ihrem Namenszeichen und Ihrer Funktion. eStab übernimmt diese Angaben soweit möglich aus der angemeldeten Dienstfunktion.',
+                'text' => 'Immer ausfüllen. Beglaubigen Sie die Nachricht mit Ihrem Namenszeichen und Ihrer Funktion. eStab übernimmt diese Angaben soweit möglich aus der für diesen Arbeitsschritt wirksamen Funktion.',
             ],
             18 => [
                 'title' => 'Quittung',
@@ -1487,18 +1511,28 @@ HTML;
         echo '<details class="estab-message-categories">'
             . '<summary>Kategorien und Ablage</summary>'
             . '<div class="estab-message-category-grid">';
+        $actingFunction = '';
         foreach ($definitions as $type => $definition) {
             $categories = new kategorien($type);
+            $actingFunction = (string) $categories->stab_fkt;
             $selected = $categories->db_get_kategobymsg($recordId);
             $managerUrl = 'katgoedt.php?' . http_build_query(
-                ['dbtyp' => $type, 'msgno' => $recordId],
+                [
+                    'dbtyp' => $type,
+                    'msgno' => $recordId,
+                    'acting_function' => $actingFunction,
+                ],
                 '',
                 '&',
                 PHP_QUERY_RFC3986
             );
             $allowed = $type !== 'master'
-                || (($_SESSION['vStab_funktion'] ?? '') === ($redcopy2 ?? ''))
-                || (($_SESSION['vStab_funktion'] ?? '') === 'Si');
+                || estab_category_can_manage_master(
+                    ['funktion' => $actingFunction],
+                    isset($redcopy2) && is_string($redcopy2)
+                        ? $redcopy2
+                        : null
+                );
             echo '<section><strong>' . $definition['label'] . '</strong>';
             if ($allowed || $type !== 'master') {
                 echo '<a href="' . estab_message_html($managerUrl) . '">'
@@ -1525,8 +1559,15 @@ HTML;
             }
             echo '</section>';
         }
+        $assignmentAction = 'katgoedt.php?' . http_build_query(
+            ['acting_function' => $actingFunction],
+            '',
+            '&',
+            PHP_QUERY_RFC3986
+        );
         echo '<button type="submit" name="category_action" value="assign" '
-            . 'formaction="katgoedt.php" class="estab-button '
+            . 'formaction="' . estab_message_html($assignmentAction)
+            . '" class="estab-button '
             . 'estab-button-secondary">Kategorien zuordnen</button>';
         echo '</div></details>';
     }
@@ -2078,6 +2119,11 @@ HTML;
             . '" name="4fach" data-estab-dirty-guard '
             . 'data-estab-requires-incident' . $dirtyInitial . '>';
         echo estab_csrf_field();
+        $actingFunction = $this->official_message_acting_function();
+        if ($actingFunction !== null) {
+            echo '<input type="hidden" name="acting_function" value="'
+                . estab_message_html($actingFunction) . '">';
+        }
         echo '<input type="hidden" name="recipient_matrix_revision" value="'
             . estab_message_html(
                 estab_workflow_recipient_matrix_revision(

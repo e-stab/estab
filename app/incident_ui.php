@@ -232,12 +232,13 @@ function estab_incident_ui_markup(
             ? ''
             : '<span>' . estab_auth_html(implode(' · ', $details)) . '</span>')
         . '<span data-estab-incident-permission-mode="'
-        . estab_auth_html($permissionMode) . '">Schreibrechte: <strong>'
+        . estab_auth_html($permissionMode) . '">Berechtigungsmodus: <strong>'
         . estab_auth_html(estab_permission_mode_label($permissionMode))
         . '</strong>'
         . ($loose
-            ? ' · Funktions- und Rollenrechte werden bei fachlichen '
-                . 'Schreibaktionen nicht erzwungen.'
+            ? ' · Rechte folgen fester Kontofunktion und ausdrücklich '
+                . 'vergebenen Zusatzfunktionen; eine formale Dienstschicht '
+                . 'ist nicht erforderlich.'
             : '')
         . '</span>'
         . '</section>';

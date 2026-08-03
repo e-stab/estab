@@ -764,9 +764,9 @@ run_browser_acceptance() {
     fi
     echo "CI integration: running real-browser menu and session acceptance"
     (
-        # Reuse the centrally provisioned fixed S1 account. The active
-        # incident, account state and function now form the write boundary;
-        # no legacy duty-shift selection is required.
+        # Reuse the centrally provisioned S1 account in the explicitly LOOSE
+        # CI incident. Its primary and explicit extra functions form the
+        # fachliche boundary; no formal duty-shift selection is required.
         export ESTAB_TEST_LOGIN_NAME=${ESTAB_TEST_LOGIN_NAME:-Container Integration}
         export ESTAB_TEST_LOGIN_CODE=${ESTAB_TEST_LOGIN_CODE:-e2e001}
         export ESTAB_TEST_LOGIN_FUNCTION=${ESTAB_TEST_LOGIN_FUNCTION:-S1}
@@ -953,8 +953,9 @@ assert_clean_app_logs
 
 echo "CI integration: running ETB/TBB HTTP integration"
 # The initial service uses the fixed A/W account first created by
-# http_smoke.sh. Re-provisioning changes only credentials and presence; the
-# account function remains the authoritative write boundary.
+# http_smoke.sh in the explicitly LOOSE incident. Re-provisioning changes only
+# credentials and presence; primary/extra functions remain the fachliche
+# boundary.
 export ESTAB_TEST_TBB_CODE=${ESTAB_TEST_TBB_CODE:-e2l001}
 export ESTAB_TEST_TBB_NAME=${ESTAB_TEST_TBB_NAME:-Logbook Integration A-W}
 run_timed 5m sh tests/integration/logbooks_http.sh

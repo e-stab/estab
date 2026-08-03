@@ -247,6 +247,20 @@ if (
         'funktion' => 'A/W',
         'rolle' => 'Fernmelder',
     ];
+    $grantedTakeoverIdentity = $takeoverIdentity + [
+        'estab_permission_mode' => 'LOOSE',
+        'estab_additional_functions' => [
+            ['funktion' => 'S1', 'rolle' => 'Stab'],
+        ],
+    ];
+    $strictAuthorIdentity = [
+        'benutzer' => 'Anton Funk',
+        'kuerzel' => 'aw0001',
+        'funktion' => 'S1',
+        'rolle' => 'Stab',
+        'estab_permission_mode' => 'STRICT',
+        'duty_assignment_id' => 17,
+    ];
     $otherIdentity = [
         'benutzer' => 'Sina Sichtung',
         'kuerzel' => 'si0001',
@@ -287,6 +301,23 @@ if (
         ) === null,
         'STRICT mode created a cross-role attachment write scope'
     );
+    $strictScope = estab_read_attachment_write_scope(
+        $strictAuthorIdentity,
+        'staff-correction',
+        $returned
+    );
+    $assert(
+        is_array($strictScope)
+            && ($strictScope['funktion'] ?? null) === 'S1'
+            && ($strictScope['rolle'] ?? null) === 'Stab'
+            && estab_read_attachment_write_scope_allows(
+                $strictScope,
+                $strictAuthorIdentity,
+                [$returned],
+                7
+            ),
+        'selected STRICT author function cannot reuse its linked attachments'
+    );
 
     estab_permission_context_set_from_incident([
         'active_einsatz_id' => 7,
@@ -314,12 +345,8 @@ if (
             ),
         'LOOSE-to-STRICT-to-LOOSE ABA survived the explicit revision snapshot'
     );
-    $assert(
-        !estab_read_message_allowed($takeoverIdentity, $returned),
-        'LOOSE mode changed the ordinary read rule used by attachments'
-    );
     $scope = estab_read_attachment_write_scope(
-        $takeoverIdentity,
+        $grantedTakeoverIdentity,
         'staff-correction',
         $returned
     );
@@ -330,25 +357,25 @@ if (
             && ($scope['operation'] ?? null) === 'staff-correction'
             && ($scope['benutzer'] ?? null) === 'Anton Funk'
             && ($scope['kuerzel'] ?? null) === 'aw0001'
-            && ($scope['funktion'] ?? null) === 'A/W'
-            && ($scope['rolle'] ?? null) === 'Fernmelder',
-        'LOOSE write scope is not bound to the exact actor and correction object'
+            && ($scope['funktion'] ?? null) === 'S1'
+            && ($scope['rolle'] ?? null) === 'Stab',
+        'LOOSE write scope is not bound to the exact granted function and correction object'
     );
 
     if (is_array($scope)) {
         $assert(
             estab_read_attachment_write_scope_allows(
                 $scope,
-                $takeoverIdentity,
+                $grantedTakeoverIdentity,
                 [$returned],
                 7
             ),
-            'authorised LOOSE correction cannot reuse its linked attachments'
+            'explicitly authorised LOOSE correction cannot reuse its linked attachments'
         );
         $assert(
             !estab_read_attachment_write_scope_allows(
                 $scope,
-                $takeoverIdentity,
+                $grantedTakeoverIdentity,
                 [],
                 7
             ),
@@ -360,7 +387,7 @@ if (
         $assert(
             !estab_read_attachment_write_scope_allows(
                 $scope,
-                $takeoverIdentity,
+                $grantedTakeoverIdentity,
                 [$foreignMessage],
                 7
             ),
@@ -380,6 +407,15 @@ if (
                 $scope,
                 $takeoverIdentity,
                 [$returned],
+                7
+            ),
+            'revoked additional function retained an attachment write scope'
+        );
+        $assert(
+            !estab_read_attachment_write_scope_allows(
+                $scope,
+                $grantedTakeoverIdentity,
+                [$returned],
                 8
             ),
             'attachment write scope survived an incident mismatch'
@@ -390,13 +426,13 @@ if (
             'revision' => 13,
         ]);
         $assert(
-            !estab_read_attachment_write_scope_allows(
+            estab_read_attachment_write_scope_allows(
                 $scope,
-                $takeoverIdentity,
+                $strictAuthorIdentity,
                 [$returned],
                 7
             ),
-            'LOOSE attachment write scope remained usable after switching to STRICT'
+            'mode-independent exact function scope rejected the selected STRICT function'
         );
     }
 
@@ -420,7 +456,7 @@ if (
     ) {
         $assert(
             estab_read_attachment_write_scope(
-                $takeoverIdentity,
+                $grantedTakeoverIdentity,
                 $operation,
                 $message
             ) === null,

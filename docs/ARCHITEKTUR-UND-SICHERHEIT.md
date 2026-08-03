@@ -44,12 +44,12 @@ an `127.0.0.1:8080` gebunden.
 | `4fadm/` | Basic-Auth-geschützte Administration, Systemstatus und Einsatzexport |
 | `4fbak/` | aktive dateisysteminterne PDF-Erzeugung, historische FPDF-Komponente und der bereits im letzten Upstream-Release deaktivierte Bildgenerator |
 | `stabetb/`, `fmtbb/`, `ubltg/`, `sammlung/` | Einsatztagebuch, technisches Betriebsbuch und Zusatzmodule |
-| `app/` | Bootstrap, PHP-/MySQL-Kompatibilität, Authentisierung, feste Kontofunktion, optionale Zugangsschichten, objektbezogene Leseberechtigung, Navigation, Sitzung, CSRF, Datum, Nachrichten-/Kategoriezugriff, Anhang einschließlich begrenztem RFC-822-Parser, Export und transaktionale Admin-Operationen |
+| `app/` | Bootstrap, PHP-/MySQL-Kompatibilität, Authentisierung, modeabhängige Dienstbesetzungs- beziehungsweise Fest-/Zusatzfunktionsautorität, optionale Zugangsschichten, objektbezogene Leseberechtigung, Navigation, Sitzung, CSRF, Datum, Nachrichten-/Kategoriezugriff, Anhang einschließlich begrenztem RFC-822-Parser, Export und transaktionale Admin-Operationen |
 | `4fcfg/` | historische Konfigurationsschnittstelle, heute aus validierten Umgebungswerten gespeist |
 | `docker/` | Apache-/PHP-Härtung, Entrypoint, Datenbankschema und Migrationen |
 | `tests/` | statische, sicherheitsbezogene, Datenbank- und HTTP-Nachweise |
 | `migration/` | unveränderlicher SVN-/Release-Provenienznachweis |
-| `docs/legacy/` und `doku/` | historische Fach- und Entwicklungsdokumentation |
+| Git-Historie (`9cd6fc0…:docs/legacy/`) und `doku/` | historische Fach- und Entwicklungsdokumentation; der große r85-Dokumentbaum bleibt im gebundenen Commit statt im aktuellen Arbeitsbaum |
 
 Der Anwendungscode liegt unveränderlich im Image. Ausschließlich
 `/var/www/html/4fdata`, `/var/lib/estab/export`, `/var/lib/mysql` und die
@@ -133,22 +133,19 @@ tatsächlich ausgeführten `SCRIPT_NAME` ab, nie aus der frei wählbaren
 Request-URI. Ein Suffix wie `mainindex.php/4fadm` kann dadurch weder die
 Basic-Auth-Grenze noch eine administrative Schreibausnahme vortäuschen.
 
-Die Anwendungssitzung weist das Konto mit dessen fester Funktion und
-serverseitig abgeleiteter Rolle nach. Für jeden operativen Schreibzugriff muss
-zusätzlich ein Einsatz aktiv sein. Jeder normale Schreibpfad revalidiert
-konkretes Konto, Sperrstatus, Zugangsschichtwirkung, aktiven Einsatz und dessen
-Berechtigungsmodus. In den vom Modus erfassten operativen Workflow-,
-ETB-/TTB-, S6-Plan- und Melderpfaden werden Funktion und Rolle in `STRICT`
-ebenfalls als Schreibgrenze geprüft; in `LOOSE` entfällt ausschließlich diese
-Prüfung. Rollenstrenge Übersichten, Kategorien- und Administrationsrechte sind
-davon ausgenommen.
-Eine aktive Dienst- oder
-Zugangsschicht, persönliche Besetzungsannahme oder Hutauswahl ist keine
-Bedingung. Die fachlichen Controller prüfen diese Grenze serverseitig erneut;
+Die Anwendungssitzung weist das konkrete Konto nach und ermittelt die
+modeabhängige operative Identität. Für jeden operativen Schreibzugriff muss
+zusätzlich ein Einsatz aktiv sein. In `STRICT` stammen Funktion und Rolle
+ausschließlich aus einer persönlich angenommenen und aktuell ausgewählten
+Besetzung der aktiven formalen Dienstschicht. In `LOOSE` stammen sie aus der
+festen Kontofunktion und den explizit vergebenen globalen Zusatzfunktionen;
+eine formale Dienstschicht ist dort nicht erforderlich. Jeder normale
+Schreibpfad revalidiert Konto, Sperrstatus, aktiven Einsatz, Modus und die
+passende wirksame Funktion. Die fachlichen Controller prüfen diese Grenze serverseitig erneut;
 ausgeblendete Links oder bereits geladene Seiten gelten nicht als
 Berechtigungsnachweis.
 
-Optionale Zugangsschichten bilden ausschließlich einsatzbezogene
+Optionale Zugangsschichten bilden ausschließlich in `LOOSE` einsatzbezogene
 Kontengruppen. Unzugeordnete Konten bleiben zugelassen, Mehrfachzuordnungen
 gelten per OR. Aktivierung erzeugt keine Sitzung; Deaktivierung widerruft eine
 Sitzung, sofern kein anderer aktiver Gruppenzugang verbleibt. Die dauerhafte
@@ -159,14 +156,12 @@ manuelle Kontosperre bleibt davon unabhängig und vorrangig.
 `nv_einsaetze.estab_permission_mode` speichert genau einen Modus je Einsatz:
 
 - `STRICT` ist der Standard für neue und beim Upgrade bereits vorhandene
-  Einsätze. Er bewahrt die bisherigen funktions- und rollenbezogenen
-  Schreibrechte einschließlich ihrer Datenbank-Trigger.
-- `LOOSE` erlaubt einem konkret angemeldeten, aktiven und ungesperrten Konto
-  die dafür vorgesehenen operativen Workflow-, ETB-/TTB-, S6-Plan- und
-  Melder-Schreibschritte unabhängig von seiner gespeicherten Funktion/Rolle.
-  Das Konto wird dabei nicht umbenannt oder umklassifiziert;
-  seine echte Identität, Funktion und Rolle bleiben in Datensatzprovenienz und
-  Audit sichtbar.
+  Einsätze. Operative Identität und Rechte gelten nur mit ausgewählter,
+  angenommener Besetzung einer aktiven Dienstschicht.
+- `LOOSE` verzichtet auf die formale Dienstschicht. Rechte folgen der festen
+  Kontofunktion und ausdrücklich in der Benutzerverwaltung vergebenen
+  Zusatzfunktionen. Diese sind global, aber ausschließlich in `LOOSE` wirksam.
+  Ein fachfremdes Konto bleibt gesperrt.
 
 `LOOSE` ist kein globaler Kompatibilitäts- oder Debugschalter. Der Modus kommt
 ausschließlich aus der unter Transaktionssperre gelesenen Einsatzzeile und wird
@@ -175,21 +170,15 @@ Requests geänderter Einsatz-, Modus- oder Revisionsstand lässt den Writer
 konfliktbehaftet scheitern, statt unter einer veralteten Berechtigung zu
 committen. Fehlt ein eindeutiger Moduskontext, gilt fail-closed `STRICT`.
 
-Die Lockerung betrifft nur funktions-/rollenbezogene **Schreib**prüfungen.
-Authentisierung, exakte SID und Kontenidentität, Kontosperre,
-Zugangsschichtentzug, aktiver offener Einsatz und Einsatzscoping, CSRF,
+Der Modus wechselt die Autoritätsquelle, nicht die fachlichen Objekt- oder
+Stufenregeln. Authentisierung, exakte SID und Kontenidentität, Kontosperre,
+aktiver offener Einsatz und Einsatzscoping, CSRF,
 Eingabevalidierung, Einsatz-/Nachrichtenbezug, Workflow- und Transportzustände,
 Sperrinhaberschaft, Nummerierung, Append-only-Regeln, Anhangintegrität,
-Ereignisketten, Audit und Aufbewahrung gelten unverändert. Allgemeine
-Leserechte werden durch den Modus nicht erweitert. Bei einem Melderauftrag
-bleiben insbesondere Eignung des beauftragten Kontos, Auftragszustand und
-Rückkehrbindung erhalten; nur die funktionsbezogene Zuständigkeit des
-disponierenden oder bestätigenden Kontos kann im lockeren Modus entfallen.
-Rollenstrenge Übersichten, Nachweisung, Zweitsichtungsarchive,
-Kategorienverwaltung und administrative Rechte sind ausdrücklich nicht Teil
-der Lockerung. Die begrenzte Objektsicht, die zum Bearbeiten einer explizit
-gewählten Workflowstufe nötig ist, gilt nur in diesem Schreibkontext.
-Bei einer funktionsübergreifenden Korrektur umfasst sie ausschließlich
+Ereignisketten, Audit und Aufbewahrung gelten unverändert. Menü-, Lese- und
+Schreibrechte verlangen in beiden Modi eine passende wirksame Funktion;
+Administrationsrechte werden durch Zusatzfunktionen nie erweitert. Bei einer
+Korrektur umfasst die Objektsicht ausschließlich
 Anlagen, die mit genau der autorisierten Status-10-Nachricht verknüpft sind.
 Karten, Vorschau, passiv gerenderte E-Mail und Download bauen den Scope aus
 der aktuellen Datenbankzeile neu auf und widerrufen ihn bei Einsatz-, Modus-
@@ -197,10 +186,14 @@ oder Statuswechsel. Ein originloser Archivanhang oder eine andere Nachrichten-
 ID erfüllt diese Grenze nicht.
 
 Anlegen oder Umstellen auf `LOOSE` erfordert im Basic-Auth-/CSRF-geschützten
-Administrationspfad eine ausdrückliche Warnungsbestätigung. Moduswechsel sind
-nur bei offenen Einsätzen möglich, binden erwartete globale Revision und
-erwarteten Altmodus und schreiben Vorher-/Nachherwert in das unveränderliche
-Einsatz-Audit. Datenbanktrigger blockieren unmarkierte beziehungsweise
+Administrationspfad eine ausdrückliche Warnungsbestätigung. Echte
+Modusänderungen sind nur bei offenen Einsätzen ohne jede operative oder formale
+Eintragung möglich, binden erwartete globale Revision und erwarteten Altmodus
+und schreiben Vorher-/Nachherwert in das unveränderliche Einsatz-Audit. Die
+erste operative oder formale Eintragung friert den Modus dauerhaft ein; das
+spätere Löschen einzelner Daten entsperrt ihn nicht. Ein idempotentes Speichern
+desselben Modus bleibt ohne neue Revision und ohne Auditereignis möglich.
+Datenbanktrigger blockieren unmarkierte beziehungsweise
 versehentliche direkte Legacy-Updates sowie eine unbestätigte Neuanlage mit
 `LOOSE`. Der dafür verwendete Sessionmarker ist ein Kohärenzvertrag für den
 vertrauenswürdigen Anwendungs-Principal, keine Privileggrenze gegen einen
@@ -321,11 +314,13 @@ Weboberfläche `/handbuch/`, die über dieselben URL- und Ausgabebegrenzungen
 wie die übrige Anwendung ausgeliefert wird. Das historische PDF von 2011 ist
 nur eine im Git-Bestand bewahrte Quelle und kein Laufzeitdienst. Anonym
 erscheinen alle elf Einstiege mit
-Anmeldehinweis. Nach der Anmeldung zeigt die Navigation anhand der festen
-Kontofunktion unmittelbar neun beziehungsweise zehn Links:
+Anmeldehinweis. Nach der Anmeldung zeigt die Navigation anhand der
+modeabhängig wirksamen Funktionsmenge unmittelbar neun bis elf Links:
 Meldungsübersicht ist ausschließlich S2/`LAGE_DOKUMENTATION`, Nachweisung
 ausschließlich LdF/`FERNMELDEBETRIEB` oder Fernmelder/`BEFOERDERUNG`
-zugeordnet.
+zugeordnet. In `STRICT` stammt diese Funktionsmenge aus der ausgewählten
+Dienstbesetzung, in `LOOSE` aus fester Kontofunktion und expliziten
+Zusatzfunktionen.
 
 Das Root-Menü klassifiziert jedes Ziel als öffentlich, Anwendung oder
 Administration und bindet passende Karten an dasselbe Navigationsmanifest.
@@ -371,8 +366,9 @@ gebundenen Ziel `messages`. GET-Anfragen mit Zugangsdaten oder den
 Login-Metadaten `login_flow`, `next` beziehungsweise `interrupted` werden
 bewusst nicht als operative Wiederherstellung eingestuft und bleiben auf der
 harten Ablehnungsgrenze. Andere HTTP-Methoden bleiben 403. Eine gültige
-Kontositzung verwendet unmittelbar ihre feste Funktion; eine zusätzliche
-Auswahlweiterleitung gibt es nicht. Rollen-, Objekt-, CSRF- und
+Kontositzung erhält in `LOOSE` unmittelbar feste und zusätzliche Funktionen.
+In `STRICT` muss vor operativer Arbeit eine persönlich angenommene Besetzung
+der aktiven Dienstschicht ausgewählt sein. Rollen-, Objekt-, CSRF- und
 Bildberechtigungen bleiben davon unberührt. Das authentifizierte
 Statusfragment verwendet HTTP 401 für eine fehlende oder abgelaufene
 Fachsitzung, damit ausschließlich der Sidebar-Poller zum Login wechseln kann.
@@ -390,7 +386,7 @@ Administrationsrouten ausschließlich escaped als technischer Kontext
 angezeigt und nie in eine Fachrolle übersetzt.
 
 Dieselbe Grenze stellt `estab_session_ui_abort()` für fachlich abgewiesene
-Browserseiten bereit. Ein fehlender Einsatz, eine unzulässige Kontofunktion,
+Browserseiten bereit. Ein fehlender Einsatz, eine unzulässige wirksame Funktion,
 ein abgelaufener Formularvorgang oder eine vorübergehend nicht mögliche
 Berechtigungsprüfung behält seinen echten HTTP-Status 4xx beziehungsweise 5xx
 und den begrenzten fachlichen Meldungstext. Statt einer ungestalteten
@@ -429,8 +425,8 @@ erreichbaren Laufzeitoberfläche.
 Die Sidebar besitzt bewusst einen eigenen Navigationsmodus. Sie rendert zuerst
 eine Statuskarte mit rollenabhängigem Arbeitszähler, Serverzeit und
 Aktivitätsübersicht, danach Identität und CSRF-geschützten Logout, anschließend die
-rollenabhängigen Fachaktionen und zuletzt die nach fester Kontofunktion
-gefilterten neun beziehungsweise zehn Bereichs- und Dienstlinks. Diese Links
+funktionsabhängigen Fachaktionen und zuletzt die nach der modeabhängig
+wirksamen Funktionsmenge gefilterten Bereichs- und Dienstlinks. Diese Links
 stehen ohne `<details>` oder
 „Bereich wechseln“-Disclosure dauerhaft bereit. Die Bereichsnavigation und
 Aktionsgruppen erzeugen keine eigenen Scrollcontainer; bei geringer
@@ -452,7 +448,7 @@ Fokus auf ihren Frame.
 `app/sidebar.php` erzeugt die semantische Statuskarte und den begrenzten
 Aktualisierungscode. Der GET
 `/4fach/vorgaben.php?fragment=status` liefert ausschließlich bei gültiger
-Anmeldung, aktivem Einsatz und zulässiger fester Kontofunktion das neue
+Anmeldung, aktivem Einsatz und zulässiger modeabhängig wirksamer Funktion das neue
 Statusfragment. Die Sidebar ersetzt nur diesen Knoten
 und lädt weder Identität, Navigation noch Aktionsformular neu.
 Der Renderer klassifiziert angemeldete Konten zentral als innerhalb von
@@ -587,7 +583,7 @@ Die Apache-Konfiguration:
   funktionieren weiterhin,
 - verweigert jeden direkten HTTP-Zugriff auf den persistenten `4fdata`-Baum;
   Anhänge und Vordrucke werden ausschließlich nach gültiger
-  Anwendungssitzung, aktivem Einsatz, passender fester Kontofunktion und
+  Anwendungssitzung, aktivem Einsatz, passender modeabhängig wirksamer Funktion und
   erneuter Objektberechtigung durch die geprüften Download-Endpunkte
   ausgeliefert,
 - trennt beim Vordruckdownload den unveränderten Archivstream vom ausdrücklich
@@ -638,8 +634,9 @@ dieser Zeile fest. Danach werden die Bytes verschoben sowie SHA-256 und
 Bytezahl ohne operativen Einsatz-Lock ermittelt, sodass langsame NAS-I/O keine
 Einsatztransaktion hält. Phase 2
 beansprucht die Reservierung innerhalb einer kurzen Transaktion vorübergehend
-mit Status 2, prüft erwarteten aktiven Einsatz, Reservierungsinhaber und
-Kontofunktion erneut und persistiert SHA-256, Bytezahl, Serverzeit, Status 1
+mit Status 2, prüft erwarteten aktiven Einsatz, Reservierungsinhaber und die
+nach Einsatzmodus wirksame Funktion erneut und persistiert SHA-256, Bytezahl,
+Serverzeit, Status 1
 und Audit atomar. Ein Rollback dieser zweiten Phase fällt auf die weiterhin
 eigene und unsichtbare Status-8-Reservierung zurück.
 
@@ -927,11 +924,11 @@ Sichtungs-/Transport-Saves, Sperränderungen und Logout nur über POST mit
 Session-CSRF. Record- und Kategorie-IDs sind kanonische positive Ganzzahlen.
 Vor jedem Nachrichtenpfad werden aktiver Einsatz, konkrete Kontoidentität samt
 gespeicherter Funktion/Rolle und Objekt gemeinsam revalidiert. Bei
-Schreibwegen entscheidet der einsatzbezogene Modus ausschließlich darüber, ob
-die feste Funktion/Rolle zusätzlich als Zuständigkeitsgate wirkt; die
-nachfolgenden Leseregeln bleiben in beiden Modi unverändert. Ein normales
+Schreibwegen entscheidet der einsatzbezogene Modus darüber, woher die
+wirksame Funktion und Rolle stammt; die fachlichen Objektregeln bleiben
+unverändert. Ein normales
 Stabs- oder Fachberaterkonto darf
-eine Nachricht lesen, wenn seine feste Funktion nach fachlichem Abschluss als vollständiger
+eine Nachricht lesen, wenn seine wirksame Funktion nach fachlichem Abschluss als vollständiger
 Empfänger-Token eingetragen ist oder sie die Nachricht selbst ausgehend
 erstellt hat. Si, LdF und Fernmelder dürfen zusätzlich ihre aktuelle Warteschlange
 beziehungsweise Sperre sowie
@@ -939,28 +936,24 @@ Nachrichten mit ihrer eigenen unveränderlichen Verarbeitungsmarke lesen.
 Vordruckliste, aktueller In-Memory-Abzug und Archivdownload erben exakt diese
 Objektregel. Ein Sperrinhaber wird über sein validiertes Kürzel gebunden.
 Historische GET-Detail- und GET-Mutationsaufrufe werden abgewiesen. Im
-lockeren Modus dürfen bekannte Schreibaufgaben von einer anderen festen
-Kontofunktion übernommen werden. Die ausdrücklich gewählte Schreibstufe darf
-dazu genau die erforderliche Workflow-Objektsicht erhalten; Richtung, Status
-und Sperrinhaber bleiben dennoch verbindlich. Bei einer zurückgewiesenen
-Ausgangsmeldung entfällt in `LOOSE` auch die Bindung an die ursprüngliche
-Verfasserfunktion. Der Ereignisnachweis bewahrt ursprüngliche und neu
+lockeren Modus dürfen Schreibaufgaben nur durch eine passende feste oder
+zusätzliche Kontofunktion übernommen werden. Richtung, Status, Objektsicht und
+Sperrinhaber bleiben verbindlich. Der Ereignisnachweis bewahrt ursprüngliche und neu
 verantwortliche Funktion, statt den Wechsel als identische Zuständigkeit
 auszugeben. Rein lesende Aufrufe behalten ihre normale Objektregel.
 
 Die einsatzbezogene Meldungsübersicht ist in beiden Modi ausschließlich für
-ein festes Konto `S2/Stab` mit `LAGE_DOKUMENTATION` bestimmt. Die Nachweisung
+die wirksame Funktion `S2/Stab` mit `LAGE_DOKUMENTATION` bestimmt. Die Nachweisung
 bleibt ausschließlich für die Funktion `LdF` mit `FERNMELDEBETRIEB` oder
-`Fernmelder` mit `BEFOERDERUNG` bestimmt. Im strengen Modus schreiben ETB
-`ETB/Stab` oder `S2/Stab`, TTB schreibt `Fernmelder`. Im lockeren Modus sperren diese
-Funktion-/Rollenmerkmale die entsprechenden Schreibaktionen nicht; die
-konkrete Kontenidentität wird weiterhin gespeichert. Anwendung und
-Insert-Trigger prüfen in beiden Modi den aktiven Einsatz und ein ungesperrtes
-Konto. Eine aktive Schicht oder Besetzungs-ID wird nicht verlangt. Die getrennte
+`Fernmelder` mit `BEFOERDERUNG` bestimmt. ETB erfordert `ETB/Stab` oder
+`S2/Stab`, TTB `Fernmelder`. In `STRICT` stammt die Funktion aus der
+ausgewählten Besetzung der aktiven Dienstschicht; in `LOOSE` aus fester oder
+zusätzlicher Kontofunktion. Anwendung und Insert-Trigger prüfen die
+modeabhängige Autorität unabhängig. Die getrennte
 `LAGE_DOKUMENTATION`-Fähigkeit und damit die Meldungsübersicht bleiben
 als normales Leserecht ausschließlich S2 vorbehalten.
 
-Die manuelle Kontosperre und ein gegebenenfalls deaktivierter Gruppenzugang
+Die manuelle Kontosperre und in `LOOSE` ein gegebenenfalls deaktivierter Gruppenzugang
 blockieren das betroffene Konto. Sie führen weder zu einem Funktionswechsel
 noch zu einer stillen Rechteübertragung auf ein anderes Konto.
 
@@ -969,9 +962,15 @@ Datenbankköpfe vergeben. Der Einsatz-Insert-Trigger erzeugt atomar `ETB:1` und
 `TTB:1`; jeder Buch-Insert sperrt und erhöht nur seinen vorhandenen Kopf. Ein
 fehlender Kopf wird nicht im konkurrierenden Buchtrigger repariert, sondern
 fail-closed abgewiesen. Globale Legacy-Primärschlüssel sind keine fachlichen
-Nummern. Der formale Abschluss hängt seine Buchzeilen innerhalb der
-Fachtransaktion an. Eine frühere Schichtaktivierung und schichtbezogene
-Eröffnungszeilen sind keine Abschlussbedingung. `UPDATE` und `DELETE`
+Nummern. In `STRICT` eröffnet die erste aktivierte formale Dienstschicht beide
+Bücher mit Schichtprovenienz; in `LOOSE` kann die Einsatzaktivierung
+schichtfreie Eröffnungszeilen erzeugen. Ist ein `STRICT`-Einsatz bereits aktiv
+und noch ungeöffnet sowie weiterhin frei von jeder operativen oder formalen
+Eintragung, erzeugt der bestätigte Wechsel nach `LOOSE` dieselben Zeilen atomar
+in der Moduswechseltransaktion. Der formale Abschluss hängt seine
+Buchzeilen innerhalb der Fachtransaktion an. `STRICT` verlangt zuvor eröffnete
+Bücher und eine beendete formale Dienstorganisation, `LOOSE` keine frühere
+Schichtaktivierung. `UPDATE` und `DELETE`
 beider Bücher sind durch Trigger gesperrt; eine Korrektur ist eine neue,
 direkt auf das Original verweisende Zeile. Die zehnjährige
 Mindestaufbewahrung wird ebenfalls in der Datenbank geprüft. Diese technischen
@@ -1008,6 +1007,18 @@ beliebigen Schreibrechten gilt dagegen als vertrauenswürdig und kann den
 Sessionmarker selbst setzen; die Trigger ersetzen deshalb keine getrennten
 Datenbankprivilegien.
 
+Migration 118 ersetzt diesen zwischenzeitlichen Vertrag erneut. Sie führt
+`nv_benutzer_zusatzfunktionen` als kollisionsgeprüfte globale Zuordnung ein.
+Die abschließenden Fachtrigger verlangen in `STRICT` eine aktive persönlich
+angenommene Dienstbesetzung und bei manuellen Buchzeilen deren Provenienz. In
+`LOOSE` ist keine formale Dienstschicht erforderlich; die fachlich passende
+Funktion und Rolle müssen aber als feste Kontofunktion oder explizite
+Zusatzfunktion vorliegen. Systembuchzeilen dürfen weiterhin ohne menschliche
+Schreiberbesetzung entstehen, müssen in `STRICT` aber weiterhin die aktive
+formale Dienstschicht als Provenienz tragen. Nur in `LOOSE` dürfen auch sie
+schichtlos sein. Die Anwendung setzt denselben Vertrag für
+Navigation, Leser und Writer um.
+
 Migration 113 ergänzt davon unabhängig die globale Kennwortrichtlinie. Sie
 akzeptiert nur die eigene InnoDB-/`utf8mb4`-Tabelle mit genau einer
 Singleton-Zeile, neun kanonischen Spalten und begrenzten Boolean-/Längenwerten.
@@ -1033,11 +1044,13 @@ merkt bereits besuchte Zeilen und begrenzt die gewünschte Vorwärts- oder
 Rückwärtstiefe auf 1 bis 25. Vorwärts bleiben Verzweigungen erhalten;
 rückwärts folgt sie der gespeicherten direkten Referenz.
 
-Die optionalen Zugangsschichten erlauben der Administration, Konten eines
+Die optionalen Zugangsschichten erlauben der Administration in `LOOSE`, Konten eines
 Einsatzes in Gruppen zu aktivieren und zu deaktivieren. Die Gruppe verändert
 keine Funktion und schreibt keine ETB-/TBB-Personalzeile. Historische formale
-Dienstschichten, Besetzungen und Übergaben bleiben davon unberührt als
-Legacy-Evidenz erhalten. Nur die PDF-Linien sind für eine anschließende
+Dienstschichten, Besetzungen und Übergaben sind davon getrennt und bleiben
+unveränderliche Evidenz. Aktive formale Dienstbesetzungen bilden in `STRICT`
+die aktuelle Autorisierungsquelle. Nur die PDF-Linien sind für
+eine anschließende
 manuelle Unterschrift vorgesehen; Webaktionen sind keine digitale Signatur.
 Schichtmutationen teilen einen globalen Advisory Lock mit der Anmeldung und
 zusätzliche kontobezogene Locks mit der Benutzerverwaltung. Deaktivieren und
@@ -1097,8 +1110,10 @@ Lock-Namensbildung verwendet die administrative Zählerreparatur. Damit kann
 eine Reparatur nicht parallel an einem regulären Writer vorbeilaufen. Der
 Wiederanlaufwert liegt nicht als unvollständige System-„Nachricht“ in
 `nv_nachrichten`, sondern als hashverkettetes
-`message_counter_repaired`-Betriebsereignis mit Objekttyp `EINSATZ` vor; eine
-aktive Schicht ist dafür nicht erforderlich.
+`message_counter_repaired`-Betriebsereignis vor. In `STRICT` verlangt die
+Reparatur die aktive formale Dienstschicht und verwendet den Objekttyp
+`DIENSTSCHICHT`; in `LOOSE` ist keine formale Dienstschicht erforderlich und
+der Objekttyp lautet `EINSATZ`.
 Normale Nummernvergabe verwendet das Maximum aus echten Nachrichten und diesem
 unveränderlichen Nachweis. Dadurch erzeugt die Reparatur weder einen
 Status-0-Datensatz noch einen dauerhaften Einsatzabschluss-Blocker.
@@ -1147,8 +1162,9 @@ alle Werte gebunden und jeder Vorgang verwendet InnoDB-Transaktionen:
   müssen sowohl im gemeinsamen als auch im getrennten Modus strikt über dem
   aktuellen Maximum liegen.
   Ein hashverkettetes `message_counter_repaired`-Betriebsereignis und der
-  Audit-Eintrag werden gemeinsam committed; es entsteht keine unevidenzierte
-  Systemnachricht.
+  Audit-Eintrag werden gemeinsam committed; `STRICT` bindet den Nachweis als
+  `DIENSTSCHICHT` an die aktive formale Schicht, `LOOSE` als `EINSATZ` ohne
+  formale Schicht. Es entsteht keine unevidenzierte Systemnachricht.
 - Der PDF-Vordruckreset setzt ausschließlich nach einem CSRF-geprüften POST die
   validierte Spalte `x04_druck` zurück und auditiert die Zahl betroffener
   Nachrichten.
@@ -1165,9 +1181,11 @@ Konflikt- oder Datenbankfehler führen nicht zu Teiländerungen.
 `app/category.php` ist die gemeinsame Daten- und Berechtigungsgrenze für die
 aktive Verwaltung `4fach/katgoedt.php`, die Auswahllisten in
 `4fach/katego.php` und das Kategorienband der Meldungsliste. Der Endpunkt
-verlangt immer eine gültige eStab-Sitzung, einen aktiven Einsatz und eine
-passende feste Kontofunktion mit serverseitig abgeleiteter Rolle. Diese
-Kategorien-/Administrationsgrenze bleibt in beiden Einsatzmodi rollenstreng.
+verlangt immer eine gültige eStab-Sitzung, einen aktiven Einsatz und eine nach
+Einsatzmodus wirksame Funktion mit serverseitig abgeleiteter Rolle: in
+`STRICT` aus der ausgewählten Dienstbesetzung, in `LOOSE` aus fester oder
+explizit zusätzlicher Kontofunktion. Der Modus erweitert die jeweils
+funktionsgebundene Kategoriengrenze nicht pauschal.
 `dbtyp` akzeptiert ausschließlich `master`, `fkt` oder `user`:
 
 - Master-Kategorien liegen in den fest konfigurierten Tabellen und dürfen nur
@@ -1204,7 +1222,7 @@ Listenabfrage bindet diese ID. Damit bleiben Kategorienamen mit Quotes reine
 Daten und können nicht in den SQL-Filter gelangen.
 
 `katgoedt.php` bleibt ein aktiver, vom Apache erreichbarer Fachendpunkt; die
-Session-, Einsatz-, Festfunktions-, Rollen-, CSRF- und Objektgrenzen liegen in
+Session-, Einsatz-, modeabhängigen Funktions-, Rollen-, CSRF- und Objektgrenzen liegen in
 PHP und werden durch `LOOSE` nicht gelockert. Nur interne Implementierungs- und
 Konfigurationsverzeichnisse werden auf Webserver-Ebene gesperrt.
 
@@ -1378,7 +1396,9 @@ Das aktuelle Basisschema verwendet:
 - einen eindeutigen Anhang-Dateinamen für race-freie Reservierung,
 - längere Session-, Passwort-, IPv6- und Dateiendungsfelder,
 - einen fail-closed auf `STRICT` voreingestellten, einsatzgebundenen
-  Berechtigungsmodus mit Guard- und modebewussten Fachtriggern,
+  Berechtigungsmodus mit Guard- und modebewussten Fachtriggern, formaler
+  Dienstbesetzungsautorität in `STRICT` sowie fester und zusätzlicher
+  Kontofunktionsautorität in `LOOSE`,
 - eine revisionsgesicherte Singleton-Tabelle für die prospektive
   Funktionskonto-Kennwortrichtlinie,
 - idempotente InnoDB-/`utf8mb4`-Migration der dynamischen Benutzer- und
@@ -1388,7 +1408,6 @@ Das aktuelle Basisschema verwendet:
   historischen Löschpfade ohne zusätzliche Cascade-Beziehungen.
 
 Die detaillierte Gegenüberstellung zum Legacy-Schema steht in
-[`docker/db/README.md`](../docker/db/README.md). Provenienz und unveränderte
-Originaldokumentation sind unter
-[`migration/README.md`](../migration/README.md) beziehungsweise
-[`docs/legacy/README.md`](legacy/README.md) nachgewiesen.
+[`docker/db/README.md`](../docker/db/README.md). Provenienz und die im
+festgeschriebenen Git-Commit archivierte unveränderte Originaldokumentation
+sind unter [`migration/README.md`](../migration/README.md) nachgewiesen.

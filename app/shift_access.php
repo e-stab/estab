@@ -33,6 +33,28 @@ final class EstabShiftAccessBusyException extends RuntimeException
 {
 }
 
+/** Optional access shifts may be administered only for a LOOSE incident. */
+function estab_shift_access_require_loose_incident(
+    array $incident,
+    int $incidentId
+): void {
+    if ((int) ($incident['active_einsatz_id'] ?? 0) !== $incidentId) {
+        throw new EstabShiftAccessConflictException(
+            'Der ausgewählte Einsatz ist nicht mehr aktiv.'
+        );
+    }
+    if (
+        estab_incident_permission_mode(
+            $incident['estab_permission_mode'] ?? null
+        ) !== ESTAB_PERMISSION_MODE_LOOSE
+    ) {
+        throw new EstabShiftAccessConflictException(
+            'Optionale Zugangsschichten können nur im lockeren '
+            . 'Berechtigungsmodus verwaltet werden.'
+        );
+    }
+}
+
 function estab_shift_access_positive_id(mixed $value, string $label): int
 {
     if (is_int($value) && $value > 0) {
@@ -841,11 +863,10 @@ function estab_shift_access_create(
                     $actor,
                     $protocolTable
                 ): array {
-                    if ((int) $incident['active_einsatz_id'] !== $incidentId) {
-                        throw new EstabShiftAccessConflictException(
-                            'Der ausgewählte Einsatz ist nicht mehr aktiv.'
-                        );
-                    }
+                    estab_shift_access_require_loose_incident(
+                        $incident,
+                        $incidentId
+                    );
                     $duplicate = $connection->prepare(
                         'SELECT `zugangsschicht_id`'
                         . ' FROM `nv_zugangsschichten`'
@@ -971,11 +992,10 @@ function estab_shift_access_add_member(
                     $actor,
                     $protocolTable
                 ): array {
-                    if ((int) $incident['active_einsatz_id'] !== $incidentId) {
-                        throw new EstabShiftAccessConflictException(
-                            'Der ausgewählte Einsatz ist nicht mehr aktiv.'
-                        );
-                    }
+                    estab_shift_access_require_loose_incident(
+                        $incident,
+                        $incidentId
+                    );
                     $shift = estab_shift_access_shift_for_update(
                         $connection,
                         $incidentId,
@@ -1151,11 +1171,10 @@ function estab_shift_access_remove_member(
                     $actor,
                     $protocolTable
                 ): array {
-                    if ((int) $incident['active_einsatz_id'] !== $incidentId) {
-                        throw new EstabShiftAccessConflictException(
-                            'Der ausgewählte Einsatz ist nicht mehr aktiv.'
-                        );
-                    }
+                    estab_shift_access_require_loose_incident(
+                        $incident,
+                        $incidentId
+                    );
                     $shift = estab_shift_access_shift_for_update(
                         $connection,
                         $incidentId,
@@ -1317,11 +1336,10 @@ function estab_shift_access_set_enabled(
                     $actor,
                     $protocolTable
                 ): array {
-                    if ((int) $incident['active_einsatz_id'] !== $incidentId) {
-                        throw new EstabShiftAccessConflictException(
-                            'Der ausgewählte Einsatz ist nicht mehr aktiv.'
-                        );
-                    }
+                    estab_shift_access_require_loose_incident(
+                        $incident,
+                        $incidentId
+                    );
                     $shift = estab_shift_access_shift_for_update(
                         $connection,
                         $incidentId,

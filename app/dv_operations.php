@@ -71,6 +71,24 @@ final class EstabDvPermissionException extends RuntimeException
 {
 }
 
+/** Formal duty-shift mutations belong exclusively to STRICT incidents. */
+function estab_dv_require_strict_incident_snapshot(
+    array $incident,
+    int $incidentId
+): void {
+    if ((int) ($incident['active_einsatz_id'] ?? 0) !== $incidentId) {
+        throw new EstabDvConflictException(
+            'Der ausgewählte Einsatz ist nicht mehr aktiv.'
+        );
+    }
+    if (!estab_incident_duty_shift_required($incident)) {
+        throw new EstabDvPermissionException(
+            'Formale Dienstschichten können nur im strengen '
+            . 'Berechtigungsmodus verwaltet werden.'
+        );
+    }
+}
+
 /** @return array{label:string,kanal:?string,bandlage:?string,verkehrsform:?string} */
 function estab_dv_telecom_medium_definition(mixed $medium): array
 {
@@ -824,11 +842,7 @@ function estab_dv_create_shift(
             $actor,
             $protocolTable
         ): array {
-            if ((int) $incident['active_einsatz_id'] !== $incidentId) {
-                throw new EstabDvConflictException(
-                    'Der ausgewählte Einsatz ist nicht mehr aktiv.'
-                );
-            }
+            estab_dv_require_strict_incident_snapshot($incident, $incidentId);
             if ($predecessorId !== null) {
                 $check = $connection->prepare(
                     'SELECT `status` FROM `nv_dienstschichten`'
@@ -935,9 +949,7 @@ function estab_dv_assign_hat(
             $matrixTable,
             $protocolTable
         ): array {
-            if ((int) $incident['active_einsatz_id'] !== $incidentId) {
-                throw new EstabDvConflictException('Der Einsatz ist nicht mehr aktiv.');
-            }
+            estab_dv_require_strict_incident_snapshot($incident, $incidentId);
             $assignment = estab_dv_role_for_function(
                 estab_dv_function_roles($connection, $matrixTable),
                 $functionValue
@@ -1137,6 +1149,16 @@ function estab_dv_accept_hat(
     $incidentId = estab_incident_positive_id($incidentId);
     $assignmentId = estab_dv_positive_id($assignmentId, 'Dienstbesetzung');
     $userCode = estab_dv_code($userCode);
+    $modeIncident = estab_incident_status($connection);
+    if (
+        (int) ($modeIncident['active_einsatz_id'] ?? 0) !== $incidentId
+        || !estab_incident_duty_shift_required($modeIncident)
+    ) {
+        throw new EstabDvPermissionException(
+            'Formale Dienstfunktionen können nur im strengen '
+            . 'Berechtigungsmodus angenommen werden.'
+        );
+    }
     $prepared = estab_dv_prepare_assignment_schema(
         $connection,
         $incidentId,
@@ -1161,6 +1183,12 @@ function estab_dv_accept_hat(
         ): array {
             if ((int) $incident['active_einsatz_id'] !== $incidentId) {
                 throw new EstabDvConflictException('Der Einsatz ist nicht mehr aktiv.');
+            }
+            if (!estab_incident_duty_shift_required($incident)) {
+                throw new EstabDvPermissionException(
+                    'Formale Dienstfunktionen können nur im strengen '
+                    . 'Berechtigungsmodus angenommen werden.'
+                );
             }
             $select = $connection->prepare(
                 'SELECT b.`dienstschicht_id`, b.`benutzer_kuerzel`,'
@@ -1386,6 +1414,12 @@ function estab_dv_activate_initial_shift(
             if ((int) $incident['active_einsatz_id'] !== $incidentId) {
                 throw new EstabDvConflictException('Der Einsatz ist nicht mehr aktiv.');
             }
+            if (!estab_incident_duty_shift_required($incident)) {
+                throw new EstabDvPermissionException(
+                    'Eine formale Dienstschicht kann nur im strengen '
+                    . 'Berechtigungsmodus aktiviert werden.'
+                );
+            }
             $active = $connection->prepare(
                 'SELECT COUNT(*) AS `anzahl` FROM `nv_dienstschichten`'
                 . ' WHERE `einsatz_id` = ?'
@@ -1440,12 +1474,13 @@ function estab_dv_activate_initial_shift(
             } finally {
                 $update->close();
             }
-            // Current incidents open their books during incident activation.
-            // This keeps the retained legacy workflow safe and idempotent
-            // without making a formal duty shift operationally mandatory.
-            estab_logbook_lifecycle_open_books_if_empty(
+            // STRICT restores the binding pre-efbc lifecycle: the first
+            // accepted duty roster must atomically create both empty books
+            // with its exact shift id. Existing rows make activation fail.
+            estab_logbook_lifecycle_open_books(
                 $connection,
-                $incident
+                $incident,
+                $shiftId
             );
             estab_dv_audit(
                 $connection,
@@ -1523,11 +1558,7 @@ function estab_dv_initiate_handover_shift(
             $adminActor,
             $protocolTable
         ): int {
-            if ((int) $incident['active_einsatz_id'] !== $incidentId) {
-                throw new EstabDvConflictException(
-                    'Der Einsatz ist nicht mehr aktiv.'
-                );
-            }
+            estab_dv_require_strict_incident_snapshot($incident, $incidentId);
             $select = $connection->prepare(
                 'SELECT `dienstschicht_id`, `status`, `vorgaenger_id`'
                 . ' FROM `nv_dienstschichten`'
@@ -1748,8 +1779,9 @@ function estab_dv_handover_requests(
 /**
  * Return only open handovers that this account can personally confirm.
  *
- * Retained only for historical handover evidence. Current authorization uses
- * the account's fixed function and never calls this as a pre-hat bootstrap.
+ * In STRICT these pending requests are the controlled bootstrap that lets the
+ * designated successor confirm a handover before selecting the new active
+ * assignment. LOOSE never uses formal handovers as an authority source.
  *
  * @return list<array<string,mixed>>
  */
@@ -1831,11 +1863,7 @@ function estab_dv_cancel_handover_request(
             $adminActor,
             $protocolTable
         ): void {
-            if ((int) $incident['active_einsatz_id'] !== $incidentId) {
-                throw new EstabDvConflictException(
-                    'Der Einsatz ist nicht mehr aktiv.'
-                );
-            }
+            estab_dv_require_strict_incident_snapshot($incident, $incidentId);
             $update = $connection->prepare(
                 'UPDATE `nv_dienstuebergabe_anfragen`'
                 . " SET `status` = 'STORNIERT', `storniert_am` = NOW(6),"
@@ -1921,6 +1949,12 @@ function estab_dv_confirm_handover_shift(
         ): void {
             if ((int) $incident['active_einsatz_id'] !== $incidentId) {
                 throw new EstabDvConflictException('Der Einsatz ist nicht mehr aktiv.');
+            }
+            if (!estab_incident_duty_shift_required($incident)) {
+                throw new EstabDvPermissionException(
+                    'Eine formale Schichtübergabe ist nur im strengen '
+                    . 'Berechtigungsmodus verfügbar.'
+                );
             }
             $requestStatement = $connection->prepare(
                 'SELECT `von_dienstschicht_id`, `an_dienstschicht_id`,'
@@ -2452,9 +2486,7 @@ function estab_dv_close_shift(
             $protocolTable,
             $attachmentRoot
         ): void {
-            if ((int) $incident['active_einsatz_id'] !== $incidentId) {
-                throw new EstabDvConflictException('Der Einsatz ist nicht mehr aktiv.');
-            }
+            estab_dv_require_strict_incident_snapshot($incident, $incidentId);
             $shift = $connection->prepare(
                 'SELECT `status` FROM `nv_dienstschichten`'
                 . ' WHERE `dienstschicht_id` = ? AND `einsatz_id` = ? FOR UPDATE'
@@ -2815,21 +2847,21 @@ function estab_dv_require_messenger_available_for_operational_write(
 }
 
 /**
- * Enforce the fixed account identity and active-incident boundary.
+ * Enforce the duty-hat boundary at every normal operational write.
  *
- * A Dienst-/Zugangsschicht is deliberately not part of this fachliche
- * authorization decision. Function and role come exclusively from the
- * administratively maintained account. Optional access shifts may disable a
- * group of accounts, but they never grant a capability or change a role.
- *
- * @return array{benutzer:string,kuerzel:string,funktion:string,rolle:string}
+ * The exact assignment selected in the authenticated session must belong to
+ * the same active incident and shift, remain personally accepted, match the
+ * complete account/function/role identity and belong to an active, unblocked
+ * account. A merely matching primary account tuple is deliberately
+ * insufficient. Reads, login, duty lifecycle and independently authenticated
+ * administration intentionally do not call this guard.
  */
-function estab_dv_require_operational_account(
+function estab_dv_require_active_hat_for_operational_write(
     mysqli $connection,
     int $incidentId,
     array $identity,
     bool $requireMessengerAvailable = true
-): array {
+): void {
     $incidentId = estab_incident_positive_id($incidentId);
     $shape = estab_auth_session_identity_shape([
         'vStab_benutzer' => $identity['benutzer'] ?? null,
@@ -2840,30 +2872,67 @@ function estab_dv_require_operational_account(
     if ($shape === null) {
         throw new EstabDvPermissionException('Anmeldung erforderlich.');
     }
+    $assignmentValue = $identity['duty_assignment_id'] ?? null;
+    if (is_int($assignmentValue) && $assignmentValue > 0) {
+        $assignmentId = $assignmentValue;
+    } elseif (
+        is_string($assignmentValue)
+        && preg_match('/\A[1-9][0-9]{0,18}\z/D', $assignmentValue) === 1
+    ) {
+        $parsedAssignment = filter_var(
+            $assignmentValue,
+            FILTER_VALIDATE_INT
+        );
+        $assignmentId = is_int($parsedAssignment)
+            && $parsedAssignment > 0
+            ? $parsedAssignment
+            : 0;
+    } else {
+        $assignmentId = 0;
+    }
+    if ($assignmentId < 1) {
+        throw new EstabDvPermissionException(
+            'Wählen Sie vor dieser Eingabe eine persönlich angenommene '
+            . 'Dienstfunktion aus.'
+        );
+    }
+
     $statement = $connection->prepare(
-        'SELECT 1 FROM `nv_benutzer` AS account'
+        'SELECT 1 FROM `nv_dienstbesetzungen` AS assignment'
+        . ' JOIN `nv_dienstschichten` AS duty_shift'
+        . ' ON duty_shift.`dienstschicht_id`'
+        . ' = assignment.`dienstschicht_id`'
         . ' JOIN `nv_einsatz_status` AS active_incident'
         . ' ON active_incident.`singleton_id` = 1'
+        . ' AND active_incident.`active_einsatz_id`'
+        . ' = duty_shift.`einsatz_id`'
         . ' JOIN `nv_einsaetze` AS incident'
-        . ' ON incident.`einsatz_id` = active_incident.`active_einsatz_id`'
-        . ' WHERE active_incident.`active_einsatz_id` = ?'
+        . ' ON incident.`einsatz_id` = duty_shift.`einsatz_id`'
+        . ' JOIN `nv_benutzer` AS account'
+        . ' ON BINARY account.`kuerzel`'
+        . ' = BINARY assignment.`benutzer_kuerzel`'
+        . ' WHERE assignment.`dienstbesetzung_id` = ?'
+        . ' AND duty_shift.`einsatz_id` = ?'
+        . " AND duty_shift.`status` = 'AKTIV'"
+        . " AND assignment.`status` = 'ANGENOMMEN'"
         . " AND incident.`estab_status` = 'open'"
         . ' AND BINARY account.`benutzer` = BINARY ?'
-        . ' AND BINARY account.`kuerzel` = BINARY ?'
-        . ' AND BINARY account.`funktion` = BINARY ?'
-        . ' AND BINARY account.`rolle` = BINARY ?'
+        . ' AND BINARY assignment.`benutzer_kuerzel` = BINARY ?'
+        . ' AND BINARY assignment.`funktion` = BINARY ?'
+        . ' AND BINARY assignment.`rolle` = BINARY ?'
         . ' AND account.`aktiv` = 1'
         . ' AND account.`estab_gesperrt` = 0'
         . ' LIMIT 1 FOR UPDATE'
     );
     if (!$statement) {
         throw new RuntimeException(
-            'Benutzerkonto konnte nicht geprüft werden.'
+            'Ausgewählte Dienstbesetzung konnte nicht geprüft werden.'
         );
     }
     try {
         $statement->bind_param(
-            'issss',
+            'iissss',
+            $assignmentId,
             $incidentId,
             $shape['benutzer'],
             $shape['kuerzel'],
@@ -2877,11 +2946,149 @@ function estab_dv_require_operational_account(
     }
     if (!$valid) {
         throw new EstabDvPermissionException(
+            'Die ausgewählte Dienstfunktion ist für diese Eingabe nicht mehr '
+            . 'aktiv, angenommen oder Ihrem Konto zugeordnet.'
+        );
+    }
+    if ($requireMessengerAvailable) {
+        estab_dv_require_messenger_available_for_operational_write(
+            $connection,
+            $incidentId,
+            $shape['kuerzel']
+        );
+    }
+}
+
+
+/**
+ * Enforce the mode-specific identity and active-incident boundary.
+ *
+ * STRICT derives function and role from the selected duty assignment. LOOSE
+ * derives them from the administratively maintained account plus explicit
+ * personal additional functions. Optional access shifts may disable a group
+ * of accounts only in LOOSE; they never grant a capability or change a role.
+ *
+ * @return array{benutzer:string,kuerzel:string,funktion:string,rolle:string}
+ */
+function estab_dv_require_operational_account(
+    mysqli $connection,
+    int $incidentId,
+    array $identity,
+    bool $requireMessengerAvailable = true,
+    bool $lockAuthority = false
+): array {
+    $incidentId = estab_incident_positive_id($incidentId);
+    $shape = estab_auth_session_identity_shape([
+        'vStab_benutzer' => $identity['benutzer'] ?? null,
+        'vStab_kuerzel' => $identity['kuerzel'] ?? null,
+        'vStab_funktion' => $identity['funktion'] ?? null,
+        'vStab_rolle' => $identity['rolle'] ?? null,
+    ]);
+    if ($shape === null) {
+        throw new EstabDvPermissionException('Anmeldung erforderlich.');
+    }
+    $incident = estab_incident_status($connection, $lockAuthority);
+    if (
+        (int) ($incident['active_einsatz_id'] ?? 0) !== $incidentId
+        || ($incident['estab_status'] ?? null) !== 'open'
+    ) {
+        throw new EstabDvPermissionException(
+            'Der Einsatz ist nicht mehr als aktiver Einsatz verfügbar.'
+        );
+    }
+    if (estab_incident_duty_shift_required($incident)) {
+        estab_dv_require_active_hat_for_operational_write(
+            $connection,
+            $incidentId,
+            $identity,
+            $requireMessengerAvailable
+        );
+        $assignmentId = filter_var(
+            $identity['duty_assignment_id'] ?? null,
+            FILTER_VALIDATE_INT,
+            ['options' => ['min_range' => 1, 'max_range' => PHP_INT_MAX]]
+        );
+        if (!is_int($assignmentId)) {
+            throw new EstabDvPermissionException(
+                'Wählen Sie zuerst eine persönlich angenommene Dienstfunktion.'
+            );
+        }
+        return $shape + [
+            'duty_assignment_id' => $assignmentId,
+            'estab_permission_mode' => 'STRICT',
+        ];
+    }
+    $statement = $connection->prepare(
+        'SELECT account.`funktion`, account.`rolle`'
+        . ' FROM `nv_benutzer` AS account'
+        . ' JOIN `nv_einsatz_status` AS active_incident'
+        . ' ON active_incident.`singleton_id` = 1'
+        . ' JOIN `nv_einsaetze` AS incident'
+        . ' ON incident.`einsatz_id` = active_incident.`active_einsatz_id`'
+        . ' WHERE active_incident.`active_einsatz_id` = ?'
+        . " AND incident.`estab_status` = 'open'"
+        . ' AND BINARY account.`benutzer` = BINARY ?'
+        . ' AND BINARY account.`kuerzel` = BINARY ?'
+        . ' AND account.`aktiv` = 1'
+        . ' AND account.`estab_gesperrt` = 0'
+        . ' LIMIT 1 FOR UPDATE'
+    );
+    if (!$statement) {
+        throw new RuntimeException(
+            'Benutzerkonto konnte nicht geprüft werden.'
+        );
+    }
+    try {
+        $statement->bind_param(
+            'iss',
+            $incidentId,
+            $shape['benutzer'],
+            $shape['kuerzel']
+        );
+        $statement->execute();
+        $account = $statement->get_result()->fetch_assoc();
+    } finally {
+        $statement->close();
+    }
+    if (!is_array($account)) {
+        throw new EstabDvPermissionException(
             'Für diese Eingabe werden ein aktiver Einsatz sowie ein aktives, '
             . 'ungesperrtes Benutzerkonto benötigt.'
         );
     }
-    if (!estab_auth_shift_access_allowed($connection, $shape['kuerzel'])) {
+    $accountFunction = (string) ($account['funktion'] ?? '');
+    $accountRole = (string) ($account['rolle'] ?? '');
+    if (!estab_auth_function_role_is_current(
+        $connection,
+        $accountFunction,
+        $accountRole
+    )) {
+        throw new EstabDvPermissionException(
+            'Die feste Kontofunktion gehört nicht mehr zum freigegebenen '
+            . 'Fachfunktionskatalog.'
+        );
+    }
+    $provenanceFunction = $identity['authorization_account_function'] ?? null;
+    $provenanceRole = $identity['authorization_account_role'] ?? null;
+    if (
+        ($provenanceFunction !== null || $provenanceRole !== null)
+        && (
+            !is_string($provenanceFunction)
+            || !is_string($provenanceRole)
+            || !hash_equals($accountFunction, $provenanceFunction)
+            || !hash_equals($accountRole, $provenanceRole)
+        )
+    ) {
+        throw new EstabDvPermissionException(
+            'Die verwendete Funktionsherkunft stimmt nicht mehr mit dem '
+            . 'Benutzerkonto überein.'
+        );
+    }
+    if (!estab_auth_shift_access_allowed(
+        $connection,
+        $shape['kuerzel'],
+        $lockAuthority
+    )) {
         throw new EstabDvPermissionException(
             'Der Zugang Ihres Kontos wurde über die optionale Schichtplanung '
             . 'vorübergehend deaktiviert.'
@@ -2894,12 +3101,101 @@ function estab_dv_require_operational_account(
             $shape['kuerzel']
         );
     }
+    $shape['estab_additional_functions'] =
+        estab_auth_fetch_additional_functions(
+            $connection,
+            $shape['kuerzel'],
+            $lockAuthority
+        );
+    $shape['estab_permission_mode'] = 'LOOSE';
+    $shape['authorization_account_function'] = $accountFunction;
+    $shape['authorization_account_role'] = $accountRole;
+    if (!estab_auth_identity_has_function(
+        $shape,
+        (string) ($identity['funktion'] ?? ''),
+        (string) ($identity['rolle'] ?? '')
+    )) {
+        throw new EstabDvPermissionException(
+            'Die ausgewählte Zusatzfunktion ist diesem Benutzerkonto nicht '
+            . 'mehr zugeordnet.'
+        );
+    }
     return $shape;
 }
 
-/**
- * Require a capability assigned to the account's fixed function/role tuple.
- */
+/** Check one capability against the server-resolved effective functions. */
+function estab_dv_effective_identity_capability_function(
+    mysqli $connection,
+    array $identity,
+    string $capability
+): ?array {
+    if (preg_match('/\A[A-Z][A-Z0-9_]{2,63}\z/D', $capability) !== 1) {
+        throw new InvalidArgumentException('Ungültige Funktionsfähigkeit.');
+    }
+    $statement = $connection->prepare(
+        'SELECT 1 FROM `nv_funktionsfaehigkeiten`'
+        . ' WHERE BINARY `funktion` = BINARY ?'
+        . ' AND BINARY `rolle` = BINARY ?'
+        . ' AND BINARY `faehigkeit` = BINARY ? LIMIT 1'
+    );
+    if (!$statement) {
+        throw new RuntimeException(
+            'Funktionsfähigkeit konnte nicht geprüft werden.'
+        );
+    }
+    try {
+        foreach (estab_auth_effective_function_roles($identity) as $tuple) {
+            $statement->bind_param(
+                'sss',
+                $tuple['funktion'],
+                $tuple['rolle'],
+                $capability
+            );
+            $statement->execute();
+            if ($statement->get_result()->fetch_row() !== null) {
+                return $tuple;
+            }
+        }
+        return null;
+    } finally {
+        $statement->close();
+    }
+}
+
+function estab_dv_effective_identity_has_capability(
+    mysqli $connection,
+    array $identity,
+    string $capability
+): bool {
+    return estab_dv_effective_identity_capability_function(
+        $connection,
+        $identity,
+        $capability
+    ) !== null;
+}
+
+/** Apply the exact function tuple that authorized one capability. */
+function estab_dv_authorized_capability_identity(
+    array $identity,
+    array $tuple,
+    string $capability
+): array {
+    if (!isset(
+        $identity['authorization_account_function'],
+        $identity['authorization_account_role']
+    )) {
+        $identity['authorization_account_function'] =
+            (string) ($identity['funktion'] ?? '');
+        $identity['authorization_account_role'] =
+            (string) ($identity['rolle'] ?? '');
+    }
+    $identity['funktion'] = (string) $tuple['funktion'];
+    $identity['rolle'] = (string) $tuple['rolle'];
+    $identity['authorization_capability'] = $capability;
+    return $identity;
+}
+
+/** Require a capability assigned to the effective operational identity. */
 function estab_dv_require_active_capability_for_operational_write(
     mysqli $connection,
     int $incidentId,
@@ -2916,13 +3212,15 @@ function estab_dv_require_active_capability_for_operational_write(
 }
 
 /**
- * Require a write capability in STRICT and only a valid account in LOOSE.
+ * Require the mode-specific operational authority.
  *
- * Read callers deliberately continue to use
- * estab_dv_require_account_capability(), so the relaxed incident mode never
- * broadens operational object visibility by accident.
+ * STRICT is authorized by the selected active, personally accepted assignment
+ * and the capability of that exact function/role tuple, matching the binding
+ * contract from before optional operational shifts. LOOSE resolves the
+ * requested capability from the fixed account plus explicit personal
+ * additional functions.
  *
- * @return array{benutzer:string,kuerzel:string,funktion:string,rolle:string}
+ * @return array<string,mixed>
  */
 function estab_dv_require_write_capability(
     mysqli $connection,
@@ -2939,50 +3237,169 @@ function estab_dv_require_write_capability(
         $connection,
         $incidentId,
         $identity,
-        $requireMessengerAvailable
+        $requireMessengerAvailable,
+        true
     );
-    $incident = estab_incident_status($connection);
-    if (
-        (int) ($incident['active_einsatz_id'] ?? 0) !== $incidentId
-        || ($incident['estab_status'] ?? null) !== 'open'
-    ) {
+    $permissionMode = $shape['estab_permission_mode'] ?? null;
+    if ($permissionMode !== 'STRICT' && $permissionMode !== 'LOOSE') {
         throw new EstabDvPermissionException(
-            'Der Einsatz ist nicht mehr als aktiver Einsatz verfügbar.'
+            'Der Berechtigungsmodus ist für diese Eingabe ungültig.'
         );
     }
-    if (!estab_incident_role_permissions_enforced($incident)) {
-        return $shape;
+    if ($permissionMode === 'LOOSE') {
+        // Lock the complete account grant range until the surrounding write
+        // transaction commits, so a concurrent administrative revocation
+        // cannot race a capability-protected write.
+        $shape['estab_additional_functions'] =
+            estab_auth_fetch_additional_functions(
+                $connection,
+                $shape['kuerzel'],
+                true
+            );
     }
-    $statement = $connection->prepare(
-        'SELECT 1 FROM `nv_funktionsfaehigkeiten`'
-        . ' WHERE BINARY `funktion` = BINARY ?'
-        . ' AND BINARY `rolle` = BINARY ?'
-        . ' AND BINARY `faehigkeit` = BINARY ? LIMIT 1'
+    $capabilityFunction = estab_dv_effective_identity_capability_function(
+        $connection,
+        $shape,
+        $capability
     );
-    if (!$statement) {
+    if ($capabilityFunction === null) {
+        throw new EstabDvPermissionException(
+            $permissionMode === 'STRICT'
+                ? 'Die aktuell ausgewählte Dienstfunktion besitzt nicht die '
+                    . 'erforderliche Fachzuständigkeit ' . $capability . '.'
+                : 'Ihre wirksamen Funktionen besitzen nicht die erforderliche '
+                    . 'Fachzuständigkeit ' . $capability . '.'
+        );
+    }
+    return estab_dv_authorized_capability_identity(
+        $shape,
+        $capabilityFunction,
+        $capability
+    );
+}
+
+/** Return the exact STRICT assignment or NULL for a LOOSE authority. */
+function estab_dv_authority_assignment_id(array $identity): ?int
+{
+    $mode = estab_permission_mode(
+        $identity['estab_permission_mode'] ?? null
+    );
+    $value = $identity['duty_assignment_id'] ?? null;
+    if ($mode === ESTAB_PERMISSION_MODE_LOOSE) {
+        if ($value !== null) {
+            throw new LogicException(
+                'Lockere Berechtigungen dürfen keine Dienstbesetzung '
+                . 'als Autoritätsnachweis verwenden.'
+            );
+        }
+        return null;
+    }
+    $assignmentId = filter_var(
+        $value,
+        FILTER_VALIDATE_INT,
+        ['options' => ['min_range' => 1, 'max_range' => PHP_INT_MAX]]
+    );
+    if (!is_int($assignmentId)) {
+        throw new EstabDvPermissionException(
+            'Der strenge Berechtigungsmodus benötigt die exakt ausgewählte '
+            . 'Dienstbesetzung.'
+        );
+    }
+    return $assignmentId;
+}
+
+/**
+ * Expose exact, server-validated assignment provenance to one trigger call.
+ *
+ * MariaDB user variables are a connection-local coherence guard, not a SQL
+ * principal boundary. The trigger revalidates every referenced assignment;
+ * this helper merely binds that check to the assignment selected by PHP and
+ * always clears both markers before returning or throwing.
+ */
+function estab_dv_with_sql_authority_context(
+    mysqli $connection,
+    ?int $actorAssignmentId,
+    ?int $targetAssignmentId,
+    callable $operation
+): mixed {
+    foreach ([$actorAssignmentId, $targetAssignmentId] as $assignmentId) {
+        if ($assignmentId !== null && $assignmentId < 1) {
+            throw new InvalidArgumentException(
+                'Ungültiger Dienstbesetzungsnachweis.'
+            );
+        }
+    }
+    $stateResult = $connection->query(
+        'SELECT @estab_dv_actor_assignment_id AS `actor_assignment_id`,'
+        . ' @estab_dv_target_assignment_id AS `target_assignment_id`'
+    );
+    if (!$stateResult) {
         throw new RuntimeException(
-            'Funktionsfähigkeit konnte nicht geprüft werden.'
+            'Dienstfunktionsnachweis konnte nicht geprüft werden.'
         );
     }
     try {
-        $statement->bind_param(
-            'sss',
-            $shape['funktion'],
-            $shape['rolle'],
-            $capability
-        );
-        $statement->execute();
-        $allowed = $statement->get_result()->fetch_row() !== null;
+        $state = $stateResult->fetch_assoc();
     } finally {
-        $statement->close();
+        $stateResult->free();
     }
-    if (!$allowed) {
-        throw new EstabDvPermissionException(
-            'Ihre fest zugewiesene Funktion besitzt nicht die erforderliche '
-            . 'Fachzuständigkeit ' . $capability . '.'
+    if (
+        !is_array($state)
+        || ($state['actor_assignment_id'] ?? null) !== null
+        || ($state['target_assignment_id'] ?? null) !== null
+    ) {
+        if (!$connection->query(
+            'SET @estab_dv_actor_assignment_id = NULL,'
+            . ' @estab_dv_target_assignment_id = NULL'
+        )) {
+            throw new RuntimeException(
+                'Verbliebener Dienstfunktionsnachweis konnte nicht '
+                . 'verworfen werden.'
+            );
+        }
+        throw new LogicException(
+            'Ein verschachtelter oder verbliebener '
+            . 'Dienstfunktionsnachweis wurde verworfen.'
         );
     }
-    return $shape;
+    $actorSql = $actorAssignmentId === null
+        ? 'NULL'
+        : (string) $actorAssignmentId;
+    $targetSql = $targetAssignmentId === null
+        ? 'NULL'
+        : (string) $targetAssignmentId;
+    if (!$connection->query(
+        'SET @estab_dv_actor_assignment_id = ' . $actorSql
+        . ', @estab_dv_target_assignment_id = ' . $targetSql
+    )) {
+        throw new RuntimeException(
+            'Dienstfunktionsnachweis konnte nicht gesetzt werden.'
+        );
+    }
+    try {
+        return $operation();
+    } finally {
+        if (!$connection->query(
+            'SET @estab_dv_actor_assignment_id = NULL,'
+            . ' @estab_dv_target_assignment_id = NULL'
+        )) {
+            throw new RuntimeException(
+                'Dienstfunktionsnachweis konnte nicht zurückgesetzt werden.'
+            );
+        }
+    }
+}
+
+/** @return array{actor_permission_mode:string,actor_duty_assignment_id:?int} */
+function estab_dv_authority_audit_details(array $identity): array
+{
+    return [
+        'actor_permission_mode' => estab_permission_mode(
+            $identity['estab_permission_mode'] ?? null
+        ),
+        'actor_duty_assignment_id' =>
+            estab_dv_authority_assignment_id($identity),
+    ];
 }
 
 function estab_dv_has_write_capability(
@@ -3007,7 +3424,7 @@ function estab_dv_has_write_capability(
 }
 
 /**
- * Require a capability of the fixed authenticated account identity.
+ * Require a capability of the effective authenticated identity.
  *
  * @return array{benutzer:string,kuerzel:string,funktion:string,rolle:string,
  * }
@@ -3031,37 +3448,31 @@ function estab_dv_require_account_capability(
         $identity,
         $requireMessengerAvailable
     );
-    $statement = $connection->prepare(
-        'SELECT 1 FROM `nv_funktionsfaehigkeiten` AS capability'
-        . ' WHERE BINARY capability.`funktion` = BINARY ?'
-        . ' AND BINARY capability.`rolle` = BINARY ?'
-        . ' AND BINARY capability.`faehigkeit` = BINARY ?'
-        . ' LIMIT 1'
-    );
-    if (!$statement) {
-        throw new RuntimeException(
-            'Funktionsfähigkeit konnte nicht geprüft werden.'
-        );
-    }
-    try {
-        $statement->bind_param(
-            'sss',
-            $shape['funktion'],
-            $shape['rolle'],
-            $capability
-        );
-        $statement->execute();
-        $allowed = $statement->get_result()->fetch_row() !== null;
-    } finally {
-        $statement->close();
-    }
-    if (!$allowed) {
+    $permissionMode = $shape['estab_permission_mode'] ?? null;
+    if ($permissionMode !== 'STRICT' && $permissionMode !== 'LOOSE') {
         throw new EstabDvPermissionException(
-            'Ihre fest zugewiesene Funktion besitzt nicht die '
-            . 'erforderliche Fachzuständigkeit ' . $capability . '.'
+            'Der Berechtigungsmodus ist für diese Ansicht ungültig.'
         );
     }
-    return $shape;
+    $capabilityFunction = estab_dv_effective_identity_capability_function(
+        $connection,
+        $shape,
+        $capability
+    );
+    if ($capabilityFunction === null) {
+        throw new EstabDvPermissionException(
+            $permissionMode === 'STRICT'
+                ? 'Die aktuell ausgewählte Dienstfunktion besitzt nicht die '
+                    . 'erforderliche Fachzuständigkeit ' . $capability . '.'
+                : 'Ihre wirksamen Funktionen besitzen nicht die '
+                    . 'erforderliche Fachzuständigkeit ' . $capability . '.'
+        );
+    }
+    return estab_dv_authorized_capability_identity(
+        $shape,
+        $capabilityFunction,
+        $capability
+    );
 }
 
 function estab_dv_has_account_capability(
@@ -3085,7 +3496,135 @@ function estab_dv_has_account_capability(
     }
 }
 
-/** @return array{herkunft:string,gueltig_ab:string,gueltig_bis:?string,betriebsleitung:string,bemerkungen:string} */
+/** Select one personally accepted active duty function in STRICT mode. */
+function estab_dv_select_session_hat(
+    mysqli $connection,
+    array &$session,
+    int $incidentId,
+    int $assignmentId,
+    string $protocolTable = 'nv_protokoll',
+    string $matrixTable = 'nv_empfmtx',
+    string $userTablePrefix = 'usr_'
+): array {
+    $baseIdentity = estab_auth_current_session_identity($session);
+    if ($baseIdentity === null) {
+        throw new EstabDvPermissionException('Anmeldung erforderlich.');
+    }
+    $incidentId = estab_incident_positive_id($incidentId);
+    $assignmentId = estab_dv_positive_id($assignmentId, 'Dienstbesetzung');
+    $prepared = estab_dv_prepare_assignment_schema(
+        $connection,
+        $incidentId,
+        $assignmentId,
+        (string) $baseIdentity['kuerzel'],
+        'ANGENOMMEN',
+        'AKTIV',
+        true,
+        $matrixTable,
+        $userTablePrefix
+    );
+    if (!$connection->begin_transaction()) {
+        throw new RuntimeException('Dienstfunktionswechsel konnte nicht begonnen werden.');
+    }
+    try {
+        $incident = estab_dv_require_incident(
+            $connection,
+            $incidentId,
+            true
+        );
+        if (!estab_incident_duty_shift_required($incident)) {
+            throw new EstabDvPermissionException(
+                'Im lockeren Berechtigungsmodus sind Primärfunktion und '
+                . 'ausdrücklich vergebene Zusatzfunktionen ohne '
+                . 'Dienstfunktionsauswahl wirksam; eine formale '
+                . 'Dienstfunktion kann dort nicht ausgewählt werden.'
+            );
+        }
+        estab_incident_lock_command_post_for_write($connection, $incident);
+        $statement = $connection->prepare(
+            'SELECT b.`dienstbesetzung_id`, b.`benutzer_kuerzel`, b.`funktion`,'
+            . ' b.`rolle` FROM `nv_dienstbesetzungen` AS b'
+            . ' JOIN `nv_dienstschichten` AS s'
+            . ' ON s.`dienstschicht_id` = b.`dienstschicht_id`'
+            . ' JOIN `nv_benutzer` AS u'
+            . ' ON BINARY u.`kuerzel` = BINARY b.`benutzer_kuerzel`'
+            . " WHERE b.`dienstbesetzung_id` = ?"
+            . " AND b.`status` = 'ANGENOMMEN'"
+            . " AND s.`einsatz_id` = ? AND s.`status` = 'AKTIV'"
+            . ' AND BINARY b.`funktion` = BINARY ?'
+            . ' AND BINARY b.`rolle` = BINARY ?'
+            . ' AND u.`aktiv` = 1 AND u.`estab_gesperrt` = 0'
+            . ' LIMIT 1 FOR UPDATE'
+        );
+        if (!$statement) {
+            throw new RuntimeException('Dienstfunktion konnte nicht vorbereitet werden.');
+        }
+        try {
+            $statement->bind_param(
+                'iiss',
+                $assignmentId,
+                $incidentId,
+                $prepared['funktion'],
+                $prepared['rolle']
+            );
+            $statement->execute();
+            $row = $statement->get_result()->fetch_assoc();
+        } finally {
+            $statement->close();
+        }
+        if (
+            !is_array($row)
+            || !hash_equals(
+                (string) $baseIdentity['kuerzel'],
+                (string) $row['benutzer_kuerzel']
+            )
+        ) {
+            throw new EstabDvPermissionException(
+                'Diese aktive Dienstfunktion gehört nicht zu Ihrem Konto.'
+            );
+        }
+        $oldFunction = (string) $baseIdentity['funktion'];
+        estab_dv_audit(
+            $connection,
+            $protocolTable,
+            $incidentId,
+            'DV Besetzung',
+            [
+                'action' => 'active_hat_selected',
+                'assignment_id' => $assignmentId,
+                'target' => (string) $baseIdentity['kuerzel'],
+                'old_function' => $oldFunction,
+                'new_function' => (string) $row['funktion'],
+                'new_role' => (string) $row['rolle'],
+            ]
+        );
+        if (!$connection->commit()) {
+            throw new RuntimeException(
+                'Dienstfunktionswechsel konnte nicht gespeichert werden.'
+            );
+        }
+    } catch (Throwable $exception) {
+        $connection->rollback();
+        throw $exception;
+    }
+    $session['vStab_funktion'] = (string) $row['funktion'];
+    $session['vStab_rolle'] = (string) $row['rolle'];
+    $session['ROLLE'] = (string) $row['rolle'];
+    $session['estab_duty_assignment_id'] = $assignmentId;
+    // Second-sighting modes belong to one exact duty function. Carrying a
+    // mode across a hat change can suppress the new function's normal queue
+    // or route it into a foreign privileged list.
+    $session['fm_zweite_sichtung'] = 0;
+    $session['si_zweite_sichtung'] = 0;
+    return [
+        'benutzer' => (string) $baseIdentity['benutzer'],
+        'kuerzel' => (string) $baseIdentity['kuerzel'],
+        'funktion' => (string) $row['funktion'],
+        'rolle' => (string) $row['rolle'],
+        'duty_assignment_id' => $assignmentId,
+    ];
+}
+
 function estab_dv_telecom_plan_header_values(array $input): array
 {
     $validFrom = estab_dv_datetime(
@@ -3450,10 +3989,24 @@ function estab_dv_create_telecom_plan(
                     $header['bemerkungen'],
                     $userCode
                 );
-                if (!$insert->execute()) {
-                    throw new RuntimeException('Fernmeldeplan konnte nicht angelegt werden.');
-                }
-                $planId = (int) $connection->insert_id;
+                $planId = estab_dv_positive_id(
+                    estab_dv_with_sql_authority_context(
+                        $connection,
+                        estab_dv_authority_assignment_id($selected),
+                        null,
+                        static function () use ($connection, $insert): int {
+                            if (!$insert->execute()) {
+                                throw new RuntimeException(
+                                    'Fernmeldeplan konnte nicht angelegt werden.'
+                                );
+                            }
+                            // Capture LAST_INSERT_ID before the authority
+                            // helper clears its connection-local SQL markers.
+                            return (int) $connection->insert_id;
+                        }
+                    ),
+                    'Fernmeldeplan'
+                );
             } finally {
                 $insert->close();
             }
@@ -3472,7 +4025,7 @@ function estab_dv_create_telecom_plan(
                         estab_dv_telecom_plan_header_audit_state(
                             ['einsatzbezeichnung' => $incidentLabel] + $header
                         ),
-                ]
+                ] + estab_dv_authority_audit_details($selected)
             );
             return ['fernmeldeplan_id' => $planId, 'version' => $version];
         }
@@ -3579,12 +4132,27 @@ function estab_dv_start_telecom_plan_revision(
                     $source['bemerkungen'],
                     $userCode
                 );
-                if (!$insertPlan->execute()) {
-                    throw new RuntimeException(
-                        'Planentwurf konnte nicht angelegt werden.'
-                    );
-                }
-                $planId = (int) $connection->insert_id;
+                $planId = estab_dv_positive_id(
+                    estab_dv_with_sql_authority_context(
+                        $connection,
+                        estab_dv_authority_assignment_id($selected),
+                        null,
+                        static function () use (
+                            $connection,
+                            $insertPlan
+                        ): int {
+                            if (!$insertPlan->execute()) {
+                                throw new RuntimeException(
+                                    'Planentwurf konnte nicht angelegt werden.'
+                                );
+                            }
+                            // Capture LAST_INSERT_ID before the authority
+                            // helper clears its connection-local SQL markers.
+                            return (int) $connection->insert_id;
+                        }
+                    ),
+                    'Planentwurf'
+                );
             } finally {
                 $insertPlan->close();
             }
@@ -3631,7 +4199,7 @@ function estab_dv_start_telecom_plan_revision(
                     'actor_function' => (string) $selected['funktion'],
                     'initial_state' =>
                         estab_dv_telecom_plan_header_audit_state($source),
-                ]
+                ] + estab_dv_authority_audit_details($selected)
             );
             return [
                 'fernmeldeplan_id' => $planId,
@@ -4443,15 +5011,23 @@ function estab_dv_activate_telecom_plan(
             try {
                 $supersede->bind_param('i', $incidentId);
                 $activate->bind_param('sii', $userCode, $planId, $incidentId);
-                if (
-                    !$supersede->execute()
-                    || !$activate->execute()
-                    || $activate->affected_rows !== 1
-                ) {
-                    throw new EstabDvConflictException(
-                        'Der Fernmeldeplan wurde zwischenzeitlich geändert.'
-                    );
-                }
+                estab_dv_with_sql_authority_context(
+                    $connection,
+                    estab_dv_authority_assignment_id($selected),
+                    null,
+                    static function () use ($supersede, $activate): void {
+                        if (
+                            !$supersede->execute()
+                            || !$activate->execute()
+                            || $activate->affected_rows !== 1
+                        ) {
+                            throw new EstabDvConflictException(
+                                'Der Fernmeldeplan wurde zwischenzeitlich '
+                                . 'geändert.'
+                            );
+                        }
+                    }
+                );
             } finally {
                 $supersede->close();
                 $activate->close();
@@ -4469,7 +5045,7 @@ function estab_dv_activate_telecom_plan(
                         'actor' => $userCode,
                         'actor_function' => (string) $selected['funktion'],
                         'replacement_plan_id' => $planId,
-                    ]
+                    ] + estab_dv_authority_audit_details($selected)
                 );
             }
             estab_dv_audit(
@@ -4482,7 +5058,7 @@ function estab_dv_activate_telecom_plan(
                     'plan_id' => $planId,
                     'actor' => $userCode,
                     'actor_function' => (string) $selected['funktion'],
-                ]
+                ] + estab_dv_authority_audit_details($selected)
             );
         }
     );
@@ -4615,49 +5191,65 @@ function estab_dv_resolve_active_route(
     return $row;
 }
 
-/** List signed-in, unblocked accounts with the fixed A/W/Fernmelder role. */
+/**
+ * List mode-authoritative messenger candidates.
+ *
+ * STRICT restores the binding active, personally accepted A/W duty
+ * assignment. LOOSE resolves A/W from the account's primary or explicitly
+ * granted additional functions and applies only its optional access-shift
+ * gate. Neither mode derives Fachrechte from an access shift.
+ */
 function estab_dv_messenger_candidates(
     mysqli $connection,
     int $incidentId
 ): array {
     $incidentId = estab_incident_positive_id($incidentId);
-    // Validate that the requested incident is the active one before exposing
-    // operational candidates. No formal duty shift is required.
-    $active = $connection->prepare(
-        'SELECT 1 FROM `nv_einsatz_status` AS active_incident'
-        . ' JOIN `nv_einsaetze` AS incident'
-        . ' ON incident.`einsatz_id` = active_incident.`active_einsatz_id`'
-        . ' WHERE active_incident.`singleton_id` = 1'
-        . ' AND active_incident.`active_einsatz_id` = ?'
-        . " AND incident.`estab_status` = 'open' LIMIT 1"
-    );
-    if (!$active) {
-        throw new RuntimeException('Aktiver Einsatz konnte nicht geprüft werden.');
-    }
-    try {
-        $active->bind_param('i', $incidentId);
-        $active->execute();
-        $isActive = $active->get_result()->fetch_row() !== null;
-    } finally {
-        $active->close();
-    }
-    if (!$isActive) {
+    $incident = estab_incident_status($connection);
+    if (
+        (int) ($incident['active_einsatz_id'] ?? 0) !== $incidentId
+        || ($incident['estab_status'] ?? null) !== 'open'
+    ) {
         return [];
     }
-    $statement = $connection->prepare(
-        'SELECT u.`benutzer`, u.`kuerzel`, u.`funktion`, u.`rolle`'
-        . ' FROM `nv_benutzer` AS u'
-        . " WHERE BINARY u.`funktion` = BINARY 'A/W'"
-        . " AND BINARY u.`rolle` = BINARY 'Fernmelder'"
-        . ' AND u.`aktiv` = 1 AND u.`estab_gesperrt` = 0'
-        . ' ORDER BY u.`benutzer`, u.`kuerzel`'
-    );
+    $strictMode = estab_incident_duty_shift_required($incident);
+    $statement = $strictMode
+        ? $connection->prepare(
+            'SELECT u.`benutzer`, u.`kuerzel`, assignment.`funktion`,'
+            . ' assignment.`rolle`, assignment.`dienstbesetzung_id`'
+            . ' FROM `nv_dienstschichten` AS duty_shift'
+            . ' JOIN `nv_dienstbesetzungen` AS assignment'
+            . ' ON assignment.`dienstschicht_id` ='
+            . ' duty_shift.`dienstschicht_id`'
+            . ' JOIN `nv_benutzer` AS u'
+            . ' ON BINARY u.`kuerzel` ='
+            . ' BINARY assignment.`benutzer_kuerzel`'
+            . " WHERE duty_shift.`einsatz_id` = ?"
+            . " AND duty_shift.`status` = 'AKTIV'"
+            . " AND assignment.`status` = 'ANGENOMMEN'"
+            . " AND BINARY assignment.`funktion` = BINARY 'A/W'"
+            . " AND BINARY assignment.`rolle` = BINARY 'Fernmelder'"
+            . ' AND u.`aktiv` = 1 AND u.`estab_gesperrt` = 0'
+            . ' ORDER BY u.`benutzer`, u.`kuerzel`'
+        )
+        : $connection->prepare(
+            'SELECT u.`benutzer`, u.`kuerzel`,'
+            . ' u.`funktion` AS `account_funktion`,'
+            . ' u.`rolle` AS `account_rolle`,'
+            . " 'A/W' AS `funktion`, 'Fernmelder' AS `rolle`,"
+            . ' NULL AS `dienstbesetzung_id`'
+            . ' FROM `nv_benutzer` AS u'
+            . ' WHERE u.`aktiv` = 1 AND u.`estab_gesperrt` = 0'
+            . ' ORDER BY u.`benutzer`, u.`kuerzel`'
+        );
     if (!$statement) {
         throw new RuntimeException(
             'Verfügbare Melder konnten nicht vorbereitet werden.'
         );
     }
     try {
+        if ($strictMode) {
+            $statement->bind_param('i', $incidentId);
+        }
         $statement->execute();
         $result = $statement->get_result();
         $rows = $result->fetch_all(MYSQLI_ASSOC);
@@ -4665,13 +5257,41 @@ function estab_dv_messenger_candidates(
     } finally {
         $statement->close();
     }
-    return array_values(array_filter(
-        $rows,
-        static fn (array $row): bool => estab_auth_shift_access_allowed(
-            $connection,
-            (string) ($row['kuerzel'] ?? '')
-        )
-    ));
+    if ($strictMode) {
+        return array_values($rows);
+    }
+    $candidates = [];
+    foreach ($rows as $row) {
+        $userCode = (string) ($row['kuerzel'] ?? '');
+        $hasFunction = hash_equals(
+            'A/W',
+            (string) ($row['account_funktion'] ?? '')
+        ) && hash_equals(
+            'Fernmelder',
+            (string) ($row['account_rolle'] ?? '')
+        );
+        foreach (
+            estab_auth_fetch_additional_functions($connection, $userCode)
+            as $extra
+        ) {
+            if (
+                hash_equals('A/W', $extra['funktion'])
+                && hash_equals('Fernmelder', $extra['rolle'])
+            ) {
+                $hasFunction = true;
+                break;
+            }
+        }
+        if (
+            !$hasFunction
+            || !estab_auth_shift_access_allowed($connection, $userCode)
+        ) {
+            continue;
+        }
+        unset($row['account_funktion'], $row['account_rolle']);
+        $candidates[] = $row;
+    }
+    return $candidates;
 }
 
 /** Return the stable, hashable fachlicher snapshot of one messenger job. */
@@ -4813,6 +5433,141 @@ function estab_dv_require_no_open_messenger_for_redispatch(
     return $rows;
 }
 
+/**
+ * Lock and resolve the exact function that authorizes a messenger target.
+ *
+ * @return array{
+ *   funktion:string,
+ *   rolle:string,
+ *   permission_mode:string,
+ *   dienstbesetzung_id:?int
+ * }
+ */
+function estab_dv_require_messenger_target(
+    mysqli $connection,
+    int $incidentId,
+    string $messengerCode,
+    array $incident
+): array {
+    $incidentId = estab_incident_positive_id($incidentId);
+    $messengerCode = estab_dv_code($messengerCode, 'Melderkürzel');
+    if ((int) ($incident['active_einsatz_id'] ?? 0) !== $incidentId) {
+        throw new EstabDvConflictException(
+            'Der Einsatz ist nicht mehr aktiv.'
+        );
+    }
+    if (estab_incident_duty_shift_required($incident)) {
+        $statement = $connection->prepare(
+            'SELECT account.`estab_gesperrt`, account.`aktiv`,'
+            . ' assignment.`dienstbesetzung_id`'
+            . ' FROM `nv_benutzer` AS account'
+            . ' JOIN `nv_dienstbesetzungen` AS assignment'
+            . ' ON BINARY assignment.`benutzer_kuerzel` ='
+            . ' BINARY account.`kuerzel`'
+            . ' JOIN `nv_dienstschichten` AS duty_shift'
+            . ' ON duty_shift.`dienstschicht_id` ='
+            . ' assignment.`dienstschicht_id`'
+            . ' WHERE BINARY account.`kuerzel` = BINARY ?'
+            . ' AND duty_shift.`einsatz_id` = ?'
+            . " AND duty_shift.`status` = 'AKTIV'"
+            . " AND assignment.`status` = 'ANGENOMMEN'"
+            . " AND BINARY assignment.`funktion` = BINARY 'A/W'"
+            . " AND BINARY assignment.`rolle` = BINARY 'Fernmelder'"
+            . ' LIMIT 1 FOR UPDATE'
+        );
+        if (!$statement) {
+            throw new RuntimeException(
+                'Melderbesetzung konnte nicht geprüft werden.'
+            );
+        }
+        try {
+            $statement->bind_param('si', $messengerCode, $incidentId);
+            $statement->execute();
+            $row = $statement->get_result()->fetch_assoc();
+        } finally {
+            $statement->close();
+        }
+        if (
+            !is_array($row)
+            || (int) ($row['estab_gesperrt'] ?? 1) === 1
+            || (int) ($row['aktiv'] ?? 0) !== 1
+            || (int) ($row['dienstbesetzung_id'] ?? 0) < 1
+        ) {
+            throw new EstabDvConflictException(
+                'Der Melder muss die Fernmelder-Funktion der aktiven '
+                . 'Dienstschicht persönlich angenommen haben und mit einem '
+                . 'aktiven, ungesperrten Konto angemeldet sein.'
+            );
+        }
+        return [
+            'funktion' => 'A/W',
+            'rolle' => 'Fernmelder',
+            'permission_mode' => ESTAB_PERMISSION_MODE_STRICT,
+            'dienstbesetzung_id' =>
+                (int) $row['dienstbesetzung_id'],
+        ];
+    }
+
+    $statement = $connection->prepare(
+        'SELECT `funktion`, `rolle`, `estab_gesperrt`, `aktiv`'
+        . ' FROM `nv_benutzer`'
+        . ' WHERE BINARY `kuerzel` = BINARY ? LIMIT 1 FOR UPDATE'
+    );
+    if (!$statement) {
+        throw new RuntimeException('Melderkonto konnte nicht geprüft werden.');
+    }
+    try {
+        $statement->bind_param('s', $messengerCode);
+        $statement->execute();
+        $row = $statement->get_result()->fetch_assoc();
+    } finally {
+        $statement->close();
+    }
+    $hasFunction = is_array($row)
+        && hash_equals('A/W', (string) ($row['funktion'] ?? ''))
+        && hash_equals('Fernmelder', (string) ($row['rolle'] ?? ''));
+    if (is_array($row) && !$hasFunction) {
+        foreach (
+            estab_auth_fetch_additional_functions(
+                $connection,
+                $messengerCode,
+                true
+            ) as $extra
+        ) {
+            if (
+                hash_equals('A/W', $extra['funktion'])
+                && hash_equals('Fernmelder', $extra['rolle'])
+            ) {
+                $hasFunction = true;
+                break;
+            }
+        }
+    }
+    if (
+        !is_array($row)
+        || (int) ($row['estab_gesperrt'] ?? 1) === 1
+        || (int) ($row['aktiv'] ?? 0) !== 1
+        || !$hasFunction
+        || !estab_auth_shift_access_allowed(
+            $connection,
+            $messengerCode,
+            true
+        )
+    ) {
+        throw new EstabDvConflictException(
+            'Der Melder benötigt im lockeren Modus die feste oder '
+            . 'ausdrücklich vergebene Zusatzfunktion Fernmelder sowie ein '
+            . 'aktives, ungesperrtes und zugelassenes Konto.'
+        );
+    }
+    return [
+        'funktion' => 'A/W',
+        'rolle' => 'Fernmelder',
+        'permission_mode' => ESTAB_PERMISSION_MODE_LOOSE,
+        'dienstbesetzung_id' => null,
+    ];
+}
+
 function estab_dv_assign_messenger(
     mysqli $connection,
     int $incidentId,
@@ -4888,38 +5643,12 @@ function estab_dv_assign_messenger(
                 $incidentId,
                 $messageId
             );
-            $user = $connection->prepare(
-                'SELECT u.`estab_gesperrt`, u.`aktiv`'
-                . ' FROM `nv_benutzer` AS u'
-                . ' WHERE BINARY u.`kuerzel` = BINARY ?'
-                . " AND BINARY u.`funktion` = BINARY 'A/W'"
-                . " AND BINARY u.`rolle` = BINARY 'Fernmelder'"
-                . ' LIMIT 1 FOR UPDATE'
+            $messengerAuthority = estab_dv_require_messenger_target(
+                $connection,
+                $incidentId,
+                $messengerCode,
+                $incident
             );
-            if (!$user) {
-                throw new RuntimeException('Melderkonto konnte nicht geprüft werden.');
-            }
-            try {
-                $user->bind_param('s', $messengerCode);
-                $user->execute();
-                $userRow = $user->get_result()->fetch_assoc();
-            } finally {
-                $user->close();
-            }
-            if (
-                !is_array($userRow)
-                || (int) $userRow['estab_gesperrt'] === 1
-                || (int) $userRow['aktiv'] !== 1
-                || !estab_auth_shift_access_allowed(
-                    $connection,
-                    $messengerCode
-                )
-            ) {
-                throw new EstabDvConflictException(
-                    'Der Melder muss als Fernmelder angemeldet, ungesperrt '
-                    . 'und für den Zugang aktiviert sein.'
-                );
-            }
             $insert = $connection->prepare(
                 'INSERT INTO `nv_melderauftraege`'
                 . ' (`einsatz_id`, `nachricht_id`, `melder_kuerzel`, `ziel`,'
@@ -4938,7 +5667,25 @@ function estab_dv_assign_messenger(
                     $actorCode
                 );
                 try {
-                    $executed = $insert->execute();
+                    $jobId = estab_dv_with_sql_authority_context(
+                        $connection,
+                        estab_dv_authority_assignment_id($selected),
+                        estab_dv_authority_assignment_id([
+                            'estab_permission_mode' =>
+                                $messengerAuthority['permission_mode'],
+                            'duty_assignment_id' =>
+                                $messengerAuthority['dienstbesetzung_id'],
+                        ]),
+                        static function () use (
+                            $connection,
+                            $insert
+                        ): int {
+                            if (!$insert->execute()) {
+                                return 0;
+                            }
+                            return (int) $connection->insert_id;
+                        }
+                    );
                 } catch (mysqli_sql_exception $exception) {
                     if ((int) $exception->getCode() === 1062) {
                         throw new EstabDvConflictException(
@@ -4952,12 +5699,11 @@ function estab_dv_assign_messenger(
                         $exception
                     );
                 }
-                if (!$executed) {
+                if (!is_int($jobId) || $jobId < 1) {
                     throw new RuntimeException(
                         'Melderauftrag konnte nicht gespeichert werden.'
                     );
                 }
-                $jobId = (int) $connection->insert_id;
             } finally {
                 $insert->close();
             }
@@ -4979,10 +5725,19 @@ function estab_dv_assign_messenger(
                     'job_id' => $jobId,
                     'message_id' => $messageId,
                     'messenger' => $messengerCode,
+                    'messenger_function' =>
+                        $messengerAuthority['funktion'],
+                    'messenger_role' => $messengerAuthority['rolle'],
+                    'messenger_duty_assignment_id' =>
+                        $messengerAuthority['dienstbesetzung_id'],
+                    'permission_mode' =>
+                        $messengerAuthority['permission_mode'],
                     'destination' => $destination,
                     'actor' => $actorCode,
+                    'actor_function' => (string) $selected['funktion'],
+                    'actor_role' => (string) $selected['rolle'],
                     'snapshot' => $jobSnapshot,
-                ]
+                ] + estab_dv_authority_audit_details($selected)
             );
             return $jobId;
         }
@@ -5123,7 +5878,8 @@ function estab_dv_transition_messenger(
                     && !$isMessenger)
             ) {
                 throw new EstabDvPermissionException(
-                    'Diese Aktion gehört nicht zu Ihrer festen Kontofunktion.'
+                    'Diese Aktion darf nur das diesem Melderauftrag '
+                    . 'persönlich zugeordnete Konto ausführen.'
                 );
             }
             [$expected, $next] = $transitions[$action];
@@ -5177,11 +5933,22 @@ function estab_dv_transition_messenger(
                     ),
                     'cancel' => $update->bind_param('si', $cancelReason, $jobId),
                 };
-                if (!$update->execute() || $update->affected_rows !== 1) {
-                    throw new EstabDvConflictException(
-                        'Der Melderauftrag wurde zwischenzeitlich geändert.'
-                    );
-                }
+                estab_dv_with_sql_authority_context(
+                    $connection,
+                    estab_dv_authority_assignment_id($selected),
+                    null,
+                    static function () use ($update): void {
+                        if (
+                            !$update->execute()
+                            || $update->affected_rows !== 1
+                        ) {
+                            throw new EstabDvConflictException(
+                                'Der Melderauftrag wurde zwischenzeitlich '
+                                . 'geändert.'
+                            );
+                        }
+                    }
+                );
             } finally {
                 $update->close();
             }
@@ -5204,7 +5971,10 @@ function estab_dv_transition_messenger(
                     'old_status' => (string) $row['status'],
                     'new_status' => $next,
                     'actor' => $actorCode,
-                ] + estab_dv_messenger_transition_evidence(
+                    'actor_function' => (string) $selected['funktion'],
+                    'actor_role' => (string) $selected['rolle'],
+                ] + estab_dv_authority_audit_details($selected)
+                    + estab_dv_messenger_transition_evidence(
                     $action,
                     $jobSnapshot
                 )

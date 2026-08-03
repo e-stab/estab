@@ -6,10 +6,11 @@ declare(strict_types=1);
  * Object-level read boundary for messages, generated forms and attachments.
  *
  * Authentication alone deliberately grants no operational object access.
- * Every read is bound to the active incident and the fixed function/role of
- * the authenticated account. Optional access shifts can disable an account as
- * a group but do not alter fachliche rights. Message visibility is then
- * derived from the same workflow fields that carry signed processing marks.
+ * Every read is bound to the active incident. STRICT uses the selected active
+ * duty assignment; LOOSE uses the account's primary and explicit additional
+ * functions. Optional access shifts can disable an account as a group only in
+ * LOOSE and never alter fachliche rights. Message visibility is then derived
+ * from the same workflow fields that carry signed processing marks.
  */
 
 require_once __DIR__ . '/attachment.php';
@@ -26,18 +27,20 @@ function estab_read_session_identity(array $session): ?array
     return estab_auth_session_identity($session);
 }
 
-/** Validate the fixed account and active incident inside the read request. */
+/** Validate the mode-specific operational identity inside the read request. */
 function estab_read_require_account_identity(
     mysqli $connection,
     int $incidentId,
-    array $identity
+    array $identity,
+    bool $lockAuthority = false
 ): array {
     try {
         return estab_dv_require_operational_account(
             $connection,
             estab_incident_positive_id($incidentId),
             $identity,
-            false
+            false,
+            $lockAuthority
         );
     } catch (EstabDvPermissionException $exception) {
         throw new EstabReadPermissionException(
@@ -64,37 +67,67 @@ function estab_read_identity_capability(array $identity): ?string
     };
 }
 
-/**
- * Require the fixed account and, for DV functions, its DB capability.
- */
+/** Require at least one operative function resolved by STRICT or LOOSE. */
 function estab_read_require_identity_scope(
     mysqli $connection,
     int $incidentId,
-    array $identity
+    array $identity,
+    bool $lockAuthority = false
 ): array {
     $selected = estab_read_require_account_identity(
         $connection,
         $incidentId,
-        $identity
+        $identity,
+        $lockAuthority
     );
-    $capability = estab_read_identity_capability($selected);
-    if ($capability !== null) {
-        try {
-            estab_dv_require_account_capability(
-                $connection,
-                $incidentId,
-                $selected,
-                $capability,
-                false
-            );
-        } catch (EstabDvPermissionException $exception) {
+    if (($selected['estab_permission_mode'] ?? null) === 'STRICT') {
+        $capability = estab_read_identity_capability($selected);
+        if ($capability !== null) {
+            try {
+                estab_dv_require_account_capability(
+                    $connection,
+                    $incidentId,
+                    $selected,
+                    $capability,
+                    false
+                );
+            } catch (EstabDvPermissionException $exception) {
+                throw new EstabReadPermissionException(
+                    'Die ausgewählte Dienstfunktion besitzt nicht die '
+                        . 'erforderliche Leseberechtigung.',
+                    previous: $exception
+                );
+            }
+        } elseif (!in_array($selected['rolle'], ['Stab', 'FB'], true)) {
             throw new EstabReadPermissionException(
-                'Die zugewiesene Funktion besitzt nicht die '
-                . 'erforderliche Leseberechtigung.',
-                previous: $exception
+                'Diese Dienstfunktion besitzt keine operative Leseberechtigung.'
             );
         }
-    } elseif (!in_array($selected['rolle'], ['Stab', 'FB'], true)) {
+        return $selected;
+    }
+    $allowed = false;
+    foreach (estab_auth_effective_function_roles($selected) as $tuple) {
+        $capability = estab_read_identity_capability($tuple);
+        if (
+            $capability !== null
+            && estab_dv_effective_identity_has_capability(
+                $connection,
+                $selected,
+                $capability
+            )
+        ) {
+            $allowed = true;
+            break;
+        }
+        if (
+            $capability === null
+            && in_array($tuple['rolle'], ['Stab', 'FB'], true)
+        ) {
+            $allowed = true;
+            break;
+        }
+    }
+    if (!$allowed) {
         throw new EstabReadPermissionException(
             'Diese Dienstfunktion besitzt keine operative Leseberechtigung.'
         );
@@ -109,16 +142,55 @@ function estab_read_require_identity_scope(
  */
 function estab_read_require_operational_scope(
     mysqli $connection,
-    array $identity
+    array $identity,
+    bool $lockAuthority = false
 ): array {
-    $incident = estab_incident_require_active($connection);
+    $incident = estab_incident_require_active($connection, $lockAuthority);
     estab_permission_context_set_from_incident($incident);
     $selected = estab_read_require_identity_scope(
         $connection,
         (int) $incident['active_einsatz_id'],
-        $identity
+        $identity,
+        $lockAuthority
     );
     return ['incident' => $incident, 'identity' => $selected];
+}
+
+/**
+ * Keep the complete operational authority stable through object selection.
+ *
+ * The callback must perform every protected object query on this connection.
+ * The locking transaction serializes an incident switch, account revocation,
+ * LOOSE access/grant change and STRICT assignment handover until the callback
+ * has finished selecting its objects.
+ */
+function estab_read_with_locked_operational_scope(
+    mysqli $connection,
+    array $identity,
+    callable $operation
+): mixed {
+    if (!$connection->begin_transaction()) {
+        throw new RuntimeException(
+            'Lesetransaktion konnte nicht begonnen werden.'
+        );
+    }
+    try {
+        $scope = estab_read_require_operational_scope(
+            $connection,
+            $identity,
+            true
+        );
+        $result = $operation($scope);
+        if (!$connection->commit()) {
+            throw new RuntimeException(
+                'Lesetransaktion konnte nicht abgeschlossen werden.'
+            );
+        }
+        return $result;
+    } catch (Throwable $exception) {
+        $connection->rollback();
+        throw $exception;
+    }
 }
 
 /**
@@ -134,19 +206,30 @@ function estab_read_message_suggestion_policy(
     array $identity,
     string $field
 ): array {
-    $function = $identity['funktion'] ?? null;
-    $role = $identity['rolle'] ?? null;
     if (
         $field === '05_gegenstelle'
-        && $role === 'Fernmelder'
-        && in_array($function, ['A/W', 'LdF'], true)
+        && (
+            estab_auth_identity_has_function(
+                $identity,
+                'A/W',
+                'Fernmelder'
+            )
+            || estab_auth_identity_has_function(
+                $identity,
+                'LdF',
+                'Fernmelder'
+            )
+        )
     ) {
         return ['direction' => null];
     }
     if (
         $field === '13_abseinheit'
-        && $function === 'LdF'
-        && $role === 'Fernmelder'
+        && estab_auth_identity_has_function(
+            $identity,
+            'LdF',
+            'Fernmelder'
+        )
     ) {
         return ['direction' => 'E'];
     }
@@ -175,11 +258,14 @@ function estab_read_ldf_mapping_policy(
     string $direction
 ): array {
     if (
-        ($identity['funktion'] ?? null) !== 'LdF'
-        || ($identity['rolle'] ?? null) !== 'Fernmelder'
+        !estab_auth_identity_has_function(
+            $identity,
+            'LdF',
+            'Fernmelder'
+        )
     ) {
         throw new EstabReadPermissionException(
-            'Nur ein Konto mit der festen Funktion LdF darf Zuordnungen lesen.'
+            'Nur eine wirksame LdF-Funktion darf Zuordnungen lesen.'
         );
     }
     return match ($direction) {
@@ -199,6 +285,84 @@ function estab_read_ldf_mapping_policy(
             'Die Zuordnungsrichtung ist ungültig.'
         ),
     };
+}
+
+/**
+ * Build a transaction-local proof for one selected/effective capability.
+ *
+ * STRICT revalidates the exact accepted assignment id. LOOSE revalidates the
+ * fixed account tuple or its explicit personal grant in the same SQL snapshot
+ * as the protected data read.
+ *
+ * @return array{sql:string,params:list<mixed>}
+ */
+function estab_read_effective_capability_scope(
+    array $identity,
+    string $capability,
+    string $accountAlias = 'account',
+    string $incidentAlias = 'incident'
+): array {
+    foreach ([$accountAlias, $incidentAlias] as $alias) {
+        if (preg_match('/\A[A-Za-z][A-Za-z0-9_]*\z/D', $alias) !== 1) {
+            throw new InvalidArgumentException('Invalid capability-scope alias');
+        }
+    }
+    if (preg_match('/\A[A-Z][A-Z0-9_]{2,63}\z/D', $capability) !== 1) {
+        throw new InvalidArgumentException('Invalid capability scope');
+    }
+    $function = (string) ($identity['funktion'] ?? '');
+    $role = (string) ($identity['rolle'] ?? '');
+    $assignmentId = filter_var(
+        $identity['duty_assignment_id'] ?? null,
+        FILTER_VALIDATE_INT,
+        ['options' => ['min_range' => 1, 'max_range' => PHP_INT_MAX]]
+    );
+    $assignmentId = is_int($assignmentId) ? $assignmentId : 0;
+    $account = '`' . $accountAlias . '`';
+    $incident = '`' . $incidentAlias . '`';
+    return [
+        'sql' => 'EXISTS (SELECT 1 FROM `nv_funktionsfaehigkeiten` AS cap'
+            . ' WHERE BINARY cap.`funktion` = BINARY ?'
+            . ' AND BINARY cap.`rolle` = BINARY ?'
+            . ' AND BINARY cap.`faehigkeit` = BINARY ?)'
+            . ' AND (('
+            . ' BINARY ' . $incident . '.`estab_permission_mode`'
+            . " = BINARY 'STRICT'"
+            . ' AND EXISTS (SELECT 1 FROM `nv_dienstbesetzungen` AS duty'
+            . ' JOIN `nv_dienstschichten` AS duty_shift'
+            . ' ON duty_shift.`dienstschicht_id` = duty.`dienstschicht_id`'
+            . ' WHERE duty.`dienstbesetzung_id` = ?'
+            . ' AND duty_shift.`einsatz_id` = ' . $incident . '.`einsatz_id`'
+            . " AND duty_shift.`status` = 'AKTIV'"
+            . " AND duty.`status` = 'ANGENOMMEN'"
+            . ' AND BINARY duty.`benutzer_kuerzel` = BINARY '
+            . $account . '.`kuerzel`'
+            . ' AND BINARY duty.`funktion` = BINARY ?'
+            . ' AND BINARY duty.`rolle` = BINARY ?))'
+            . ' OR ('
+            . ' BINARY ' . $incident . '.`estab_permission_mode`'
+            . " = BINARY 'LOOSE'"
+            . ' AND ((BINARY ' . $account . '.`funktion` = BINARY ?'
+            . ' AND BINARY ' . $account . '.`rolle` = BINARY ?)'
+            . ' OR EXISTS (SELECT 1'
+            . ' FROM `nv_benutzer_zusatzfunktionen` AS extra'
+            . ' WHERE BINARY extra.`benutzer_kuerzel` = BINARY '
+            . $account . '.`kuerzel`'
+            . ' AND BINARY extra.`funktion` = BINARY ?'
+            . ' AND BINARY extra.`rolle` = BINARY ?))))',
+        'params' => [
+            $function,
+            $role,
+            $capability,
+            $assignmentId,
+            $function,
+            $role,
+            $function,
+            $role,
+            $function,
+            $role,
+        ],
+    ];
 }
 
 /**
@@ -362,18 +526,19 @@ function estab_read_ldf_mapping_suggestions(
     }
     $messageId = estab_message_positive_id($messageId);
     $scope = estab_read_require_operational_scope($connection, $identity);
-    $policy = estab_read_ldf_mapping_policy(
-        $scope['identity'],
-        $direction
-    );
-    $selected = $scope['identity'];
     $incidentId = (int) $scope['incident']['active_einsatz_id'];
-    $capability = estab_read_identity_capability($selected);
-    if ($capability !== 'FERNMELDEBETRIEB') {
-        throw new EstabReadPermissionException(
-            'Die feste Kontofunktion besitzt keine LdF-Zuordnungsberechtigung.'
-        );
-    }
+    $selected = estab_read_require_capability(
+        $connection,
+        $incidentId,
+        $scope['identity'],
+        'FERNMELDEBETRIEB'
+    );
+    $policy = estab_read_ldf_mapping_policy($selected, $direction);
+    $capability = 'FERNMELDEBETRIEB';
+    $capabilityScope = estab_read_effective_capability_scope(
+        $selected,
+        $capability
+    );
 
     $table = estab_message_table($messageTable);
     $messageContext = $policy['message_context'];
@@ -388,10 +553,6 @@ function estab_read_ldf_mapping_suggestions(
         . ' ON incident.`einsatz_id` = active.`active_einsatz_id`'
         . ' JOIN `nv_benutzer` AS account'
         . ' ON BINARY account.`kuerzel` = BINARY ?'
-        . ' JOIN `nv_funktionsfaehigkeiten` AS capability'
-        . ' ON BINARY capability.`funktion`'
-        . ' = BINARY account.`funktion`'
-        . ' AND BINARY capability.`rolle` = BINARY account.`rolle`'
         . ' JOIN ' . $table . ' AS current_message'
         . ' ON current_message.`00_lfd` = ?'
         . ' AND current_message.`einsatz_id` = active.`active_einsatz_id`'
@@ -405,21 +566,16 @@ function estab_read_ldf_mapping_suggestions(
         . ' AND active.`active_einsatz_id` = ?'
         . " AND incident.`estab_status` = 'open'"
         . ' AND BINARY account.`benutzer` = BINARY ?'
-        . ' AND BINARY account.`funktion` = BINARY ?'
-        . ' AND BINARY account.`rolle` = BINARY ?'
-        . ' AND BINARY capability.`faehigkeit` = BINARY ?'
         . ' AND account.`aktiv` = 1'
-        . ' AND account.`estab_gesperrt` = 0';
-    $scopeParameters = [
+        . ' AND account.`estab_gesperrt` = 0'
+        . ' AND (' . $capabilityScope['sql'] . ')';
+    $scopeParameters = array_merge([
         $selected['kuerzel'],
         $messageId,
         $direction,
         $incidentId,
         $selected['benutzer'],
-        $selected['funktion'],
-        $selected['rolle'],
-        $capability,
-    ];
+    ], $capabilityScope['params']);
 
     $scopeNormalized = estab_read_mapping_normalized_sql(
         'scope.`context_value`'
@@ -634,13 +790,34 @@ function estab_read_message_suggestions(
         $field
     );
     $incidentId = (int) $scope['incident']['active_einsatz_id'];
-    $selected = $scope['identity'];
-    $capability = estab_read_identity_capability($selected);
-    if ($capability === null) {
+    $selected = null;
+    $capability = null;
+    $capabilityCandidates = $field === '13_abseinheit'
+        ? ['FERNMELDEBETRIEB']
+        : ['FERNMELDEBETRIEB', 'BEFOERDERUNG'];
+    foreach ($capabilityCandidates as $candidateCapability) {
+        try {
+            $selected = estab_read_require_capability(
+                $connection,
+                $incidentId,
+                $scope['identity'],
+                $candidateCapability
+            );
+            $capability = $candidateCapability;
+            break;
+        } catch (EstabReadPermissionException) {
+            // Another effective telecommunications function may match.
+        }
+    }
+    if (!is_array($selected) || !is_string($capability)) {
         throw new EstabReadPermissionException(
             'Diese Dienstfunktion besitzt keine Vorschlagsberechtigung.'
         );
     }
+    $capabilityScope = estab_read_effective_capability_scope(
+        $selected,
+        $capability
+    );
     $table = estab_message_table($messageTable);
     $column = match ($field) {
         '05_gegenstelle' => '`05_gegenstelle`',
@@ -661,32 +838,24 @@ function estab_read_message_suggestions(
         . ' ON incident.`einsatz_id` = active.`active_einsatz_id`'
         . ' JOIN `nv_benutzer` AS account'
         . ' ON BINARY account.`kuerzel` = BINARY ?'
-        . ' JOIN `nv_funktionsfaehigkeiten` AS capability'
-        . ' ON BINARY capability.`funktion`'
-        . ' = BINARY account.`funktion`'
-        . ' AND BINARY capability.`rolle` = BINARY account.`rolle`'
         . ' WHERE active.`active_einsatz_id` = ?'
         . " AND incident.`estab_status` = 'open'"
         . ' AND BINARY account.`benutzer` = BINARY ?'
-        . ' AND BINARY account.`funktion` = BINARY ?'
-        . ' AND BINARY account.`rolle` = BINARY ?'
-        . ' AND BINARY capability.`faehigkeit` = BINARY ?'
         . ' AND account.`aktiv` = 1'
         . ' AND account.`estab_gesperrt` = 0'
+        . ' AND (' . $capabilityScope['sql'] . ')'
         . ' AND candidate.`einsatz_id` = active.`active_einsatz_id`'
         . ' AND candidate.`einsatz_id` = ?'
         . ' AND candidate.' . $column . ' IS NOT NULL'
         . ' AND CHAR_LENGTH(TRIM(candidate.' . $column . ')) > 0';
-    $parameters = [
+    $parameters = array_merge([
         $incidentId,
         $selected['kuerzel'],
         $incidentId,
         $selected['benutzer'],
-        $selected['funktion'],
-        $selected['rolle'],
-        $capability,
+    ], $capabilityScope['params'], [
         $incidentId,
-    ];
+    ]);
     if ($direction !== null) {
         $sql .= ' AND candidate.`04_richtung` = ?';
         $parameters[] = $direction;
@@ -825,7 +994,7 @@ function estab_read_code_matches(mixed $storedCode, mixed $identityCode): bool
  *
  * @return array{sql:string,params:list<mixed>}
  */
-function estab_read_message_visibility_sql(
+function estab_read_message_visibility_sql_for_identity(
     array $identity,
     string $alias = 'm'
 ): array {
@@ -925,7 +1094,7 @@ function estab_read_message_visibility_sql(
         ];
     }
 
-    if ($function !== 'Si' && in_array($role, ['Stab', 'FB'], true)) {
+    if (estab_auth_has_staff_message_workspace($function, $role)) {
         return [
             'sql' => estab_message_staff_access_sql($alias),
             'params' => [
@@ -939,6 +1108,40 @@ function estab_read_message_visibility_sql(
     );
 }
 
+/** Build the union of all server-resolved effective function scopes. */
+function estab_read_message_visibility_sql(
+    array $identity,
+    string $alias = 'm'
+): array {
+    $predicates = [];
+    $parameters = [];
+    foreach (estab_auth_effective_function_roles($identity) as $tuple) {
+        $candidate = $identity;
+        $candidate['funktion'] = $tuple['funktion'];
+        $candidate['rolle'] = $tuple['rolle'];
+        unset($candidate['estab_additional_functions']);
+        try {
+            $scope = estab_read_message_visibility_sql_for_identity(
+                $candidate,
+                $alias
+            );
+        } catch (EstabReadPermissionException) {
+            continue;
+        }
+        $predicates[] = '(' . $scope['sql'] . ')';
+        array_push($parameters, ...$scope['params']);
+    }
+    if ($predicates === []) {
+        throw new EstabReadPermissionException(
+            'Diese Dienstfunktion darf keine Nachrichtenliste lesen.'
+        );
+    }
+    return [
+        'sql' => '(' . implode(' OR ', $predicates) . ')',
+        'params' => $parameters,
+    ];
+}
+
 /**
  * Pure per-message visibility decision.
  *
@@ -947,7 +1150,10 @@ function estab_read_message_visibility_sql(
  * only their current workflow queue/lock or an object carrying their own
  * immutable processing mark.
  */
-function estab_read_message_allowed(array $identity, array $message): bool
+function estab_read_message_allowed_for_identity(
+    array $identity,
+    array $message
+): bool
 {
     $function = (string) ($identity['funktion'] ?? '');
     $role = (string) ($identity['rolle'] ?? '');
@@ -1007,8 +1213,23 @@ function estab_read_message_allowed(array $identity, array $message): bool
             );
     }
 
-    return in_array($role, ['Stab', 'FB'], true)
+    return estab_auth_has_staff_message_workspace($function, $role)
         && estab_message_object_allowed($identity, 'staff-read', $message);
+}
+
+/** Return true when any effective function may read the message. */
+function estab_read_message_allowed(array $identity, array $message): bool
+{
+    foreach (estab_auth_effective_function_roles($identity) as $tuple) {
+        $candidate = $identity;
+        $candidate['funktion'] = $tuple['funktion'];
+        $candidate['rolle'] = $tuple['rolle'];
+        unset($candidate['estab_additional_functions']);
+        if (estab_read_message_allowed_for_identity($candidate, $message)) {
+            return true;
+        }
+    }
+    return false;
 }
 
 /** Return one active-incident message only when this identity may read it. */
@@ -1018,22 +1239,26 @@ function estab_read_message(
     mixed $recordId,
     array $identity
 ): ?array {
-    $incident = estab_incident_require_active($connection);
-    $selected = estab_read_require_identity_scope(
+    return estab_read_with_locked_operational_scope(
         $connection,
-        (int) $incident['active_einsatz_id'],
-        $identity
+        $identity,
+        static function (array $scope) use (
+            $connection,
+            $messageTable,
+            $recordId
+        ): ?array {
+            $message = estab_message_fetch_for_incident_by_id(
+                $connection,
+                $messageTable,
+                $recordId,
+                $scope['incident']['active_einsatz_id']
+            );
+            return is_array($message)
+                && estab_read_message_allowed($scope['identity'], $message)
+                ? $message
+                : null;
+        }
     );
-    $message = estab_message_fetch_for_incident_by_id(
-        $connection,
-        $messageTable,
-        $recordId,
-        $incident['active_einsatz_id']
-    );
-    return is_array($message)
-        && estab_read_message_allowed($selected, $message)
-        ? $message
-        : null;
 }
 
 /** Filter complete message rows without exposing the rejected rows. */
@@ -1095,13 +1320,17 @@ function estab_read_filter_generated_forms(
     array $forms,
     array $identity
 ): array {
-    $scope = estab_read_require_operational_scope($connection, $identity);
-    return estab_read_filter_generated_forms_for_incident(
+    return estab_read_with_locked_operational_scope(
         $connection,
-        $messageTable,
-        $forms,
-        $scope['identity'],
-        $scope['incident']['active_einsatz_id']
+        $identity,
+        static fn (array $scope): array =>
+            estab_read_filter_generated_forms_for_incident(
+                $connection,
+                $messageTable,
+                $forms,
+                $scope['identity'],
+                $scope['incident']['active_einsatz_id']
+            )
     );
 }
 
@@ -1162,11 +1391,13 @@ function estab_read_attachment_authorization_columns(): string
 }
 
 /**
- * Bind exceptional attachment access to one already authorised write object.
+ * Bind attachment access to one already authorised write object.
  *
  * The returned value is server-side policy data, never a browser capability.
- * It can broaden only an explicit LOOSE write stage and is re-evaluated
- * against the current linked message on every attachment read/use.
+ * It can broaden ordinary read access only for the exact function which may
+ * currently edit this object and is re-evaluated against the current linked
+ * message on every attachment read/use. The rule is identical in both modes;
+ * only the source of the effective function differs.
  *
  * @return array{
  *   incident_id:int,message_id:int,operation:string,
@@ -1179,17 +1410,39 @@ function estab_read_attachment_write_scope(
     array $message
 ): ?array {
     if (
-        estab_permission_role_checks_enforced()
-        || !estab_message_operation_relaxes_write_role($operation)
+        !estab_message_operation_relaxes_write_role($operation)
         || !estab_message_object_allowed($identity, $operation, $message, true)
     ) {
         return null;
     }
+    $actingIdentity = $identity;
+    if ($operation === 'staff-correction') {
+        $authorFunction = (string) ($message['14_funktion'] ?? '');
+        $actingIdentity = null;
+        foreach (estab_auth_effective_function_roles($identity) as $tuple) {
+            if (
+                $tuple['funktion'] === $authorFunction
+                && estab_auth_has_staff_message_workspace(
+                    $tuple['funktion'],
+                    $tuple['rolle']
+                )
+            ) {
+                $actingIdentity = $identity;
+                $actingIdentity['funktion'] = $tuple['funktion'];
+                $actingIdentity['rolle'] = $tuple['rolle'];
+                $actingIdentity['estab_additional_functions'] = [];
+                break;
+            }
+        }
+        if (!is_array($actingIdentity)) {
+            return null;
+        }
+    }
     $shape = estab_auth_session_identity_shape([
-        'vStab_benutzer' => $identity['benutzer'] ?? null,
-        'vStab_kuerzel' => $identity['kuerzel'] ?? null,
-        'vStab_funktion' => $identity['funktion'] ?? null,
-        'vStab_rolle' => $identity['rolle'] ?? null,
+        'vStab_benutzer' => $actingIdentity['benutzer'] ?? null,
+        'vStab_kuerzel' => $actingIdentity['kuerzel'] ?? null,
+        'vStab_funktion' => $actingIdentity['funktion'] ?? null,
+        'vStab_rolle' => $actingIdentity['rolle'] ?? null,
     ]);
     if ($shape === null) {
         return null;
@@ -1248,7 +1501,8 @@ function estab_read_attachment_write_scope_for_record(
     $selected = estab_read_require_identity_scope(
         $connection,
         $incidentId,
-        $identity
+        $identity,
+        $forUpdate
     );
     $message = estab_message_fetch_for_incident_by_id(
         $connection,
@@ -1272,16 +1526,16 @@ function estab_read_attachment_write_scope_allows(
     array $linkedMessages,
     int $incidentId
 ): bool {
-    if (!is_array($scope) || estab_permission_role_checks_enforced()) {
+    if (!is_array($scope)) {
         return false;
     }
-    $shape = estab_auth_session_identity_shape([
+    $accountShape = estab_auth_session_identity_shape([
         'vStab_benutzer' => $identity['benutzer'] ?? null,
         'vStab_kuerzel' => $identity['kuerzel'] ?? null,
         'vStab_funktion' => $identity['funktion'] ?? null,
         'vStab_rolle' => $identity['rolle'] ?? null,
     ]);
-    if ($shape === null) {
+    if ($accountShape === null) {
         return false;
     }
     try {
@@ -1302,21 +1556,33 @@ function estab_read_attachment_write_scope_allows(
     ) {
         return false;
     }
-    foreach (['benutzer', 'kuerzel', 'funktion', 'rolle'] as $field) {
+    foreach (['benutzer', 'kuerzel'] as $field) {
         if (
             !is_string($scope[$field] ?? null)
-            || !hash_equals($shape[$field], $scope[$field])
+            || !hash_equals($accountShape[$field], $scope[$field])
         ) {
             return false;
         }
     }
+    $scopeFunction = (string) ($scope['funktion'] ?? '');
+    $scopeRole = (string) ($scope['rolle'] ?? '');
+    if (!estab_auth_identity_has_function(
+        $identity,
+        $scopeFunction,
+        $scopeRole
+    )) {
+        return false;
+    }
+    $actingShape = $accountShape;
+    $actingShape['funktion'] = $scopeFunction;
+    $actingShape['rolle'] = $scopeRole;
     foreach ($linkedMessages as $message) {
         if (
             is_array($message)
             && (int) ($message['einsatz_id'] ?? 0) === $incidentId
             && (int) ($message['00_lfd'] ?? 0) === $scopeMessageId
             && estab_message_object_allowed(
-                $shape,
+                $actingShape,
                 $operation,
                 $message,
                 true
@@ -1458,18 +1724,13 @@ function estab_read_free_attachment_allowed(
     ) {
         return true;
     }
-    return in_array(
-        [
-            (string) ($selectedIdentity['funktion'] ?? ''),
-            (string) ($selectedIdentity['rolle'] ?? ''),
-        ],
-        [
-            ['S2', 'Stab'],
-            ['Si', 'Stab'],
-            ['LdF', 'Fernmelder'],
-        ],
-        true
-    );
+    return estab_auth_identity_has_function($selectedIdentity, 'S2', 'Stab')
+        || estab_auth_identity_has_function($selectedIdentity, 'Si', 'Stab')
+        || estab_auth_identity_has_function(
+            $selectedIdentity,
+            'LdF',
+            'Fernmelder'
+        );
 }
 
 /** Pure inherited-right decision for one attachment row. */
@@ -1603,13 +1864,17 @@ function estab_read_filter_attachments(
     array $attachments,
     array $identity
 ): array {
-    $scope = estab_read_require_operational_scope($connection, $identity);
-    return estab_read_filter_attachments_for_incident(
+    return estab_read_with_locked_operational_scope(
         $connection,
-        $messageTable,
-        $attachments,
-        $scope['identity'],
-        $scope['incident']['active_einsatz_id']
+        $identity,
+        static fn (array $scope): array =>
+            estab_read_filter_attachments_for_incident(
+                $connection,
+                $messageTable,
+                $attachments,
+                $scope['identity'],
+                $scope['incident']['active_einsatz_id']
+            )
     );
 }
 
@@ -1643,7 +1908,8 @@ function estab_read_attachment(
     $selected = estab_read_require_identity_scope(
         $connection,
         $incidentId,
-        $identity
+        $identity,
+        $forUpdate
     );
     $base = pathinfo($requestedFilename, PATHINFO_FILENAME);
     $extension = strtolower(
@@ -1753,7 +2019,8 @@ function estab_read_attachments(
     $selected = estab_read_require_identity_scope(
         $connection,
         $incidentId,
-        $identity
+        $identity,
+        $forUpdate
     );
     $messageMap = estab_read_attachment_message_map(
         $connection,

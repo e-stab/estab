@@ -13,6 +13,12 @@ include ("data_hndl.php");      // propritÃ¤re  Datenbankoperationen
 //include ("menue.php");          // erzeuge MenÃ¼s
 
 $trackingReadIdentity = estab_read_session_identity ($_SESSION);
+estab_navigation_require_selected_duty (
+    $_SESSION,
+    $trackingReadIdentity,
+    "tracking",
+    $_SERVER
+);
 $trackingAccessConnection = null;
 $trackingError = null;
 try {

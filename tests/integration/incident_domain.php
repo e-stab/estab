@@ -241,20 +241,16 @@ try {
         $status['active_einsatz_id'] === $idA
             && $status['revision'] === 1
             && $status['fuehrungsstellenname'] === $commandPostA
-            && $status['fuehrungsstellenname_gesperrt'] === 1
+            && $status['fuehrungsstellenname_gesperrt'] === 0
             && (int) $queryValue(
                 $connection,
                 'SELECT COUNT(*) FROM `nv_etb` WHERE `einsatz_id` = ' . $idA
-                    . ' AND `estab_book_lfd` = 1'
-                    . ' AND `estab_shift_id` IS NULL'
-            ) === 1
+            ) === 0
             && (int) $queryValue(
                 $connection,
                 'SELECT COUNT(*) FROM `nv_tbb` WHERE `einsatz_id` = ' . $idA
-                    . ' AND `estab_book_lfd` = 1'
-                    . ' AND `estab_shift_id` IS NULL'
-            ) === 1,
-        'incident activation did not open both books without a duty shift'
+            ) === 0,
+        'STRICT incident activation opened books before the first duty shift'
     );
     $assert(
         $fails(
@@ -512,8 +508,16 @@ try {
         $status['active_einsatz_id'] === $idB
             && $status['revision'] === 3
             && $status['fuehrungsstellenname'] === $commandPostB
-            && $status['fuehrungsstellenname_gesperrt'] === 1,
-        'second incident activation failed to open its shift-free books'
+            && $status['fuehrungsstellenname_gesperrt'] === 0
+            && (int) $queryValue(
+                $connection,
+                'SELECT COUNT(*) FROM `nv_etb` WHERE `einsatz_id` = ' . $idB
+            ) === 0
+            && (int) $queryValue(
+                $connection,
+                'SELECT COUNT(*) FROM `nv_tbb` WHERE `einsatz_id` = ' . $idB
+            ) === 0,
+        'second STRICT activation opened books before its first duty shift'
     );
     $historicalMessageA = estab_message_fetch_for_incident_by_id(
         $connection,
@@ -675,6 +679,15 @@ try {
             && ($incidentB['estab_permission_mode'] ?? null) === 'STRICT',
         'new and existing-domain incidents did not default fail-closed to STRICT'
     );
+    $strictEmptyBookPreflight = estab_incident_close_preflight(
+        $connection,
+        $idA
+    );
+    $assert(
+        $strictEmptyBookPreflight['logbuecher_eroeffnet'] === false
+            && $strictEmptyBookPreflight['closable'] === false,
+        'STRICT allowed incident closure before ETB and TTB were opened'
+    );
     $directModeChange = $fails(
         static fn (): bool => $connection->query(
             "UPDATE `nv_einsaetze` SET `estab_permission_mode` = 'LOOSE'"
@@ -717,25 +730,54 @@ try {
             ) === 'STRICT:Integration A',
         'mode marker authorised a combined permission and incident-data update'
     );
-    $assert(
-        $fails(
-            static fn (): array => estab_incident_update_permission_mode(
-                $connection,
-                $idA,
-                'LOOSE',
-                'STRICT',
-                4,
-                'integration-test',
-                false
-            )
-        ) instanceof EstabIncidentInputException
-            && (int) $queryValue(
-                $connection,
-                'SELECT `revision` FROM `nv_einsatz_status`'
-                    . ' WHERE `singleton_id` = 1'
-            ) === 4,
-        'LOOSE mode was enabled without explicit administrative confirmation'
+    $modeAuditBeforeRejectedChange = (int) $queryValue(
+        $connection,
+        'SELECT COUNT(*) FROM `nv_einsatz_ereignisse`'
+            . ' WHERE `einsatz_id` = ' . $idA
+            . " AND `aktion` = 'berechtigung_geaendert'"
     );
+    foreach ([false, true] as $confirmedRejectedChange) {
+        $assert(
+            $fails(
+                static fn (): array => estab_incident_update_permission_mode(
+                    $connection,
+                    $idA,
+                    'LOOSE',
+                    'STRICT',
+                    4,
+                    'integration-test',
+                    $confirmedRejectedChange
+                )
+            ) instanceof EstabIncidentConflictException
+                && $queryValue(
+                    $connection,
+                    'SELECT `estab_permission_mode` FROM `nv_einsaetze`'
+                        . ' WHERE `einsatz_id` = ' . $idA
+                ) === 'STRICT'
+                && (int) $queryValue(
+                    $connection,
+                    'SELECT `revision` FROM `nv_einsatz_status`'
+                        . ' WHERE `singleton_id` = 1'
+                ) === 4
+                && (int) $queryValue(
+                    $connection,
+                    'SELECT COUNT(*) FROM `nv_etb`'
+                        . ' WHERE `einsatz_id` = ' . $idA
+                ) === 0
+                && (int) $queryValue(
+                    $connection,
+                    'SELECT COUNT(*) FROM `nv_tbb`'
+                        . ' WHERE `einsatz_id` = ' . $idA
+                ) === 0
+                && (int) $queryValue(
+                    $connection,
+                    'SELECT COUNT(*) FROM `nv_einsatz_ereignisse`'
+                        . ' WHERE `einsatz_id` = ' . $idA
+                        . " AND `aktion` = 'berechtigung_geaendert'"
+                ) === $modeAuditBeforeRejectedChange,
+            'operational data did not freeze the incident mode inertly'
+        );
+    }
     $assert(
         $fails(
             static fn (): array => estab_incident_update_permission_mode(
@@ -750,7 +792,6 @@ try {
         ) instanceof EstabIncidentConflictException,
         'stale status revision changed the permission mode'
     );
-
     $permissionIdentity = [
         'benutzer' => 'Permission Mode Integration',
         'kuerzel' => 'pm001',
@@ -795,6 +836,28 @@ try {
         'betriebsleitung' => 'Integration',
         'bemerkungen' => 'Nur für den automatisierten Sicherheitsnachweis.',
     ];
+    estab_permission_context_set_from_incident($status);
+    $assert(
+        $fails(
+            static fn (): array => estab_dv_create_telecom_plan(
+                $connection,
+                $idA,
+                $permissionIdentity,
+                $planInput
+            )
+        ) instanceof EstabDvPermissionException
+            && (int) $queryValue(
+                $connection,
+                'SELECT COUNT(*) FROM `nv_fernmeldeplaene`'
+                    . ' WHERE `einsatz_id` = ' . $idA
+        ) === 0,
+        'STRICT mode admitted S6 planning through an unrelated primary function'
+    );
+    $connection->query(
+        "INSERT INTO `nv_benutzer_zusatzfunktionen`"
+            . " (`benutzer_kuerzel`, `funktion`, `rolle`, `vergeben_von`)"
+            . " VALUES ('pm001', 'S6', 'Stab', 'integration-test')"
+    );
     $assert(
         $fails(
             static fn (): array => estab_dv_create_telecom_plan(
@@ -809,45 +872,126 @@ try {
                 'SELECT COUNT(*) FROM `nv_fernmeldeplaene`'
                     . ' WHERE `einsatz_id` = ' . $idA
             ) === 0,
-        'STRICT mode admitted a write without the fixed S6 capability'
+        'STRICT mode treated a LOOSE additional function as authority'
     );
-
-    estab_permission_context_set_from_incident($status);
-    $looseIncident = estab_incident_update_permission_mode(
+    $connection->query(
+        "DELETE FROM `nv_benutzer_zusatzfunktionen`"
+            . " WHERE `benutzer_kuerzel` = 'pm001' AND `funktion` = 'S6'"
+    );
+    $sameStrictIncident = estab_incident_update_permission_mode(
         $connection,
         $idA,
-        'LOOSE',
+        'STRICT',
         'STRICT',
         4,
-        'integration-test',
+        'idempotent-strict-integration-test',
         true
     );
     $assert(
-        ($looseIncident['estab_permission_mode'] ?? null) === 'LOOSE'
-            && ($looseIncident['revision'] ?? null) === 5
-            && $queryValue(
+        ($sameStrictIncident['estab_permission_mode'] ?? null) === 'STRICT'
+            && ($sameStrictIncident['revision'] ?? null) === 4
+            && (int) $queryValue(
                 $connection,
-                'SELECT `estab_permission_mode` FROM `nv_einsaetze`'
+                'SELECT COUNT(*) FROM `nv_einsatz_ereignisse`'
                     . ' WHERE `einsatz_id` = ' . $idA
-            ) === 'LOOSE',
-        'confirmed permission-mode update was not persisted and revised'
+                    . " AND `aktion` = 'berechtigung_geaendert'"
+            ) === $modeAuditBeforeRejectedChange,
+        'idempotent STRICT confirmation was blocked or created a mode audit'
+    );
+
+    $inactiveStatus = estab_incident_deactivate(
+        $connection,
+        $idA,
+        4,
+        'integration-test'
+    );
+    $assert(
+        ($inactiveStatus['active_einsatz_id'] ?? null) === null
+            && ($inactiveStatus['revision'] ?? null) === 5
+            && $fails(
+                static fn (): array => estab_dv_create_telecom_plan(
+                    $connection,
+                    $idA,
+                    $permissionIdentity,
+                    $planInput
+                )
+            ) instanceof EstabNoActiveIncidentException,
+        'permission mode replaced the mandatory active-incident write gate'
+    );
+
+    $looseCreated = estab_incident_create(
+        $connection,
+        [
+            'kennung' => 'TEST-LOOSE-RIGHTS',
+            'name' => 'Loose permission rights',
+            'estab_permission_mode' => 'LOOSE',
+            'beginn' => date('Y-m-d\TH:i', time() - 60),
+            'ort' => 'Testort locker',
+            'organisation' => 'Organisation locker',
+            'fuehrungsstellenname' => 'Führungsstelle locker',
+            'einsatzleitung' => 'Einsatzleitung locker',
+            'beschreibung' => 'Von Anfang an lockerer Berechtigungsmodus',
+        ],
+        'integration-test',
+        true,
+        5,
+        true
+    );
+    $looseId = (int) $looseCreated['einsatz_id'];
+    $looseStatus = estab_incident_status($connection);
+    $assert(
+        $looseId > 0
+            && ($looseStatus['active_einsatz_id'] ?? null) === $looseId
+            && ($looseStatus['revision'] ?? null) === 6
+            && ($looseStatus['estab_permission_mode'] ?? null) === 'LOOSE'
+            && (int) $queryValue(
+                $connection,
+                'SELECT COUNT(*) FROM `nv_etb` WHERE `einsatz_id` = '
+                    . $looseId . ' AND `estab_shift_id` IS NULL'
+            ) === 1
+            && (int) $queryValue(
+                $connection,
+                'SELECT COUNT(*) FROM `nv_tbb` WHERE `einsatz_id` = '
+                    . $looseId . ' AND `estab_shift_id` IS NULL'
+            ) === 1,
+        'initial LOOSE creation did not atomically activate and open its books'
     );
     $assert(
         $fails(
             static fn (): array => estab_dv_create_telecom_plan(
                 $connection,
-                $idA,
+                $looseId,
                 $permissionIdentity,
                 $planInput
             )
         ) instanceof EstabIncidentConflictException,
-        'request admitted under the old mode/revision crossed the write lock'
+        'request admitted under the old incident/mode context crossed the write lock'
     );
-
-    estab_permission_context_set_from_incident($looseIncident);
+    estab_permission_context_set_from_incident($looseStatus);
+    $assert(
+        $fails(
+            static fn (): array => estab_dv_create_telecom_plan(
+                $connection,
+                $looseId,
+                $permissionIdentity,
+                $planInput
+            )
+        ) instanceof EstabDvPermissionException
+            && (int) $queryValue(
+                $connection,
+                'SELECT COUNT(*) FROM `nv_fernmeldeplaene`'
+                    . ' WHERE `einsatz_id` = ' . $looseId
+            ) === 0,
+        'LOOSE mode granted S6 planning to an unrelated primary function'
+    );
+    $connection->query(
+        "INSERT INTO `nv_benutzer_zusatzfunktionen`"
+            . " (`benutzer_kuerzel`, `funktion`, `rolle`, `vergeben_von`)"
+            . " VALUES ('pm001', 'S6', 'Stab', 'integration-test')"
+    );
     $plan = estab_dv_create_telecom_plan(
         $connection,
-        $idA,
+        $looseId,
         $permissionIdentity,
         $planInput
     );
@@ -863,8 +1007,17 @@ try {
                 $connection,
                 'SELECT `erstellt_von` FROM `nv_fernmeldeplaene`'
                     . ' WHERE `fernmeldeplan_id` = ' . $planId
-            ) === $permissionIdentity['kuerzel'],
-        'LOOSE mode did not admit a valid active account beyond its fixed role'
+            ) === $permissionIdentity['kuerzel']
+            && $queryValue(
+                $connection,
+                'SELECT `akteur_funktion` FROM `nv_betriebsereignisse`'
+                    . ' WHERE `einsatz_id` = ' . $looseId
+                    . " AND `objekttyp` = 'FERNMELDEPLAN'"
+                    . ' AND `objekt_id` = ' . $planId
+                    . " AND `aktion` = 'plan_created'"
+                    . ' ORDER BY `betriebsereignis_id` DESC LIMIT 1'
+            ) === 'S6',
+        'LOOSE explicit S6 grant did not authorize and record the exact function'
     );
     $assert(
         $fails(
@@ -890,7 +1043,7 @@ try {
         $fails(
             static fn (): array => estab_dv_create_telecom_plan(
                 $connection,
-                $idA,
+                $looseId,
                 $permissionIdentity,
                 $planInput
             )
@@ -913,41 +1066,77 @@ try {
         'LOOSE mode admitted a write into an inactive incident'
     );
 
-    $strictAgain = estab_incident_update_permission_mode(
+    $looseModeAuditBeforeRejectedChange = (int) $queryValue(
         $connection,
-        $idA,
-        'STRICT',
-        'LOOSE',
-        5,
-        'integration-test'
+        'SELECT COUNT(*) FROM `nv_einsatz_ereignisse`'
+            . ' WHERE `einsatz_id` = ' . $looseId
+            . " AND `aktion` = 'berechtigung_geaendert'"
     );
-    estab_permission_context_set_from_incident($strictAgain);
     $assert(
-        ($strictAgain['estab_permission_mode'] ?? null) === 'STRICT'
-            && ($strictAgain['revision'] ?? null) === 6
-            && $fails(
-                static fn (): array => estab_dv_create_telecom_plan(
+        $fails(
+            static fn (): array => estab_incident_update_permission_mode(
                     $connection,
-                    $idA,
-                    $permissionIdentity,
-                    $planInput
-                )
-            ) instanceof EstabDvPermissionException,
-        'switching back to STRICT did not immediately restore role enforcement'
+                    $looseId,
+                    'STRICT',
+                    'LOOSE',
+                    6,
+                    'integration-test'
+            )
+        ) instanceof EstabIncidentConflictException
+            && $queryValue(
+                $connection,
+                'SELECT `estab_permission_mode` FROM `nv_einsaetze`'
+                    . ' WHERE `einsatz_id` = ' . $looseId
+            ) === 'LOOSE'
+            && (int) $queryValue(
+                $connection,
+                'SELECT `revision` FROM `nv_einsatz_status`'
+                    . ' WHERE `singleton_id` = 1'
+            ) === 6
+            && $queryValue(
+                $connection,
+                'SELECT `status` FROM `nv_fernmeldeplaene`'
+                    . ' WHERE `fernmeldeplan_id` = ' . $planId
+            ) === 'ENTWURF'
+            && (int) $queryValue(
+                $connection,
+                'SELECT COUNT(*) FROM `nv_einsatz_ereignisse`'
+                    . ' WHERE `einsatz_id` = ' . $looseId
+                    . " AND `aktion` = 'berechtigung_geaendert'"
+            ) === $looseModeAuditBeforeRejectedChange,
+        'LOOSE operational data did not freeze the mode inertly'
+    );
+    $sameLooseIncident = estab_incident_update_permission_mode(
+        $connection,
+        $looseId,
+        'LOOSE',
+        'LOOSE',
+        6,
+        'idempotent-loose-integration-test',
+        true
     );
     $assert(
-        (int) $queryValue(
-            $connection,
-            'SELECT COUNT(*) FROM `nv_einsatz_ereignisse`'
-                . ' WHERE `einsatz_id` = ' . $idA
-                . " AND `aktion` = 'berechtigung_geaendert'"
-        ) === 2,
-        'permission-mode changes were not recorded as immutable incident events'
+        ($sameLooseIncident['estab_permission_mode'] ?? null) === 'LOOSE'
+            && ($sameLooseIncident['revision'] ?? null) === 6
+            && (int) $queryValue(
+                $connection,
+                'SELECT COUNT(*) FROM `nv_etb` WHERE `einsatz_id` = '
+                    . $looseId . ' AND `estab_book_lfd` = 1'
+            ) === 1
+            && (int) $queryValue(
+                $connection,
+                'SELECT COUNT(*) FROM `nv_tbb` WHERE `einsatz_id` = '
+                    . $looseId . ' AND `estab_book_lfd` = 1'
+            ) === 1,
+        'idempotent LOOSE confirmation was blocked or duplicated book rows'
     );
-
+    $connection->query(
+        "DELETE FROM `nv_benutzer_zusatzfunktionen`"
+            . " WHERE `benutzer_kuerzel` = 'pm001' AND `funktion` = 'S6'"
+    );
     $inactiveStatus = estab_incident_deactivate(
         $connection,
-        $idA,
+        $looseId,
         6,
         'integration-test'
     );
@@ -957,12 +1146,286 @@ try {
             && $fails(
                 static fn (): array => estab_dv_create_telecom_plan(
                     $connection,
-                    $idA,
+                    $looseId,
                     $permissionIdentity,
                     $planInput
                 )
             ) instanceof EstabNoActiveIncidentException,
         'permission mode replaced the mandatory active-incident write gate'
+    );
+    $inactiveStrictIncident = estab_incident_create(
+        $connection,
+        [
+            'kennung' => 'TEST-INACTIVE-MODE',
+            'name' => 'Inactive mode transition',
+            'beginn' => date('Y-m-d\TH:i', time() - 60),
+            'ort' => 'Testort inaktiv',
+            'organisation' => 'Organisation inaktiv',
+            'fuehrungsstellenname' => 'Führungsstelle inaktiv',
+            'einsatzleitung' => 'Einsatzleitung inaktiv',
+            'beschreibung' => 'Inaktiver Moduswechsel ohne Logbucheröffnung',
+        ],
+        'integration-test',
+        false
+    );
+    $inactiveStrictId = (int) $inactiveStrictIncident['einsatz_id'];
+    $inactiveLooseIncident = estab_incident_update_permission_mode(
+        $connection,
+        $inactiveStrictId,
+        'LOOSE',
+        'STRICT',
+        7,
+        'inactive-mode-integration-test',
+        true
+    );
+    $assert(
+        ($inactiveLooseIncident['estab_permission_mode'] ?? null) === 'LOOSE'
+            && ($inactiveLooseIncident['revision'] ?? null) === 8
+            && ($inactiveLooseIncident['fuehrungsstellenname_gesperrt'] ?? null)
+                === 0
+            && (int) $queryValue(
+                $connection,
+                'SELECT COUNT(*) FROM `nv_etb` WHERE `einsatz_id` = '
+                    . $inactiveStrictId
+            ) === 0
+            && (int) $queryValue(
+                $connection,
+                'SELECT COUNT(*) FROM `nv_tbb` WHERE `einsatz_id` = '
+                    . $inactiveStrictId
+            ) === 0,
+        'inactive STRICT-to-LOOSE change opened or locked empty books'
+    );
+    $accessShiftModeAuditCount = (int) $queryValue(
+        $connection,
+        'SELECT COUNT(*) FROM `nv_einsatz_ereignisse`'
+            . ' WHERE `einsatz_id` = ' . $inactiveStrictId
+            . " AND `aktion` = 'berechtigung_geaendert'"
+    );
+    $connection->query(
+        'INSERT INTO `nv_zugangsschichten`'
+            . ' (`einsatz_id`, `bezeichnung`, `beginn`, `ende`,'
+            . ' `zugang_aktiv`, `erstellt_von`, `geaendert_von`)'
+            . ' VALUES (' . $inactiveStrictId
+            . ", 'Nur Zugangsschicht', NULL, NULL, 0,"
+            . " 'integration-test', 'integration-test')"
+    );
+    $assert(
+        $fails(
+            static fn (): array => estab_incident_update_permission_mode(
+                $connection,
+                $inactiveStrictId,
+                'STRICT',
+                'LOOSE',
+                8,
+                'access-shift-mode-integration-test'
+            )
+        ) instanceof EstabIncidentConflictException
+            && $queryValue(
+                $connection,
+                'SELECT `estab_permission_mode` FROM `nv_einsaetze`'
+                    . ' WHERE `einsatz_id` = ' . $inactiveStrictId
+            ) === 'LOOSE'
+            && (int) $queryValue(
+                $connection,
+                'SELECT `revision` FROM `nv_einsatz_status`'
+                    . ' WHERE `singleton_id` = 1'
+            ) === 8
+            && (int) $queryValue(
+                $connection,
+                'SELECT COUNT(*) FROM `nv_einsatz_ereignisse`'
+                    . ' WHERE `einsatz_id` = ' . $inactiveStrictId
+                    . " AND `aktion` = 'berechtigung_geaendert'"
+            ) === $accessShiftModeAuditCount,
+        'an access shift did not freeze the inactive incident mode inertly'
+    );
+
+    $unlockedStrictIncident = estab_incident_create(
+        $connection,
+        [
+            'kennung' => 'TEST-ACTIVE-MODE',
+            'name' => 'Active mode transition',
+            'beginn' => date('Y-m-d\TH:i', time() - 60),
+            'ort' => 'Testort aktiv',
+            'organisation' => 'Organisation aktiv',
+            'fuehrungsstellenname' => 'Führungsstelle aktiv',
+            'einsatzleitung' => 'Einsatzleitung aktiv',
+            'beschreibung' => 'Aktiver Moduswechsel mit Logbucheröffnung',
+        ],
+        'integration-test',
+        false
+    );
+    $unlockedStrictId = (int) $unlockedStrictIncident['einsatz_id'];
+    $unlockedStrictStatus = estab_incident_activate(
+        $connection,
+        $unlockedStrictId,
+        8,
+        'integration-test'
+    );
+    $assert(
+        ($unlockedStrictStatus['revision'] ?? null) === 9
+            && ($unlockedStrictStatus['estab_permission_mode'] ?? null)
+                === 'STRICT'
+            && ($unlockedStrictStatus['fuehrungsstellenname_gesperrt'] ?? null)
+                === 0,
+        'unused STRICT activation was unexpectedly locked before its first shift'
+    );
+    $connection->query(
+        "UPDATE `nv_einsaetze` SET `organisation` = ''"
+            . ' WHERE `einsatz_id` = ' . $unlockedStrictId
+    );
+    $looseOpeningFailure = $fails(
+        static fn (): array => estab_incident_update_permission_mode(
+            $connection,
+            $unlockedStrictId,
+            'LOOSE',
+            'STRICT',
+            9,
+            'rollback-integration-test',
+            true
+        )
+    );
+    $assert(
+        $looseOpeningFailure instanceof RuntimeException
+            && $queryValue(
+                $connection,
+                'SELECT `estab_permission_mode` FROM `nv_einsaetze`'
+                    . ' WHERE `einsatz_id` = ' . $unlockedStrictId
+            ) === 'STRICT'
+            && (int) $queryValue(
+                $connection,
+                'SELECT `revision` FROM `nv_einsatz_status`'
+                    . ' WHERE `singleton_id` = 1'
+            ) === 9
+            && (int) $queryValue(
+                $connection,
+                'SELECT COUNT(*) FROM `nv_etb` WHERE `einsatz_id` = '
+                    . $unlockedStrictId
+            ) === 0
+            && (int) $queryValue(
+                $connection,
+                'SELECT COUNT(*) FROM `nv_tbb` WHERE `einsatz_id` = '
+                    . $unlockedStrictId
+            ) === 0,
+        'failed LOOSE book opening did not roll back mode, revision and rows'
+    );
+    $restoreOrganisation = $connection->prepare(
+        'UPDATE `nv_einsaetze` SET `organisation` = ? WHERE `einsatz_id` = ?'
+    );
+    if (!$restoreOrganisation) {
+        throw new RuntimeException('Could not restore integration organisation');
+    }
+    try {
+        $organisationActive = 'Organisation aktiv';
+        $restoreOrganisation->bind_param(
+            'si',
+            $organisationActive,
+            $unlockedStrictId
+        );
+        $restoreOrganisation->execute();
+    } finally {
+        $restoreOrganisation->close();
+    }
+    $assert(
+        $fails(
+            static fn (): array => estab_incident_update_permission_mode(
+                $connection,
+                $unlockedStrictId,
+                'LOOSE',
+                'STRICT',
+                9,
+                'unconfirmed-active-mode-integration-test',
+                false
+            )
+        ) instanceof EstabIncidentInputException
+            && $queryValue(
+                $connection,
+                'SELECT `estab_permission_mode` FROM `nv_einsaetze`'
+                    . ' WHERE `einsatz_id` = ' . $unlockedStrictId
+            ) === 'STRICT'
+            && (int) $queryValue(
+                $connection,
+                'SELECT `revision` FROM `nv_einsatz_status`'
+                    . ' WHERE `singleton_id` = 1'
+            ) === 9,
+        'unused active STRICT incident changed to LOOSE without confirmation'
+    );
+    $freshLooseStatus = estab_incident_update_permission_mode(
+        $connection,
+        $unlockedStrictId,
+        'LOOSE',
+        'STRICT',
+        9,
+        'active-mode-integration-test',
+        true
+    );
+    $assert(
+        ($freshLooseStatus['active_einsatz_id'] ?? null) === $unlockedStrictId
+            && ($freshLooseStatus['revision'] ?? null) === 10
+            && ($freshLooseStatus['estab_permission_mode'] ?? null) === 'LOOSE'
+            && ($freshLooseStatus['fuehrungsstellenname_gesperrt'] ?? null) === 1
+            && (int) $queryValue(
+                $connection,
+                'SELECT COUNT(*) FROM `nv_etb` WHERE `einsatz_id` = '
+                    . $unlockedStrictId
+                    . ' AND `estab_book_lfd` = 1'
+                    . ' AND `estab_shift_id` IS NULL'
+            ) === 1
+            && (int) $queryValue(
+                $connection,
+                'SELECT COUNT(*) FROM `nv_tbb` WHERE `einsatz_id` = '
+                    . $unlockedStrictId
+                    . ' AND `estab_book_lfd` = 1'
+                    . ' AND `estab_shift_id` IS NULL'
+            ) === 1,
+        'active mode change returned a stale snapshot or invalid book opening'
+    );
+    $freshLooseIdempotent = estab_incident_update_permission_mode(
+        $connection,
+        $unlockedStrictId,
+        'LOOSE',
+        'LOOSE',
+        10,
+        'idempotent-active-mode-integration-test',
+        true
+    );
+    $assert(
+        ($freshLooseIdempotent['revision'] ?? null) === 10
+            && (int) $queryValue(
+                $connection,
+                'SELECT COUNT(*) FROM `nv_etb` WHERE `einsatz_id` = '
+                    . $unlockedStrictId
+                    . ' AND `estab_book_lfd` = 1'
+            ) === 1
+            && (int) $queryValue(
+                $connection,
+                'SELECT COUNT(*) FROM `nv_tbb` WHERE `einsatz_id` = '
+                    . $unlockedStrictId
+                    . ' AND `estab_book_lfd` = 1'
+            ) === 1,
+        'idempotent active LOOSE confirmation duplicated book rows or revision'
+    );
+    $assert(
+        $fails(
+            static fn (): array => estab_incident_update_permission_mode(
+                $connection,
+                $unlockedStrictId,
+                'STRICT',
+                'LOOSE',
+                10,
+                'reverse-active-mode-integration-test'
+            )
+        ) instanceof EstabIncidentConflictException
+            && $queryValue(
+                $connection,
+                'SELECT `estab_permission_mode` FROM `nv_einsaetze`'
+                    . ' WHERE `einsatz_id` = ' . $unlockedStrictId
+            ) === 'LOOSE'
+            && (int) $queryValue(
+                $connection,
+                'SELECT `revision` FROM `nv_einsatz_status`'
+                    . ' WHERE `singleton_id` = 1'
+            ) === 10,
+        'opened books did not freeze the active LOOSE incident mode inertly'
     );
     $permissionContextKey = ESTAB_PERMISSION_CONTEXT_KEY;
     unset($GLOBALS[$permissionContextKey]);

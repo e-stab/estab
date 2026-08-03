@@ -147,8 +147,9 @@ Staging-Transaktion speichert anschließend die erwartete Dateiendung, noch
 bevor ein Zielpfad an den Uploader übergeben wird. Danach werden die Bytes
 verschoben und ohne langen Einsatz-Lock gehasht, damit eine langsame NAS-Ablage
 keine operativen Datenbankzeilen hält. Die Finalisierungstransaktion
-beansprucht die Zeile mit Status 2, prüft erwarteten aktiven Einsatz und
-Kontofunktion erneut und schreibt Metadaten, SHA-256, Bytezahl, Serverzeit,
+beansprucht die Zeile mit Status 2, prüft erwarteten aktiven Einsatz und die
+nach Einsatzmodus wirksame Funktion erneut und schreibt Metadaten, SHA-256,
+Bytezahl, Serverzeit,
 sichtbaren Status 1 sowie Audit atomar. Ein Fehler in dieser Transaktion rollt
 vollständig auf die unsichtbare Status-8-Reservierung zurück.
 
@@ -446,8 +447,8 @@ ihn anschließend wieder her.
 podman compose run --rm migrate
 ```
 
-Ein bereits aktueller Bestand meldet alle dreiundzwanzig Migrationen
-einschließlich `117-telecom-draft-discard.sql` als vorhanden und
+Ein bereits aktueller Bestand meldet alle vierundzwanzig Migrationen
+einschließlich `118-operational-authority.sql` als vorhanden und
 führt trotzdem den vollständigen Read-only-Schematest aus. Die Ausgabe muss
 `Post-migration schema verification passed` und anschließend
 `All schema migrations are applied` enthalten. Erst danach sollte der Stack
@@ -497,7 +498,13 @@ Manipulations-Guard-Trigger und sechs modebewusste Fachtrigger. Ein
 abweichender oder unvollständiger Zustand hält App und Readiness geschlossen,
 bis die Migration kontrolliert abgeschlossen ist.
 
-### 5. Ersten Einsatz aktivieren und Zugänge optional gruppieren
+Migration 118 stellt den aktuellen Autorisierungsvertrag her. Sie ergänzt
+globale Zusatzfunktionen je Benutzer und ersetzt die abschließenden
+Fachtrigger: `STRICT` verlangt eine aktive, persönlich angenommene und
+ausgewählte Dienstbesetzung; `LOOSE` arbeitet ohne formale Dienstschicht, aber
+nur mit passender fester oder ausdrücklicher Zusatzfunktion.
+
+### 5. Ersten Einsatz aktivieren und Berechtigungsmodus vorbereiten
 
 Eine Neuinstallation startet absichtlich ohne aktiven Einsatz. Anmeldung,
 öffentliche Ansichten und Administration bleiben erreichbar; operative Lese-
@@ -514,49 +521,58 @@ Nachricht, dem ersten Anhang oder einem ETB-/TBB-Eintrag:
 3. unter **Kennwortrichtlinie** die Auslieferungsvorgabe prüfen und bei Bedarf
    nach einer Vorher-/Nachher-Vorschau revisionsgesichert anpassen,
 4. unter **Benutzerverwaltung** persönliche Konten mit der jeweils festen
-   Funktion anlegen; die Rolle wird serverseitig abgeleitet,
-5. optional unter **Führungsstellenbetrieb** Zugangsschichten anlegen, Konten
-   zuordnen und gewünschte Gruppen aktivieren,
-6. jede Person regulär anmelden und Einsatz sowie feste Funktion in der
+   Funktion anlegen; die Rolle wird serverseitig abgeleitet. Nur für lockere
+   Einsätze bei Bedarf gezielt Zusatzfunktionen vergeben,
+5. im Modus **Streng** unter **Führungsstellenbetrieb** eine formale
+   Dienstschicht anlegen, aktivieren und Funktionen persönlich besetzen. Jede
+   Person nimmt ihre Besetzung an und wählt sie in der Sitzung aus,
+6. im Modus **Locker** optional Zugangsschichten anlegen, Konten zuordnen und
+   gewünschte Gruppen aktivieren,
+7. jede Person regulär anmelden und Einsatz sowie wirksame Funktion in der
    Oberfläche prüfen; die Statusanzeige muss zusätzlich den erwarteten
    Berechtigungsmodus nennen.
 
 Für Neuinstallation und Regelbetrieb bleibt **Streng** ausgewählt. In diesem
-Modus erzwingt eStab die bisherigen funktions- und rollenbezogenen
-Schreibrechte. **Locker** darf nur als bewusste Einsatzentscheidung gewählt
+Modus stammen operative Identität und Rechte ausschließlich aus der
+ausgewählten Besetzung einer aktiven formalen Dienstschicht. **Locker** darf nur als bewusste Einsatzentscheidung gewählt
 werden: Die Administration zeigt eine Warnung und verlangt eine separate
 Bestätigung. Der Modus gehört zur Einsatzzeile, nicht zu `.env`, Konto oder
-Schicht. Ein Wechsel ist nur bei einem offenen Einsatz möglich, gegen globale
-Revision und erwarteten Altmodus abgesichert und mit Vorher-/Nachherwert
-auditiert. Beim Upgrade bleiben alle bestehenden Einsätze automatisch streng.
+Schicht. Eine echte Änderung ist nur bei einem offenen Einsatz ohne jede
+operative oder formale Eintragung möglich, gegen globale Revision und
+erwarteten Altmodus abgesichert und mit Vorher-/Nachherwert auditiert. Die erste
+solche Eintragung friert den Modus dauerhaft ein; auch das spätere Löschen
+einzelner Daten hebt diese Sperre nicht auf. Das idempotente Speichern desselben
+Modus bleibt ohne neue Revision und ohne Auditereignis möglich. Beim Upgrade
+bleiben alle bestehenden Einsätze automatisch streng.
 
 Locker bedeutet nicht „ohne Berechtigung“: Authentifizierung, konkrete aktive
 und ungesperrte Kontenidentität, ein durch Zugangsschichten gegebenenfalls
 entzogener Zugang, aktiver offener Einsatz und Einsatzzuordnung, CSRF,
 Validierung, Objekt- und Workflowzustände, Sperrinhaber, Anhangintegrität,
-Append-only-/Nachweisregeln, Audit und Aufbewahrung bleiben verbindlich. Nur
-die feste Funktion/Rolle blockiert einen **Schreib**schritt dann nicht. Die
-gespeicherte Identität und Funktion bleiben in Fachdatensatz und Audit
-sichtbar; allgemeine Leserechte, Nachweisung, rollenbezogene Übersichten und
-Zweitsichtungsarchive sowie Kategorien- und Administrationsrechte werden
-nicht erweitert. Nur eine ausdrücklich gewählte operative Schreibstufe erhält
-die dafür nötige Workflow-Objektsicht. Eine zurückgewiesene Ausgangsmeldung
-kann funktionsübergreifend übernommen werden; der Nachweis muss ursprüngliche
-und neue Verantwortlichkeit getrennt bewahren.
+Append-only-/Nachweisregeln, Audit und Aufbewahrung bleiben verbindlich.
+Menü-, Lese- und Schreibrechte folgen der festen Kontofunktion und den
+explizit vergebenen globalen Zusatzfunktionen. Ein fachfremdes Konto bleibt
+gesperrt; Zusatzfunktionen erteilen keine Administrationsrechte.
 
-Eine Dienst- oder Zugangsschicht ist keine fachliche Voraussetzung für
-operative Eingaben. Ist ein Konto keiner Gruppe zugeordnet, bleibt sein Zugang
+Eine formale Dienstschicht ist in **Streng** zwingende fachliche Voraussetzung;
+in **Locker** ist sie nicht erforderlich. Optionale Zugangsschichten werden
+nur in **Locker** ausgewertet. Ist ein Konto keiner Gruppe zugeordnet, bleibt sein Zugang
 erlaubt. Bei mehreren Zuordnungen genügt für den Kontozugang eine aktive
 Gruppe. Das Aktivieren meldet niemanden an; das Deaktivieren widerruft
 Sitzungen der betroffenen Konten, sofern keine andere aktive Gruppe verbleibt.
 Eine Zugangsschicht ändert niemals Funktion, Rolle oder Schreibrecht. Die
 manuelle Kontosperre bleibt ein unabhängiger, vorrangiger Mechanismus.
 
-Historische formale Dienstschichten, Besetzungen und Übergaben werden nicht
-gelöscht. Im Abschnitt **Dienstorganisation** des Exports erscheinen sie
-getrennt als historischer Legacy-Nachweis. Derselbe Abschnitt enthält die
-optionalen Zugangsschichten samt aktuellen und entfernten Kontenzuordnungen.
-Die Altwerte steuern weder heutige Berechtigungen noch den Einsatzabschluss.
+Formale Dienstschichten, Besetzungen und Übergaben werden nicht gelöscht. Im
+Modus **Streng** steuern aktive angenommene Besetzungen die operativen Rechte;
+im Abschnitt **Dienstorganisation** bleiben aktuelle und historische Werte
+exportierbar. Derselbe Abschnitt enthält getrennt die optionalen lockeren
+Zugangsschichten samt aktuellen und entfernten Kontenzuordnungen. In
+**Streng** blockieren offene Dienstschichten, offene Besetzungen und offene
+Übergabeanforderungen den formalen Einsatzabschluss. Ordnungsgemäß beendete
+historische Dienstorganisation bleibt unveränderlich exportierbar, autorisiert
+aber nicht mehr und blockiert allein keinen Abschluss. In **Locker** sind
+formale Dienstschichten weder Voraussetzung noch Abschlussblocker.
 
 Eine ETB-Anlage wird optional beim Erfassen des ETB-Eintrags aus den
 finalisierten, noch unbenutzten Anhängen des aktiven Einsatzes ausgewählt.
@@ -585,32 +601,37 @@ Einträge oder rückwärts der Bezugspfad anzeigen. Die Auswertungstiefe ist auf
 **Druckansicht öffnen** erzeugt eine auf diesen Referenznachweis beschränkte
 Ansicht.
 
-Neue ETB-/TTB-Zeilen dürfen die Legacy-Felder für aktive Dienstschicht und
-schreibende Dienstbesetzung `NULL` lassen. Sie werden nicht mit einer
-Zugangsschicht befüllt; historische belegte Provenienz bleibt unverändert.
-Im strengen Modus schreiben ETB nur Konten mit `ETB/Stab` oder `S2/Stab` und
-TTB nur Konten mit der festen Funktion `Fernmelder`. Im lockeren Modus entfällt
-ausschließlich diese Funktions-/Rollenbedingung. Anwendung und Datenbank prüfen
-in beiden Modi das konkrete aktive und ungesperrte Konto sowie den aktiven
-Einsatz, aber keine aktive Schicht.
-Die Aktivierung eines neuen, noch leeren Einsatzes eröffnet ETB und TTB
-atomar mit je einer Systemzeile; beide Provenienzfelder bleiben dabei `NULL`.
+Neue manuelle ETB-/TTB-Zeilen speichern im strengen Modus aktive
+Dienstschicht und schreibende Dienstbesetzung. Im lockeren Modus dürfen diese
+Felder `NULL` bleiben; eine Zugangsschicht wird niemals eingetragen.
+ETB erfordert `ETB/Stab` oder `S2/Stab`, TTB `Fernmelder`: in `STRICT` aus der
+ausgewählten Dienstbesetzung, in `LOOSE` aus der festen oder einer expliziten
+Zusatzfunktion. Anwendung und Datenbank prüfen dieselbe Grenze.
+Bei einem neuen, noch leeren Einsatz eröffnet eStab ETB und TTB
+im Modus `STRICT` erst bei Aktivierung der ersten formalen Dienstschicht
+atomar mit je einer schichtbezogenen Systemzeile. Im Modus `LOOSE` kann dies
+bereits bei der Einsatzaktivierung ohne Schichtbezug erfolgen. Bei einem
+bereits aktiven, noch ungeöffneten `STRICT`-Einsatz, der weiterhin keinerlei
+operative oder formale Eintragung besitzt, erzeugt auch der bestätigte Wechsel
+nach `LOOSE` beide schichtfreien Eröffnungszeilen atomar. Die
+Systemzeilen dürfen ohne persönliche Schreiberbesetzung bleiben.
 Enthält ein übernommener Alt-Einsatz bereits Buchzeilen, wird seine belegte
 Reihenfolge nicht durch eine nachträgliche Eröffnungszeile verändert.
 
 Der Dossierexport weist ETB-Anlagennummer und Ablagekennzeichen im
 Fb-Fü-2-Abzug beziehungsweise Anlagenverzeichnis aus. Für ETB/TBB wählt die
-Administration das Gesamtbuch oder bei historischem Bestand eine frühere
-formale Dienstschicht. Dieser Legacy-Filter umfasst keine Zugangsschicht und
-keine neue Zeile mit `NULL`-Provenienz. Er filtert nur diese beiden
+Administration das Gesamtbuch oder bei belegter Provenienz eine aktuelle
+beziehungsweise historische formale Dienstschicht. Dieser Dienstschichtfilter
+umfasst keine Zugangsschicht und keine Zeile mit `NULL`-Provenienz. Er filtert nur diese beiden
 Buchabschnitte; Nachrichtenvordrucke, Anhänge und alle
 weiteren ausgewählten Abschnitte bleiben einsatzweit. Deckblatt und
 `pdf_export`-Audit dokumentieren den aufgelösten Umfang.
 
-Ein formaler Einsatzabschluss verlangt weder eine frühere Schichtaktivierung
-noch schichtbezogene Eröffnungszeilen. Offene historische formale Schichten
-blockieren ihn ebenfalls nicht; fachlich offene Nachrichten, Melderaufträge
-und andere echte Abschlussblocker bleiben wirksam.
+Ein formaler Einsatzabschluss verlangt in `STRICT` eröffnete Bücher und eine
+ordnungsgemäß beendete formale Dienstorganisation. In `LOOSE` sind eine
+frühere Schichtaktivierung und schichtbezogene Eröffnungszeilen nicht
+erforderlich. Fachlich offene Nachrichten, Melderaufträge und andere echte
+Abschlussblocker bleiben in beiden Modi wirksam.
 
 Ein Einsatzwechsel gilt systemweit für alle angemeldeten Browser. Er darf nur
 koordiniert erfolgen, wenn keine ungespeicherten Fachvorgänge offen sind.
@@ -704,14 +725,18 @@ weiterhin ausschließlich über `ESTAB_ADMIN_USER` und die
 [Benutzerverwaltung](BENUTZERVERWALTUNG.md).
 
 Den einsatzbezogenen Berechtigungsmodus verwaltet ausschließlich
-`/4fadm/incidents.php`. Vor einer Umstellung auf **Locker** müssen
-Einsatzleitung und örtlich Verantwortliche festlegen, wer die dadurch
-funktionsübergreifend möglichen Schreibschritte übernehmen darf. Die
-Warnungsbestätigung ist keine fachliche Freigabe: Einsatz-ID, Anlass, Beginn
-und Ende der Lockerung sowie die verantwortliche Entscheidung gehören in das
-örtliche Betriebsprotokoll. Nach Wegfall des Anlasses wird derselbe offene
-Einsatz wieder auf **Streng** gesetzt und die sichtbare Statusanzeige geprüft.
-Ein abgeschlossenes Einsatzarchiv lässt sich nicht nachträglich umstellen.
+`/4fadm/incidents.php`. Vor jeder operativen oder formalen Eintragung müssen
+Einsatzleitung und örtlich Verantwortliche festlegen, welcher Modus gilt,
+welche Konten in **Locker** welche Zusatzfunktionen benötigen und wie optionale
+Zugangsschichten gesteuert werden. Die Warnungsbestätigung ist keine fachliche
+Freigabe: Einsatz-ID, Anlass, gewählter Modus und verantwortliche Entscheidung
+gehören in das örtliche Betriebsprotokoll. Nach der ersten operativen oder
+formalen Eintragung bleibt der Modus dieses Einsatzes unveränderlich. Erfordert
+eine spätere organisatorische Entscheidung einen anderen Modus, wird der
+Übergang auf einen getrennten, im gewünschten Modus vorbereiteten Einsatz
+koordiniert; ein bereits betriebener `LOOSE`-Einsatz wird nicht auf `STRICT`
+zurückgestellt. Ein abgeschlossenes Einsatzarchiv lässt sich ebenfalls nicht
+nachträglich umstellen.
 
 ### Kennwortrichtlinie für Funktionskonten
 
@@ -773,7 +798,8 @@ Die Aktivitätsübersicht wertet ausschließlich echte Browserinteraktion aus.
 Ohne Zeiger-, Tastatur-, Formular-, Rad- oder Touchinteraktion beziehungsweise
 bewusste Rückkehr in das sichtbare Fenster wechselt ein angemeldeter Benutzer
 nach 15 Minuten zu „Inaktiv“. Das ist zunächst nur ein Präsenzzustand: Die
-Fachsitzung und die feste Kontofunktion bleiben gültig.
+Fachsitzung wird allein dadurch nicht widerrufen; fachliche Rechte werden bei
+jedem Request weiterhin aus dem aktuellen Einsatzmodus neu geprüft.
 
 Nach 12 Stunden ohne echte Interaktion widerruft die Anwendung die
 Fachsitzung serverseitig. Der nächste geschützte Seitenaufruf führt zum
@@ -896,8 +922,8 @@ Meldungsübersicht, Vordrucke, Einsatztagebuch, Technisches Betriebsbuch,
 Nachweisung und BOS-Info. Administration und Handbuch sind zwei getrennte
 Dienste. Das aktuelle, öffentliche und ohne Funktionsanmeldung erreichbare
 Web-Handbuch liegt unter `/handbuch/`; das historische PDF von 2011 gehört
-nicht zum Laufzeitbestand. Nach der Anmeldung zeigt die Navigation je nach
-fester Kontofunktion neun oder zehn Bereichs- und Dienstlinks;
+nicht zum Laufzeitbestand. Nach der Anmeldung filtert die Navigation die
+Bereichs- und Dienstlinks nach der modeabhängig wirksamen Funktionsmenge;
 Meldungsübersicht ist ausschließlich S2, Nachweisung ausschließlich LdF und
 Fernmelder zugeordnet. Der aktuelle Bereich ist hervorgehoben; alle internen Ziele
 ersetzen die aktuelle Ansicht und erzeugen keine zusätzlichen Tabs. Der
@@ -906,8 +932,8 @@ Anwendungs-`iframe`-Elemente: die vollhohe linke `vorgaben`-Sidebar und den
 rechten `mainframe`. Eine vom Benutzer bewusst aufgeklappte PDF-Anlage kann
 innerhalb des Inhaltsdokuments zusätzlich in einer isolierten
 Vorschau-Einbettung erscheinen. In der Sidebar folgen auf die Statuskarte die Sitzungsidentität
-mit Logout, die zur angemeldeten Rolle passenden Textbuttons für Fachaktionen
-und danach die für die feste Kontofunktion sichtbaren Bereichs- und Dienstlinks.
+mit Logout, die zu den wirksamen Funktionen passenden Textbuttons für Fachaktionen
+und danach die für diese Funktionsmenge sichtbaren Bereichs- und Dienstlinks.
 Die frühere aufklappbare Auswahl „Bereich wechseln“ und ihre kleine eigene
 Scrollfläche entfallen. Bei geringer Höhe scrollt ausschließlich das gesamte
 Sidebar-Dokument, sodass Status, Navigation und Aktionen in einer durchgehenden
@@ -965,8 +991,10 @@ Browserkontext. Die Anmeldekarte zeigt das Ziel und hat mit „Anmeldung
 abbrechen · Zur Übersicht“ stets einen Top-Level-Ausgang; weder ein
 eingebettetes Login noch ein direkt geöffneter Tab erfordern eine manuelle
 Änderung der Browseradresse. Nach erfolgreicher Anmeldung wird das vorgemerkte
-und für die feste Kontofunktion zulässige Ziel direkt geöffnet; eine
-zusätzliche Hutauswahl entfällt.
+und für die wirksame Funktion zulässige Ziel geöffnet. In `STRICT` ist vor
+operativer Arbeit die angenommene Besetzung der aktiven Dienstschicht
+auszuwählen; in `LOOSE` gelten feste und zusätzliche Kontofunktionen ohne
+Hutauswahl.
 Rollen-, Objekt-, CSRF- und Subresource-Anfragen werden nicht umgelenkt und
 behalten ihre 403-Grenzen. Das Statusfragment liefert bei fehlender oder
 abgelaufener Fachsitzung stattdessen HTTP 401, damit die Sidebar den
@@ -1154,13 +1182,15 @@ und schreiben nur nach POST plus Session-CSRF:
   letzte tatsächlich auf Papier verwendete Nummer eintragen. Der Zielwert muss
   strikt größer als der angezeigte Höchstwert sein. Gemeinsame und getrennte
   Nachweisung werden getrennt behandelt; ein Absenken oder Teilupdate ist
-  ausgeschlossen. Ein aktiver Einsatz ist Voraussetzung, eine aktive Schicht
+  ausgeschlossen. Ein aktiver Einsatz ist immer Voraussetzung. In `STRICT`
+  ist zusätzlich eine aktive formale Dienstschicht erforderlich; in `LOOSE`
   nicht. Die Maßnahme
   erzeugt keine fingierte Fachnachricht und keine erfundenen
   Bearbeitungszeichen des Fernmelders, von LdF oder Si. Stattdessen schreibt sie
   den Zielwert als dediziertes,
-  unveränderliches `message_counter_repaired`-Ereignis mit Objekttyp `EINSATZ`
-  in die verkettete einsatzbezogene Betriebsspur sowie in `nv_protokoll`.
+  unveränderliches `message_counter_repaired`-Ereignis in die verkettete
+  einsatzbezogene Betriebsspur sowie in `nv_protokoll`: in `STRICT` mit
+  Objekttyp `DIENSTSCHICHT`, in `LOOSE` mit Objekttyp `EINSATZ`.
   Zugangsschichtmutationen verwenden dort `ZUGANGSSCHICHT`. Die nächste echte
   Nachricht erhält die Nummer nach dem größeren Wert aus Fachbestand und
   diesem Wiederanlaufnachweis.

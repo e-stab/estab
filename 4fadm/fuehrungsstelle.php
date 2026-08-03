@@ -2,6 +2,42 @@
 
 declare(strict_types=1);
 
+/**
+ * Route the Schicht administration from the authoritative active-incident
+ * permission mode. The selected policy snapshot is retained so every
+ * transactional mutation rejects an incident or mode change that happened
+ * after routing.
+ */
+
+require_once __DIR__ . '/../4fcfg/dbcfg.inc.php';
+require_once __DIR__ . '/../app/admin_operations.php';
+
+estab_admin_require_http_auth($_SERVER);
+
+$shiftAdminMode = ESTAB_PERMISSION_MODE_STRICT;
+$shiftAdminConnection = null;
+try {
+    $shiftAdminConnection = estab_auth_connect($conf_4f_db);
+    $shiftAdminStatus = estab_incident_status($shiftAdminConnection);
+    if (($shiftAdminStatus['active_einsatz_id'] ?? null) !== null) {
+        estab_permission_context_set_from_incident($shiftAdminStatus);
+        $shiftAdminMode = estab_permission_mode(
+            $shiftAdminStatus['estab_permission_mode'] ?? null
+        );
+    }
+} catch (Throwable $exception) {
+    error_log(
+        'eStab Schichtadministration: Modus konnte nicht ermittelt werden: '
+        . $exception->getMessage()
+    );
+} finally {
+    if ($shiftAdminConnection instanceof mysqli) {
+        estab_auth_close($shiftAdminConnection);
+    }
+}
+
+if ($shiftAdminMode === ESTAB_PERMISSION_MODE_LOOSE) {
+
 session_start();
 
 require_once __DIR__ . '/../4fcfg/dbcfg.inc.php';
@@ -67,9 +103,32 @@ if ($requestMethod === 'POST') {
         estab_csrf_require_post($_SERVER, $_POST);
         $actionValue = $_POST['admin_action'] ?? null;
         $action = is_string($actionValue) ? $actionValue : '';
+        if (in_array(
+            $action,
+            [
+                'create_duty_shift',
+                'assign_duty_function',
+                'activate_duty_shift',
+                'handover_duty_shift',
+                'cancel_duty_handover',
+                'close_duty_shift',
+            ],
+            true
+        )) {
+            throw new EstabShiftAccessConflictException(
+                'Der Einsatz wird inzwischen im lockeren '
+                . 'Berechtigungsmodus geführt. Bitte laden Sie die Seite '
+                . 'neu und verwenden Sie die optionale Zugangsschichtplanung.'
+            );
+        }
         if (!in_array(
             $action,
-            ['create_shift', 'add_member', 'remove_member', 'set_enabled'],
+            [
+                'create_access_shift',
+                'add_access_member',
+                'remove_access_member',
+                'set_access_enabled',
+            ],
             true
         )) {
             throw new EstabShiftAccessInputException(
@@ -85,7 +144,7 @@ if ($requestMethod === 'POST') {
         );
         $protocolTable = $conf_4f_tbl['protokoll'];
 
-        if ($action === 'create_shift') {
+        if ($action === 'create_access_shift') {
             estab_shift_access_create(
                 $connection,
                 $incidentId,
@@ -102,7 +161,7 @@ if ($requestMethod === 'POST') {
             $_POST['zugangsschicht_id'] ?? null,
             'Zugangsschicht'
         );
-        if ($action === 'add_member') {
+        if ($action === 'add_access_member') {
             if (($_POST['confirm_assignment'] ?? null) !== '1') {
                 throw new EstabShiftAccessInputException(
                     'Bitte bestätigen Sie die Schichtzuordnung.'
@@ -122,7 +181,7 @@ if ($requestMethod === 'POST') {
                     : 'member_added'
             );
         }
-        if ($action === 'remove_member') {
+        if ($action === 'remove_access_member') {
             $result = estab_shift_access_remove_member(
                 $connection,
                 $incidentId,
@@ -179,6 +238,7 @@ if ($requestMethod === 'POST') {
     } catch (
         EstabShiftAccessConflictException
         | EstabShiftAccessBusyException
+        | EstabIncidentConflictException
         | EstabIncidentConfigurationException
         | EstabNoActiveIncidentException $exception
     ) {
@@ -281,14 +341,14 @@ foreach ($shifts as $shift) {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>eStab Optionale Schichten</title>
+  <title>eStab Optionale Zugangsschichten</title>
   <?= estab_session_ui_stylesheet() ?>
 </head>
 <body class="estab-tool-page">
 <main class="estab-tool-main estab-tool-main-wide" data-estab-shift-admin>
   <header class="estab-tool-hero">
-    <p class="estab-tool-eyebrow">Administration · Zugangssteuerung</p>
-    <h1>Optionale Schichten</h1>
+    <p class="estab-tool-eyebrow">Administration · Berechtigungsmodus Locker</p>
+    <h1>Optionale Zugangsschichten</h1>
     <p>Fassen Sie Konten bei Bedarf zu Schichten zusammen und schalten Sie
       deren Anmeldung gemeinsam frei oder aus. Ohne Zuordnung behält ein
       Konto seinen individuellen Zugang.</p>
@@ -296,10 +356,15 @@ foreach ($shifts as $shift) {
 
   <aside class="estab-tool-notice" aria-label="Geltungsbereich">
     <strong>Schichten steuern ausschließlich den Zugang.</strong>
-    <p>Fachrechte stammen immer aus der festen Funktion und Rolle des Kontos.
+    <p>Fachrechte stammen aus der festen Primärfunktion des Kontos und – nur
+      im lockeren Modus – aus ausdrücklich in der Benutzerverwaltung
+      vergebenen persönlichen Zusatzfunktionen.
       Für operative Eingaben ist ein aktiver Einsatz zwingend; eine aktive
       Schicht ist dafür niemals erforderlich. Eine individuelle Kontosperre
       hat unabhängig von jeder Schicht Vorrang.</p>
+    <a class="estab-button" href="incidents.php">
+      Berechtigungsmodus des Einsatzes verwalten
+    </a>
   </aside>
 
   <?php if ($error !== null): ?>
@@ -359,7 +424,8 @@ foreach ($shifts as $shift) {
       <form class="estab-tool-form" method="post"
         action="fuehrungsstelle.php">
         <?= estab_csrf_field() ?>
-        <input type="hidden" name="admin_action" value="create_shift">
+        <input type="hidden" name="admin_action"
+          value="create_access_shift">
         <div class="estab-tool-form-grid">
           <div class="estab-tool-field estab-tool-field-wide">
             <label for="shift-name">Bezeichnung</label>
@@ -507,7 +573,7 @@ foreach ($shifts as $shift) {
                 <form method="post" action="fuehrungsstelle.php">
                   <?= estab_csrf_field() ?>
                   <input type="hidden" name="admin_action"
-                    value="set_enabled">
+                    value="set_access_enabled">
                   <input type="hidden" name="zugangsschicht_id"
                     value="<?= $shiftId ?>">
                   <input type="hidden" name="expected_enabled" value="1">
@@ -523,7 +589,8 @@ foreach ($shifts as $shift) {
             <?php else: ?>
               <form method="post" action="fuehrungsstelle.php">
                 <?= estab_csrf_field() ?>
-                <input type="hidden" name="admin_action" value="set_enabled">
+                <input type="hidden" name="admin_action"
+                  value="set_access_enabled">
                 <input type="hidden" name="zugangsschicht_id"
                   value="<?= $shiftId ?>">
                 <input type="hidden" name="expected_enabled" value="0">
@@ -633,7 +700,7 @@ foreach ($shifts as $shift) {
                         <form method="post" action="fuehrungsstelle.php">
                           <?= estab_csrf_field() ?>
                           <input type="hidden" name="admin_action"
-                            value="remove_member">
+                            value="remove_access_member">
                           <input type="hidden" name="zugangsschicht_id"
                             value="<?= $shiftId ?>">
                           <input type="hidden" name="benutzer_kuerzel"
@@ -665,7 +732,8 @@ foreach ($shifts as $shift) {
             <form class="estab-tool-form" method="post"
               action="fuehrungsstelle.php">
               <?= estab_csrf_field() ?>
-              <input type="hidden" name="admin_action" value="add_member">
+              <input type="hidden" name="admin_action"
+                value="add_access_member">
               <input type="hidden" name="zugangsschicht_id"
                 value="<?= $shiftId ?>">
               <div class="estab-tool-field">
@@ -817,6 +885,834 @@ foreach ($shifts as $shift) {
   <footer class="estab-tool-footer">
     <a href="admin.php">Zurück zur Administration</a>
     <span>Zuordnungen und Statusänderungen werden einsatzbezogen protokolliert.</span>
+  </footer>
+</main>
+</body>
+</html>
+<?php
+    return;
+}
+
+session_start();
+
+require_once __DIR__ . '/../4fcfg/dbcfg.inc.php';
+require_once __DIR__ . '/../4fcfg/config.inc.php';
+require_once __DIR__ . '/../app/admin_operations.php';
+require_once __DIR__ . '/../app/csrf.php';
+require_once __DIR__ . '/../app/dv_operations.php';
+require_once __DIR__ . '/../app/session_ui.php';
+
+estab_admin_require_http_auth($_SERVER);
+estab_session_ui_start($_SESSION);
+$handoverIdentity = estab_auth_session_identity($_SESSION);
+
+header('Content-Type: text/html; charset=UTF-8');
+header('Cache-Control: private, no-store, max-age=0');
+header('X-Robots-Tag: noindex, nofollow');
+
+function dv_admin_redirect(string $result): never
+{
+    header(
+        'Location: fuehrungsstelle.php?result=' . rawurlencode($result),
+        true,
+        303
+    );
+    exit;
+}
+
+$requestMethod = $_SERVER['REQUEST_METHOD'] ?? '';
+$error = null;
+$flash = null;
+$connection = null;
+
+if ($requestMethod === 'POST') {
+    try {
+        estab_csrf_require_post($_SERVER, $_POST);
+        $action = $_POST['admin_action'] ?? null;
+        if (!is_string($action)) {
+            throw new EstabDvInputException('Unbekannte administrative Aktion.');
+        }
+        if (in_array(
+            $action,
+            [
+                'create_access_shift',
+                'add_access_member',
+                'remove_access_member',
+                'set_access_enabled',
+            ],
+            true
+        )) {
+            throw new EstabDvConflictException(
+                'Der Einsatz wird inzwischen im strengen '
+                . 'Berechtigungsmodus geführt. Bitte laden Sie die Seite '
+                . 'neu und verwenden Sie die formale Dienstschichtplanung.'
+            );
+        }
+        $connection = estab_auth_connect($conf_4f_db);
+        $incident = estab_incident_require_active($connection);
+        $incidentId = (int) $incident['active_einsatz_id'];
+        $actor = estab_dv_actor($_SERVER['REMOTE_USER'] ?? 'admin');
+        if ($action === 'create_duty_shift') {
+            estab_dv_create_shift(
+                $connection,
+                $incidentId,
+                $_POST['bezeichnung'] ?? null,
+                $_POST['vorgaenger_id'] ?? null,
+                $actor,
+                $conf_4f_tbl['protokoll']
+            );
+            dv_admin_redirect('shift_created');
+        }
+        if ($action === 'assign_duty_function') {
+            $policyLock = estab_assignment_acquire_policy_lock(
+                $connection,
+                (string) $conf_4f_db['datenbank'],
+                $conf_4f_tbl['empfmtx']
+            );
+            try {
+                $assignedHat = estab_dv_assign_hat(
+                    $connection,
+                    $incidentId,
+                    estab_dv_positive_id(
+                        $_POST['dienstschicht_id'] ?? null,
+                        'Dienstschicht'
+                    ),
+                    $_POST['benutzer_kuerzel'] ?? null,
+                    $_POST['funktion'] ?? null,
+                    $actor,
+                    $conf_4f_tbl['empfmtx'],
+                    $conf_4f_tbl['protokoll']
+                );
+            } finally {
+                estab_assignment_release_policy_lock($connection, $policyLock);
+            }
+            dv_admin_redirect(
+                ($assignedHat['active_shift_extension'] ?? false) === true
+                    ? 'hat_extension_assigned'
+                    : 'hat_assigned'
+            );
+        }
+        if ($action === 'activate_duty_shift') {
+            estab_dv_activate_initial_shift(
+                $connection,
+                $incidentId,
+                estab_dv_positive_id(
+                    $_POST['dienstschicht_id'] ?? null,
+                    'Dienstschicht'
+                ),
+                $actor,
+                $conf_4f_tbl['protokoll']
+            );
+            dv_admin_redirect('shift_activated');
+        }
+        if ($action === 'handover_duty_shift') {
+            if (
+                !is_array($handoverIdentity)
+                || !isset($handoverIdentity['duty_assignment_id'])
+            ) {
+                throw new EstabDvPermissionException(
+                    'Melden Sie sich zusätzlich persönlich an und wählen Sie '
+                    . 'eine angenommene Funktion der aktiven Schicht, bevor '
+                    . 'Sie die Übergabe anfordern.'
+                );
+            }
+            estab_dv_initiate_handover_shift(
+                $connection,
+                $incidentId,
+                estab_dv_positive_id(
+                    $_POST['von_dienstschicht_id'] ?? null,
+                    'Abgebende Schicht'
+                ),
+                estab_dv_positive_id(
+                    $_POST['an_dienstschicht_id'] ?? null,
+                    'Übernehmende Schicht'
+                ),
+                $_POST['zusammenfassung'] ?? null,
+                (int) $handoverIdentity['duty_assignment_id'],
+                $handoverIdentity,
+                $actor,
+                $conf_4f_tbl['protokoll']
+            );
+            dv_admin_redirect('shift_handover_initiated');
+        }
+        if ($action === 'cancel_duty_handover') {
+            estab_dv_cancel_handover_request(
+                $connection,
+                $incidentId,
+                estab_dv_positive_id(
+                    $_POST['dienstuebergabe_anfrage_id'] ?? null,
+                    'Übergabeanforderung'
+                ),
+                $_POST['stornierungsgrund'] ?? null,
+                $actor,
+                $conf_4f_tbl['protokoll']
+            );
+            dv_admin_redirect('shift_handover_cancelled');
+        }
+        if ($action === 'close_duty_shift') {
+            estab_dv_close_shift(
+                $connection,
+                $incidentId,
+                estab_dv_positive_id(
+                    $_POST['dienstschicht_id'] ?? null,
+                    'Dienstschicht'
+                ),
+                $actor,
+                $conf_4f_tbl['protokoll'],
+                (string) $conf_4f['ablage_dir']
+            );
+            dv_admin_redirect('shift_closed');
+        }
+        throw new EstabDvInputException('Unbekannte administrative Aktion.');
+    } catch (EstabCsrfException) {
+        http_response_code(403);
+        $error = 'Die Formularsitzung ist ungültig oder abgelaufen. '
+            . 'Bitte laden Sie die Seite neu.';
+    } catch (EstabDvInputException $exception) {
+        http_response_code(422);
+        $error = $exception->getMessage();
+    } catch (EstabDvPermissionException $exception) {
+        http_response_code(403);
+        $error = $exception->getMessage();
+    } catch (
+        EstabDvConflictException
+        | EstabAssignmentBusyException
+        | EstabIncidentConflictException
+        | EstabIncidentConfigurationException
+        | EstabNoActiveIncidentException $exception
+    ) {
+        http_response_code(409);
+        $error = $exception->getMessage();
+    } catch (Throwable $exception) {
+        error_log('eStab Führungsstellen-Administration: ' . $exception->getMessage());
+        http_response_code(500);
+        $error = 'Die Führungsstellenänderung konnte nicht gespeichert werden.';
+    } finally {
+        if ($connection instanceof mysqli) {
+            estab_auth_close($connection);
+        }
+    }
+} elseif ($requestMethod !== 'GET') {
+    header('Allow: GET, POST');
+    http_response_code(405);
+    $error = 'Diese Seite unterstützt nur GET und POST.';
+}
+
+$status = null;
+$shifts = [];
+$users = [];
+$functionRoles = [];
+$blockers = null;
+$finalShiftPreflight = null;
+$handoverRequests = [];
+try {
+    $connection = estab_auth_connect($conf_4f_db);
+    $status = estab_incident_status($connection);
+    if ($status['active_einsatz_id'] !== null) {
+        $incidentId = (int) $status['active_einsatz_id'];
+        $shifts = estab_dv_shift_list($connection, $incidentId);
+        $handoverRequests = estab_dv_handover_requests(
+            $connection,
+            $incidentId
+        );
+        $users = estab_auth_fetch_users($connection, $conf_4f_tbl['benutzer']);
+        $policyLock = estab_assignment_acquire_policy_lock(
+            $connection,
+            (string) $conf_4f_db['datenbank'],
+            $conf_4f_tbl['empfmtx']
+        );
+        try {
+            $functionRoles = estab_dv_function_roles(
+                $connection,
+                $conf_4f_tbl['empfmtx']
+            );
+        } finally {
+            estab_assignment_release_policy_lock($connection, $policyLock);
+        }
+        $blockers = estab_dv_incident_closure_blockers(
+            $connection,
+            $incidentId
+        );
+        foreach ($shifts as $shift) {
+            if (($shift['status'] ?? null) === 'AKTIV') {
+                $finalShiftPreflight = estab_incident_close_preflight(
+                    $connection,
+                    $incidentId,
+                    (string) $conf_4f['ablage_dir'],
+                    (int) $shift['dienstschicht_id']
+                );
+                break;
+            }
+        }
+    }
+} catch (Throwable $exception) {
+    error_log('eStab Führungsstellenübersicht: ' . $exception->getMessage());
+    if ($error === null) {
+        http_response_code(503);
+        $error = 'Die Führungsstellenübersicht ist derzeit nicht verfügbar.';
+    }
+} finally {
+    if ($connection instanceof mysqli) {
+        estab_auth_close($connection);
+    }
+}
+
+$flashMessages = [
+    'shift_created' => 'Die geplante Dienstschicht wurde angelegt.',
+    'hat_assigned' => 'Die Funktionsbesetzung wurde verbindlich zugewiesen.',
+    'hat_extension_assigned' =>
+        'Die Ergänzung wurde zugewiesen. Sie wird erst mit der persönlichen '
+        . 'Annahme wirksam und dann automatisch im ETB nachgewiesen.',
+    'shift_activated' => 'Die erste Dienstschicht ist jetzt aktiv.',
+    'shift_handover_initiated' =>
+        'Die übergebende Person hat die Übergabe angefordert. Eine persönlich '
+        . 'angemeldete Person der Nachfolgeschicht muss sie jetzt bestätigen.',
+    'shift_handover_cancelled' =>
+        'Die unbestätigte Übergabeanforderung wurde mit Begründung '
+        . 'revisionssicher storniert.',
+    'shift_closed' => 'Die Dienstschicht wurde geschlossen.',
+];
+$resultValue = $_GET['result'] ?? null;
+if (is_string($resultValue) && isset($flashMessages[$resultValue])) {
+    $flash = $flashMessages[$resultValue];
+}
+$activeShift = null;
+$plannedShifts = [];
+$hasActivationHistory = false;
+foreach ($shifts as $shift) {
+    if (($shift['aktiviert_am'] ?? null) !== null) {
+        $hasActivationHistory = true;
+    }
+    if (($shift['status'] ?? null) === 'AKTIV') {
+        $activeShift = $shift;
+    } elseif (($shift['status'] ?? null) === 'GEPLANT') {
+        $plannedShifts[] = $shift;
+    }
+}
+$hasOpenHandover = false;
+foreach ($handoverRequests as $handoverRequest) {
+    if (($handoverRequest['status'] ?? null) === 'INITIIERT') {
+        $hasOpenHandover = true;
+        break;
+    }
+}
+
+?><!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>eStab Führungsstellenbetrieb</title>
+  <?= estab_session_ui_stylesheet() ?>
+</head>
+<body class="estab-tool-page">
+<main class="estab-tool-main" data-estab-dv-admin>
+  <header class="estab-tool-hero">
+    <p class="estab-tool-eyebrow">Administration · Berechtigungsmodus Streng</p>
+    <h1>Führungsstelle und Dienstschichten</h1>
+    <p>Hier werden Schichten vorbereitet, Funktionen echten Konten
+      zugewiesen und Übergaben revisionssicher dokumentiert. Eine Person darf
+      mehrere getrennte Funktionen übernehmen; jede Funktion muss sie selbst
+      in der eStab-Oberfläche annehmen.</p>
+  </header>
+
+  <aside class="estab-tool-notice" aria-label="Berechtigungsmodus">
+    <strong>Formaler Dienstbetrieb ist aktiv.</strong>
+    <p>Operative Rechte entstehen ausschließlich durch eine persönlich
+      angenommene Funktion der aktiven Dienstschicht. Hier planen Sie
+      Dienstschichten, besetzen Funktionen und dokumentieren Übergaben.</p>
+    <a class="estab-button" href="incidents.php">
+      Berechtigungsmodus des Einsatzes verwalten
+    </a>
+  </aside>
+
+  <section class="estab-tool-status" aria-label="Unterstützter Betriebsmodus">
+    <strong>Unterstützter Betriebsmodus: Führungsstelle mit eingerichteter
+      Fernmeldebetriebsstelle.</strong>
+    <span>Deshalb sind LdF und Fernmelder Pflichtbesetzungen und eStab führt je
+      Einsatz genau ein TBB. Führungsstellen ohne eigene
+      Fernmeldebetriebsstelle (reiner ETB-Betrieb) gehören derzeit nicht zum
+      unterstützten Produktumfang.</span>
+  </section>
+
+  <?php if ($error !== null): ?>
+    <p class="estab-tool-feedback estab-tool-feedback-error" role="alert">
+      <?= estab_admin_html($error) ?>
+    </p>
+  <?php endif; ?>
+  <?php if ($flash !== null): ?>
+    <p class="estab-tool-feedback estab-tool-feedback-success" role="status">
+      <?= estab_admin_html($flash) ?>
+    </p>
+  <?php endif; ?>
+
+  <?php if (!is_array($status) || $status['active_einsatz_id'] === null): ?>
+    <section class="estab-tool-status estab-tool-status-danger" role="alert">
+      <strong>Kein Einsatz aktiv.</strong>
+      <span>Aktivieren Sie zuerst einen Einsatz; Dienstbesetzungen sind strikt
+        einsatzgebunden.</span>
+    </section>
+  <?php elseif (($status['fuehrungsstellenname'] ?? null) === null): ?>
+    <section class="estab-tool-status estab-tool-status-danger" role="alert">
+      <strong>Name der Führungsstelle fehlt.</strong>
+      <span>Ergänzen Sie zuerst den aktiven Einsatz. Dienstschichten und
+        operative Vorgänge bleiben bis dahin gesperrt.</span>
+      <a class="estab-button" href="incidents.php">
+        Führungsstellenname festlegen
+      </a>
+    </section>
+  <?php else: ?>
+    <section class="estab-tool-status estab-tool-status-active">
+      <div>
+        <span>Aktiver Einsatz</span>
+        <strong><?= estab_admin_html(
+            $status['kennung'] . ' · ' . $status['name']
+        ) ?></strong>
+      </div>
+      <div>
+        <span>Führungsstelle</span>
+        <strong><?= estab_admin_html(
+            $status['fuehrungsstellenname']
+        ) ?></strong>
+      </div>
+      <div>
+        <span>Dienstbetrieb</span>
+        <strong><?= $activeShift === null
+            ? 'Noch keine aktive Schicht'
+            : estab_admin_html(
+                '#' . $activeShift['nummer'] . ' · '
+                . $activeShift['bezeichnung']
+            ) ?></strong>
+      </div>
+    </section>
+
+    <?php foreach ($handoverRequests as $handoverRequest): ?>
+      <?php if (($handoverRequest['status'] ?? null) !== 'INITIIERT') {
+          continue;
+      } ?>
+      <section class="estab-tool-panel" aria-label="Offene Übergabeanforderung">
+        <header class="estab-tool-panel-heading">
+          <h2>Übergabe wartet auf persönliche Bestätigung</h2>
+          <p>Schicht #<?= (int) $handoverRequest['von_nummer'] ?> →
+            Schicht #<?= (int) $handoverRequest['an_nummer'] ?> · initiiert
+            von <?= estab_admin_html($handoverRequest['initiiert_von']) ?>
+            am <?= estab_admin_html($handoverRequest['initiiert_am']) ?></p>
+        </header>
+        <p><?= nl2br(estab_admin_html(
+            $handoverRequest['zusammenfassung']
+        )) ?></p>
+        <form class="estab-tool-form" method="post"
+          action="fuehrungsstelle.php">
+          <?= estab_csrf_field() ?>
+          <input type="hidden" name="admin_action"
+            value="cancel_duty_handover">
+          <input type="hidden" name="dienstuebergabe_anfrage_id"
+            value="<?= (int) $handoverRequest[
+                'dienstuebergabe_anfrage_id'
+            ] ?>">
+          <label>Stornierungsgrund
+            <textarea name="stornierungsgrund" maxlength="10000"
+              required></textarea>
+          </label>
+          <button class="estab-button estab-button-danger-outline"
+            type="submit">Fehlanforderung begründet stornieren</button>
+        </form>
+      </section>
+    <?php endforeach; ?>
+
+    <section class="estab-tool-panel">
+      <header class="estab-tool-panel-heading">
+        <h2>Schicht vorbereiten</h2>
+        <p>Die Pflichtfunktionen S2, Si, S6, LdF und Fernmelder müssen
+          mindestens
+          einmal zugewiesen und persönlich angenommen sein, bevor eine
+          Schicht aktiv werden kann. Mehrere Fernmelder-Besetzungen sind
+          ausdrücklich möglich.</p>
+      </header>
+      <form class="estab-tool-form" method="post" action="fuehrungsstelle.php">
+        <?= estab_csrf_field() ?>
+        <input type="hidden" name="admin_action"
+          value="create_duty_shift">
+        <label>Schichtbezeichnung
+          <input name="bezeichnung" maxlength="100"
+            placeholder="z. B. Tagschicht 30.07." required>
+        </label>
+        <label>Vorgängerschicht
+          <select name="vorgaenger_id">
+            <option value="">Erste Schicht / keine</option>
+            <?php foreach ($shifts as $shift): ?>
+              <?php if (in_array($shift['status'], ['AKTIV', 'GEPLANT'], true)): ?>
+                <option value="<?= (int) $shift['dienstschicht_id'] ?>">
+                  #<?= (int) $shift['nummer'] ?> ·
+                  <?= estab_admin_html($shift['bezeichnung']) ?> ·
+                  <?= estab_admin_html($shift['status']) ?>
+                </option>
+              <?php endif; ?>
+            <?php endforeach; ?>
+          </select>
+        </label>
+        <button class="estab-button estab-button-primary" type="submit">
+          Geplante Schicht anlegen
+        </button>
+      </form>
+    </section>
+
+    <?php foreach ($plannedShifts as $shift): ?>
+      <section class="estab-tool-panel">
+        <header class="estab-tool-panel-heading">
+          <h2>#<?= (int) $shift['nummer'] ?> ·
+            <?= estab_admin_html($shift['bezeichnung']) ?></h2>
+          <p>Geplant · Funktionsträger müssen ihre Zuweisung noch selbst
+            annehmen.</p>
+        </header>
+        <div class="estab-tool-table-wrap">
+          <table class="estab-tool-table">
+            <thead><tr>
+              <th>Funktion</th><th>Person</th><th>Status</th>
+            </tr></thead>
+            <tbody>
+            <?php foreach ($shift['besetzungen'] as $hat): ?>
+              <tr>
+                <td><?= estab_admin_html(
+                    estab_function_identity_display_name(
+                        (string) $hat['funktion'],
+                        (string) $hat['rolle']
+                    )
+                ) ?></td>
+                <td><?= estab_admin_html(
+                    $hat['benutzer'] . ' (' . $hat['benutzer_kuerzel'] . ')'
+                ) ?></td>
+                <td><?= estab_admin_html($hat['status']) ?></td>
+              </tr>
+            <?php endforeach; ?>
+            </tbody>
+          </table>
+        </div>
+        <form class="estab-tool-form" method="post"
+          action="fuehrungsstelle.php">
+          <?= estab_csrf_field() ?>
+          <input type="hidden" name="admin_action"
+            value="assign_duty_function">
+          <input type="hidden" name="dienstschicht_id"
+            value="<?= (int) $shift['dienstschicht_id'] ?>">
+          <p>Ein ungesperrtes Konto kann bereits für die kommende Schicht
+            eingeplant werden. Die Person muss sich erst zur persönlichen
+            Annahme anmelden. Die danach gespeicherte Annahme zählt auch nach
+            der Abmeldung; ein gesperrtes Konto zählt dagegen nie.</p>
+          <label>Benutzerkonto
+            <select name="benutzer_kuerzel" required>
+              <?php foreach ($users as $user): ?>
+                <?php
+                $userBlocked =
+                    (int) ($user['estab_gesperrt'] ?? 0) === 1;
+                $userPresence = estab_auth_presence_state($user);
+                ?>
+                <option value="<?= estab_admin_html($user['kuerzel']) ?>"
+                  <?= $userBlocked ? 'disabled' : '' ?>>
+                  <?= estab_admin_html(
+                      $user['benutzer'] . ' (' . $user['kuerzel'] . ') · '
+                      . (
+                          $userBlocked
+                              ? 'gesperrt'
+                              : (
+                                  $userPresence === 'online'
+                                      ? 'aktiv'
+                                      : (
+                                          $userPresence === 'inactive'
+                                              ? 'inaktiv (15+ Min.)'
+                                              : 'nicht angemeldet'
+                                      )
+                              )
+                      )
+                  ) ?>
+                </option>
+              <?php endforeach; ?>
+            </select>
+          </label>
+          <label>Zusätzliche Dienstfunktion
+            <select name="funktion" required>
+              <?php foreach ($functionRoles as $function => $role): ?>
+                <option value="<?= estab_admin_html($function) ?>">
+                  <?= estab_admin_html(
+                      estab_function_identity_display_name($function, $role)
+                  ) ?>
+                </option>
+              <?php endforeach; ?>
+            </select>
+          </label>
+          <button class="estab-button" type="submit">Funktion zuweisen</button>
+        </form>
+        <?php $missing = array_values(array_diff(
+            ESTAB_DV_REQUIRED_HATS,
+            array_map(
+                static fn (array $hat): string =>
+                    $hat['status'] === 'ANGENOMMEN'
+                        && (int) ($hat['benutzer_gesperrt'] ?? 1) === 0
+                    ? $hat['funktion']
+                    : '',
+                $shift['besetzungen']
+            )
+        )); ?>
+        <?php if ($missing === []): ?>
+          <?php if ($activeShift === null && !$hasActivationHistory): ?>
+            <form method="post" action="fuehrungsstelle.php">
+              <?= estab_csrf_field() ?>
+              <input type="hidden" name="admin_action"
+                value="activate_duty_shift">
+              <input type="hidden" name="dienstschicht_id"
+                value="<?= (int) $shift['dienstschicht_id'] ?>">
+              <button class="estab-button estab-button-primary" type="submit">
+                Als erste Schicht aktivieren
+              </button>
+            </form>
+          <?php elseif ($activeShift !== null
+              && (int) ($shift['vorgaenger_id'] ?? 0)
+              === (int) $activeShift['dienstschicht_id']): ?>
+            <form class="estab-tool-form" method="post"
+              action="fuehrungsstelle.php">
+              <?= estab_csrf_field() ?>
+              <input type="hidden" name="admin_action"
+                value="handover_duty_shift">
+              <input type="hidden" name="von_dienstschicht_id"
+                value="<?= (int) $activeShift['dienstschicht_id'] ?>">
+              <input type="hidden" name="an_dienstschicht_id"
+                value="<?= (int) $shift['dienstschicht_id'] ?>">
+              <label>Übergabezusammenfassung
+                <textarea name="zusammenfassung" maxlength="10000"
+                  required></textarea>
+              </label>
+              <?php if (is_array($handoverIdentity)
+                  && isset($handoverIdentity['duty_assignment_id'])): ?>
+                <p class="estab-tool-feedback">Persönlich übergebend:
+                  <strong><?= estab_admin_html(
+                      $handoverIdentity['benutzer'] . ' ['
+                      . $handoverIdentity['kuerzel'] . '] · '
+                      . $handoverIdentity['funktion'] . ' ('
+                      . $handoverIdentity['rolle'] . ')'
+                  ) ?></strong>. Die übernehmende Person bestätigt danach
+                  mit ihrer angenommenen Funktion.</p>
+              <?php else: ?>
+                <p class="estab-tool-feedback estab-tool-feedback-error">
+                  Vor der Anforderung muss die übergebende Person sich
+                  <a href="../4fach/fuehrungsstelle.php">persönlich anmelden
+                  und ihre aktive Dienstfunktion wählen</a>.</p>
+              <?php endif; ?>
+              <button class="estab-button estab-button-primary" type="submit"
+                <?= is_array($handoverIdentity)
+                    && isset($handoverIdentity['duty_assignment_id'])
+                    ? '' : 'disabled' ?>>
+                Übergabe verbindlich anfordern
+              </button>
+            </form>
+          <?php endif; ?>
+        <?php else: ?>
+          <p class="estab-tool-feedback">
+            Noch nicht angenommen:
+            <strong><?= estab_admin_html(implode(', ', array_map(
+                'estab_function_display_name',
+                $missing
+            ))) ?></strong>
+          </p>
+        <?php endif; ?>
+        <form method="post" action="fuehrungsstelle.php">
+          <?= estab_csrf_field() ?>
+          <input type="hidden" name="admin_action"
+            value="close_duty_shift">
+          <input type="hidden" name="dienstschicht_id"
+            value="<?= (int) $shift['dienstschicht_id'] ?>">
+          <button class="estab-button estab-button-danger-outline" type="submit">
+            Planung schließen
+          </button>
+        </form>
+      </section>
+    <?php endforeach; ?>
+
+    <?php if ($activeShift !== null): ?>
+      <?php
+      $occupiedActiveFunctions = [];
+      $activeHasLogbookWriter = false;
+      foreach ($activeShift['besetzungen'] as $activeHat) {
+          if (in_array(
+              $activeHat['status'] ?? null,
+              ['ZUGEWIESEN', 'ANGENOMMEN'],
+              true
+          )) {
+              $occupiedActiveFunctions[] = (string) $activeHat['funktion'];
+          }
+          if (
+              ($activeHat['status'] ?? null) === 'ANGENOMMEN'
+              && in_array(
+                  (string) ($activeHat['funktion'] ?? ''),
+                  ['ETB', 'S2'],
+                  true
+              )
+          ) {
+              $activeHasLogbookWriter = true;
+          }
+      }
+      $occupiedActiveFunctions = array_values(array_unique(
+          $occupiedActiveFunctions
+      ));
+      $activeExtensionRoles = array_filter(
+          $functionRoles,
+          static fn (string $role, string $function): bool => (
+              $function === 'A/W'
+              || !in_array($function, $occupiedActiveFunctions, true)
+          ) && !($function === 'ETB' && $activeHasLogbookWriter),
+          ARRAY_FILTER_USE_BOTH
+      );
+      ?>
+      <section class="estab-tool-panel">
+        <header class="estab-tool-panel-heading">
+          <h2>Aktive Schicht #<?= (int) $activeShift['nummer'] ?></h2>
+          <p><?= estab_admin_html($activeShift['bezeichnung']) ?> · Eine
+            zusätzliche, bislang unbesetzte Funktion kann während des
+            laufenden Betriebs ergänzt werden. Die bereits bestimmte
+            ETB-Führung wechselt ausschließlich mit einer bestätigten
+            Schichtübergabe.</p>
+        </header>
+        <div class="estab-tool-table-wrap">
+          <table class="estab-tool-table">
+            <thead><tr><th>Funktion</th><th>Person</th><th>Status</th></tr></thead>
+            <tbody>
+            <?php foreach ($activeShift['besetzungen'] as $hat): ?>
+              <tr>
+                <td><?= estab_admin_html(
+                    estab_function_identity_display_name(
+                        (string) $hat['funktion'],
+                        (string) $hat['rolle']
+                    )
+                ) ?></td>
+                <td><?= estab_admin_html(
+                    $hat['benutzer'] . ' (' . $hat['benutzer_kuerzel'] . ')'
+                ) ?></td>
+                <td><?= estab_admin_html($hat['status']) ?></td>
+              </tr>
+            <?php endforeach; ?>
+            </tbody>
+          </table>
+        </div>
+        <form class="estab-tool-form" method="post"
+          action="fuehrungsstelle.php">
+          <?= estab_csrf_field() ?>
+          <input type="hidden" name="admin_action"
+            value="assign_duty_function">
+          <input type="hidden" name="dienstschicht_id"
+            value="<?= (int) $activeShift['dienstschicht_id'] ?>">
+          <h3>Laufende Schichtbesetzung erweitern</h3>
+          <p>Die Zuweisung allein ändert den Betrieb noch nicht. Erst wenn die
+            betroffene Person sie selbst annimmt, wird sie wirksam und
+            automatisch im ETB dokumentiert. Ergänzungen für LdF und
+            Fernmelder werden
+            zusätzlich im TBB nachgewiesen. Bereits besetzte Funktionen
+            können nicht ausgetauscht werden; dafür ist eine geordnete
+            Schichtübergabe erforderlich. Weitere Fernmelder dürfen ergänzt
+            werden. Eine ETB-Ergänzung, die S2 oder ETB als bestimmten
+            Schreiber verdrängen würde, wird nicht angeboten.</p>
+          <label>Benutzerkonto
+            <select name="benutzer_kuerzel" required>
+              <?php foreach ($users as $user): ?>
+                <?php
+                $userBlocked =
+                    (int) ($user['estab_gesperrt'] ?? 0) === 1;
+                $userPresence = estab_auth_presence_state($user);
+                ?>
+                <option value="<?= estab_admin_html($user['kuerzel']) ?>"
+                  <?= $userBlocked ? 'disabled' : '' ?>>
+                  <?= estab_admin_html(
+                      $user['benutzer'] . ' (' . $user['kuerzel'] . ') · '
+                      . (
+                          $userBlocked
+                              ? 'gesperrt'
+                              : (
+                                  $userPresence === 'online'
+                                      ? 'aktiv'
+                                      : (
+                                          $userPresence === 'inactive'
+                                              ? 'inaktiv (15+ Min.)'
+                                              : 'nicht angemeldet'
+                                      )
+                              )
+                      )
+                  ) ?>
+                </option>
+              <?php endforeach; ?>
+            </select>
+          </label>
+          <label>Neue oder zusätzliche Fernmelder-Funktion
+            <select name="funktion" required>
+              <?php foreach ($activeExtensionRoles as $function => $role): ?>
+                <option value="<?= estab_admin_html($function) ?>">
+                  <?= estab_admin_html(
+                      estab_function_identity_display_name($function, $role)
+                  ) ?>
+                </option>
+              <?php endforeach; ?>
+            </select>
+          </label>
+          <button class="estab-button" type="submit">
+            Ergänzung verbindlich zuweisen
+          </button>
+        </form>
+        <?php if ($plannedShifts === []
+            && !$hasOpenHandover
+            && ($finalShiftPreflight['closable'] ?? false)): ?>
+          <form method="post" action="fuehrungsstelle.php">
+            <?= estab_csrf_field() ?>
+            <input type="hidden" name="admin_action"
+              value="close_duty_shift">
+            <input type="hidden" name="dienstschicht_id"
+              value="<?= (int) $activeShift['dienstschicht_id'] ?>">
+            <button class="estab-button estab-button-danger-outline"
+              type="submit">Letzte Schicht schließen</button>
+          </form>
+        <?php else: ?>
+          <p class="estab-tool-feedback">Die aktive Schicht bleibt offen,
+            bis alle Nachrichten, Sperren, Anhänge, Nachweise,
+            Fernmeldeplanentwürfe, Melderaufträge, Nachfolgeschichten und
+            Übergabeanforderungen fachlich abgeschlossen sind. So bleibt der
+            Einsatz jederzeit arbeitsfähig und gerät nicht in einen Zustand
+            ohne aktive Schicht.</p>
+        <?php endif; ?>
+      </section>
+    <?php endif; ?>
+
+    <?php if (is_array($blockers)): ?>
+      <section class="estab-tool-panel">
+        <header class="estab-tool-panel-heading">
+          <h2>DV-Abschlussstatus</h2>
+          <p>Dieser Status kann von der formalen Einsatzabschlussprüfung
+            unverändert übernommen werden.</p>
+        </header>
+        <dl>
+          <dt>Offene Schichten</dt>
+          <dd><?= (int) $blockers['offene_schichten'] ?></dd>
+          <dt>Offene Besetzungen</dt>
+          <dd><?= (int) $blockers['offene_besetzungen'] ?></dd>
+          <dt>Offene Melderaufträge</dt>
+          <dd><?= (int) $blockers['offene_melderauftraege'] ?></dd>
+          <dt>Offene Fernmeldeplanentwürfe</dt>
+          <dd><?= (int) $blockers['offene_fernmeldeplanentwuerfe'] ?></dd>
+          <dt>Offene Übergabeanforderungen</dt>
+          <dd><?= (int) $blockers['offene_uebergabeanforderungen'] ?></dd>
+          <dt>Betriebsereigniskette</dt>
+          <dd><?= $blockers['betriebsereigniskette_gueltig']
+              ? 'gültig'
+              : 'FEHLER' ?></dd>
+          <?php if (is_array($finalShiftPreflight)): ?>
+            <dt>ETB und TBB</dt>
+            <dd><?= $finalShiftPreflight['logbuecher_eroeffnet']
+                ? 'eröffnet'
+                : 'noch nicht eröffnet' ?></dd>
+          <?php endif; ?>
+        </dl>
+      </section>
+    <?php endif; ?>
+  <?php endif; ?>
+
+  <footer class="estab-tool-footer">
+    <a href="admin.php">Zurück zur Administration</a>
+    <span>Schichten, Besetzungen und Übergaben bleiben nachvollziehbar erhalten.</span>
   </footer>
 </main>
 </body>

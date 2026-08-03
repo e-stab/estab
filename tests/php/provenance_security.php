@@ -95,6 +95,9 @@ $expectedSubjects = [
         'manifest' => 'legacy-documentation-r85.jsonl',
         'source_path' => '/eStab_0.9/docu',
         'last_changed_revision' => 47,
+        'archive_git_commit'
+            => '9cd6fc0779ed72181d71aa9042f85c971c92f0c1',
+        'archive_git_subtree' => 'docs/legacy/svn-r85',
         'file_count' => 95,
     ],
     'sourceforge-release-ver0.9.26b' => [
@@ -263,6 +266,19 @@ $verifyBundle = static function (callable $reader) use (
             throw new RuntimeException($identifier . ': SVN manifest metadata mismatch');
         }
         if (
+            isset($expected['archive_git_commit'])
+            && (
+                ($header['archive_git_commit'] ?? null)
+                    !== $expected['archive_git_commit']
+                || ($header['archive_git_subtree'] ?? null)
+                    !== $expected['archive_git_subtree']
+            )
+        ) {
+            throw new RuntimeException(
+                $identifier . ': archived documentation locator mismatch'
+            );
+        }
+        if (
             $expected['source_kind'] === 'sourceforge-release'
             && (
                 ($header['release_version'] ?? null)
@@ -337,17 +353,6 @@ $verifyBundle = static function (callable $reader) use (
                         $identifier . ': documentation mode mismatch'
                     );
                 }
-                $documentationPath = $root . '/docs/legacy/svn-r85/' . $pathBytes;
-                $content = $reader($documentationPath);
-                if (
-                    strlen($content) !== $entry['size']
-                    || !hash_equals($entry['sha256'], hash('sha256', $content))
-                ) {
-                    throw new RuntimeException(
-                        $identifier . ': documentation content mismatch at '
-                        . $pathBytes
-                    );
-                }
                 $documentationPaths[$pathBytes] = true;
             } elseif (
                 !in_array($entry['mode'], ['100644', '100755', '120000'], true)
@@ -362,34 +367,13 @@ $verifyBundle = static function (callable $reader) use (
             throw new RuntimeException($identifier . ': aggregate mismatch');
         }
 
-        if ($expected['kind'] === 'filesystem') {
-            $directory = $root . '/docs/legacy/svn-r85';
-            $iterator = new RecursiveIteratorIterator(
-                new RecursiveDirectoryIterator(
-                    $directory,
-                    FilesystemIterator::SKIP_DOTS
-                )
+        if (
+            $expected['kind'] === 'filesystem'
+            && count($documentationPaths) !== $expected['file_count']
+        ) {
+            throw new RuntimeException(
+                $identifier . ': archived documentation path set mismatch'
             );
-            $actualPaths = [];
-            foreach ($iterator as $file) {
-                if (!$file->isFile() || $file->isLink()) {
-                    throw new RuntimeException(
-                        $identifier . ': unsupported documentation entry'
-                    );
-                }
-                $relative = str_replace(
-                    DIRECTORY_SEPARATOR,
-                    '/',
-                    substr($file->getPathname(), strlen($directory) + 1)
-                );
-                $actualPaths[$relative] = true;
-            }
-            ksort($actualPaths, SORT_STRING);
-            if (array_keys($actualPaths) !== array_keys($documentationPaths)) {
-                throw new RuntimeException(
-                    $identifier . ': documentation path set mismatch'
-                );
-            }
         }
     }
 };
@@ -398,6 +382,7 @@ $verifyBundle($defaultReader);
 $assert(true, 'canonical provenance bundle was rejected');
 $ciWorkflow = $defaultReader($root . '/.github/workflows/ci.yml');
 $staticRunner = $defaultReader($root . '/tests/static/run.sh');
+$provenanceVerifier = $defaultReader($root . '/migration/verify_provenance.py');
 $assert(
     str_contains($ciWorkflow, 'fetch-depth: 0')
         && str_contains($ciWorkflow, 'fetch-tags: true')
@@ -413,6 +398,18 @@ $assert(
         '$repo_root/tests/php/provenance_security.php'
     ),
     'minimal static suite omits provenance bundle verification'
+);
+$assert(
+    str_contains(
+        $provenanceVerifier,
+        '9cd6fc0779ed72181d71aa9042f85c971c92f0c1'
+    )
+        && str_contains(
+            $provenanceVerifier,
+            'archive_git_subtree="docs/legacy/svn-r85"'
+        )
+        && str_contains($provenanceVerifier, 'archived_filesystem_rows('),
+    'removed original documentation is not verified from its pinned Git subtree'
 );
 
 $changedManifest = $evidenceDirectory . '/application-trunk-r84.jsonl';
@@ -468,8 +465,8 @@ $assert(
     'recorded SourceForge archive identity manipulation was not detected'
 );
 
-$changedDocumentation = $root
-    . '/docs/legacy/svn-r85/Programmierung/Systemstatus.nsd';
+$changedDocumentation = $evidenceDirectory
+    . '/legacy-documentation-r85.jsonl';
 $tamperedDocumentationDetected = false;
 try {
     $verifyBundle(
@@ -487,12 +484,12 @@ try {
 } catch (RuntimeException $error) {
     $tamperedDocumentationDetected = str_contains(
         $error->getMessage(),
-        'documentation content mismatch'
+        'manifest checksum mismatch'
     );
 }
 $assert(
     $tamperedDocumentationDetected,
-    'documentation manipulation was not detected'
+    'archived documentation manifest manipulation was not detected'
 );
 
 echo 'provenance security: OK ('

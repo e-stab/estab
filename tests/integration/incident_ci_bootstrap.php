@@ -70,6 +70,7 @@ try {
             [
                 'kennung' => $identifier,
                 'name' => 'Automatisierter CI-Integrationstest',
+                'estab_permission_mode' => 'LOOSE',
                 'beginn' => date('Y-m-d\TH:i'),
                 'organisation' => 'eStab CI',
                 'fuehrungsstellenname' => $commandPostName,
@@ -80,17 +81,23 @@ try {
             ],
             $actor,
             true,
-            (int) $status['revision']
+            (int) $status['revision'],
+            true
         );
         $incidentId = (int) $created['einsatz_id'];
     } else {
         $incidentId = (int) $incidents[0]['einsatz_id'];
+        $assert(
+            ($incidents[0]['estab_permission_mode'] ?? null) === 'LOOSE',
+            'CI integration incident is not explicitly LOOSE'
+        );
         if ($activeId === null) {
             $status = estab_incident_activate(
                 $connection,
                 $incidentId,
                 (int) $status['revision'],
-                $actor
+                $actor,
+                true
             );
         }
     }
@@ -99,7 +106,8 @@ try {
     $assert(
         $active['active_einsatz_id'] === $incidentId
             && ($active['kennung'] ?? null) === $identifier
-            && ($active['fuehrungsstellenname'] ?? null) === $commandPostName,
+            && ($active['fuehrungsstellenname'] ?? null) === $commandPostName
+            && ($active['estab_permission_mode'] ?? null) === 'LOOSE',
         'CI incident is not the authoritative active incident'
     );
 
@@ -108,7 +116,8 @@ try {
         $connection,
         $incidentId,
         $revision,
-        $actor
+        $actor,
+        true
     );
     $assert(
         $secondActivation['active_einsatz_id'] === $incidentId

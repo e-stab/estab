@@ -5,6 +5,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/../../app/message_repository.php';
 require_once __DIR__ . '/../../app/admin_operations.php';
 require_once __DIR__ . '/../../app/generated_form.php';
+require_once __DIR__ . '/../../app/workflow.php';
 
 function message_db_assert(bool $condition, string $message): void
 {
@@ -41,12 +42,76 @@ function message_db_actor(
     string $function,
     string $role
 ): array {
-    return [
+    $assignmentMapValue = getenv('ESTAB_TEST_MESSAGE_DUTY_ASSIGNMENTS');
+    $assignmentMap = [];
+    if (is_string($assignmentMapValue) && $assignmentMapValue !== '') {
+        try {
+            $decoded = json_decode(
+                $assignmentMapValue,
+                true,
+                32,
+                JSON_THROW_ON_ERROR
+            );
+        } catch (JsonException $exception) {
+            throw new RuntimeException(
+                'Message duty assignment map is invalid',
+                0,
+                $exception
+            );
+        }
+        if (!is_array($decoded)) {
+            throw new RuntimeException(
+                'Message duty assignment map is not an object'
+            );
+        }
+        $assignmentMap = $decoded;
+    }
+    $assignmentKey = $code . '|' . $function;
+    $assignmentId = $assignmentMap[$assignmentKey] ?? null;
+    if (
+        $assignmentId !== null
+        && (!is_int($assignmentId) || $assignmentId < 1)
+    ) {
+        throw new RuntimeException(
+            "Message duty assignment {$assignmentKey} is invalid"
+        );
+    }
+    $actor = [
         'benutzer' => $user,
         'kuerzel' => $code,
         'funktion' => $function,
         'rolle' => $role,
     ];
+    if (is_int($assignmentId)) {
+        $actor['duty_assignment_id'] = $assignmentId;
+    }
+    return $actor;
+}
+
+function message_db_publish_duty_assignments(array $assignments): void
+{
+    foreach ($assignments as $key => $assignmentId) {
+        if (
+            !is_string($key)
+            || preg_match('/\A[^|]{1,6}\|[^|]{1,20}\z/D', $key) !== 1
+            || !is_int($assignmentId)
+            || $assignmentId < 1
+        ) {
+            throw new RuntimeException(
+                'Message duty assignment fixture is invalid'
+            );
+        }
+    }
+    message_db_assert(
+        putenv(
+            'ESTAB_TEST_MESSAGE_DUTY_ASSIGNMENTS='
+            . json_encode(
+                $assignments,
+                JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES
+            )
+        ),
+        'Could not publish message duty assignments to workers'
+    );
 }
 
 function message_db_password(): string
@@ -357,6 +422,7 @@ $tables = [$stateTable];
 $barriers = [];
 $previousIncidentId = null;
 $testIncidentId = null;
+$permissionModeIncidentId = null;
 $commandPostName = 'Führungsstelle Nachrichten ' . $token;
 
 foreach ($tables as $table) {
@@ -368,24 +434,41 @@ register_shutdown_function(
         $tables,
         &$barriers,
         &$previousIncidentId,
-        &$testIncidentId
+        &$testIncidentId,
+        &$permissionModeIncidentId
     ): void {
         if (is_int($testIncidentId) && $testIncidentId > 0) {
             try {
                 $restoreConnection = estab_message_connect($config);
                 $status = estab_incident_status($restoreConnection);
-                if ((int) ($status['active_einsatz_id'] ?? 0) === $testIncidentId) {
+                $activeIncidentId = (int) (
+                    $status['active_einsatz_id'] ?? 0
+                );
+                if (
+                    $activeIncidentId === $testIncidentId
+                    || (
+                        is_int($permissionModeIncidentId)
+                        && $activeIncidentId === $permissionModeIncidentId
+                    )
+                ) {
                     if (is_int($previousIncidentId) && $previousIncidentId > 0) {
+                        $previousIncident = estab_incident_find(
+                            $restoreConnection,
+                            $previousIncidentId
+                        );
                         estab_incident_activate(
                             $restoreConnection,
                             $previousIncidentId,
                             (int) $status['revision'],
-                            'message-concurrency-cleanup'
+                            'message-concurrency-cleanup',
+                            is_array($previousIncident)
+                                && ($previousIncident['estab_permission_mode'] ?? null)
+                                    === ESTAB_PERMISSION_MODE_LOOSE
                         );
                     } else {
                         estab_incident_deactivate(
                             $restoreConnection,
-                            $testIncidentId,
+                            $activeIncidentId,
                             (int) $status['revision'],
                             'message-concurrency-cleanup'
                         );
@@ -481,18 +564,6 @@ try {
         );
         $fixtureUserInsert->close();
     }
-    $stateIdentity = [
-        'benutzer' => 'Concurrency S2',
-        'kuerzel' => 'state1',
-        'funktion' => 'S2',
-        'rolle' => 'Stab',
-    ];
-    $staffIdentity = [
-        'benutzer' => 'Concurrency staff',
-        'kuerzel' => 'staff1',
-        'funktion' => 'S1',
-        'rolle' => 'Stab',
-    ];
     $initialShift = estab_dv_create_shift(
         $connection,
         $testIncidentId,
@@ -526,26 +597,57 @@ try {
         $initialShiftId,
         'message-concurrency'
     );
-    $fixtureActor = 's60001';
-    $planInsert = estab_message_execute(
-        $connection,
-        'INSERT INTO `nv_fernmeldeplaene`'
-            . ' (`einsatz_id`, `version`, `einsatzbezeichnung`, `herkunft`,'
-            . ' `gueltig_ab`, `gueltig_bis`, `betriebsleitung`,'
-            . ' `bemerkungen`, `erstellt_von`)'
-            . ' VALUES (?, 1, ?, ?, NOW() - INTERVAL 1 DAY,'
-            . ' NOW() + INTERVAL 1 DAY, ?, ?, ?)',
-        [
-            $testIncidentId,
-            'Concurrency ' . $token,
-            'CI message concurrency',
-            'S6 CI',
-            'Canonical outgoing race route',
-            $fixtureActor,
-        ]
+    message_db_publish_duty_assignments($historicalAssignments);
+    $stateIdentity = message_db_actor(
+        'Concurrency S2',
+        'state1',
+        'S2',
+        'Stab'
     );
-    $planId = (int) $connection->insert_id;
-    $planInsert->close();
+    $staffIdentity = message_db_actor(
+        'Concurrency staff',
+        'staff1',
+        'S1',
+        'Stab'
+    );
+    $fixtureActor = 's60001';
+    $fixtureS6AssignmentId = (int) (
+        $historicalAssignments[$fixtureActor . '|S6'] ?? 0
+    );
+    $planId = estab_dv_with_sql_authority_context(
+        $connection,
+        $fixtureS6AssignmentId,
+        null,
+        static function () use (
+            $connection,
+            $testIncidentId,
+            $token,
+            $fixtureActor
+        ): int {
+            $planInsert = estab_message_execute(
+                $connection,
+                'INSERT INTO `nv_fernmeldeplaene`'
+                    . ' (`einsatz_id`, `version`, `einsatzbezeichnung`,'
+                    . ' `herkunft`, `gueltig_ab`, `gueltig_bis`,'
+                    . ' `betriebsleitung`, `bemerkungen`, `erstellt_von`)'
+                    . ' VALUES (?, 1, ?, ?, NOW() - INTERVAL 1 DAY,'
+                    . ' NOW() + INTERVAL 1 DAY, ?, ?, ?)',
+                [
+                    $testIncidentId,
+                    'Concurrency ' . $token,
+                    'CI message concurrency',
+                    'S6 CI',
+                    'Canonical outgoing race route',
+                    $fixtureActor,
+                ]
+            );
+            try {
+                return (int) $connection->insert_id;
+            } finally {
+                $planInsert->close();
+            }
+        }
+    );
     message_db_assert($planId > 0, 'Could not create S6 plan fixture');
     $routeInsert = estab_message_execute(
         $connection,
@@ -579,13 +681,18 @@ try {
         $telecomEntryBId > 0 && $telecomEntryBId !== $telecomEntryId,
         'Could not create distinct S6 redisposition route'
     );
-    $planActivate = estab_message_execute(
+    $planActivate = estab_dv_with_sql_authority_context(
         $connection,
-        "UPDATE `nv_fernmeldeplaene` SET `status` = 'AKTIV',"
-            . ' `freigegeben_am` = NOW(6), `freigegeben_von` = ?'
-            . ' WHERE `fernmeldeplan_id` = ? AND `einsatz_id` = ?'
-            . " AND `status` = 'ENTWURF'",
-        [$fixtureActor, $planId, $testIncidentId]
+        $fixtureS6AssignmentId,
+        null,
+        static fn (): mysqli_stmt => estab_message_execute(
+            $connection,
+            "UPDATE `nv_fernmeldeplaene` SET `status` = 'AKTIV',"
+                . ' `freigegeben_am` = NOW(6), `freigegeben_von` = ?'
+                . ' WHERE `fernmeldeplan_id` = ? AND `einsatz_id` = ?'
+                . " AND `status` = 'ENTWURF'",
+            [$fixtureActor, $planId, $testIncidentId]
+        )
     );
     message_db_assert(
         $planActivate->affected_rows === 1,
@@ -918,36 +1025,36 @@ try {
             ),
         'Outgoing function author lost nonterminal state access'
     );
-    $siIdentity = [
-        'benutzer' => 'Concurrency Si',
-        'kuerzel' => 'si0001',
-        'funktion' => 'Si',
-        'rolle' => 'Stab',
-    ];
-    $successorIdentity = [
-        'benutzer' => 'Concurrency successor',
-        'kuerzel' => 'next01',
-        'funktion' => 'S1',
-        'rolle' => 'Stab',
-    ];
+    $siIdentity = message_db_actor(
+        'Concurrency Si',
+        'si0001',
+        'Si',
+        'Stab'
+    );
+    $successorIdentity = message_db_actor(
+        'Concurrency successor',
+        'next01',
+        'S1',
+        'Stab'
+    );
     $foreignFunctionIdentity = [
         'benutzer' => 'Concurrency foreign function',
         'kuerzel' => 'other1',
         'funktion' => 'S2',
         'rolle' => 'Stab',
     ];
-    $ldfIdentity = [
-        'benutzer' => 'Concurrency LdF',
-        'kuerzel' => 'ldf001',
-        'funktion' => 'LdF',
-        'rolle' => 'Fernmelder',
-    ];
-    $awIdentity = [
-        'benutzer' => 'Concurrency A/W',
-        'kuerzel' => 'aw0001',
-        'funktion' => 'A/W',
-        'rolle' => 'Fernmelder',
-    ];
+    $ldfIdentity = message_db_actor(
+        'Concurrency LdF',
+        'ldf001',
+        'LdF',
+        'Fernmelder'
+    );
+    $awIdentity = message_db_actor(
+        'Concurrency A/W',
+        'aw0001',
+        'A/W',
+        'Fernmelder'
+    );
     $statusFourRow = estab_message_fetch_by_id(
         $connection,
         $messageTable,
@@ -1108,6 +1215,7 @@ try {
     );
     $successorShiftId = (int) $successorShift['dienstschicht_id'];
     $successorConfirmingAssignmentId = 0;
+    $successorDutyAssignments = [];
     foreach ([
         ['state1', 'S2'],
         ['si0001', 'Si'],
@@ -1127,6 +1235,8 @@ try {
         if ($code === 'next01') {
             $successorConfirmingAssignmentId = (int) $hat['dienstbesetzung_id'];
         }
+        $successorDutyAssignments[$code . '|' . $function] =
+            (int) $hat['dienstbesetzung_id'];
         estab_dv_accept_hat(
             $connection,
             $testIncidentId,
@@ -1168,6 +1278,31 @@ try {
             'funktion' => 'S1',
             'rolle' => 'Stab',
         ]
+    );
+    message_db_publish_duty_assignments($successorDutyAssignments);
+    $siIdentity = message_db_actor(
+        'Concurrency Si',
+        'si0001',
+        'Si',
+        'Stab'
+    );
+    $successorIdentity = message_db_actor(
+        'Concurrency successor',
+        'next01',
+        'S1',
+        'Stab'
+    );
+    $ldfIdentity = message_db_actor(
+        'Concurrency LdF',
+        'ldf001',
+        'LdF',
+        'Fernmelder'
+    );
+    $awIdentity = message_db_actor(
+        'Concurrency A/W',
+        'aw0001',
+        'A/W',
+        'Fernmelder'
     );
     message_db_assert(
         estab_message_resubmit_returned_outgoing(
@@ -2238,10 +2373,10 @@ try {
         'Next real number reused a watermark after numbering-mode change'
     );
 
-    // The incident permission mode must reach the real message repository,
-    // not only the route/UI helpers. Build two formally returned S1 messages:
-    // one is taken over by a real S2 account in LOOSE, while the other remains
-    // untouched for account, incident and restored-STRICT negative probes.
+    // Keep STRICT and LOOSE as independent incident identities: permission
+    // mode becomes immutable as soon as operational records exist. The STRICT
+    // message proves the formal assignment boundary; two messages created in
+    // LOOSE prove explicit personal additional-function handling.
     $strictModeStatus = estab_incident_status($connection);
     message_db_assert(
         (int) ($strictModeStatus['active_einsatz_id'] ?? 0) === $testIncidentId
@@ -2249,15 +2384,16 @@ try {
         'Message permission-mode fixture did not start in STRICT'
     );
     estab_permission_context_set_from_incident($strictModeStatus);
+    $permissionAuthorIdentity = $successorIdentity;
     $createReturnedPermissionFixture = static function (
+        int $incidentId,
         string $fixture
     ) use (
         $connection,
         $config,
         $messageTable,
-        $staffIdentity,
-        $siIdentity,
-        $testIncidentId
+        $permissionAuthorIdentity,
+        $siIdentity
     ): int {
         $stored = estab_message_insert_numbered(
             $connection,
@@ -2274,8 +2410,8 @@ try {
                 '12_betreff' => 'Berechtigungsmodus ' . $fixture,
                 '12_inhalt' => 'permission-mode-' . $fixture,
                 '13_abseinheit' => 'FORGED-PERMISSION-MODE',
-                '14_zeichen' => $staffIdentity['kuerzel'],
-                '14_funktion' => $staffIdentity['funktion'],
+                '14_zeichen' => $permissionAuthorIdentity['kuerzel'],
+                '14_funktion' => $permissionAuthorIdentity['funktion'],
                 '15_quitdatum' => null,
                 '15_quitzeichen' => '',
                 '16_empf' => 'S1_rt,S2_bl',
@@ -2287,16 +2423,16 @@ try {
             null,
             message_db_event(
                 'created',
-                $staffIdentity['benutzer'],
-                $staffIdentity['kuerzel'],
-                $staffIdentity['funktion'],
-                $staffIdentity['rolle'],
+                $permissionAuthorIdentity['benutzer'],
+                $permissionAuthorIdentity['kuerzel'],
+                $permissionAuthorIdentity['funktion'],
+                $permissionAuthorIdentity['rolle'],
                 null,
                 4,
                 ['fixture' => 'permission-mode-' . $fixture]
             ),
             null,
-            $testIncidentId
+            $incidentId
         );
         $messageId = (int) $stored['id'];
         message_db_assert(
@@ -2321,25 +2457,27 @@ try {
                     10,
                     ['fixture' => 'permission-mode-' . $fixture]
                 ),
-                $testIncidentId
+                $incidentId
             ),
             'Could not create returned permission-mode fixture ' . $fixture
         );
         return $messageId;
     };
-    $permissionModeMessageId = $createReturnedPermissionFixture('takeover');
-    $permissionModeGuardMessageId =
-        $createReturnedPermissionFixture('guard');
+    $strictPermissionGuardMessageId = $createReturnedPermissionFixture(
+        $testIncidentId,
+        'strict-guard'
+    );
+    $correctionIdentity = $stateIdentity;
     $crossRoleCorrectionFields = static function (
         string $probe
-    ) use ($stateIdentity): array {
+    ) use (&$correctionIdentity): array {
         return [
             '10_anschrift' => 'THW Permission Mode korrigiert',
             '12_betreff' => 'Berechtigungsmodus korrigiert',
             '12_inhalt' => 'permission-mode-correction-' . $probe,
             '13_abseinheit' => 'FORGED-CROSS-ROLE-SENDER',
-            '14_zeichen' => $stateIdentity['kuerzel'],
-            '14_funktion' => $stateIdentity['funktion'],
+            '14_zeichen' => $correctionIdentity['kuerzel'],
+            '14_funktion' => $correctionIdentity['funktion'],
             '15_quitdatum' => null,
             '15_quitzeichen' => '',
             'x00_status' => 4,
@@ -2350,13 +2488,13 @@ try {
     };
     $crossRoleEvent = static function (
         string $probe
-    ) use ($stateIdentity): array {
+    ) use (&$correctionIdentity): array {
         return message_db_event(
             'author_resubmitted',
-            $stateIdentity['benutzer'],
-            $stateIdentity['kuerzel'],
-            $stateIdentity['funktion'],
-            $stateIdentity['rolle'],
+            $correctionIdentity['benutzer'],
+            $correctionIdentity['kuerzel'],
+            $correctionIdentity['funktion'],
+            $correctionIdentity['rolle'],
             10,
             4,
             ['permission_mode_probe' => $probe]
@@ -2366,7 +2504,7 @@ try {
     $strictReturned = estab_message_fetch_by_id(
         $connection,
         $messageTable,
-        $permissionModeMessageId
+        $strictPermissionGuardMessageId
     );
     message_db_assert(
         is_array($strictReturned)
@@ -2379,9 +2517,9 @@ try {
             && !estab_message_resubmit_returned_outgoing(
                 $connection,
                 $messageTable,
-                $permissionModeMessageId,
-                $stateIdentity['kuerzel'],
-                $stateIdentity['funktion'],
+                $strictPermissionGuardMessageId,
+                $correctionIdentity['kuerzel'],
+                $correctionIdentity['funktion'],
                 $crossRoleCorrectionFields('strict-before'),
                 $crossRoleEvent('strict-before'),
                 null,
@@ -2393,21 +2531,48 @@ try {
                 'SELECT COUNT(*) FROM `nv_nachrichten_ereignisse`'
                     . ' WHERE `message_id` = ?'
                     . " AND `event_type` = 'author_resubmitted'",
-                [$permissionModeMessageId]
+                [$strictPermissionGuardMessageId]
             ) === 0,
         'STRICT admitted a cross-role returned-message correction'
     );
 
-    $looseIncident = estab_incident_update_permission_mode(
+    $looseStatusBeforeCreate = estab_incident_status($connection);
+    $looseCreated = estab_incident_create(
         $connection,
-        $testIncidentId,
-        'LOOSE',
-        'STRICT',
-        (int) $strictModeStatus['revision'],
+        [
+            'kennung' => 'CI-MSG-LOOSE-' . strtoupper($token),
+            'name' => 'Message permission LOOSE ' . $token,
+            'beginn' => date('Y-m-d\TH:i'),
+            'organisation' => 'eStab CI',
+            'fuehrungsstellenname' => $commandPostName,
+            'einsatzleitung' => 'Automatisierte Nachrichtenprüfung',
+            'beschreibung' =>
+                'Separater LOOSE-Datenraum für Berechtigungsnachweise',
+            'estab_permission_mode' => ESTAB_PERMISSION_MODE_LOOSE,
+            'metadaten' => json_encode(
+                [
+                    'test' => 'message_concurrency_permission_mode',
+                    'token' => $token,
+                ],
+                JSON_THROW_ON_ERROR
+            ),
+        ],
         'message-permission-mode-test',
+        true,
+        (int) $looseStatusBeforeCreate['revision'],
         true
     );
+    $permissionModeIncidentId = (int) $looseCreated['einsatz_id'];
+    $looseIncident = estab_incident_status($connection);
     estab_permission_context_set_from_incident($looseIncident);
+    $permissionModeMessageId = $createReturnedPermissionFixture(
+        $permissionModeIncidentId,
+        'takeover'
+    );
+    $permissionModeGuardMessageId = $createReturnedPermissionFixture(
+        $permissionModeIncidentId,
+        'guard'
+    );
     $strictRestoredIncident = null;
     try {
         $looseReturned = estab_message_fetch_by_id(
@@ -2415,31 +2580,68 @@ try {
             $messageTable,
             $permissionModeMessageId
         );
+        $looseBaseIdentity = estab_dv_require_operational_account(
+            $connection,
+            $permissionModeIncidentId,
+            $stateIdentity
+        );
         message_db_assert(
             ($looseIncident['estab_permission_mode'] ?? null) === 'LOOSE'
                 && is_array($looseReturned)
-                && estab_message_object_allowed(
-                    $stateIdentity,
+                && estab_workflow_identity_for_message_operation(
+                    $looseBaseIdentity,
                     'staff-correction',
-                    $looseReturned,
-                    true
-                ),
-            'LOOSE did not expose the exact status-10 correction to S2'
+                    $looseReturned
+                ) === null,
+            'LOOSE exposed an S1 correction to ungranted S2'
         );
+        $grantS1 = estab_message_execute(
+            $connection,
+            'INSERT INTO `nv_benutzer_zusatzfunktionen`'
+                . ' (`benutzer_kuerzel`, `funktion`, `rolle`, `vergeben_von`)'
+                . ' VALUES (?, ?, ?, ?)',
+            [$stateIdentity['kuerzel'], 'S1', 'Stab', 'message-permission-mode-test']
+        );
+        message_db_assert(
+            $grantS1->affected_rows === 1,
+            'Could not grant the explicit S1 correction function'
+        );
+        $grantS1->close();
+        $looseGrantedIdentity = estab_dv_require_operational_account(
+            $connection,
+            $permissionModeIncidentId,
+            $stateIdentity
+        );
+        $selectedCorrectionIdentity = estab_workflow_identity_for_message_operation(
+            $looseGrantedIdentity,
+            'staff-correction',
+            $looseReturned
+        );
+        message_db_assert(
+            is_array($selectedCorrectionIdentity)
+                && ($selectedCorrectionIdentity['funktion'] ?? null) === 'S1'
+                && ($selectedCorrectionIdentity['rolle'] ?? null) === 'Stab'
+                && ($selectedCorrectionIdentity['authorization_account_function'] ?? null)
+                    === 'S2'
+                && ($selectedCorrectionIdentity['authorization_route_function'] ?? null)
+                    === 'S1',
+            'LOOSE did not select the exact explicitly granted S1 actor'
+        );
+        $correctionIdentity = $selectedCorrectionIdentity;
         message_db_assert(
             estab_message_resubmit_returned_outgoing(
                 $connection,
                 $messageTable,
                 $permissionModeMessageId,
-                $stateIdentity['kuerzel'],
-                $stateIdentity['funktion'],
+                $correctionIdentity['kuerzel'],
+                $correctionIdentity['funktion'],
                 $crossRoleCorrectionFields('loose-success'),
                 $crossRoleEvent('loose-success'),
                 null,
                 null,
-                $testIncidentId
+                $permissionModeIncidentId
             ),
-            'LOOSE did not permit a real S2 account to take over an S1 correction'
+            'LOOSE explicit S1 grant did not permit the exact S1 correction'
         );
         $correctedByCrossRole = estab_message_fetch_by_id(
             $connection,
@@ -2470,23 +2672,23 @@ try {
             is_array($correctedByCrossRole)
                 && (int) $correctedByCrossRole['x00_status'] === 4
                 && (string) $correctedByCrossRole['14_zeichen'] === 'state1'
-                && (string) $correctedByCrossRole['14_funktion'] === 'S2'
+                && (string) $correctedByCrossRole['14_funktion'] === 'S1'
                 && (string) $correctedByCrossRole['13_abseinheit']
                     === $commandPostName
                 && (string) $takeoverEvidence[0]['actor_user']
                     === $stateIdentity['benutzer']
                 && (string) $takeoverEvidence[0]['actor_code'] === 'state1'
-                && (string) $takeoverEvidence[0]['actor_function'] === 'S2'
+                && (string) $takeoverEvidence[0]['actor_function'] === 'S1'
                 && (int) $takeoverEvidence[0]['from_status'] === 10
                 && (int) $takeoverEvidence[0]['to_status'] === 4
                 && ($takeoverSnapshot['original_author_code'] ?? null)
-                    === 'staff1'
+                    === $permissionAuthorIdentity['kuerzel']
                 && ($takeoverSnapshot['original_author_function'] ?? null)
                     === 'S1'
                 && ($takeoverSnapshot['responsible_author_code'] ?? null)
                     === 'state1'
                 && ($takeoverSnapshot['responsible_author_function'] ?? null)
-                    === 'S2',
+                    === 'S1',
             'LOOSE takeover lost actor, original author, or new responsibility evidence'
         );
 
@@ -2495,13 +2697,13 @@ try {
                 $connection,
                 $messageTable,
                 $permissionModeMessageId,
-                $stateIdentity['kuerzel'],
-                $stateIdentity['funktion'],
+                $correctionIdentity['kuerzel'],
+                $correctionIdentity['funktion'],
                 $crossRoleCorrectionFields('wrong-status'),
                 $crossRoleEvent('wrong-status'),
                 null,
                 null,
-                $testIncidentId
+                $permissionModeIncidentId
             )
                 && estab_message_query_int(
                     $connection,
@@ -2519,13 +2721,13 @@ try {
                 $connection,
                 $messageTable,
                 $permissionModeGuardMessageId,
-                $stateIdentity['kuerzel'],
-                $stateIdentity['funktion'],
+                $correctionIdentity['kuerzel'],
+                $correctionIdentity['funktion'],
                 $crossRoleCorrectionFields('foreign-incident'),
                 $crossRoleEvent('foreign-incident'),
                 null,
                 null,
-                $testIncidentId + 1000000
+                $permissionModeIncidentId + 1000000
             );
         } catch (EstabIncidentConflictException) {
             $foreignIncidentRejected = true;
@@ -2543,17 +2745,10 @@ try {
         );
         try {
             try {
-                estab_message_resubmit_returned_outgoing(
+                estab_dv_require_operational_account(
                     $connection,
-                    $messageTable,
-                    $permissionModeGuardMessageId,
-                    $stateIdentity['kuerzel'],
-                    $stateIdentity['funktion'],
-                    $crossRoleCorrectionFields('blocked-account'),
-                    $crossRoleEvent('blocked-account'),
-                    null,
-                    null,
-                    $testIncidentId
+                    $permissionModeIncidentId,
+                    $stateIdentity
                 );
             } catch (EstabDvPermissionException) {
                 $blockedActorRejected = true;
@@ -2570,55 +2765,59 @@ try {
             'LOOSE committed a correction from a blocked account'
         );
 
-        $reassignedActorRejected = false;
-        $reassign = estab_message_execute(
+        $revokedActorRejected = false;
+        $revokeS1 = estab_message_execute(
             $connection,
-            'UPDATE `nv_benutzer` SET `funktion` = ?'
-                . ' WHERE BINARY `kuerzel` = BINARY ?',
-            ['S3', $stateIdentity['kuerzel']]
+            'DELETE FROM `nv_benutzer_zusatzfunktionen`'
+                . ' WHERE BINARY `benutzer_kuerzel` = BINARY ?'
+                . ' AND BINARY `funktion` = BINARY ?',
+            [$stateIdentity['kuerzel'], 'S1']
         );
-        $accountWasReassigned = $reassign->affected_rows === 1;
-        $reassign->close();
-        try {
-            message_db_assert(
-                $accountWasReassigned,
-                'Could not reassign permission-mode account fixture'
-            );
-            try {
-                estab_message_resubmit_returned_outgoing(
-                    $connection,
-                    $messageTable,
-                    $permissionModeGuardMessageId,
-                    $stateIdentity['kuerzel'],
-                    $stateIdentity['funktion'],
-                    $crossRoleCorrectionFields('reassigned-account'),
-                    $crossRoleEvent('reassigned-account'),
-                    null,
-                    null,
-                    $testIncidentId
-                );
-            } catch (EstabDvPermissionException) {
-                $reassignedActorRejected = true;
-            }
-        } finally {
-            $restoreFunction = estab_message_execute(
-                $connection,
-                'UPDATE `nv_benutzer` SET `funktion` = ?'
-                    . ' WHERE BINARY `kuerzel` = BINARY ?',
-                [$stateIdentity['funktion'], $stateIdentity['kuerzel']]
-            );
-            $restoreFunction->close();
-        }
+        $grantWasRevoked = $revokeS1->affected_rows === 1;
+        $revokeS1->close();
+        $identityAfterRevocation = estab_dv_require_operational_account(
+            $connection,
+            $permissionModeIncidentId,
+            $stateIdentity
+        );
+        $guardForRevocation = estab_message_fetch_by_id(
+            $connection,
+            $messageTable,
+            $permissionModeGuardMessageId
+        );
+        $revokedActorRejected = is_array($guardForRevocation)
+            && estab_workflow_identity_for_message_operation(
+                $identityAfterRevocation,
+                'staff-correction',
+                $guardForRevocation
+            ) === null;
+        message_db_assert(
+            $grantWasRevoked && $revokedActorRejected,
+            'Revoked S1 function remained effective for the S2 account'
+        );
+        $restoreS1Grant = estab_message_execute(
+            $connection,
+            'INSERT INTO `nv_benutzer_zusatzfunktionen`'
+                . ' (`benutzer_kuerzel`, `funktion`, `rolle`, `vergeben_von`)'
+                . ' VALUES (?, ?, ?, ?)',
+            [$stateIdentity['kuerzel'], 'S1', 'Stab', 'strict-stale-grant-test']
+        );
+        message_db_assert(
+            $restoreS1Grant->affected_rows === 1,
+            'Could not restore stale loose grant for the STRICT boundary probe'
+        );
+        $restoreS1Grant->close();
         $guardAfterNegatives = estab_message_fetch_by_id(
             $connection,
             $messageTable,
             $permissionModeGuardMessageId
         );
         message_db_assert(
-            $reassignedActorRejected
+            $revokedActorRejected
                 && is_array($guardAfterNegatives)
                 && (int) $guardAfterNegatives['x00_status'] === 10
-                && (string) $guardAfterNegatives['14_zeichen'] === 'staff1'
+                && (string) $guardAfterNegatives['14_zeichen']
+                    === $permissionAuthorIdentity['kuerzel']
                 && (string) $guardAfterNegatives['14_funktion'] === 'S1'
                 && estab_message_query_int(
                     $connection,
@@ -2631,12 +2830,13 @@ try {
         );
     } finally {
         $modeBeforeRestore = estab_incident_status($connection);
-        if (($modeBeforeRestore['estab_permission_mode'] ?? null) === 'LOOSE') {
-            $strictRestoredIncident = estab_incident_update_permission_mode(
+        if (
+            (int) ($modeBeforeRestore['active_einsatz_id'] ?? 0)
+                === $permissionModeIncidentId
+        ) {
+            $strictRestoredIncident = estab_incident_activate(
                 $connection,
                 $testIncidentId,
-                'STRICT',
-                'LOOSE',
                 (int) $modeBeforeRestore['revision'],
                 'message-permission-mode-test'
             );
@@ -2646,14 +2846,33 @@ try {
         estab_permission_context_set_from_incident($strictRestoredIncident);
     }
 
+    $correctionIdentity = $stateIdentity;
+    $strictOperationalRejected = false;
+    try {
+        estab_dv_require_operational_account(
+            $connection,
+            $testIncidentId,
+            $stateIdentity
+        );
+    } catch (EstabDvPermissionException) {
+        $strictOperationalRejected = true;
+    }
     $strictGuardRow = estab_message_fetch_by_id(
         $connection,
         $messageTable,
-        $permissionModeGuardMessageId
+        $strictPermissionGuardMessageId
     );
     message_db_assert(
         ($strictRestoredIncident['estab_permission_mode'] ?? null) === 'STRICT'
             && is_array($strictGuardRow)
+            && $strictOperationalRejected
+            && estab_message_query_int(
+                $connection,
+                'SELECT COUNT(*) FROM `nv_benutzer_zusatzfunktionen`'
+                    . ' WHERE BINARY `benutzer_kuerzel` = BINARY ?'
+                    . ' AND BINARY `funktion` = BINARY ?',
+                [$stateIdentity['kuerzel'], 'S1']
+            ) === 1
             && !estab_message_object_allowed(
                 $stateIdentity,
                 'staff-correction',
@@ -2663,7 +2882,7 @@ try {
             && !estab_message_resubmit_returned_outgoing(
                 $connection,
                 $messageTable,
-                $permissionModeGuardMessageId,
+                $strictPermissionGuardMessageId,
                 $stateIdentity['kuerzel'],
                 $stateIdentity['funktion'],
                 $crossRoleCorrectionFields('strict-restored'),
@@ -2678,13 +2897,33 @@ try {
                     . ' WHERE `einsatz_id` = ?'
                     . " AND `aktion` = 'berechtigung_geaendert'",
                 [$testIncidentId]
-            ) === 2
+            ) === 0
+            && estab_message_query_int(
+                $connection,
+                'SELECT COUNT(*) FROM `nv_einsatz_ereignisse`'
+                    . ' WHERE `einsatz_id` = ?'
+                    . " AND `aktion` = 'berechtigung_geaendert'",
+                [$permissionModeIncidentId]
+            ) === 0
             && estab_message_evidence_verify(
                 $connection,
                 $testIncidentId
+            )['valid'] === true
+            && estab_message_evidence_verify(
+                $connection,
+                $permissionModeIncidentId
             )['valid'] === true,
-        'Returning to STRICT did not restore the cross-role correction boundary'
+        'Reactivating the immutable STRICT fixture did not ignore the stale '
+            . 'LOOSE S1 grant'
     );
+    $cleanupS1Grant = estab_message_execute(
+        $connection,
+        'DELETE FROM `nv_benutzer_zusatzfunktionen`'
+            . ' WHERE BINARY `benutzer_kuerzel` = BINARY ?'
+            . ' AND BINARY `funktion` = BINARY ?',
+        [$stateIdentity['kuerzel'], 'S1']
+    );
+    $cleanupS1Grant->close();
 
     // A completed evidence row rejects even an idempotent-looking generic
     // update; corrections must be new, explicitly linked records.

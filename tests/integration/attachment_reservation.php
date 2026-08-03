@@ -162,7 +162,8 @@ function attachment_db_restore_incident(
                         $connection,
                         $previousIncidentId,
                         (int) $status['revision'],
-                        'attachment-integration-cleanup'
+                        'attachment-integration-cleanup',
+                        true
                     );
                 } else {
                     estab_incident_deactivate(
@@ -180,7 +181,8 @@ function attachment_db_restore_incident(
                     $connection,
                     $previousIncidentId,
                     (int) $status['revision'],
-                    'attachment-integration-cleanup'
+                    'attachment-integration-cleanup',
+                    true
                 );
             } elseif (
                 $activeIncidentId !== $previousIncidentId
@@ -618,6 +620,7 @@ try {
         [
             'kennung' => 'CI-ATT-' . strtoupper($token),
             'name' => 'Attachment reservation ' . $token,
+            'estab_permission_mode' => 'LOOSE',
             'beginn' => date('Y-m-d\TH:i'),
             'organisation' => 'eStab CI',
             'fuehrungsstellenname' => $fixtureCommandPostName,
@@ -633,7 +636,9 @@ try {
             ),
         ],
         'attachment-integration',
-        false
+        false,
+        null,
+        true
     );
     $fixtureIncidentId = (int) (
         $fixtureIncident['einsatz_id'] ?? 0
@@ -648,12 +653,15 @@ try {
         $connectionA,
         $fixtureIncidentId,
         (int) $activationStatus['revision'],
-        'attachment-integration'
+        'attachment-integration',
+        true
     );
     attachment_db_assert(
         (int) ($activatedFixture['active_einsatz_id'] ?? 0)
-            === $fixtureIncidentId,
-        'Could not activate the isolated attachment incident'
+            === $fixtureIncidentId
+            && ($activatedFixture['estab_permission_mode'] ?? null)
+                === 'LOOSE',
+        'Could not activate the isolated LOOSE attachment incident'
     );
     attachment_db_assert(
         estab_dv_active_shift_summary(

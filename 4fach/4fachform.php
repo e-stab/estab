@@ -218,64 +218,65 @@ class nachrichten4fach {
       $connection = null;
       try {
         $connection = estab_message_connect ($conf_4f_db);
-        $incident = estab_incident_active ($connection);
-        if (
-          !is_array ($incident)
-          || (int) ($incident ["active_einsatz_id"] ?? 0) !== $incidentId
-        ) {
-          throw new EstabIncidentConflictException (
-            "Der aktive Einsatz hat sich geändert."
-          );
-        }
-        estab_permission_context_set_from_incident ($incident);
-        $selectedIdentity = estab_read_require_identity_scope (
+        $this->messageTimelineHtml = estab_read_with_locked_operational_scope (
           $connection,
-          $incidentId,
-          $identity
-        );
-        $message = estab_message_fetch_for_incident_by_id (
-          $connection,
-          (string) $conf_4f_tbl ["nachrichten"],
-          $messageId,
-          $incidentId
-        );
-        if (!is_array ($message)) {
-          throw new EstabReadPermissionException (
-            "Der Nachrichtenvordruck ist nicht verfügbar."
-          );
-        }
+          $identity,
+          function (array $scope) use (
+            $connection,
+            $conf_4f_tbl,
+            $incidentId,
+            $messageId
+          ): string {
+            if (
+              (int) $scope ["incident"]["active_einsatz_id"] !== $incidentId
+            ) {
+              throw new EstabIncidentConflictException (
+                "Der aktive Einsatz hat sich geändert."
+              );
+            }
+            $selectedIdentity = $scope ["identity"];
+            $message = estab_message_fetch_for_incident_by_id (
+              $connection,
+              (string) $conf_4f_tbl ["nachrichten"],
+              $messageId,
+              $incidentId
+            );
+            if (!is_array ($message)) {
+              throw new EstabReadPermissionException (
+                "Der Nachrichtenvordruck ist nicht verfügbar."
+              );
+            }
 
-        $operation = array (
-          "Stab_lesen" => "staff-read",
-          "Stab_korrigieren" => "staff-correction",
-          "Stab_sichten" => "viewer-review",
-          "LdF-Eingang" => "telecommunications-lead-edit",
-          "LdF-Ausgang" => "telecommunications-lead-edit",
-          "FM-Ausgang" => "telecommunications-edit",
-        ) [$this->task] ?? null;
-        $readAllowed = estab_read_message_allowed (
-          $selectedIdentity,
-          $message
-        );
-        $writeAllowed = is_string ($operation)
-          && estab_message_object_allowed (
-            $selectedIdentity,
-            $operation,
-            $message,
-            true
-          );
-        $looseWriteView = is_string ($operation)
-          && estab_message_operation_relaxes_write_role ($operation)
-          && !estab_permission_role_checks_enforced ();
-        if (!$readAllowed && !($writeAllowed && $looseWriteView)) {
-          throw new EstabReadPermissionException (
-            "Der Nachrichtenverlauf ist nicht freigegeben."
-          );
-        }
+            $operation = array (
+              "Stab_lesen" => "staff-read",
+              "Stab_korrigieren" => "staff-correction",
+              "Stab_sichten" => "viewer-review",
+              "LdF-Eingang" => "telecommunications-lead-edit",
+              "LdF-Ausgang" => "telecommunications-lead-edit",
+              "FM-Ausgang" => "telecommunications-edit",
+            ) [$this->task] ?? null;
+            $readAllowed = estab_read_message_allowed (
+              $selectedIdentity,
+              $message
+            );
+            $writeAllowed = is_string ($operation)
+              && estab_message_object_allowed (
+                $selectedIdentity,
+                $operation,
+                $message,
+                true
+              );
+            if (!$readAllowed && !$writeAllowed) {
+              throw new EstabReadPermissionException (
+                "Der Nachrichtenverlauf ist nicht freigegeben."
+              );
+            }
 
-        $this->messageTimelineHtml = estab_message_timeline_render (
-          estab_message_timeline_for_message ($connection, $message),
-          "message-timeline-".$messageId
+            return estab_message_timeline_render (
+              estab_message_timeline_for_message ($connection, $message),
+              "message-timeline-".$messageId
+            );
+          }
         );
       } catch (Throwable $exception) {
         error_log ("eStab verified message timeline is unavailable");
@@ -1029,12 +1030,16 @@ HTML;
         ? $this->formdata["16_empf"]
         : ""; // Zeile mit den Empfaengern aus der DB
     $empf_array = estab_recipient_copy_map ($empf_text);
-    $sessionFunction = (string) ($_SESSION ['vStab_funktion'] ?? "");
-    if (isset ($empf_array [$sessionFunction])) {
-      $sessionColours = estab_recipient_copy_colours (
-        $empf_array [$sessionFunction]
+    $actingIdentity = $GLOBALS ["workflowSelectedIdentity"] ?? null;
+    $actingFunction = is_array ($actingIdentity)
+      && is_string ($actingIdentity ["funktion"] ?? null)
+        ? $actingIdentity ["funktion"]
+        : "";
+    if (isset ($empf_array [$actingFunction])) {
+      $actingColours = estab_recipient_copy_colours (
+        $empf_array [$actingFunction]
       );
-      $this->fktmsgbgcolor = $sessionColours [0] ?? "";
+      $this->fktmsgbgcolor = $actingColours [0] ?? "";
     }
     $sonstcount = 2;
     for ($i=1; $i <= 5 ; $i++){
@@ -1121,14 +1126,18 @@ HTML;
         echo "<TD>";
         $katego_master = new  kategorien ("master");
         $katearr_master = $katego_master->db_get_kategobymsg ($this->formdata["00_lfd"]);
+        $actingFunction = (string) $katego_master->stab_fkt;
         $masterManagerUrl = "katgoedt.php?".http_build_query (array (
           "dbtyp" => "master",
           "msgno" => (string) $this->formdata ["00_lfd"],
+          "acting_function" => $actingFunction,
         ), "", "&", PHP_QUERY_RFC3986);
         echo"<a ";
           // Ist die Funktion berechtigt globale Kategorien zu aendern?
-        $berechtigt = ($_SESSION ["vStab_funktion"] == $redcopy2) OR
-                      ($_SESSION ["vStab_funktion"] == "Si");
+        $berechtigt = estab_category_can_manage_master (
+          array ("funktion" => $actingFunction),
+          is_string ($redcopy2) ? $redcopy2 : null
+        );
         if ($berechtigt) {
           echo "href=\"".estab_message_html ($masterManagerUrl)."\"";
         }

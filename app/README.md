@@ -41,9 +41,11 @@ die gemeinsame Stationsleiste für Bearbeitung und Detailansicht. Wiederholte
 Stationen bleiben als einzelne Besuche erhalten. Laufzeiten verwenden
 ausschließlich die unveränderbare Datenbankzeit `recorded_at`; die fachlich
 korrigierbare Ereigniszeit `occurred_at` ist ausdrücklich keine Stoppuhr.
-`shift_access.php` bildet optionale einsatzgebundene Zugangsschichten und
-Kontenzuordnungen ab. `dv_operations.php` bildet S6-Planung, Melderlauf sowie
-historische Dienstbetriebs- und Betriebsereignisdaten ab. `operational_guard.php` ist die
+`shift_access.php` bildet die nur im lockeren Modus wirksamen optionalen
+einsatzgebundenen Zugangsschichten und Kontenzuordnungen ab.
+`dv_operations.php` bildet formale Dienstschichten samt persönlicher
+Besetzung, S6-Planung, Melderlauf und Betriebsereignisdaten ab.
+`operational_guard.php` ist die
 gemeinsame fail-closed Grenze für authentifizierte operative Schreibrequests.
 
 ## Sicherheits- und Kompatibilitätsentscheidungen
@@ -148,17 +150,19 @@ gemeinsame fail-closed Grenze für authentifizierte operative Schreibrequests.
   Übergabeereignis. Der feste Eingangslauf ist `1 → 4 → 8`.
 - `read_authorization.php` liefert die serverseitig gerenderten
   Vorschlagslisten für „Rufname der Gegenstelle“ und „Absender“. Die Abfrage
-  validiert den aktiven Einsatz sowie feste Kontofunktion und Rolle erneut:
+  validiert den aktiven Einsatz sowie die wirksamen Funktionen und Rollen
+  erneut: in `STRICT` aus der ausgewählten aktiven Dienstbesetzung, in `LOOSE`
+  aus der festen Kontofunktion und ausdrücklich vergebenen Zusatzfunktionen.
   Rufnamen sind nur für die Funktionen Fernmelder und LdF verfügbar,
   Absender nur für LdF bei Eingängen. Sie liest ausschließlich bisherige Werte
-  desselben aktiven Einsatzes. Für das feste LdF-Konto
+  desselben aktiven Einsatzes. Für einen wirksamen LdF-Kontext
   korreliert `estab_read_ldf_mapping_suggestions()` außerdem den
   Gegenstellenrufnamen eines gesperrten Eingangs mit früheren Absendern
   beziehungsweise die Anschrift eines gesperrten Ausgangs mit früheren
   Gegenstellenrufnamen. Abgeschlossene Nachrichtenpaare stehen nach Häufigkeit
   und Aktualität vor einem passenden aktuell gültigen S6-Fernmeldeplan; erst
   danach folgt die allgemeine Einsatzhistorie. Dieselbe UNION-Abfrage bindet
-  Einsatz, Konto, feste Funktionsfähigkeit, Richtung,
+  Einsatz, Konto, modeabhängig wirksame Funktionsfähigkeit, Richtung,
   Nachrichtenstatus und Sperrinhaber erneut, sodass ein zwischenzeitlicher
   Zuständigkeits- oder Sperrwechsel keine Daten freigibt. Der lokale Absender
   eines Ausgangs wird weiterhin serverseitig bestimmt. Die Felder verwenden
@@ -222,8 +226,10 @@ gemeinsame fail-closed Grenze für authentifizierte operative Schreibrequests.
   Ablehnungsgrenze. Alle Loginformulare verwenden `target="_self"` und bleiben
   damit im aktuellen Kontext, während der Abbruchlink mit Top-Level-Ziel
   zuverlässig zur öffentlichen Übersicht führt. Nach der Anmeldung öffnet die
-  Navigation das vorgemerkte, für die feste Kontofunktion zulässige Ziel
-  unmittelbar; eine Hutauswahl entfällt. Rollen-, Objekt-, CSRF-, Polling- und
+  Navigation das vorgemerkte, nach wirksamer Funktion zulässige Ziel
+  unmittelbar. In `STRICT` ist vor operativer Arbeit eine angenommene
+  Besetzung der aktiven Dienstschicht auszuwählen; in `LOOSE` entfällt diese
+  Auswahl. Rollen-, Objekt-, CSRF-, Polling- und
   Bildgrenzen bleiben harte 403-Antworten. Die Anmeldekarte zeigt das
   vorgemerkte Ziel und bietet immer einen Top-Level-Abbruch zur Übersicht.
   Administration und das öffentliche Web-Handbuch unter `/handbuch/` sind
@@ -248,12 +254,12 @@ gemeinsame fail-closed Grenze für authentifizierte operative Schreibrequests.
   HTML-Marker der Leiste nicht unterdrücken. Der Nachrichtenarbeitsbereich
   besteht aus der durchgehenden `vorgaben`-Sidebar und dem rechten `mainframe`.
   Die Sidebar bündelt Arbeitszähler, Serverzeit,
-  Onlinebelegung, Identität, Logout, die nach fester Kontofunktion
+  Onlinebelegung, Identität, Logout, die nach wirksamer Funktion
   gefilterten neun beziehungsweise zehn dauerhaft sichtbaren Bereichs- und
   Dienstlinks ohne Disclosure sowie rollenabhängige Fachaktionen. Bei einem
-  lockeren Einsatz zeigt sie die bekannten schreibenden Fachaktionen
-  funktionsübergreifend an; allgemeine Lesebereiche, Nachweisung und
-  Zweitsichtungsarchive bleiben weiterhin nach ihrer Leseregel begrenzt. Der
+  lockeren Einsatz vereinigt sie ausschließlich die Bereiche und Aktionen der
+  festen Kontofunktion und der ausdrücklich vergebenen Zusatzfunktionen; es
+  gibt keine pauschale funktionsübergreifende Freigabe. Der
   Hauptframe entfernt seine Standalone-Leiste vor der ersten Darstellung. Das
   regelmäßig ausgetauschte Statusfragment lässt Navigation, wiederhergestellten
   Fokus, Scrollposition und das langlebige PCM-WAV-Audioelement bestehen.
@@ -264,13 +270,20 @@ gemeinsame fail-closed Grenze für authentifizierte operative Schreibrequests.
   Tab eine erfolgreiche Browserfreigabe; die browserweite Ein-/Aus-Absicht
   wird über `localStorage` synchronisiert und verspätete `play()`-Ergebnisse
   werden generationsgebunden verworfen.
-- `auth.php` bindet immer die konkrete Funktion und Rolle aus `nv_benutzer` an
-  die Sitzung. `permission_mode.php` normalisiert den ausschließlich aus der
-  Einsatzzeile geladenen Modus; ohne eindeutigen Kontext gilt `STRICT`.
-  Operative Schreibpfade verlangen in beiden Modi ein konkretes aktives und
-  ungesperrtes Konto sowie einen aktiven offenen Einsatz, aber keine aktive Dienst- oder
-  Zugangsschicht und keine Besetzungs-ID. `shift_access.php` erlaubt optionale
-  einsatzbezogene Kontengruppen: unzugeordnete Konten bleiben zugelassen,
+- `auth.php` bindet das konkrete Konto an die Sitzung und ermittelt daraus die
+  modeabhängige operative Identität. `permission_mode.php` normalisiert den
+  ausschließlich aus der Einsatzzeile geladenen Modus; ohne eindeutigen
+  Kontext gilt fail-closed `STRICT`. Dort verlangt jeder operative
+  Schreibpfad eine persönlich angenommene, aktuell ausgewählte Besetzung einer
+  aktiven formalen Dienstschicht. Funktion und Rolle stammen aus diesem
+  Besetzungssnapshot und dürfen von der festen Kontofunktion abweichen. Ein
+  Schichtende oder eine Ablösung entzieht die Rechte sofort. In `LOOSE` ist
+  keine formale Dienstschicht oder Besetzungs-ID erforderlich. Wirksam sind
+  die feste Kontofunktion aus `nv_benutzer` und die in
+  `nv_benutzer_zusatzfunktionen` ausdrücklich vergebenen globalen
+  Zusatzfunktionen; diese Zusatzfunktionen werden in `STRICT` ignoriert.
+  `shift_access.php` erlaubt nur in `LOOSE` optionale einsatzbezogene
+  Kontengruppen: unzugeordnete Konten bleiben zugelassen,
   Mehrfachzuordnungen gelten per OR, Aktivierung erzeugt keine Sitzung und
   Deaktivierung widerruft betroffene Sitzungen ohne andere aktive Zuordnung.
   Die manuelle Sperre `estab_gesperrt` bleibt unabhängig und vorrangig. Ein
@@ -278,17 +291,20 @@ gemeinsame fail-closed Grenze für authentifizierte operative Schreibrequests.
   sichtbaren Schichtstatus, aktuellen Mitgliedsintervalle sowie relevanten
   Sperr- und Sitzungszustände; Entfernen verlangt zusätzlich exakt die
   angezeigte Mitgliedsintervall-ID und verhindert damit einen ABA-Fehler.
-  In `STRICT` prüfen Writer außerdem die bisherige fachlich passende feste
-  Kontofunktion/Rolle. In `LOOSE` entfällt nur diese Schreibprüfung;
-  Authentisierung, Zugangsentzug, Einsatzscoping, CSRF, Validierung,
-  Richtung, Workflowzustand, Sperrinhaber, Integrität, Audit und Retention
-  bleiben bestehen. Die normale Leseautorisierung wird nicht global
-  gelockert; Nachweisung, rollenbezogene Übersichten/Zweitsichtungsarchive,
-  Kategorien- und Administrationsrechte bleiben streng. Nur eine ausdrücklich
-  gewählte Schreibstufe erhält die nötige Workflow-Objektsicht. Bei einem
-  zurückgewiesenen Ausgang darf `LOOSE` die Bindung an die ursprüngliche
-  Verfasserfunktion lösen; Ereignis- und Datensatzprovenienz erhalten beide
-  Verantwortlichkeiten.
+  In beiden Modi muss mindestens eine wirksame Funktion den konkreten
+  Arbeitsschritt erlauben; `LOOSE` vergibt niemals pauschal alle Schreib- oder
+  Leserechte. Authentisierung, Einsatzscoping, CSRF, Validierung, Richtung,
+  Workflowzustand, Sperrinhaber, Integrität, Audit und Retention bleiben
+  unverändert. Administrationsrechte werden durch operative Zusatzfunktionen
+  nicht erweitert.
+- Bei mehreren gewöhnlichen Stabs-/Fachberaterfunktionen erzeugt die Sidebar
+  getrennte `Schreiben als …`-/`Lesen als …`-Aktionen. Der explizite
+  `acting_function`-Kontext wird nur aus der in `LOOSE` aktuell gültigen festen
+  oder zusätzlichen Kontofunktion beziehungsweise der in `STRICT` ausgewählten
+  Dienstbesetzung kanonisiert und durch Formular-, Listen-, Status- und
+  Detailpfade weitergereicht. Jeder Controller prüft ihn vor der
+  Objektberechtigung erneut; manipulierte oder widerrufene Kontexte scheitern
+  fail-closed.
 - `dynamic_schema.php` reconciliert die sechs historischen
   Nachrichten-/Status-/Kategorietabellen für feste Stabs- und FB-Kontofunktionen
   unter einem datenbank-/funktionsgebundenen Advisory Lock. Der Login-Wrapper
@@ -303,7 +319,8 @@ gemeinsame fail-closed Grenze für authentifizierte operative Schreibrequests.
   eigene Melder-Rückkehrkette. Ein übernommener
   Melderauftrag blockiert bis zur Rückkehr insbesondere Nachrichten,
   Kategorien, Gelesen-/Erledigt-Zustände, ETB/TBB und Anhänge. Ohne aktiven
-  Einsatz bleibt die Grenze fail-closed; das Fehlen einer Schicht sperrt nicht.
+  Einsatz bleibt die Grenze fail-closed; in `STRICT` sperrt zusätzlich eine
+  fehlende aktive, angenommene und ausgewählte Dienstbesetzung.
 - `export.php` veröffentlicht jeden Datenbankexport atomar als streng benannten
   Lauf und ZIP außerhalb des DocumentRoot. Die Administrationsseite listet nur
   reguläre, nicht verlinkte Archive unmittelbar im konfigurierten Exportroot.
@@ -324,9 +341,13 @@ gemeinsame fail-closed Grenze für authentifizierte operative Schreibrequests.
   Einsatz-ID.
 - Neue und migrierte Einsätze erhalten `STRICT`. Anlegen, Aktivieren oder
   Umstellen eines lockeren Einsatzes verlangt eine ausdrückliche
-  Warnungsbestätigung. Die Modusänderung ist nur bei offenen Einsätzen möglich,
-  bindet erwarteten Altmodus und globale Revision, erhöht letztere bei einer
-  echten Änderung und auditiert Vorher/Nachher. Eng gesetzte Sessionmarker und
+  Warnungsbestätigung. Eine echte Modusänderung ist nur bei einem offenen
+  Einsatz ohne jede operative oder formale Eintragung möglich, bindet
+  erwarteten Altmodus und globale Revision, erhöht letztere und auditiert
+  Vorher/Nachher. Die erste operative oder formale Eintragung friert den Modus
+  dauerhaft ein; auch das spätere Löschen einzelner Daten hebt diese Sperre
+  nicht auf. Das idempotente Speichern desselben Modus bleibt ohne neue
+  Revision und ohne Auditereignis möglich. Eng gesetzte Sessionmarker und
   Datenbank-Guard-Trigger weisen unbeabsichtigte oder alte, unmarkierte
   `LOOSE`-Inserts/-Updates ab und verhindern kombinierte Änderungen weiterer
   Einsatzfelder. Sie sind keine Privileggrenze gegen Personen oder Prozesse
@@ -357,8 +378,9 @@ gemeinsame fail-closed Grenze für authentifizierte operative Schreibrequests.
   Herabstufung des Nachweises. Exporte vergleichen die reale Datei erneut und
   brechen bei Abweichung ab. Der Admin-Controller übergibt beim formalen
   Einsatzabschluss zwingend den konfigurierten Ablageroot, sodass der
-  Abschluss-Preflight ebenfalls die realen Bytes prüft. Historische formale
-  Dienstschichten sind keine Abschlussblocker. Beim Upgrade vorhandene Dateien bleiben ehrlich
+  Abschluss-Preflight ebenfalls die realen Bytes prüft. In `STRICT` bleiben
+  fehlende Bucheröffnung und offene formale Dienstorganisation blockierend;
+  in `LOOSE` ist keine formale Dienstschicht nötig. Beim Upgrade vorhandene Dateien bleiben ehrlich
   als „Integrität beim Eingang nicht belegbar“ gekennzeichnet, weil ein heute
   berechneter Hash ihre ursprünglichen Eingangsbytes nicht beweisen könnte.
 - Einzelne Nachrichtenvordrucke werden als

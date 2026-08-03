@@ -80,6 +80,12 @@ $_SESSION += array (
 // enforce the established function/role boundary before any database action.
 $workflowIdentity = estab_auth_session_identity ($_SESSION);
 if ($workflowIdentity !== null) {
+  estab_navigation_require_selected_duty (
+    $_SESSION,
+    $workflowIdentity,
+    "messages",
+    $_SERVER
+  );
   $permissionModeConnection = null;
   try {
     $permissionModeConnection = estab_auth_connect ($conf_4f_db);
@@ -315,6 +321,11 @@ if ($workflowIdentity !== null) {
     )) {
       estab_workflow_forbid ();
     }
+    $workflowSelectedIdentity = estab_workflow_identity_for_request (
+      $workflowSelectedIdentity,
+      $returnValue
+    );
+    $workflowIdentity = $workflowSelectedIdentity;
     $activeCommandPostName = estab_incident_command_post_name (
       $readScope ["incident"]
     );
@@ -329,8 +340,9 @@ if ($workflowIdentity !== null) {
     estab_workflow_render_read_gate (
       403,
       "Operativer Zugang nicht verfügbar",
-      "Prüfen Sie die feste Kontofunktion und ob Ihr Zugang in der ".
-      "optionalen Schichtplanung aktiviert ist."
+      "Prüfen Sie im strengen Modus Ihre aktive, angenommene und ausgewählte ".
+      "Dienstfunktion. Im lockeren Modus prüfen Sie Haupt- und ".
+      "Zusatzfunktionen sowie eine gegebenenfalls zugeordnete Zugangsschicht."
     );
   } catch (EstabIncidentConfigurationException $exception) {
     estab_workflow_render_read_gate (
@@ -344,7 +356,7 @@ if ($workflowIdentity !== null) {
     estab_workflow_render_read_gate (
       503,
       "Berechtigungsstatus nicht verfügbar",
-      "Die feste Kontofunktion kann derzeit nicht geprüft werden."
+      "Die wirksame Dienstfunktion kann derzeit nicht geprüft werden."
     );
   } finally {
     if ($readGateConnection instanceof mysqli) {
@@ -353,19 +365,25 @@ if ($workflowIdentity !== null) {
   }
 }
 
-// A second-sighting mode is scoped to the fixed account function. Normalise
-// stale sessions after an administrative function change.
+// A second-sighting mode is scoped to one currently effective function.
+// Normalise stale sessions after a hat, mode or additional-function change.
 if (
   !is_array ($workflowSelectedIdentity)
-  || ($workflowSelectedIdentity ["funktion"] ?? null) !== "A/W"
-  || ($workflowSelectedIdentity ["rolle"] ?? null) !== "Fernmelder"
+  || !estab_auth_identity_has_function (
+    $workflowSelectedIdentity,
+    "A/W",
+    "Fernmelder"
+  )
 ) {
   $_SESSION ["fm_zweite_sichtung"] = 0;
 }
 if (
   !is_array ($workflowSelectedIdentity)
-  || ($workflowSelectedIdentity ["funktion"] ?? null) !== "Si"
-  || ($workflowSelectedIdentity ["rolle"] ?? null) !== "Stab"
+  || !estab_auth_identity_has_function (
+    $workflowSelectedIdentity,
+    "Si",
+    "Stab"
+  )
 ) {
   $_SESSION ["si_zweite_sichtung"] = 0;
 }
@@ -577,29 +595,47 @@ if ($messageOperation !== null) {
   $objectConnection = null;
   try {
     $objectConnection = estab_message_connect ($conf_4f_db);
-    $objectMessage = estab_message_fetch_for_incident_by_id (
+    $objectSelection = estab_read_with_locked_operational_scope (
       $objectConnection,
-      $conf_4f_tbl ["nachrichten"],
-      $messageRecordId,
-      $workflowIncidentId
+      $workflowSelectedIdentity,
+      static function (array $scope) use (
+        $objectConnection,
+        $conf_4f_tbl,
+        $messageRecordId,
+        $workflowIncidentId,
+        $messageOperation
+      ): array {
+        if (
+          (int) $scope ["incident"]["active_einsatz_id"]
+            !== $workflowIncidentId
+        ) {
+          throw new EstabIncidentConflictException (
+            "Der aktive Einsatz hat sich geändert."
+          );
+        }
+        $message = estab_message_fetch_for_incident_by_id (
+          $objectConnection,
+          $conf_4f_tbl ["nachrichten"],
+          $messageRecordId,
+          $workflowIncidentId
+        );
+        $identity = is_array ($message)
+          ? estab_workflow_identity_for_message_operation (
+            $scope ["identity"],
+            $messageOperation,
+            $message
+          )
+          : null;
+        return array (
+          "message" => $message,
+          "identity" => $identity,
+          "scope_identity" => $scope ["identity"],
+        );
+      }
     );
-    $objectAllowed = is_array ($objectMessage)
-      && estab_message_object_allowed (
-        $workflowSelectedIdentity,
-        $messageOperation,
-        $objectMessage,
-        true
-      )
-      && (
-        (
-          estab_message_operation_relaxes_write_role ($messageOperation)
-          && !estab_permission_role_checks_enforced ()
-        )
-        || estab_read_message_allowed (
-          $workflowSelectedIdentity,
-          $objectMessage
-        )
-      );
+    $objectMessage = $objectSelection ["message"];
+    $objectIdentity = $objectSelection ["identity"];
+    $objectAllowed = is_array ($objectIdentity);
     if (!$objectAllowed) {
       if (
         $messageOperation === "staff-correction"
@@ -608,7 +644,7 @@ if ($messageOperation !== null) {
           === "pending-submit"
         && is_array ($objectMessage)
         && estab_read_message_allowed (
-          $workflowSelectedIdentity,
+          $objectSelection ["scope_identity"],
           $objectMessage
         )
       ) {
@@ -622,6 +658,10 @@ if ($messageOperation !== null) {
       }
       estab_workflow_forbid ();
     }
+    // From here on, author marks, state tables, locks and attachment scopes
+    // carry the exact function that passed the object-level decision.
+    $workflowSelectedIdentity = $objectIdentity;
+    $workflowIdentity = $workflowSelectedIdentity;
   } catch (Throwable $exception) {
     error_log ("eStab message object gate failed");
     estab_workflow_forbid ();
@@ -2040,10 +2080,23 @@ ANTWORT % WEITERLEITUNG
       $error = check_save_user ($loginData, $loginError);
       if (!$error) {
         $_SESSION ["menue"] = "ROLLE";
-        unset ($_SESSION ["estab_pending_navigation_key"]);
-        estab_navigation_open_after_login (
+        $loginModeConnection = null;
+        try {
+          $loginModeConnection = estab_auth_connect ($conf_4f_db);
+          $loginPermissionMode = estab_auth_active_permission_mode (
+            $loginModeConnection
+          );
+        } finally {
+          if ($loginModeConnection instanceof mysqli) {
+            estab_auth_close ($loginModeConnection);
+          }
+        }
+        $loginLandingKey = estab_navigation_login_landing_key (
+          $_SESSION,
+          $loginPermissionMode,
           $loginDestination ?? "messages"
         );
+        estab_navigation_open_after_login ($loginLandingKey);
       }
     }
   }
@@ -2086,12 +2139,16 @@ ANTWORT % WEITERLEITUNG
         if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><br> ### Gesprächsnotiz == 2. Sichtung<br>\n";}
 
         $formdata = $returnValue ;
-        $formdata ["01_zeichen"]      = $_SESSION ["vStab_kuerzel"];
+        $formdata ["01_zeichen"] =
+          (string) $workflowSelectedIdentity ["kuerzel"];
         $formdata ["11_gesprnotiz"]   = "t";
         $formdata ["13_abseinheit"] = $activeCommandPostName;
-        $formdata ["14_zeichen"]      = $_SESSION ["vStab_kuerzel"];
-        $formdata ["14_funktion"]     = $_SESSION ["vStab_funktion"];
-        $formdata ["16_empf"]         = $redcopy2."_rt,".$_SESSION ["vStab_funktion"]."_gn" ;
+        $formdata ["14_zeichen"] =
+          (string) $workflowSelectedIdentity ["kuerzel"];
+        $formdata ["14_funktion"] =
+          (string) $workflowSelectedIdentity ["funktion"];
+        $formdata ["16_empf"] = $redcopy2."_rt,".
+          $workflowSelectedIdentity ["funktion"]."_gn";
         $formdata ["15_quitdatum"]    = "";
         $formdata ["15_quitzeichen"]  = "";
         $formdata ["task"]            = "Stab_gesprnoti";
@@ -2238,7 +2295,7 @@ FM-Ausgang (Sichter) abgebrochen
        }
   } elseif (estab_workflow_cancelled_new_form ($returnValue)) {
     // These forms own no persisted record lock. Their cancel action is a
-    // navigation back to the fixed account's ordinary view, so it must become
+    // navigation back to the effective function's ordinary view, so it must become
     // a neutral request before the single-dispatch decision below.
     $returnValue ["task"] = "";
   } elseif (estab_workflow_acknowledged_read_form ($returnValue)) {
@@ -2275,8 +2332,10 @@ Daten kommen vom Formular und sollen als Antwort dienen.
       estab_message_followup_contact_fields ($objectMessage, "AW")
     );
     $formdata ["12_abfzeit"] = "" ;
-    $formdata ["14_zeichen"]     = $_SESSION["vStab_kuerzel"];
-    $formdata ["14_funktion"]    = $_SESSION["vStab_funktion"];
+    $formdata ["14_zeichen"] =
+      (string) $workflowSelectedIdentity ["kuerzel"];
+    $formdata ["14_funktion"] =
+      (string) $workflowSelectedIdentity ["funktion"];
     $formdata ["12_inhalt"] = "Zitat: von ".$formdata["04_richtung"]." ".$formdata["04_nummer"]." \n\"".$formdata ["12_inhalt"]."\"\n";
     $formdata ["04_richtung"] = "";
     $formdata ["04_nummer"] = "";
@@ -2312,8 +2371,10 @@ Daten kommen vom Formular und sollen als Antwort dienen.
     $formdata ["11_gesprnotiz"] = "";
     $formdata ["13_abseinheit"] = $activeCommandPostName;
     $formdata ["12_abfzeit"] = "" ;
-    $formdata ["14_zeichen"]     = $_SESSION["vStab_kuerzel"];
-    $formdata ["14_funktion"]    = $_SESSION["vStab_funktion"];
+    $formdata ["14_zeichen"] =
+      (string) $workflowSelectedIdentity ["kuerzel"];
+    $formdata ["14_funktion"] =
+      (string) $workflowSelectedIdentity ["funktion"];
     $formdata = estab_message_followup_new_record ($formdata);
     $form = new nachrichten4fach ($formdata, "Stab_schreiben", "");
   }
@@ -2459,8 +2520,10 @@ if ($returnValue ["stab"] === "korrektur") {
 
     if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><br>  _GET[stab_schreiben_x] )) and !gesprnotizsichter ";  echo "<br>\n";}
     $formdata ["13_abseinheit"] = $activeCommandPostName;
-    $formdata ["14_zeichen"]     = $_SESSION["vStab_kuerzel"];
-    $formdata ["14_funktion"]    = $_SESSION["vStab_funktion"];
+    $formdata ["14_zeichen"] =
+      (string) $workflowSelectedIdentity ["kuerzel"];
+    $formdata ["14_funktion"] =
+      (string) $workflowSelectedIdentity ["funktion"];
     $form = new nachrichten4fach ($formdata, "Stab_schreiben", "");
   }
 
@@ -2475,16 +2538,12 @@ if ($returnValue ["stab"] === "korrektur") {
    if (estab_workflow_should_render_primary_view (
          $workflowPrimaryView,
          "staff-list",
-         (
-           ($_SESSION ["vStab_rolle"] == "Stab" ) or
-           ($_SESSION ["ROLLE"] == "Stab" ) or
-           ($_SESSION ["vStab_rolle"] == "FB" ) or
-           ($_SESSION ["ROLLE"] == "FB" )
-         )
+         is_array ($workflowSelectedIdentity)
+           && estab_workflow_selected_identity_is_staff_writer (
+             $workflowSelectedIdentity
+           )
        ) and
         (
-          ( $_SESSION ["vStab_funktion"] != "Si"
-           ) and
           ( $returnValue ["stab"] != "meldung"
            ) and
           ( !(isset ($returnValue ["m2_benutzer_x"]
@@ -2640,11 +2699,12 @@ ul#topmenu li.active {
    if (estab_workflow_should_render_primary_view (
          $workflowPrimaryView,
          "viewer-list",
-         (
-           (($_SESSION ["vStab_rolle"] == "Stab") or
-            ($_SESSION ["ROLLE"] == "Stab")) and
-           ($_SESSION ["vStab_funktion"] == "Si")
-         )
+         is_array ($workflowSelectedIdentity)
+           && estab_workflow_selected_identity_is (
+             $workflowSelectedIdentity,
+             "Si",
+             "Stab"
+           )
        ) and
         ( !($returnValue["sichter"] == "meldung") ) and
         ( !(isset($returnValue["si_admin_x"])) ) and
@@ -2680,13 +2740,19 @@ ul#topmenu li.active {
   Ausgänge: Gegenstelle und verbindlichen Beförderungsweg festlegen.
 \**********************************************************************/
   if (
-    is_array ($workflowIdentity)
-    && estab_workflow_is_telecommunications_lead ($workflowIdentity, true)
+    is_array ($workflowSelectedIdentity)
+    && estab_workflow_is_telecommunications_lead (
+      $workflowSelectedIdentity,
+      true
+    )
     && estab_workflow_should_render_primary_view (
       $workflowPrimaryView,
       "telecommunications-lead-list",
-      ($workflowIdentity ["funktion"] ?? "") === "LdF"
-        && ($workflowIdentity ["rolle"] ?? "") === "Fernmelder"
+      estab_workflow_selected_identity_is (
+        $workflowSelectedIdentity,
+        "LdF",
+        "Fernmelder"
+      )
     )
     && $returnValue ["ldf"] !== "meldung"
     && $returnValue ["task"] === ""
@@ -2789,11 +2855,12 @@ ul#topmenu li.active {
  if (estab_workflow_should_render_primary_view (
        $workflowPrimaryView,
        "telecommunications-outgoing-list",
-       (
-         (($_SESSION ["vStab_rolle"] == "Fernmelder") or
-          ($_SESSION ["ROLLE"] == "Fernmelder")) and
-         ($_SESSION ["vStab_funktion"] == "A/W")
-       )
+       is_array ($workflowSelectedIdentity)
+         && estab_workflow_selected_identity_is (
+           $workflowSelectedIdentity,
+           "A/W",
+           "Fernmelder"
+         )
      ) and
         !( ( isset ($returnValue ["fm_anhang_x"])  ) OR
            ( isset ($returnValue ["ah_upload_x"])  ) OR
@@ -2926,8 +2993,8 @@ if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b>  ### FM Aus
         echo "<header class=\"estab-tool-hero\">";
         echo "<p class=\"estab-tool-eyebrow\">Fernmelder · Nachrichtenvordrucke</p>";
         echo "<h1>Zweite Sichtung</h1>";
-        echo "<p>Durchsuchen und öffnen Sie die für Ihre aktuelle ".
-             "festen Kontofunktion sichtbaren Nachrichten des aktiven Einsatzes.</p>";
+        echo "<p>Durchsuchen und öffnen Sie die für Ihre wirksame ".
+             "Fernmelderfunktion sichtbaren Nachrichten des aktiven Einsatzes.</p>";
         echo "</header>";
         $list = new listen (
           "FMADMIN",
@@ -2971,8 +3038,8 @@ if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b>  ### FM Aus
         echo "<header class=\"estab-tool-hero\">";
         echo "<p class=\"estab-tool-eyebrow\">Si · Nachrichtenvordrucke</p>";
         echo "<h1>Zweite Sichtung</h1>";
-        echo "<p>Durchsuchen und öffnen Sie die für Ihre aktuelle ".
-             "festen Kontofunktion sichtbaren Nachrichten des aktiven Einsatzes.</p>";
+        echo "<p>Durchsuchen und öffnen Sie die für Ihre aktuell wirksame ".
+             "Sichtungsfunktion sichtbaren Nachrichten des aktiven Einsatzes.</p>";
         echo "</header>";
         $list = new listen (
           "SIADMIN",

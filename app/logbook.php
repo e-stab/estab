@@ -286,15 +286,7 @@ function estab_logbook_assignment_snapshot(array $assignment): string
     return $snapshot;
 }
 
-/**
- * Return historical duty assignments for the optional ETB workflow metadata.
- *
- * Duty shifts no longer grant ETB rights and therefore do not have to be
- * active.  The browser receives display values only; the chosen primary key
- * is revalidated and locked in the write transaction.
- *
- * @return list<array<string,mixed>>
- */
+/** Return the ETB assignment choices valid for the active permission mode. */
 function estab_logbook_active_assignment_options(
     array $databaseConfig
 ): array {
@@ -304,6 +296,12 @@ function estab_logbook_active_assignment_options(
         if ($incident === null) {
             return [];
         }
+        $strictMode = estab_incident_duty_shift_required($incident);
+        $assignmentStatusSql = $strictMode
+            ? " AND duty_shift.`status` = 'AKTIV'"
+                . " AND assignment.`status` = 'ANGENOMMEN'"
+                . ' AND account.`estab_gesperrt` = 0'
+            : " AND assignment.`status` <> 'ZURUECKGEZOGEN'";
         $statement = $connection->prepare(
             'SELECT assignment.`dienstbesetzung_id`,'
                 . ' assignment.`dienstschicht_id`, assignment.`funktion`,'
@@ -318,7 +316,7 @@ function estab_logbook_active_assignment_options(
                 . ' ON BINARY account.`kuerzel` ='
                 . ' BINARY assignment.`benutzer_kuerzel`'
                 . ' WHERE duty_shift.`einsatz_id` = ?'
-                . " AND assignment.`status` <> 'ZURUECKGEZOGEN'"
+                . $assignmentStatusSql
                 . ' ORDER BY duty_shift.`nummer` DESC,'
                 . ' assignment.`funktion`, account.`benutzer`,'
                 . ' assignment.`dienstbesetzung_id`'
@@ -353,15 +351,54 @@ function estab_logbook_active_assignment_options(
     }
 }
 
-/**
- * Validate the fixed account function used for a manual logbook entry.
- *
- * The caller has already proved the active incident and the required
- * capability.  New entries deliberately carry no legacy duty-shift
- * provenance because duty shifts are optional and never grant write rights.
- *
- * @return array{shift_id:?int,writer_assignment_id:?int}
- */
+/** Return the first accepted active assignment designated to lead a book. */
+function estab_logbook_designated_writer_assignment(
+    mysqli $connection,
+    int $incidentId,
+    string $kind,
+    bool $forUpdate = false
+): ?int {
+    if (!in_array($kind, ['etb', 'tbb'], true)) {
+        throw new InvalidArgumentException('Invalid logbook kind');
+    }
+    $incidentId = estab_incident_positive_id($incidentId);
+    $functionClause = $kind === 'etb'
+        ? "assignment.`funktion` IN ('ETB','S2')"
+        : "assignment.`funktion` = 'A/W'";
+    $order = $kind === 'etb'
+        ? "CASE assignment.`funktion` WHEN 'ETB' THEN 0 ELSE 1 END, "
+        : '';
+    $statement = $connection->prepare(
+        'SELECT assignment.`dienstbesetzung_id`'
+        . ' FROM `nv_dienstbesetzungen` AS assignment'
+        . ' JOIN `nv_dienstschichten` AS shift_row'
+        . ' ON shift_row.`dienstschicht_id` = assignment.`dienstschicht_id`'
+        . ' WHERE shift_row.`einsatz_id` = ?'
+        . " AND shift_row.`status` = 'AKTIV'"
+        . " AND assignment.`status` = 'ANGENOMMEN'"
+        . ' AND ' . $functionClause
+        . ' ORDER BY ' . $order . 'assignment.`dienstbesetzung_id` LIMIT 1'
+        . ($forUpdate ? ' FOR UPDATE' : '')
+    );
+    if (!$statement) {
+        throw new RuntimeException('Logbuchführung konnte nicht ermittelt werden.');
+    }
+    try {
+        $statement->bind_param('i', $incidentId);
+        if (!$statement->execute()) {
+            throw new RuntimeException('Logbuchführung konnte nicht geprüft werden.');
+        }
+        $result = $statement->get_result();
+        $row = $result->fetch_assoc();
+        $result->free();
+    } finally {
+        $statement->close();
+    }
+    $assignmentId = (int) ($row['dienstbesetzung_id'] ?? 0);
+    return $assignmentId > 0 ? $assignmentId : null;
+}
+
+/** Derive the authoritative manual writer for STRICT or LOOSE. */
 function estab_logbook_manual_writer_context(
     mysqli $connection,
     int $incidentId,
@@ -371,7 +408,85 @@ function estab_logbook_manual_writer_context(
     if (!in_array($kind, ['etb', 'tbb'], true)) {
         throw new InvalidArgumentException('Invalid logbook kind');
     }
-    estab_incident_positive_id($incidentId);
+    $incidentId = estab_incident_positive_id($incidentId);
+    $incident = estab_incident_status($connection);
+    if ((int) ($incident['active_einsatz_id'] ?? 0) !== $incidentId) {
+        throw new EstabDvPermissionException('Der Einsatz ist nicht mehr aktiv.');
+    }
+    if (estab_incident_duty_shift_required($incident)) {
+        $candidate = filter_var(
+            $identity['duty_assignment_id'] ?? null,
+            FILTER_VALIDATE_INT,
+            ['options' => ['min_range' => 1, 'max_range' => PHP_INT_MAX]]
+        );
+        if (!is_int($candidate)) {
+            throw new EstabDvPermissionException(
+                'Wählen Sie zuerst eine persönlich angenommene Dienstfunktion.'
+            );
+        }
+        $designated = estab_logbook_designated_writer_assignment(
+            $connection,
+            $incidentId,
+            $kind,
+            true
+        );
+        if ($designated === null || $designated !== $candidate) {
+            throw new EstabDvPermissionException(
+                'Nur die für diese Schicht bestimmte Logbuchführung darf '
+                . 'Einträge speichern.'
+            );
+        }
+        $statement = $connection->prepare(
+            'SELECT assignment.`dienstbesetzung_id`,'
+            . ' assignment.`dienstschicht_id`'
+            . ' FROM `nv_dienstbesetzungen` AS assignment'
+            . ' JOIN `nv_dienstschichten` AS duty_shift'
+            . ' ON duty_shift.`dienstschicht_id` = assignment.`dienstschicht_id`'
+            . ' JOIN `nv_benutzer` AS account'
+            . ' ON BINARY account.`kuerzel` = BINARY assignment.`benutzer_kuerzel`'
+            . ' WHERE assignment.`dienstbesetzung_id` = ?'
+            . ' AND duty_shift.`einsatz_id` = ?'
+            . " AND duty_shift.`status` = 'AKTIV'"
+            . " AND assignment.`status` = 'ANGENOMMEN'"
+            . ' AND BINARY account.`benutzer` = BINARY ?'
+            . ' AND BINARY assignment.`benutzer_kuerzel` = BINARY ?'
+            . ' AND BINARY assignment.`funktion` = BINARY ?'
+            . ' AND BINARY assignment.`rolle` = BINARY ?'
+            . ' AND account.`aktiv` = 1 AND account.`estab_gesperrt` = 0'
+            . ' LIMIT 1 FOR UPDATE'
+        );
+        if (!$statement) {
+            throw new RuntimeException('Logbuchführung konnte nicht gesperrt werden.');
+        }
+        try {
+            $user = (string) ($identity['benutzer'] ?? '');
+            $code = (string) ($identity['kuerzel'] ?? '');
+            $function = (string) ($identity['funktion'] ?? '');
+            $role = (string) ($identity['rolle'] ?? '');
+            $statement->bind_param(
+                'iissss',
+                $candidate,
+                $incidentId,
+                $user,
+                $code,
+                $function,
+                $role
+            );
+            $statement->execute();
+            $row = $statement->get_result()->fetch_assoc();
+        } finally {
+            $statement->close();
+        }
+        if (!is_array($row)) {
+            throw new EstabDvPermissionException(
+                'Die ausgewählte Logbuchführung ist nicht mehr aktiv.'
+            );
+        }
+        return [
+            'shift_id' => (int) $row['dienstschicht_id'],
+            'writer_assignment_id' => (int) $row['dienstbesetzung_id'],
+        ];
+    }
     if (!estab_logbook_is_designated_writer(
         $connection,
         $incidentId,
@@ -380,9 +495,8 @@ function estab_logbook_manual_writer_context(
     )) {
         throw new EstabDvPermissionException(
             $kind === 'etb'
-                ? 'ETB-Einträge dürfen nur Konten mit der festen Funktion '
-                    . 'ETB oder S2 und der Rolle Stab speichern.'
-                : 'TBB-Einträge dürfen nur Fernmelder-Konten speichern.'
+                ? 'ETB-Einträge erfordern die Funktion ETB oder S2.'
+                : 'TBB-Einträge erfordern die Funktion Fernmelder.'
         );
     }
     return [
@@ -391,15 +505,7 @@ function estab_logbook_manual_writer_context(
     ];
 }
 
-/**
- * Lock and validate one optional legacy ETB target assignment.
- *
- * The assignment only describes who an entry concerns.  It may come from any
- * non-withdrawn historical duty shift of the incident and never affects the
- * writer's authorization.
- *
- * @return array{assignment_id:int,snapshot:string}|null
- */
+/** Lock and validate one mode-appropriate ETB target assignment. */
 function estab_logbook_etb_assignee_context(
     mysqli $connection,
     int $incidentId,
@@ -413,6 +519,19 @@ function estab_logbook_etb_assignee_context(
         $assignmentId,
         'Zuordnung'
     );
+    $incident = estab_incident_status($connection);
+    $strictMode = estab_incident_duty_shift_required($incident);
+    if ($strictMode && (!is_int($shiftId) || $shiftId < 1)) {
+        throw new EstabDvPermissionException(
+            'Die aktive Dienstschicht der Logbuchführung fehlt.'
+        );
+    }
+    $scopeSql = $strictMode
+        ? ' AND assignment.`dienstschicht_id` = ?'
+            . " AND duty_shift.`status` = 'AKTIV'"
+            . " AND assignment.`status` = 'ANGENOMMEN'"
+            . ' AND account.`estab_gesperrt` = 0'
+        : " AND assignment.`status` <> 'ZURUECKGEZOGEN'";
     $statement = $connection->prepare(
         'SELECT assignment.`dienstbesetzung_id`,'
             . ' assignment.`funktion`, assignment.`rolle`,'
@@ -426,7 +545,7 @@ function estab_logbook_etb_assignee_context(
             . ' BINARY assignment.`benutzer_kuerzel`'
             . ' WHERE assignment.`dienstbesetzung_id` = ?'
             . ' AND duty_shift.`einsatz_id` = ?'
-            . " AND assignment.`status` <> 'ZURUECKGEZOGEN'"
+            . $scopeSql
             . ' LIMIT 1 FOR UPDATE'
     );
     if (!$statement) {
@@ -435,7 +554,16 @@ function estab_logbook_etb_assignee_context(
         );
     }
     try {
-        $statement->bind_param('ii', $assignmentId, $incidentId);
+        if ($strictMode) {
+            $statement->bind_param(
+                'iii',
+                $assignmentId,
+                $incidentId,
+                $shiftId
+            );
+        } else {
+            $statement->bind_param('ii', $assignmentId, $incidentId);
+        }
         $statement->execute();
         $row = $statement->get_result()->fetch_assoc();
     } finally {
@@ -461,7 +589,7 @@ function estab_logbook_etb_assignee_context(
     ];
 }
 
-/** Check the fixed account function/role that grants logbook authorship. */
+/** Check the designated STRICT hat or one effective LOOSE function. */
 function estab_logbook_is_designated_writer(
     mysqli $connection,
     int $incidentId,
@@ -481,23 +609,36 @@ function estab_logbook_is_designated_writer(
         if ((int) ($incident['active_einsatz_id'] ?? 0) !== $incidentId) {
             return false;
         }
-        if (!estab_incident_role_permissions_enforced($incident)) {
-            estab_dv_require_operational_account(
-                $connection,
-                $incidentId,
-                $identity,
-                false
+        if (estab_incident_duty_shift_required($incident)) {
+            $candidate = filter_var(
+                $identity['duty_assignment_id'] ?? null,
+                FILTER_VALIDATE_INT,
+                ['options' => ['min_range' => 1, 'max_range' => PHP_INT_MAX]]
             );
-            return true;
+            return is_int($candidate)
+                && $candidate === estab_logbook_designated_writer_assignment(
+                    $connection,
+                    $incidentId,
+                    $kind
+                );
         }
+        $selected = estab_dv_require_operational_account(
+            $connection,
+            $incidentId,
+            $identity,
+            false
+        );
+        return $kind === 'etb'
+            ? estab_auth_identity_has_function($selected, 'ETB', 'Stab')
+                || estab_auth_identity_has_function($selected, 'S2', 'Stab')
+            : estab_auth_identity_has_function(
+                $selected,
+                'A/W',
+                'Fernmelder'
+            );
     } catch (Throwable) {
         return false;
     }
-    $function = trim((string) ($identity['funktion'] ?? ''));
-    $role = trim((string) ($identity['rolle'] ?? ''));
-    return $kind === 'etb'
-        ? $role === 'Stab' && in_array($function, ['ETB', 'S2'], true)
-        : $role === 'Fernmelder' && $function === 'A/W';
 }
 
 /**
@@ -1400,7 +1541,7 @@ function estab_logbook_insert_entry(
             ): int {
                 $prefix = $kind . '_';
                 $incidentId = (int) $incident['active_einsatz_id'];
-                estab_dv_require_active_capability_for_operational_write(
+                $writerIdentity = estab_dv_require_write_capability(
                     $connection,
                     $incidentId,
                     $identity,
@@ -1411,7 +1552,7 @@ function estab_logbook_insert_entry(
                 $writerContext = estab_logbook_manual_writer_context(
                     $connection,
                     $incidentId,
-                    $identity,
+                    $writerIdentity,
                     $kind
                 );
                 $shiftId = $writerContext['shift_id'];
@@ -1465,9 +1606,9 @@ function estab_logbook_insert_entry(
                 try {
                     $event = (string) ($entry['event'] ?? '');
                     $comment = (string) ($entry['comment'] ?? '');
-                    $function = (string) ($identity['funktion'] ?? '');
-                    $code = (string) ($identity['kuerzel'] ?? '');
-                    $user = (string) ($identity['benutzer'] ?? '');
+                    $function = (string) ($writerIdentity['funktion'] ?? '');
+                    $code = (string) ($writerIdentity['kuerzel'] ?? '');
+                    $user = (string) ($writerIdentity['benutzer'] ?? '');
                     if ($kind === 'etb') {
                         $eventTime = (string) ($entry['event_time'] ?? '');
                         $eventType = (string) ($entry['event_type'] ?? '');

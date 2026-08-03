@@ -10,6 +10,7 @@ if (getenv('ESTAB_DV_EVIDENCE_INTEGRATION') !== '1') {
 require_once dirname(__DIR__, 2) . '/app/incident.php';
 require_once dirname(__DIR__, 2) . '/app/message_evidence.php';
 require_once dirname(__DIR__, 2) . '/app/logbook.php';
+require_once dirname(__DIR__, 2) . '/app/logbook_lifecycle.php';
 
 $databaseName = getenv('ESTAB_DB_NAME') ?: '';
 if (preg_match('/\Aestab_dv_evidence_[a-z0-9_]*\z/D', $databaseName) !== 1) {
@@ -91,10 +92,12 @@ try {
             'fuehrungsstellenname' => 'Führungsstelle ohne Schicht',
             'einsatzleitung' => 'Leitung Eröffnungsprüfung',
             'beschreibung' => 'Negativprüfung vor der ersten Dienstschicht.',
+            'estab_permission_mode' => ESTAB_PERMISSION_MODE_LOOSE,
         ],
         'evidence-integration',
         true,
-        (int) $status['revision']
+        (int) $status['revision'],
+        true
     );
     $unopenedIncidentId = (int) $unopenedCreated['einsatz_id'];
     $unopenedSnapshotSql = "SELECT CONCAT("
@@ -208,8 +211,16 @@ try {
         $foreignEventTime,
         $foreignShiftId
     );
-    $foreignEtb->execute();
-    $foreignEntryId = (int) $connection->insert_id;
+    $foreignEntryId = estab_logbook_lifecycle_with_system_write_context(
+        $connection,
+        $foreignIncidentId,
+        'ETB',
+        static function () use ($foreignEtb, $connection): int {
+            $foreignEtb->execute();
+            // Capture LAST_INSERT_ID before clearing the system-write marker.
+            return (int) $connection->insert_id;
+        }
+    );
     $foreignEtb->close();
     mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
     $status = estab_incident_status($connection);
@@ -296,6 +307,7 @@ try {
     );
     $evidenceShiftId = (int) $evidenceShift['dienstschicht_id'];
     $evidenceAssignmentId = 0;
+    $evidencePrimaryAwAssignmentId = 0;
     foreach (ESTAB_DV_REQUIRED_HATS as $function) {
         $assignment = estab_dv_assign_hat(
             $connection,
@@ -313,6 +325,10 @@ try {
         );
         if ($function === 'S2') {
             $evidenceAssignmentId = (int) $assignment['dienstbesetzung_id'];
+        } elseif ($function === 'A/W') {
+            $evidencePrimaryAwAssignmentId = (int) (
+                $assignment['dienstbesetzung_id']
+            );
         }
     }
     $evidenceAwRoster = estab_dv_assign_hat(
@@ -372,7 +388,9 @@ try {
         "UPDATE `nv_benutzer` SET `aktiv` = 0 WHERE `kuerzel` = 'evo'"
     );
     $assert(
-        $evidenceAssignmentId > 0 && $evidenceAwAssignmentId > 0,
+        $evidenceAssignmentId > 0
+            && $evidencePrimaryAwAssignmentId > 0
+            && $evidenceAwAssignmentId > 0,
         'evidence fixture did not create historical S2 and A/W assignments'
     );
     estab_dv_activate_initial_shift(
@@ -381,6 +399,7 @@ try {
         $evidenceShiftId,
         'evidence-integration'
     );
+    $actor['duty_assignment_id'] = $evidenceAssignmentId;
     $assert(
         (int) $scalar(
             $connection,
@@ -417,7 +436,7 @@ try {
             && in_array($evidenceAwAssignmentId, $assignmentOptionIds, true)
             && in_array($offlineRosterId, $assignmentOptionIds, true)
             && !in_array($withdrawnRosterId, $assignmentOptionIds, true)
-            && in_array($assignedRosterId, $assignmentOptionIds, true)
+            && !in_array($assignedRosterId, $assignmentOptionIds, true)
             && $offlineAssignmentSnapshot
                 === 'A/W (Fernmelder): Angenommene Offline-Besetzung [evo]',
         'ETB assignment selector omitted usable historical staffing, exposed '
@@ -683,17 +702,20 @@ try {
         );
     }
 
-    $assignedAssignee = estab_logbook_etb_assignee_context(
+    $acceptedAssignee = estab_logbook_etb_assignee_context(
         $connection,
         $incidentId,
-        null,
-        $assignedRosterId
+        $evidenceShiftId,
+        $offlineRosterId
     );
     $assert(
-        (int) ($assignedAssignee['assignment_id'] ?? 0) === $assignedRosterId,
-        'usable historical planning assignment was rejected as ETB metadata'
+        (int) ($acceptedAssignee['assignment_id'] ?? 0) === $offlineRosterId,
+        'accepted active-shift assignment was rejected as ETB metadata'
     );
-    foreach ([$withdrawnRosterId, 900000000] as $invalidAssigneeId) {
+    foreach (
+        [$assignedRosterId, $withdrawnRosterId, 900000000]
+        as $invalidAssigneeId
+    ) {
         $assert(
             $fails(static fn (): int => estab_logbook_insert_entry(
                 $databaseConfig,
@@ -781,7 +803,8 @@ try {
                     . " `estab_assignee_assignment_id`, '|',"
                     . " `estab_assignment`) FROM `nv_etb`"
                     . ' WHERE `etb_lfd-nr` = ' . $entryId
-            ) === '0|0|' . $offlineRosterId
+            ) === $evidenceShiftId . '|' . $evidenceAssignmentId . '|'
+                . $offlineRosterId
                 . '|A/W (Fernmelder): Angenommene Offline-Besetzung [evo]'
             && (string) $scalar(
                 $connection,
@@ -790,7 +813,8 @@ try {
                     . " `estab_assignee_assignment_id`, '|',"
                     . " `estab_assignment`) FROM `nv_etb`"
                     . ' WHERE `etb_lfd-nr` = ' . $correctionId
-            ) === '0|0|' . $evidenceAssignmentId
+            ) === $evidenceShiftId . '|' . $evidenceAssignmentId . '|'
+                . $evidenceAssignmentId
                 . '|S2 (Stab): Evidence Integration [evi]',
         'ETB correction, optional assignment snapshot, or '
             . 'incident-local sequence is incomplete'
@@ -867,16 +891,25 @@ try {
             ? 'korrektur'
             : 'ohne';
         $assert(
-            $fails(static fn (): bool => $connection->query(
-                'INSERT INTO `nv_etb`'
-                . ' (`einsatz_id`, `etb_time`, `etb_aktion`, `etb_bemerk`,'
-                . ' `etb_kuerzel`, `etb_benutzer`, `estab_shift_id`,'
-                . ' `estab_event_time`, `estab_event_type`, `'
-                . $referenceColumn . '`) VALUES ('
-                . $incidentId . ", NOW(), 'cross incident', '', 'system',"
-                . " 'eStab-System', " . $evidenceShiftId . ", NOW(), '"
-                . $eventType . "', " . $referenceId . ')'
-            )) instanceof mysqli_sql_exception,
+            $fails(static fn (): mixed =>
+                estab_logbook_lifecycle_with_system_write_context(
+                    $connection,
+                    $incidentId,
+                    'ETB',
+                    static fn (): bool => $connection->query(
+                        'INSERT INTO `nv_etb`'
+                        . ' (`einsatz_id`, `etb_time`, `etb_aktion`,'
+                        . ' `etb_bemerk`, `etb_kuerzel`, `etb_benutzer`,'
+                        . ' `estab_shift_id`, `estab_event_time`,'
+                        . ' `estab_event_type`, `' . $referenceColumn
+                        . '`) VALUES (' . $incidentId
+                        . ", NOW(), 'cross incident', '', 'system',"
+                        . " 'eStab-System', " . $evidenceShiftId
+                        . ", NOW(), '" . $eventType . "', "
+                        . $referenceId . ')'
+                    )
+                )
+            ) instanceof mysqli_sql_exception,
             'database accepted cross-incident ETB ' . $referenceColumn
         );
     }
@@ -900,30 +933,45 @@ try {
     );
     mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
     $assert(
-        $fails(static fn (): bool => $connection->query(
-            'INSERT INTO `nv_etb`'
-            . ' (`einsatz_id`, `etb_time`, `etb_aktion`, `etb_bemerk`,'
-            . ' `etb_kuerzel`, `etb_benutzer`, `estab_shift_id`,'
-            . ' `estab_event_time`, `estab_event_type`,'
-            . ' `estab_correction_of`) VALUES ('
-            . $incidentId . ", NOW(), 'correction chain', '', 'system',"
-            . " 'eStab-System', " . $evidenceShiftId . ', NOW(),'
-            . " 'korrektur', " . $correctionId . ')'
-        )) instanceof mysqli_sql_exception,
+        $fails(static fn (): mixed =>
+            estab_logbook_lifecycle_with_system_write_context(
+                $connection,
+                $incidentId,
+                'ETB',
+                static fn (): bool => $connection->query(
+                    'INSERT INTO `nv_etb`'
+                    . ' (`einsatz_id`, `etb_time`, `etb_aktion`,'
+                    . ' `etb_bemerk`, `etb_kuerzel`, `etb_benutzer`,'
+                    . ' `estab_shift_id`, `estab_event_time`,'
+                    . ' `estab_event_type`, `estab_correction_of`) VALUES ('
+                    . $incidentId
+                    . ", NOW(), 'correction chain', '', 'system',"
+                    . " 'eStab-System', " . $evidenceShiftId . ', NOW(),'
+                    . " 'korrektur', " . $correctionId . ')'
+                )
+            )
+        ) instanceof mysqli_sql_exception,
         'database accepted an ambiguous ETB correction chain'
     );
     $selfReferenceId = 900000001;
-    $selfReferenceFailure = $fails(static fn (): bool => $connection->query(
-        'INSERT INTO `nv_etb`'
-        . ' (`etb_lfd-nr`, `einsatz_id`, `etb_time`, `etb_aktion`,'
-        . ' `etb_bemerk`, `etb_kuerzel`, `etb_benutzer`,'
-        . ' `estab_shift_id`, `estab_event_time`, `estab_event_type`,'
-        . ' `estab_correction_of`) VALUES ('
-        . $selfReferenceId . ', ' . $incidentId
-        . ", NOW(), 'self correction', '', 'system', 'eStab-System', "
-        . $evidenceShiftId . ", NOW(), 'korrektur', "
-        . $selfReferenceId . ')'
-    ));
+    $selfReferenceFailure = $fails(static fn (): mixed =>
+        estab_logbook_lifecycle_with_system_write_context(
+            $connection,
+            $incidentId,
+            'ETB',
+            static fn (): bool => $connection->query(
+                'INSERT INTO `nv_etb`'
+                . ' (`etb_lfd-nr`, `einsatz_id`, `etb_time`, `etb_aktion`,'
+                . ' `etb_bemerk`, `etb_kuerzel`, `etb_benutzer`,'
+                . ' `estab_shift_id`, `estab_event_time`,'
+                . ' `estab_event_type`, `estab_correction_of`) VALUES ('
+                . $selfReferenceId . ', ' . $incidentId
+                . ", NOW(), 'self correction', '', 'system',"
+                . " 'eStab-System', " . $evidenceShiftId
+                . ", NOW(), 'korrektur', " . $selfReferenceId . ')'
+            )
+        )
+    );
     $assert(
         $selfReferenceFailure instanceof mysqli_sql_exception
             && str_contains(
@@ -934,10 +982,11 @@ try {
     );
 
     $awActor = [
-        'benutzer' => 'Evidence Integration A/W',
-        'kuerzel' => 'ewa',
+        'benutzer' => 'Evidence Integration',
+        'kuerzel' => 'evi',
         'funktion' => 'A/W',
         'rolle' => 'Fernmelder',
+        'duty_assignment_id' => $evidencePrimaryAwAssignmentId,
     ];
     $tbbEntryId = estab_logbook_insert_entry(
         $databaseConfig,
@@ -998,14 +1047,14 @@ try {
                     . ' COALESCE(`estab_writer_assignment_id`, 0))'
                     . ' FROM `nv_tbb`'
                     . ' WHERE `tbb_lfd-nr` = ' . $tbbEntryId
-            ) === '0|0'
+            ) === $evidenceShiftId . '|' . $evidencePrimaryAwAssignmentId
             && (string) $scalar(
                 $connection,
                 "SELECT CONCAT(COALESCE(`estab_shift_id`, 0), '|',"
                     . ' COALESCE(`estab_writer_assignment_id`, 0))'
                     . ' FROM `nv_tbb`'
                     . ' WHERE `tbb_lfd-nr` = ' . $tbbCorrectionId
-            ) === '0|0',
+            ) === $evidenceShiftId . '|' . $evidencePrimaryAwAssignmentId,
         'structured TBB entry/correction or '
             . 'incident-local sequence is incomplete'
     );

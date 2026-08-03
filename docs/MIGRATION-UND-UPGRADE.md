@@ -46,7 +46,7 @@ Während einer erstmaligen oder aus `applying` wiederaufgenommenen Baseline
 entsteht zusätzlich der Datensatz
 `114-self-registration-fresh-default` in `estab_schema_baselines`. Sein
 Checksum ist exakt die SHA-256 der unveränderten Migration 114. Der Marker
-bleibt bis hinter allen dreiundzwanzig Migrationen auf `applying`. Dann setzt ein
+bleibt bis hinter allen vierundzwanzig Migrationen auf `applying`. Dann setzt ein
 einziges atomisches InnoDB-Multi-Table-Update ausschließlich die noch pristine
 Richtlinienzeile `ENVIRONMENT/NULL/0/migration-114` auf
 `DISABLED/NULL/1/fresh-install` und gleichzeitig den Marker auf `applied`.
@@ -102,9 +102,10 @@ Derzeit sind folgende explizite Migrationen vorhanden:
 | `docker/db/migrations/112-optional-access-shifts.sql` | ergänzt optionale einsatzgebundene Zugangsschichten und Kontenzuordnungen; ersetzt den abschließenden ETB-/TBB-Triggervertrag durch festen Funktions-/Rollenbezug und aktiven Einsatz ohne Pflicht zu Dienstschicht oder Besetzungs-ID; ältere formale Schichtdaten bleiben historische Evidenz |
 | `docker/db/migrations/113-password-policy.sql` | ergänzt genau eine revisionsgesicherte globale Kennwortrichtlinie für künftig gesetzte Funktionskonto-Kennwörter; Standard sind mindestens 12 Unicode-Codepoints ohne verpflichtende Zeichenklasse, die konfigurierbare Mindestlänge liegt zwischen 8 und 128 Unicode-Codepoints und optionale Unicode-Groß-/Titlecase-/Kleinbuchstaben, Ziffern und Sonderzeichen können verlangt werden; Unicode-Steuerzeichen sind verboten, Formatzeichen einschließlich ZWJ erlaubt; neue und geänderte Kennwörter werden mit Argon2id gespeichert, serverseitig gelten höchstens 1024 UTF-8-Bytes, im Browserfeld 1024 Eingabeeinheiten und eine exakte JavaScript-Codepointzählung bei verbindlicher Serverprüfung; Klartext und eindeutig verifizierbare Alt-Hashes werden nach erfolgreichem Login migriert, bcrypt nur bei einem eingegebenen Kennwort unter 72 UTF-8-Bytes, während ein ambivalenter längerer bcrypt-Alt-Hash bis zum administrativen Reset unverändert bleibt; stärkere oder gemischte Argon2id-Kosten werden nicht zurückgestuft, vorhandene Sitzungen bleiben unverändert |
 | `docker/db/migrations/114-self-registration-policy.sql` | ergänzt die revisionsgesicherte Singleton-Freigabe für öffentliche Kontoanlage mit `DISABLED`, `PERMANENT` und DB-UTC-befristetem `UNTIL`; die unveränderte SQL-Datei setzt aus Upgrade-Kompatibilität zunächst `ENVIRONMENT`; nur ein im selben neuen Baseline-Lauf checksumgebunden angelegter Fresh-Marker autorisiert anschließend die atomare Umstellung der pristine Zeile auf `DISABLED/NULL/1/fresh-install`; echte Upgrades und frühere markerlose Neuinstallationen behalten `ENVIRONMENT`, bis die erste administrative Auswahl die Datenbank autoritativ macht; bestehende Konten, Kennwörter und Sitzungen bleiben unverändert |
-| `docker/db/migrations/115-incident-permission-mode.sql` | ergänzt den pro Einsatz gespeicherten Modus `STRICT`/`LOOSE` mit `STRICT` als Default für Bestand und Neuanlage; Guard-Trigger erkennen unmarkierte Legacy-DML und kombinierte Einsatzänderungen, während der bestätigte Anwendungsweg Revision und Audit bindet; sechs modebewusste Fachtrigger bewahren in `STRICT` die bisherigen Funktions-/Rollengrenzen und lockern in `LOOSE` ausschließlich diese Schreibprüfungen, während konkrete aktive und ungesperrte Kontenidentität, aktiver offener Einsatz, Zustands-, Beziehungs-, Integritäts- und Append-only-Regeln bestehen bleiben |
+| `docker/db/migrations/115-incident-permission-mode.sql` | ergänzt den pro Einsatz gespeicherten Modus `STRICT`/`LOOSE` mit `STRICT` als Default für Bestand und Neuanlage; Guard-Trigger erkennen unmarkierte Legacy-DML und kombinierte Einsatzänderungen, während der bestätigte Anwendungsweg Revision und Audit bindet; der dadurch entstandene historische, mit Migration 118 abgelöste Zwischenstand bewahrt in `STRICT` die damaligen Funktions-/Rollengrenzen und lässt in `LOOSE` ausschließlich diese Schreibprüfungen aus, während konkrete aktive und ungesperrte Kontenidentität, aktiver offener Einsatz, Zustands-, Beziehungs-, Integritäts- und Append-only-Regeln bestehen bleiben |
 | `docker/db/migrations/116-standard-categories.sql` | ergänzt ausschließlich bei einer vollständig leeren globalen Kategorienliste die editier- und löschbaren Vorgaben `Allgemein` sowie `EA1` bis `EA6`; ein bereits vorhandener Betreiberkatalog bleibt vollständig unverändert |
 | `docker/db/migrations/117-telecom-draft-discard.sql` | erweitert den Fernmeldeplan-Zustandsautomaten um das kontrollierte Archivieren eines inhaltlich unveränderten Entwurfs als `ERSETZT`; Freigabedaten bleiben leer und vorhandene Wege werden nicht gelöscht; unveränderliche Felder werden NULL-sicher verglichen und eine Planfreigabe ist nur im gespeicherten Gültigkeitsfenster zulässig |
+| `docker/db/migrations/118-operational-authority.sql` | stellt formale Dienstbesetzungsautorität in `STRICT` wieder her und ergänzt globale Zusatzfunktionen für `LOOSE`; ersetzt die abschließenden ETB-/TTB-, Fernmeldeplan- und Meldertrigger, ohne Vorgängermigrationen oder Fachdaten umzuschreiben |
 
 Migration 95 klassifiziert vorhandene Zeilen bereits beim Hinzufügen der
 Spalte mit dem einmaligen Anfangswert `integrity_required=0` und stellt danach
@@ -140,8 +141,8 @@ eigenen Zwischenstände. Gemischte Katalogdaten, ein abweichender
 Primärschlüssel oder fremde Indizes blockieren vor der nächsten Änderung und
 bleiben zur Untersuchung erhalten. `verify.sql` und die Laufzeit-Readiness
 verlangen danach exakt sieben Katalogzeilen, das vollständige neue ENUM,
-ausschließlich den zweispaltigen Primärschlüssel und alle dreiundzwanzig
-angewendeten Migrationen einschließlich Version 117.
+ausschließlich den zweispaltigen Primärschlüssel und alle vierundzwanzig
+angewendeten Migrationen einschließlich Version 118.
 
 Migration 97 fügt `nv_einsaetze.fuehrungsstellenname` als
 `VARCHAR(128) NULL` unmittelbar hinter `organisation` und
@@ -263,16 +264,22 @@ zehn Jahre ab `estab_closed_at` verlängert, ohne ein späteres bestehendes Ende
 zu verkürzen. Der neue Abschluss-Trigger verhindert anschließend jede kürzere
 Frist.
 
-Der aktuelle Anwendungs-Preflight verlangt keine frühere Schichtaktivierung
-und keine schichtbezogenen Eröffnungszeilen. Historische formale
-Dienstschichten oder Besetzungen blockieren den Einsatzabschluss nicht; echte
-fachliche Blocker wie offene Nachrichten, Melderläufe oder fehlerhafte Anhänge
-bleiben wirksam.
+Der aktuelle Anwendungs-Preflight verlangt in `STRICT` eröffnete Bücher und
+eine ordnungsgemäß beendete formale Dienstorganisation. In `LOOSE` sind eine
+frühere Schichtaktivierung und schichtbezogene Eröffnungszeilen keine
+Abschlussbedingung. Echte fachliche Blocker wie offene Nachrichten,
+Melderläufe oder fehlerhafte Anhänge bleiben in beiden Modi wirksam.
 
-Die Anwendung ergänzt keine historischen Tatsachen. Neue Bücher können ohne
-Dienstschicht mit ihrer ersten fachlichen Zeile beginnen. Bestandszeilen
-erhalten lokale Nummern, aber keinen nachträglich erfundenen Pflichtkopf, keine
-Besetzung und keine Quittung.
+Die Anwendung ergänzt keine historischen Tatsachen. In `STRICT` entstehen
+automatische Bucheröffnungszeilen erst bei der ersten aktivierten formalen
+Dienstschicht und speichern deren Schichtprovenienz; in `LOOSE` dürfen sie bei
+der Einsatzaktivierung schichtlos entstehen. Eine persönliche Schreiberbesetzung
+ist für diese Systemzeilen nicht erforderlich. Neue manuelle Fachzeilen
+verlangen im aktuellen `STRICT`-Vertrag eine aktive,
+angenommene und ausgewählte Dienstbesetzung und dürfen nur in `LOOSE` ohne
+formale Dienstschicht geschrieben werden. Bestandszeilen erhalten lokale
+Nummern, aber keinen nachträglich erfundenen Pflichtkopf, keine Besetzung und
+keine Quittung.
 
 Migration 111 ergänzt an `nv_etb` die nullable Spalten `estab_shift_id`,
 `estab_writer_assignment_id`, `estab_assignee_assignment_id` und
@@ -306,8 +313,9 @@ führt bewusst kein historisches Provenienz-Backfill aus: Alle neuen Felder
 bleiben bei vorhandenen ETB-/TTB-Zeilen `NULL`, weil weder Dienstschicht noch
 schreibende Person rückwirkend beweisbar sind.
 
-Migration 112 ersetzt diese abschließenden Insert-Trigger, ohne Migration 111
-zu verändern. Aktuell benötigen neue Zeilen einen aktiven Einsatz, ein
+Migration 112 ersetzte diese abschließenden Insert-Trigger, ohne Migration 111
+zu verändern. In diesem später durch Migration 118 abgelösten Zwischenstand
+benötigten neue Zeilen einen aktiven Einsatz, ein
 aktives ungesperrtes Konto und die feste fachlich passende Funktion/Rolle:
 ETB durch `ETB/Stab` oder `S2/Stab`, TTB durch die Funktion `Fernmelder`. Eine aktive
 Dienstschicht, angenommene Besetzung und Besetzungs-ID sind nicht erforderlich;
@@ -351,7 +359,7 @@ Migration 114 ergänzt entsprechend die eigene, kollisionsgeprüfte Tabelle
 ausdrücklich geöffnete Installation beim Upgrade. Nach der ersten Adminaktion
 sind nur `DISABLED`, `PERMANENT` oder `UNTIL` samt UTC-Endzeit, Revision und
 Audit-Akteur maßgeblich. `verify.sql` und die Laufzeit-Readiness prüfen beide
-Singleton-Tabellen und alle dreiundzwanzig Ledgerzeilen gemeinsam.
+Singleton-Tabellen und alle vierundzwanzig Ledgerzeilen gemeinsam.
 
 Bei einer vom aktuellen Runner selbst begonnenen Neuinstallation ist dagegen
 der checksumgebundene Baseline-Marker maßgeblich: Solange Migration 114 noch
@@ -378,7 +386,12 @@ und ein bestehender Modus darf dort nur für die gesperrte konkrete Einsatz-ID
 geändert werden. Die Anwendung verlangt dafür
 Basic Auth, Session-CSRF, erwarteten Altmodus, unveränderte globale Revision
 und bei `LOOSE` eine ausdrückliche Bestätigung; die Änderung und ihr
-Vorher-/Nachher-Audit committen gemeinsam.
+Vorher-/Nachher-Audit committen gemeinsam. Im aktuellen Anwendungsstand ist
+eine echte Änderung zusätzlich nur bei einem offenen Einsatz ohne jede
+operative oder formale Eintragung zulässig. Die erste solche Eintragung friert
+den Modus dauerhaft ein; das spätere Löschen einzelner Daten hebt die Sperre
+nicht auf. Ein idempotentes Speichern desselben Modus bleibt ohne neue Revision
+und ohne Auditereignis möglich.
 
 Die connection-lokalen SQL-Marker sind ein Datenkonsistenzvertrag zwischen
 Anwendung und Triggern, keine Authentisierungsgrenze für einen Principal mit
@@ -426,7 +439,7 @@ Kopfdatenänderung protokollieren ausschließlich die bereits einsatzbezogen
 gespeicherten Kopfdaten als Initial- beziehungsweise Vorher-/Nachher-Snapshot;
 Zugangsdaten und Sitzungswerte werden nicht in die Ereignisdetails übernommen.
 
-Sechs Fachtrigger werden modebewusst ersetzt: ETB- und TBB-Insert,
+Migration 115 ersetzte damals sechs Fachtrigger modebewusst: ETB- und TBB-Insert,
 Fernmeldeplan-Insert/-Freigabe sowie Melderauftrag-Insert/-Update. `STRICT`
 erhält die bis dahin geltenden Funktions-/Rollenbedingungen byteinhaltlich
 weiter. `LOOSE` lässt nur diese Prädikate aus und verlangt weiterhin die
@@ -435,11 +448,39 @@ einsatzgleiche Beziehungen, zulässige Workflowzustände, Melder-Eignung,
 Nummerierung, Referenzen, Provenienz und Unveränderlichkeit. Ein Upgrade ist
 deshalb kein implizites Öffnen bestehender Schreibrechte.
 
-Der erneuerte ETB-Insert-Trigger akzeptiert neue Referenzen nur als
+Der damals erneuerte ETB-Insert-Trigger akzeptiert neue Referenzen nur als
 kanonische, positive, bereits vorhandene lokale ETB-Nummer desselben Einsatzes.
 Für Korrekturen muss diese öffentliche Nummer exakt zur intern gebundenen
 direkten Originalzeile passen. Historischer Freitext wird durch die Migration
 nicht umgedeutet oder überschrieben.
+
+Migration 118 ersetzt diesen Zwischenvertrag abschließend. Sie legt die
+kollisionsgeprüfte InnoDB-/`utf8mb4_unicode_ci`-Tabelle
+`nv_benutzer_zusatzfunktionen` mit eindeutigem Konto-/Funktionsschlüssel,
+serverseitig abgeleiteter Rolle, Vergabezeit und Vergabeakteur an. Der
+Fremdschlüssel zum Kontokürzel verwendet `ON DELETE CASCADE`; fremde Tabellen,
+Constraints, Indexe oder nicht eindeutig erkannte Vorgängertrigger blockieren
+den Ledgerabschluss.
+
+Die sechs Fachtrigger werden erneut ersetzt. In `STRICT` muss die schreibende
+Person eine Besetzung der aktiven formalen Dienstschicht persönlich
+angenommen haben und genau diese Funktion in der Sitzung ausgewählt sein.
+Manuelle ETB-/TTB-Zeilen speichern Dienstschicht und Schreiberbesetzung;
+Systemzeilen dürfen ohne menschlichen Schreiber bleiben. S6-Plan- und
+Melderaktionen verlangen entsprechend ausgewählte S6-, LdF- oder
+Fernmelder-Besetzungen. In `LOOSE` ist keine formale Dienstschicht nötig, die
+fachlich passende Funktion/Rolle muss aber als feste Kontofunktion oder
+explizite Zusatzfunktion vorhanden sein. Damit ist ein fachfremdes aktives
+Konto in beiden Modi gesperrt. Zusatzfunktionen sind global und werden in
+`STRICT` nicht ausgewertet; optionale Zugangsschichten werden nur in `LOOSE`
+als zusätzliches Zugangs-Gate verwendet.
+
+Die Anwendung ergänzt diesen Triggervertrag um eine dauerhafte Modusgrenze:
+Vor der ersten operativen oder formalen Eintragung darf die Administration den
+Modus revisionsgebunden ändern; danach ist nur noch die idempotente Bestätigung
+desselben Werts möglich. Bereits erfasste Fachdaten oder formale
+Dienstorganisation dürfen nicht durch späteres Löschen zu einem erneuten
+Moduswechsel führen.
 
 Fachgrundlage für diese Migration ist das bereitgestellte Handbuch ETB/TBB,
 Version 1.0, Stand März 2022, SHA-256
@@ -665,6 +706,10 @@ Für jede Abnahme werden festgehalten:
 - Nachweis, dass alle übernommenen Einsätze nach Migration 115 weiterhin
   `STRICT` sind; jede später bewusst auf `LOOSE` gesetzte Einsatz-ID samt
   Warnungsbestätigung und Auditentscheidung wird getrennt dokumentiert,
+- Nachweis des Migration-118-Vertrags: `STRICT` scheitert ohne aktive,
+  angenommene und ausgewählte Dienstbesetzung; `LOOSE` scheitert ohne passende
+  feste oder explizite Zusatzfunktion; Zusatzfunktionen bleiben in `STRICT`
+  wirkungslos,
 - Name der freigebenden Person.
 
 Ein Rückrollen nur des App-Images ist ausschließlich zulässig, wenn die

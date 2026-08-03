@@ -303,6 +303,118 @@ function estab_navigation_require_session(
 }
 
 /**
+ * Send a safe page load to the STRICT duty-function selector.
+ *
+ * Submitted form bodies are never replayed. The symbolic destination is kept
+ * in the server-side session so selecting a valid hat can continue there.
+ */
+function estab_navigation_select_duty(
+    array &$session,
+    string $destinationKey,
+    array $server = []
+): never {
+    $destinationKey = estab_navigation_login_destination_key($destinationKey);
+    if ($destinationKey === null) {
+        throw new InvalidArgumentException('Invalid duty destination');
+    }
+    $effectiveServer = $server === [] ? $_SERVER : $server;
+    $method = strtoupper((string) ($effectiveServer['REQUEST_METHOD'] ?? 'GET'));
+    if (!in_array($method, ['GET', 'HEAD', 'POST'], true)) {
+        // An unknown/unsafe request body is deliberately discarded by the
+        // 303 below; the user still lands in the normal application chrome.
+        unset($session['estab_pending_navigation_key']);
+    } else {
+        $session['estab_pending_navigation_key'] = $destinationKey;
+    }
+    header('Cache-Control: no-store');
+    header('Vary: Cookie');
+    header(
+        'Location: ' . estab_navigation_url_for_key('command-post')
+            . '#meine-dienstfunktionen',
+        true,
+        303
+    );
+    exit;
+}
+
+/**
+ * Whether a server-resolved identity still needs a STRICT duty selection.
+ *
+ * Web callers must pass the identity returned by estab_auth_session_identity()
+ * (or estab_read_session_identity()). That boundary has already revalidated an
+ * existing assignment against the active incident, active duty shift,
+ * personally accepted assignment and exact account/function tuple. Therefore
+ * a syntactically valid id here is also current authority, while a stale,
+ * closed or foreign assignment has already failed the authenticated session
+ * closed. LOOSE deliberately needs no selected hat.
+ */
+function estab_navigation_strict_duty_selection_required(
+    ?array $identity
+): bool {
+    if ($identity === null) {
+        return true;
+    }
+    $mode = $identity['estab_permission_mode'] ?? null;
+    if ($mode === 'LOOSE') {
+        return false;
+    }
+    if ($mode !== 'STRICT') {
+        return true;
+    }
+    $assignmentId = filter_var(
+        $identity['duty_assignment_id'] ?? null,
+        FILTER_VALIDATE_INT,
+        ['options' => ['min_range' => 1, 'max_range' => PHP_INT_MAX]]
+    );
+    return !is_int($assignmentId);
+}
+
+/**
+ * Resolve the first page after a successful login for the active mode.
+ *
+ * STRICT must retain the originally requested protected area in server-side
+ * session state and bootstrap through the duty selector. LOOSE has no duty
+ * selection step and may continue directly to the validated destination.
+ */
+function estab_navigation_login_landing_key(
+    array &$session,
+    string $permissionMode,
+    string $destinationKey
+): string {
+    $destinationKey = estab_navigation_login_destination_key($destinationKey);
+    if ($destinationKey === null) {
+        throw new InvalidArgumentException('Invalid login landing destination');
+    }
+    if ($permissionMode === 'STRICT') {
+        $session['estab_pending_navigation_key'] = $destinationKey;
+        return 'command-post';
+    }
+    if ($permissionMode === 'LOOSE') {
+        unset($session['estab_pending_navigation_key']);
+        return $destinationKey;
+    }
+    unset($session['estab_pending_navigation_key']);
+    throw new InvalidArgumentException('Invalid login permission mode');
+}
+
+/** Redirect a protected direct route to the STRICT duty selector if needed. */
+function estab_navigation_require_selected_duty(
+    array &$session,
+    ?array $identity,
+    string $destinationKey,
+    array $server = []
+): void {
+    if (!estab_navigation_strict_duty_selection_required($identity)) {
+        return;
+    }
+    estab_navigation_select_duty(
+        $session,
+        $destinationKey,
+        $server
+    );
+}
+
+/**
  * Render the validated destination as a form field for one login tab.
  *
  * Carrying the symbolic key in each form keeps parallel tabs independent.
@@ -416,11 +528,12 @@ function estab_navigation_validated_item(array $item): array
 }
 
 /**
- * Pure navigation hint for the authenticated account identity.
+ * Pure navigation hint for the mode-specific authenticated identity.
  *
  * The endpoints repeat the authoritative capability check. Navigation only
- * suppresses links that do not match the account's fixed function and role.
- * Optional shift membership never changes operational permissions.
+ * suppresses links that do not match the selected STRICT duty assignment or
+ * the fixed/additional LOOSE functions. Access-shift membership never grants
+ * operational permissions.
  */
 function estab_navigation_duty_access_allowed(
     array $item,
@@ -433,20 +546,29 @@ function estab_navigation_duty_access_allowed(
     if ($identity === null) {
         return false;
     }
+    if (estab_navigation_strict_duty_selection_required($identity)) {
+        return $item['key'] === 'command-post';
+    }
     if ($item['duty_access'] === '') {
         return true;
     }
-    $tuple = [
-        (string) ($identity['funktion'] ?? ''),
-        (string) ($identity['rolle'] ?? ''),
-    ];
     return match ($item['duty_access']) {
-        'LAGE_DOKUMENTATION' => $tuple === ['S2', 'Stab'],
-        'FERNMELDE_NACHWEIS' => in_array(
-            $tuple,
-            [['LdF', 'Fernmelder'], ['A/W', 'Fernmelder']],
-            true
+        'LAGE_DOKUMENTATION' => estab_auth_identity_has_function(
+            $identity,
+            'S2',
+            'Stab'
         ),
+        'FERNMELDE_NACHWEIS' =>
+            estab_auth_identity_has_function(
+                $identity,
+                'LdF',
+                'Fernmelder'
+            )
+            || estab_auth_identity_has_function(
+                $identity,
+                'A/W',
+                'Fernmelder'
+            ),
         default => false,
     };
 }

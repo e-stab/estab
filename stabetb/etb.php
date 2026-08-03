@@ -13,7 +13,7 @@ Einsatz Tage Buch
   Szenario "Globaler Einsatz aktiv."
 
     + Anzeige des globalen Einsatzkopfs
-    + Lesender Zugriff mit fester Kontofunktion
+    + Lesender Zugriff mit der im Einsatzmodus wirksamen Funktion
     + Eintragsfunktion nur mit der Faehigkeit EINSATZTAGEBUCH
 
   Szenario "Schaltflaeche ETB-Eintrag wird betaetigt"
@@ -39,6 +39,7 @@ class etb_liste {
   var $etb_kuerzel ;
   var $etb_benutzer ;
   var $etb_rolle ;
+  var $etb_identity = array ();
   var $etb_authorized ;
 
 /*****************************************************************************\
@@ -318,12 +319,7 @@ if (debug == true){ echo "etb_tableexist==>"; var_dump($this->etb_titel_tbl); ec
       $conf_tbl ["etb"],
       "etb",
       $validation ["data"],
-      array (
-        "funktion" => (string) $this->etb_funktion,
-        "kuerzel" => (string) $this->etb_kuerzel,
-        "benutzer" => (string) $this->etb_benutzer,
-        "rolle" => (string) $this->etb_rolle,
-      )
+      $this->etb_identity
     );
   }
 
@@ -852,6 +848,12 @@ include ("../4fcfg/dbcfg.inc.php");
 include ("../4fcfg/e_cfg.inc.php");
 
 $identity = estab_read_session_identity ($_SESSION);
+estab_navigation_require_selected_duty (
+  $_SESSION,
+  $identity,
+  "incident-log",
+  $_SERVER
+);
 estab_session_ui_start ($_SESSION);
 
 $berechtigt = false;
@@ -924,6 +926,7 @@ $etbobj->etb_funktion = $identity ["funktion"];
 $etbobj->etb_kuerzel = $identity ["kuerzel"];
 $etbobj->etb_benutzer = $identity ["benutzer"];
 $etbobj->etb_rolle = $identity ["rolle"];
+$etbobj->etb_identity = $identity;
 
 if ($requestMethod === "POST") {
   if (!$berechtigt) {
@@ -1062,8 +1065,8 @@ if (!$etbobj->etb_titel_gesetzt) {
     } else {
       echo "<aside class=\"estab-tool-notice estab-tool-notice-warning\">\n";
       echo "<strong>ETB schreibgeschützt.</strong>\n<p>";
-      echo "Ihre feste Kontofunktion darf das Einsatztagebuch lesen, ".
-        "besitzt aber nicht die Fachzuständigkeit für Einträge.";
+      echo "Ihre aktuell wirksamen Funktionen erlauben das Lesen, besitzen ".
+        "aber nicht die Fachzuständigkeit für ETB-Einträge.";
       echo "</p>\n</aside>\n";
     }
   }

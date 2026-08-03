@@ -156,7 +156,10 @@ $assert(
 );
 $assert(
     str_contains($loadTimeline, 'estab_read_session_identity')
-        && str_contains($loadTimeline, 'estab_read_require_identity_scope')
+        && str_contains(
+            $loadTimeline,
+            'estab_read_with_locked_operational_scope'
+        )
         && str_contains(
             $loadTimeline,
             'estab_message_fetch_for_incident_by_id'
@@ -169,7 +172,7 @@ $assert(
     $appearsInOrder(
         $loadTimeline,
         [
-            'if (!$readAllowed && !($writeAllowed && $looseWriteView))',
+            'if (!$readAllowed && !$writeAllowed)',
             'estab_message_timeline_for_message ($connection, $message)',
         ]
     ),

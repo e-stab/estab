@@ -38,6 +38,12 @@ if ($identity === null) {
     throw new LogicException('Authenticated category identity missing');
 }
 $categoryReadIdentity = estab_read_session_identity($_SESSION);
+estab_navigation_require_selected_duty(
+    $_SESSION,
+    $categoryReadIdentity,
+    'messages',
+    $_SERVER
+);
 estab_session_ui_start($_SESSION, false, true);
 
 /** @var array<string,string> $conf_4f_db */
@@ -75,11 +81,19 @@ function estab_category_endpoint_redirect(string $location): never
 }
 
 /** Build the category manager URL without mixing raw values into HTML. */
-function estab_category_manager_url(string $type, int $messageId, string $status = ''): string
+function estab_category_manager_url(
+    string $type,
+    int $messageId,
+    string $status = '',
+    string $actingFunction = ''
+): string
 {
     $query = ['dbtyp' => $type, 'msgno' => (string) $messageId];
     if ($status !== '') {
         $query['status'] = $status;
+    }
+    if ($actingFunction !== '') {
+        $query['acting_function'] = $actingFunction;
     }
     return 'katgoedt.php?' . http_build_query($query, '', '&', PHP_QUERY_RFC3986);
 }
@@ -94,6 +108,7 @@ function estab_category_render_manager(
 ): void {
     $rows = estab_category_fetch_all($connection, $scope);
     $type = (string) $scope['type'];
+    $actingFunction = (string) ($scope['acting_function'] ?? '');
     $statusMessages = [
         'created' => 'Kategorie wurde angelegt.',
         'updated' => 'Kategorie wurde geändert.',
@@ -108,7 +123,7 @@ function estab_category_render_manager(
         'master' => 'Diese Kategorien stehen allen berechtigten Funktionen zur '
             . 'Verfügung. Eine leere Erstkonfiguration beginnt mit Allgemein '
             . 'und EA1 bis EA6 als anpassbarer Grundstruktur.',
-        'fkt' => 'Diese Kategorien gelten für die aktuell angemeldete Funktion.',
+        'fkt' => 'Diese Kategorien gelten für die aktuell wirksame Funktion.',
         'user' => 'Diese Kategorien gehören ausschließlich zum angemeldeten Konto.',
     };
     $formAction = 'katgoedt.php';
@@ -154,7 +169,12 @@ function estab_category_render_manager(
     }
     foreach ($rows as $row) {
         $categoryId = (int) $row['lfd'];
-        $editUrl = estab_category_manager_url($type, $messageId)
+        $editUrl = estab_category_manager_url(
+            $type,
+            $messageId,
+            '',
+            $actingFunction
+        )
             . '&edit_id=' . rawurlencode((string) $categoryId);
         echo '<tr><td data-label="Kategorie"><strong>'
             . estab_auth_html($row['kategorie']) . '</strong></td>';
@@ -171,6 +191,8 @@ function estab_category_render_manager(
         echo '<input type="hidden" name="category_action" value="delete">';
         echo '<input type="hidden" name="dbtyp" value="' . estab_auth_html($type) . '">';
         echo '<input type="hidden" name="msgno" value="' . estab_auth_html($messageId) . '">';
+        echo '<input type="hidden" name="acting_function" value="'
+            . estab_auth_html($actingFunction) . '">';
         echo '<input type="hidden" name="category_id" value="'
             . estab_auth_html($categoryId) . '">';
         echo '<button class="estab-button estab-button-danger-outline" '
@@ -198,6 +220,8 @@ function estab_category_render_manager(
         . ($isUpdate ? 'update' : 'create') . '">';
     echo '<input type="hidden" name="dbtyp" value="' . estab_auth_html($type) . '">';
     echo '<input type="hidden" name="msgno" value="' . estab_auth_html($messageId) . '">';
+    echo '<input type="hidden" name="acting_function" value="'
+        . estab_auth_html($actingFunction) . '">';
     if ($isUpdate) {
         echo '<input type="hidden" name="category_id" value="'
             . estab_auth_html($editing['lfd']) . '">';
@@ -221,7 +245,12 @@ function estab_category_render_manager(
         . '</button>';
     if ($isUpdate) {
         echo '<a class="estab-button" href="' . estab_auth_html(
-            estab_category_manager_url($type, $messageId)
+            estab_category_manager_url(
+                $type,
+                $messageId,
+                '',
+                $actingFunction
+            )
         ) . '">Abbrechen</a>';
     }
     echo '</div></form></section>';
@@ -239,13 +268,18 @@ try {
         $connection,
         estab_read_session_identity($_SESSION) ?? []
     );
-    $identity = $readScope['identity'];
+    $method = strtoupper((string) ($_SERVER['REQUEST_METHOD'] ?? 'GET'));
+    $actingFunction = $method === 'POST'
+        ? ($_POST['acting_function'] ?? $_GET['acting_function'] ?? null)
+        : ($_GET['acting_function'] ?? null);
+    $identity = estab_category_identity_for_function(
+        $readScope['identity'],
+        $actingFunction
+    );
     $redcopy = estab_category_redcopy_function(
         $connection,
         (string) $conf_4f_tbl['empfmtx']
     );
-    $method = strtoupper((string) ($_SERVER['REQUEST_METHOD'] ?? 'GET'));
-
     if ($method === 'POST') {
         try {
             estab_csrf_require_post($_SERVER, $_POST);
@@ -255,19 +289,6 @@ try {
                 'Aktion nicht erlaubt.'
             );
         }
-        $activeIncident = estab_incident_active($connection);
-        if ($activeIncident === null) {
-            throw new EstabCategoryConflictException(
-                'Kategorien können nur während eines aktiven Einsatzes '
-                . 'geändert werden.'
-            );
-        }
-        estab_dv_require_operational_account(
-            $connection,
-            (int) $activeIncident['active_einsatz_id'],
-            $identity
-        );
-
         $action = $_POST['category_action'] ?? null;
         if (!is_string($action) || !in_array(
             $action,
@@ -336,44 +357,39 @@ try {
                 $_POST['msgno'] ?? null,
                 'Meldungs-ID'
             );
-            if (
-                estab_read_message(
-                    $connection,
-                    (string) $conf_4f_tbl['nachrichten'],
-                    $messageId,
-                    $identity
-                ) === null
-            ) {
-                throw new EstabCategoryAuthorizationException(
-                    'Keine Berechtigung für diese Meldung.'
+            $scope = estab_category_scope($type, $identity, $conf_4f_tbl);
+            $categoryId = null;
+            if ($action !== 'create') {
+                $categoryId = estab_category_positive_id(
+                    $_POST['category_id'] ?? null,
+                    'Kategorie-ID'
                 );
             }
-            estab_category_require_management($type, $identity, $redcopy);
-            $scope = estab_category_scope($type, $identity, $conf_4f_tbl);
+            estab_category_mutate_authorized(
+                $connection,
+                $action,
+                $messageId,
+                (string) $conf_4f_tbl['nachrichten'],
+                $identity,
+                $scope,
+                $categoryId,
+                $_POST,
+                (string) $conf_4f_tbl['empfmtx']
+            );
             $status = '';
             if ($action === 'create') {
-                estab_category_create($connection, $scope, $_POST);
                 $status = 'created';
             } elseif ($action === 'update') {
-                $categoryId = estab_category_positive_id(
-                    $_POST['category_id'] ?? null,
-                    'Kategorie-ID'
-                );
-                estab_category_update($connection, $scope, $categoryId, $_POST);
                 $status = 'updated';
             } else {
-                $categoryId = estab_category_positive_id(
-                    $_POST['category_id'] ?? null,
-                    'Kategorie-ID'
-                );
-                estab_category_delete($connection, $scope, $categoryId);
                 estab_category_clear_session_filter($_SESSION, $type);
                 $status = 'deleted';
             }
             $categoryRedirect = estab_category_manager_url(
                 $type,
                 $messageId,
-                $status
+                $status,
+                (string) $identity['funktion']
             );
         }
     } elseif ($method !== 'GET') {

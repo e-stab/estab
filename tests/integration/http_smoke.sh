@@ -41,6 +41,7 @@ restore_vordruck=${ESTAB_TEST_RESTORE_VORDRUCK:-}
 restore_vordruck_sha256=${ESTAB_TEST_RESTORE_VORDRUCK_SHA256:-}
 state_file=${ESTAB_TEST_STATE_FILE:-}
 compose_engine=${ESTAB_TEST_COMPOSE_ENGINE:-}
+project_name=${COMPOSE_PROJECT_NAME:-}
 
 case "$test_code" in
     '' | *[!a-z0-9_]*)
@@ -215,6 +216,9 @@ conversation_matrix_fixture_changed=0
 conversation_matrix_original_rc2=f
 conversation_matrix_original_auto=f
 tampered_attachment=
+permission_mode_original_incident_id=0
+permission_mode_test_incident_id=0
+permission_mode_incident_restore_required=false
 cleanup_http_smoke() {
     status=$?
     trap - EXIT HUP INT TERM
@@ -257,6 +261,17 @@ cleanup_http_smoke() {
                     'HTTP smoke: emergency recipient-matrix restore failed' >&2
                 status=1
             }
+    fi
+    if [ "$permission_mode_incident_restore_required" = true ] && \
+        [ "$permission_mode_original_incident_id" -gt 0 ]; then
+        permission_mode_incident_fixture \
+            restore "$permission_mode_original_incident_id" \
+            >/dev/null 2>&1 || {
+                printf '%s\n' \
+                    'HTTP smoke: emergency incident restore failed' >&2
+                status=1
+            }
+        permission_mode_incident_restore_required=false
     fi
     rm -rf -- "$work_dir"
     exit "$status"
@@ -680,6 +695,16 @@ db_sql() {
     '
 }
 
+permission_mode_incident_fixture() {
+    "$compose_engine" compose run --rm --no-deps -T \
+        --env ESTAB_PERMISSION_MODE_INCIDENT_FIXTURE=1 \
+        --env "ESTAB_PERMISSION_MODE_INCIDENT_PROJECT=$project_name" \
+        --volume "$repo_root:/workspace:ro" \
+        --workdir /workspace \
+        app php -d auto_prepend_file= \
+            tests/integration/permission_mode_incident_fixture.php "$@"
+}
+
 vordruck_name_for_marker() {
     marker=$1
     if ! printf '%s' "$marker" | grep -Eq '^[A-Za-z0-9_:-]{1,180}$'; then
@@ -1020,9 +1045,9 @@ if [ "$restore_verify_only" = true ]; then
     assert_session_bar "$test_name" "$test_code" "$test_function" "$restore_role"
 
     assert_body "$workflow_marker"
-    # The restored fixed S1 account may read its own workflow object but does
-    # not acquire S2 Lage-/Dokumentationsrechte merely because the export was
-    # restored. No legacy duty assignment is required after the restore.
+    # The restored explicitly LOOSE incident lets the fixed S1 account read
+    # its own workflow object, but never grants S2 Lage-/Dokumentationsrechte.
+    # No formal duty assignment is required after the restore.
     assert_status 403 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
         "$base_url/4fueltg/ue_ltg.php"
     assert_body_absent "$workflow_marker"
@@ -1187,7 +1212,10 @@ assert_session_bar "$test_name" "$test_code" "$test_function" "$test_role"
 assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     "$base_url/4fach/fuehrungsstelle.php"
 assert_session_bar "$test_name" "$test_code" "$test_function" "$test_role"
-assert_body 'Zugewiesene Funktion'
+assert_body 'Kontofunktion'
+assert_body 'Wirksame Funktionen'
+assert_body 'Berechtigungsmodus'
+assert_body 'Locker'
 assert_body_absent 'name="dienstbesetzung_id"'
 assert_body_absent 'value="select_hat"'
 
@@ -1327,8 +1355,9 @@ printf "DELETE FROM nv_nachrichten WHERE \`00_lfd\` = %s AND \`12_inhalt\` = '%s
     db_sql >/dev/null
 
 # Provision the fixed account functions used by this and the following HTTP
-# suites. An active incident is the only operational lifecycle prerequisite;
-# neither login nor fachliche writes require a formal legacy duty shift.
+# suites. This central fixture is explicitly LOOSE: an active incident is the
+# operational lifecycle prerequisite, while fachliche rights still come only
+# from the primary function and explicitly granted personal extra functions.
 account_s2_name=${ESTAB_TEST_ETB_NAME:-Logbook Integration S2}
 account_s2_code=${ESTAB_TEST_ETB_CODE:-e2s200}
 account_si_name=${ESTAB_TEST_CATEGORY_SI_NAME:-Category Integration Si}
@@ -1391,12 +1420,13 @@ if [ "$legacy_assignment" != "$(printf 'A/W\tFernmelder\t1')" ]; then
         "$legacy_assignment" >&2
     exit 1
 fi
-assert_body 'Zugewiesene Funktion'
+assert_body 'Kontofunktion'
+assert_body 'Wirksame Funktionen'
 assert_body_absent 'name="dienstbesetzung_id"'
 assert_body_absent 'value="select_hat"'
 
-# The fixed A/W account can write in the active incident while it is completely
-# unassigned to both optional access shifts and historical duty shifts.
+# In the explicitly LOOSE incident, the fixed A/W account can write while it
+# is unassigned to optional access shifts and formal duty shifts.
 fixed_account_write_marker="FIXED-ACCOUNT-WRITE-$$"
 fixed_account_write_before=$(
     printf "SELECT COUNT(*) FROM nv_tbb WHERE estab_operations = '%s' AND estab_shift_id IS NULL AND estab_writer_assignment_id IS NULL;\n" \
@@ -3694,6 +3724,11 @@ FROM nv_nachrichten AS source
 WHERE source.\`12_inhalt\` = '${vordruck_marker}'
 LIMIT 1;
 SET @estab_pdf_archive_message_id = LAST_INSERT_ID();
+SET @estab_logbook_system_write_incident_id = (
+  SELECT einsatz_id FROM nv_nachrichten
+   WHERE \`00_lfd\` = @estab_pdf_archive_message_id
+);
+SET @estab_logbook_system_write_book = 'TTB';
 INSERT INTO nv_tbb (
   einsatz_id, estab_shift_id, tbb_time, tbb_aktion, tbb_bemerk,
   tbb_funktion, tbb_kuerzel, tbb_benutzer,
@@ -3712,6 +3747,8 @@ SELECT
   'bearbeitet durch ${legacy_registration_code}'
 FROM nv_nachrichten AS message_row
 WHERE message_row.\`00_lfd\` = @estab_pdf_archive_message_id;
+SET @estab_logbook_system_write_incident_id = NULL;
+SET @estab_logbook_system_write_book = NULL;
 SET @estab_pdf_archive_message_id = NULL;
 COMMIT;
 SQL
@@ -4487,8 +4524,40 @@ if [ -n "${ESTAB_TEST_ADMIN_USER:-}" ] && [ -n "$admin_password" ]; then
     assert_body 'separate technische Administrationskennwort'
     csrf_from_body >/dev/null
 
-    # Optional access shifts are incident-scoped admission groups, not duty
-    # functions. First prove an unassigned fixed-function account may log in.
+    # Optional access shifts exist only in LOOSE. The populated incoming
+    # incident keeps its immutable mode; this access test gets a separate
+    # incident created as LOOSE from the outset and cleanup reactivates the
+    # exact incoming incident even after failure.
+    permission_mode_original_incident_id=$(printf '%s\n' \
+        'SELECT active_einsatz_id FROM nv_einsatz_status WHERE singleton_id=1;' |
+        db_sql | tr -d '\r\n')
+    case "$permission_mode_original_incident_id" in
+        '' | 0 | *[!0-9]*)
+            printf 'HTTP smoke: active incident is unavailable\n' >&2
+            exit 1
+            ;;
+    esac
+    permission_mode_incident_restore_required=true
+    permission_mode_test_incident_id=$(permission_mode_incident_fixture \
+        create-loose "CI-HTTP-LOOSE-$$-$$")
+    case "$permission_mode_test_incident_id" in
+        '' | 0 | *[!0-9]*)
+            printf 'HTTP smoke: isolated LOOSE incident was not created\n' >&2
+            exit 1
+            ;;
+    esac
+    permission_mode_fixture_state=$(printf '%s\n' \
+        'SELECT CONCAT(s.active_einsatz_id, "|", e.estab_permission_mode) FROM nv_einsatz_status AS s JOIN nv_einsaetze AS e ON e.einsatz_id=s.active_einsatz_id WHERE s.singleton_id=1;' |
+        db_sql | tr -d '\r\n')
+    if [ "$permission_mode_fixture_state" != \
+        "${permission_mode_test_incident_id}|LOOSE" ]; then
+        printf 'HTTP smoke: isolated access incident is not active LOOSE: %s\n' \
+            "$permission_mode_fixture_state" >&2
+        exit 1
+    fi
+
+    # An unassigned fixed-function account may log in in LOOSE, while its
+    # Fachrechte still come only from its primary and explicit extra functions.
     access_shift_cookie=$work_dir/access-shift-cookies.txt
     : > "$access_shift_cookie"
     assert_status 200 \
@@ -4525,7 +4594,8 @@ if [ -n "${ESTAB_TEST_ADMIN_USER:-}" ] && [ -n "$admin_password" ]; then
         --cookie "$admin_cookie" --cookie-jar "$admin_cookie" \
         "$base_url/4fadm/fuehrungsstelle.php"
     assert_body 'data-estab-shift-admin'
-    assert_body 'Optionale Schichten'
+    assert_body 'Optionale Zugangsschichten'
+    assert_body 'Für operative Eingaben ist ein aktiver Einsatz zwingend'
     assert_body 'Schicht ist dafür niemals erforderlich.'
     access_shift_csrf=$(csrf_from_body)
     access_shift_label="HTTP Zugang $$"
@@ -4533,7 +4603,7 @@ if [ -n "${ESTAB_TEST_ADMIN_USER:-}" ] && [ -n "$admin_password" ]; then
         --cookie "$admin_cookie" --cookie-jar "$admin_cookie" \
         --request POST \
         --data-urlencode "csrf_token=$access_shift_csrf" \
-        --data-urlencode 'admin_action=create_shift' \
+        --data-urlencode 'admin_action=create_access_shift' \
         --data-urlencode "bezeichnung=$access_shift_label" \
         "$base_url/4fadm/fuehrungsstelle.php"
     assert_header_fixed \
@@ -4562,7 +4632,7 @@ if [ -n "${ESTAB_TEST_ADMIN_USER:-}" ] && [ -n "$admin_password" ]; then
         --cookie "$admin_cookie" --cookie-jar "$admin_cookie" \
         --request POST \
         --data-urlencode "csrf_token=$access_shift_csrf" \
-        --data-urlencode 'admin_action=add_member' \
+        --data-urlencode 'admin_action=add_access_member' \
         --data-urlencode "zugangsschicht_id=$access_shift_id" \
         --data-urlencode "benutzer_kuerzel=$idle_account_code" \
         --data-urlencode 'confirm_assignment=1' \
@@ -4612,7 +4682,7 @@ if [ -n "${ESTAB_TEST_ADMIN_USER:-}" ] && [ -n "$admin_password" ]; then
         --cookie "$admin_cookie" --cookie-jar "$admin_cookie" \
         --request POST \
         --data-urlencode "csrf_token=$access_shift_csrf" \
-        --data-urlencode 'admin_action=set_enabled' \
+        --data-urlencode 'admin_action=set_access_enabled' \
         --data-urlencode "zugangsschicht_id=$access_shift_id" \
         --data-urlencode 'expected_enabled=0' \
         --data-urlencode "expected_confirmation_version=$access_shift_version" \
@@ -4662,7 +4732,7 @@ if [ -n "${ESTAB_TEST_ADMIN_USER:-}" ] && [ -n "$admin_password" ]; then
         --cookie "$admin_cookie" --cookie-jar "$admin_cookie" \
         --request POST \
         --data-urlencode "csrf_token=$access_shift_csrf" \
-        --data-urlencode 'admin_action=set_enabled' \
+        --data-urlencode 'admin_action=set_access_enabled' \
         --data-urlencode "zugangsschicht_id=$access_shift_id" \
         --data-urlencode 'expected_enabled=1' \
         --data-urlencode "expected_confirmation_version=$access_shift_version" \
@@ -4678,12 +4748,23 @@ if [ -n "${ESTAB_TEST_ADMIN_USER:-}" ] && [ -n "$admin_password" ]; then
         --cookie "$access_shift_cookie" --cookie-jar "$access_shift_cookie" \
         "$base_url/4fach/vordrucke.php"
 
+    restored_permission_mode_incident_id=$(permission_mode_incident_fixture \
+        restore "$permission_mode_original_incident_id")
+    if [ "$restored_permission_mode_incident_id" != \
+        "$permission_mode_original_incident_id" ]; then
+        printf 'HTTP smoke: incoming incident was not reactivated: %s\n' \
+            "$restored_permission_mode_incident_id" >&2
+        exit 1
+    fi
+    permission_mode_incident_restore_required=false
+
     assert_status 200 --config "$admin_curl_config" \
         --cookie "$admin_cookie" --cookie-jar "$admin_cookie" \
         "$base_url/4fadm/incident_export.php"
     assert_body 'data-estab-incident-export'
     assert_body 'PDF-Einsatzdossier'
-    assert_body 'Optionale Zugangsschichten samt Zuordnungen'
+    assert_body 'Formale Dienstschichten samt Besetzungen und Übergaben'
+    assert_body 'optionalen Zugangsschichten des lockeren Betriebs'
     incident_pdf_csrf=$(csrf_from_body)
     incident_pdf_id=$(printf '%s\n' \
         'SELECT `active_einsatz_id` FROM `nv_einsatz_status` WHERE `singleton_id` = 1;' |

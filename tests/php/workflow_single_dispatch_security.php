@@ -13,6 +13,14 @@ $assert = static function (bool $condition, string $message) use (&$assertions):
         throw new RuntimeException($message);
     }
 };
+$fails = static function (callable $operation): ?Throwable {
+    try {
+        $operation();
+    } catch (Throwable $exception) {
+        return $exception;
+    }
+    return null;
+};
 
 $identities = [
     'S1/Stab' => [
@@ -21,6 +29,10 @@ $identities = [
         'funktion' => 'S1',
         'rolle' => 'Stab',
         'default' => 'staff-list',
+        'allowed_actions' => [
+            'stab_schreiben_x',
+            'stab_korrekturen_x',
+        ],
     ],
     'Si/Stab' => [
         'benutzer' => 'Single Dispatch Si',
@@ -28,6 +40,9 @@ $identities = [
         'funktion' => 'Si',
         'rolle' => 'Stab',
         'default' => 'viewer-list',
+        'allowed_actions' => [
+            'stab_sichten_x',
+        ],
     ],
     'A/W/Fernmelder' => [
         'benutzer' => 'Single Dispatch A-W',
@@ -35,6 +50,10 @@ $identities = [
         'funktion' => 'A/W',
         'rolle' => 'Fernmelder',
         'default' => 'telecommunications-outgoing-list',
+        'allowed_actions' => [
+            'fm_eingang_x',
+            'fm_ausgang_x',
+        ],
     ],
     'LdF/Fernmelder' => [
         'benutzer' => 'Single Dispatch LdF',
@@ -42,6 +61,9 @@ $identities = [
         'funktion' => 'LdF',
         'rolle' => 'Fernmelder',
         'default' => 'telecommunications-lead-list',
+        'allowed_actions' => [
+            'ldf_nachrichten_x',
+        ],
     ],
     'POL/FB' => [
         'benutzer' => 'Single Dispatch POL',
@@ -49,6 +71,10 @@ $identities = [
         'funktion' => 'POL',
         'rolle' => 'FB',
         'default' => 'staff-list',
+        'allowed_actions' => [
+            'stab_schreiben_x',
+            'stab_korrekturen_x',
+        ],
     ],
 ];
 $actions = [
@@ -72,8 +98,9 @@ estab_permission_context_set_from_incident([
 
 foreach ($identities as $identityLabel => $identityWithDefault) {
     $defaultView = $identityWithDefault['default'];
+    $allowedActions = $identityWithDefault['allowed_actions'];
     $identity = $identityWithDefault;
-    unset($identity['default']);
+    unset($identity['default'], $identity['allowed_actions']);
 
     $assert(
         estab_workflow_primary_view_selector([]) === null,
@@ -96,9 +123,12 @@ foreach ($identities as $identityLabel => $identityWithDefault) {
     foreach ($actions as $button => $expectedView) {
         $request = [$button => '1'];
         $selector = estab_workflow_primary_view_selector($request);
+        $routeExpected = in_array($button, $allowedActions, true);
         $assert(
-            estab_workflow_route_allowed($identity, 'POST', $request),
-            $identityLabel . ': LOOSE action was rejected: ' . $button
+            estab_workflow_route_allowed($identity, 'POST', $request)
+                === $routeExpected,
+            $identityLabel . ': LOOSE base function admitted or rejected the wrong action: '
+                . $button
         );
         $assert(
             $selector === $expectedView,
@@ -115,7 +145,7 @@ foreach ($identities as $identityLabel => $identityWithDefault) {
         ));
         $assert(
             $rendered === [$expectedView],
-            $identityLabel . ': explicit LOOSE action also rendered the account default: '
+            $identityLabel . ': explicit selector also rendered the account default: '
                 . $button
         );
     }
@@ -133,6 +163,160 @@ foreach ($identities as $identityLabel => $identityWithDefault) {
             );
         }
     }
+}
+
+$looseMultiFunctionIdentity = [
+    'benutzer' => 'Single Dispatch S1 mit Zusatzfunktionen',
+    'kuerzel' => 'sd_multi',
+    'funktion' => 'S1',
+    'rolle' => 'Stab',
+    'estab_permission_mode' => ESTAB_PERMISSION_MODE_LOOSE,
+    'estab_additional_functions' => [
+        ['funktion' => 'Si', 'rolle' => 'Stab'],
+        ['funktion' => 'A/W', 'rolle' => 'Fernmelder'],
+        ['funktion' => 'LdF', 'rolle' => 'Fernmelder'],
+    ],
+];
+$assert(
+    estab_workflow_selected_identity_is_staff_writer(
+        $looseMultiFunctionIdentity
+    )
+        && !estab_workflow_selected_identity_is(
+            $looseMultiFunctionIdentity,
+            'Si',
+            'Stab'
+        )
+        && !estab_workflow_selected_identity_is(
+            $looseMultiFunctionIdentity,
+            'A/W',
+            'Fernmelder'
+        )
+        && !estab_workflow_selected_identity_is(
+            $looseMultiFunctionIdentity,
+            'LdF',
+            'Fernmelder'
+        ),
+    'LOOSE additions replaced the fixed account function as neutral view'
+);
+foreach ($actions as $button => $expectedView) {
+    $request = [$button => '1'];
+    $assert(
+        estab_workflow_route_allowed(
+            $looseMultiFunctionIdentity,
+            'POST',
+            $request
+        ),
+        'LOOSE explicit additional function did not admit its action: ' . $button
+    );
+    $actingIdentity = estab_workflow_identity_for_request(
+        $looseMultiFunctionIdentity,
+        $request
+    );
+    $expectedTuple = match ($button) {
+        'stab_schreiben_x', 'stab_korrekturen_x' => ['S1', 'Stab'],
+        'stab_sichten_x' => ['Si', 'Stab'],
+        'ldf_nachrichten_x' => ['LdF', 'Fernmelder'],
+        'fm_eingang_x', 'fm_ausgang_x' => ['A/W', 'Fernmelder'],
+    };
+    $assert(
+        ($actingIdentity['funktion'] ?? null) === $expectedTuple[0]
+            && ($actingIdentity['rolle'] ?? null) === $expectedTuple[1]
+            && ($actingIdentity['authorization_account_function'] ?? null)
+                === 'S1'
+            && ($actingIdentity['authorization_account_role'] ?? null)
+                === 'Stab'
+            && ($actingIdentity['authorization_route_function'] ?? null)
+                === $expectedTuple[0]
+            && ($actingIdentity['authorization_route_role'] ?? null)
+                === $expectedTuple[1],
+        'LOOSE route did not retain account provenance for ' . $expectedView
+    );
+    $assert(
+        estab_workflow_selected_identity_is(
+            $actingIdentity,
+            $expectedTuple[0],
+            $expectedTuple[1]
+        ),
+        'LOOSE route did not expose exactly one selected function for '
+            . $expectedView
+    );
+}
+
+$multiStaffIdentity = $looseMultiFunctionIdentity;
+$multiStaffIdentity['estab_additional_functions'][] = [
+    'funktion' => 'S2',
+    'rolle' => 'Stab',
+];
+$selectedS2Identity = estab_workflow_identity_as_tuple(
+    $multiStaffIdentity,
+    ['funktion' => 'S2', 'rolle' => 'Stab']
+);
+$selectedCorrectionActor = estab_workflow_identity_for_selected_route(
+    $multiStaffIdentity,
+    $selectedS2Identity,
+    ['task' => 'Stab_korrigieren', 'absenden_x' => '1']
+);
+$assert(
+    ($selectedCorrectionActor['funktion'] ?? null) === 'S2'
+        && ($selectedCorrectionActor['rolle'] ?? null) === 'Stab'
+        && ($selectedCorrectionActor['authorization_account_function'] ?? null)
+            === 'S1'
+        && ($selectedCorrectionActor['authorization_route_function'] ?? null)
+            === 'S2',
+    'selected additional S2 correction route fell back to the first staff function'
+);
+$foreignSelectedIdentity = $selectedS2Identity;
+$foreignSelectedIdentity['kuerzel'] = 'foreign';
+$assert(
+    $fails(
+        static fn (): array => estab_workflow_identity_for_selected_route(
+            $multiStaffIdentity,
+            $foreignSelectedIdentity,
+            ['task' => 'Stab_korrigieren', 'absenden_x' => '1']
+        )
+    ) instanceof RuntimeException,
+    'selected route actor from another account was accepted'
+);
+$revokedMultiStaffIdentity = $multiStaffIdentity;
+$revokedMultiStaffIdentity['estab_additional_functions'] = array_values(
+    array_filter(
+        $revokedMultiStaffIdentity['estab_additional_functions'],
+        static fn (array $tuple): bool => $tuple['funktion'] !== 'S2'
+    )
+);
+$assert(
+    $fails(
+        static fn (): array => estab_workflow_identity_for_selected_route(
+            $revokedMultiStaffIdentity,
+            $selectedS2Identity,
+            ['task' => 'Stab_korrigieren', 'absenden_x' => '1']
+        )
+    ) instanceof RuntimeException,
+    'revoked selected S2 route remained effective'
+);
+$assert(
+    $fails(
+        static fn (): array => estab_workflow_identity_for_selected_route(
+            $multiStaffIdentity,
+            $selectedS2Identity,
+            ['fm_eingang_x' => '1']
+        )
+    ) instanceof RuntimeException,
+    'selected S2 actor was reused for an A/W route'
+);
+
+$looseUngradedIdentity = $looseMultiFunctionIdentity;
+unset($looseUngradedIdentity['estab_additional_functions']);
+foreach (['stab_sichten_x', 'ldf_nachrichten_x', 'fm_eingang_x'] as $button) {
+    $assert(
+        !estab_workflow_route_allowed(
+            $looseUngradedIdentity,
+            'POST',
+            [$button => '1']
+        ),
+        'LOOSE route remained available after its additional function was removed: '
+            . $button
+    );
 }
 
 $assert(
@@ -250,6 +434,17 @@ $assert(
 );
 $controller = file_get_contents($root . '/4fach/mainindex.php');
 $assert(is_string($controller), 'main controller cannot be read');
+$assert(
+    preg_match(
+        '~"telecommunications-outgoing-list",\s+'
+            . 'is_array \(\$workflowSelectedIdentity\)\s+'
+            . '&& estab_workflow_selected_identity_is \(\s*'
+            . '\$workflowSelectedIdentity,\s*"A/W",\s*'
+            . '"Fernmelder"\s*\)~',
+        $controller
+    ) === 1,
+    'anonymous or multi-function message overview lacks one exact Fernmelder default'
+);
 $lockCancelSourceStart = strpos(
     $controller,
     'if (!estab_message_release_operator_stage_lock ('
@@ -316,7 +511,7 @@ estab_permission_context_set_from_incident([
     'revision' => 42,
 ]);
 $strictStaff = $identities['S1/Stab'];
-unset($strictStaff['default']);
+unset($strictStaff['default'], $strictStaff['allowed_actions']);
 $assert(
     estab_workflow_route_allowed(
         $strictStaff,

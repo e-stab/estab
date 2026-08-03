@@ -86,12 +86,31 @@ function estab_permission_context(): ?array
     return is_array($context) ? $context : null;
 }
 
-/** Missing context is fail-closed and therefore keeps role checks enabled. */
+/**
+ * Fachrollen are mandatory in both modes.
+ *
+ * LOOSE changes the source of authorization (fixed account plus explicitly
+ * administered additional functions), never the existence of a role check.
+ */
 function estab_permission_role_checks_enforced(): bool
+{
+    return true;
+}
+
+/** Missing context fails closed and therefore requires a selected duty hat. */
+function estab_permission_duty_shift_required(): bool
 {
     $context = estab_permission_context();
     return $context === null
-        || $context['mode'] !== ESTAB_PERMISSION_MODE_LOOSE;
+        || $context['mode'] === ESTAB_PERMISSION_MODE_STRICT;
+}
+
+/** Return whether the authoritative request context explicitly selected LOOSE. */
+function estab_permission_loose_mode_active(): bool
+{
+    $context = estab_permission_context();
+    return $context !== null
+        && $context['mode'] === ESTAB_PERMISSION_MODE_LOOSE;
 }
 
 /**

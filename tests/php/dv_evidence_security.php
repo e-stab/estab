@@ -370,6 +370,22 @@ $assert(
     'formal close omits preflight, live reservations, retention, or evidence verification'
 );
 $assert(
+    str_contains(
+        $incident,
+        '$strictMode = estab_incident_duty_shift_required($permissionSnapshot)'
+    )
+        && str_contains($incident, '$preflight[\'logbuecher_eroeffnet\']')
+        && str_contains($incident, '$preflight[\'offene_schichten\'] === 0')
+        && str_contains($incident, '$preflight[\'offene_besetzungen\'] === 0')
+        && str_contains(
+            $incident,
+            '$preflight[\'offene_uebergabeanforderungen\'] === 0'
+        )
+        && str_contains($incident, '!$strictMode')
+        && str_contains($incident, '$closingShiftId'),
+    'close preflight does not enforce formal evidence only in STRICT'
+);
+$assert(
     str_contains($logbookMigration, 'estab_book_lfd')
         && str_contains($logbookMigration, 'Closed incident requires ten-year retention')
         && str_contains($logbookMigration, 'TTB entries are append-only; write a correction')

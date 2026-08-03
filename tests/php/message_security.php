@@ -193,6 +193,7 @@ $successorStaff = ['kuerzel' => 'st0003', 'funktion' => 'S1', 'rolle' => 'Stab']
 $secondStaff = ['kuerzel' => 's20001', 'funktion' => 'S2', 'rolle' => 'Stab'];
 $foreignStaff = ['kuerzel' => 'st0002', 'funktion' => 'S10', 'rolle' => 'Stab'];
 $viewer = ['kuerzel' => 'si0001', 'funktion' => 'Si', 'rolle' => 'Stab'];
+$etb = ['kuerzel' => 'etb001', 'funktion' => 'ETB', 'rolle' => 'Stab'];
 $radio = ['kuerzel' => 'aw0001', 'funktion' => 'A/W', 'rolle' => 'Fernmelder'];
 $otherRadio = ['kuerzel' => 'aw0002', 'funktion' => 'A/W', 'rolle' => 'Fernmelder'];
 $lead = ['kuerzel' => 'ld0001', 'funktion' => 'LdF', 'rolle' => 'Fernmelder'];
@@ -249,12 +250,24 @@ $assert(
     'staff reached an incoming recipient before terminal Si review'
 );
 $assert(!estab_message_object_allowed($foreignStaff, 'staff-read', $incoming), 'substring recipient accepted');
+$assert(
+    estab_message_effective_staff_functions($etb) === [],
+    'ETB capability was widened into an effective staff message function'
+);
 $assert(estab_message_object_allowed($viewer, 'viewer-review', $incoming), 'pending viewer item denied');
 $completedIncoming = $incoming;
 $completedIncoming['x00_status'] = 8;
 $completedIncoming['x01_abschluss'] = 't';
 $completedIncoming['15_quitdatum'] = '2026-07-23 12:01:00';
 $completedIncoming['15_quitzeichen'] = 'si0001';
+$assert(
+    !estab_message_object_allowed(
+        $etb,
+        'staff-read',
+        array_replace($completedIncoming, ['16_empf' => 'alle_rt,'])
+    ),
+    'ETB capability was widened into a universal staff message object right'
+);
 $assert(
     estab_message_object_allowed($staff, 'staff-read', $completedIncoming)
         && estab_message_object_allowed(
@@ -350,6 +363,70 @@ $assert(
             $completedOutgoing
         ),
     'terminal outgoing recipient denied'
+);
+$multiStaffIdentity = $staff + [
+    'benutzer' => 'Mehrfachfunktion',
+    'estab_permission_mode' => ESTAB_PERMISSION_MODE_LOOSE,
+    'estab_additional_functions' => [
+        ['funktion' => 'S2', 'rolle' => 'Stab'],
+    ],
+];
+$selectedS2Identity = estab_workflow_identity_for_request(
+    $multiStaffIdentity,
+    ['stab_lesen_x' => '1', 'acting_function' => 'S2']
+);
+$selectedS2ObjectActor = estab_workflow_identity_for_message_operation(
+    $selectedS2Identity,
+    'staff-state',
+    $completedIncoming
+);
+$assert(
+    is_array($selectedS2ObjectActor)
+        && ($selectedS2ObjectActor['funktion'] ?? null) === 'S2'
+        && ($selectedS2ObjectActor['authorization_route_function'] ?? null)
+            === 'S2',
+    'object-level staff flow did not preserve the selected S2 workspace'
+);
+$leadWithS6 = $lead + [
+    'benutzer' => 'LdF mit S6-Zusatzfunktion',
+    'estab_permission_mode' => ESTAB_PERMISSION_MODE_LOOSE,
+    'estab_additional_functions' => [
+        ['funktion' => 'S6', 'rolle' => 'Stab'],
+    ],
+];
+$completedForS6 = $completedIncoming;
+$completedForS6['16_empf'] = 'S6_bl';
+$s6StateActor = estab_workflow_identity_for_message_operation(
+    $leadWithS6,
+    'staff-state',
+    $completedForS6
+);
+$leadStageActor = estab_workflow_identity_for_message_operation(
+    $leadWithS6,
+    'telecommunications-lead-incoming-save',
+    $leadIncoming
+);
+$assert(
+    is_array($s6StateActor)
+        && ($s6StateActor['funktion'] ?? null) === 'S6'
+        && ($s6StateActor['rolle'] ?? null) === 'Stab'
+        && ($s6StateActor['authorization_account_function'] ?? null) === 'LdF'
+        && ($s6StateActor['authorization_route_function'] ?? null) === 'S6'
+        && is_array($leadStageActor)
+        && ($leadStageActor['funktion'] ?? null) === 'LdF'
+        && ($leadStageActor['rolle'] ?? null) === 'Fernmelder'
+        && ($leadStageActor['authorization_route_function'] ?? null) === 'LdF',
+    'LdF plus S6 did not select exactly the function authorized for each message object'
+);
+$leadAfterS6Revocation = $leadWithS6;
+unset($leadAfterS6Revocation['estab_additional_functions']);
+$assert(
+    estab_workflow_identity_for_message_operation(
+        $leadAfterS6Revocation,
+        'staff-state',
+        $completedForS6
+    ) === null,
+    'revoked S6 additional function retained its object-level state authority'
 );
 $assert(
     !estab_message_object_allowed($staff, 'staff-read', $leadIncoming),
@@ -457,6 +534,28 @@ foreach ([
 ] as $source) {
     $assert(is_string($source), 'security source unreadable');
 }
+
+$zieleStart = strpos($formSource, 'function ziele (){');
+$zieleEnd = strpos($formSource, 'function list_anhang (){');
+$zieleSource = is_int($zieleStart) && is_int($zieleEnd)
+    ? substr($formSource, $zieleStart, $zieleEnd - $zieleStart)
+    : '';
+$assert(
+    str_contains(
+        $zieleSource,
+        '$actingIdentity = $GLOBALS ["workflowSelectedIdentity"] ?? null;'
+    )
+        && str_contains(
+            $zieleSource,
+            'is_string ($actingIdentity ["funktion"] ?? null)'
+        )
+        && str_contains($zieleSource, '$empf_array [$actingFunction]')
+        && !str_contains($zieleSource, '$_SESSION')
+        && !str_contains($formSource, '$_SESSION [\'vStab_funktion\']')
+        && !str_contains($formSource, '$_SESSION ["vStab_funktion"]'),
+    'message-form recipient background is not bound to the exact '
+        . 'server-selected effective function'
+);
 
 $assert(
     substr_count(
@@ -738,6 +837,22 @@ $assert(
         && str_contains($dataSource, 'function unset_msg_read ($lfd, array $actor)')
         && str_contains($dataSource, 'function set_msg_done ($lfd, array $actor)')
         && str_contains($dataSource, 'function unset_msg_done ($lfd, array $actor)')
+        && str_contains(
+            $dataSource,
+            'function list_of_readed_msg (array $actor)'
+        )
+        && str_contains(
+            $dataSource,
+            'function list_of_done_msg (array $actor)'
+        )
+        && str_contains(
+            $listSource,
+            'list_of_readed_msg ($this->operationalIdentity)'
+        )
+        && str_contains(
+            $listSource,
+            'list_of_done_msg ($this->operationalIdentity)'
+        )
         && str_contains($dataSource, 'function reset_record_lock ( $lfd, array $actor )')
         && preg_match(
             '/estab_message_release_operator_stage_lock\s*\(.*?'
@@ -745,7 +860,22 @@ $assert(
             $dataSource
         ) === 1
         && substr_count($mainSource, '$workflowSelectedIdentity') >= 10
-        && substr_count($dataSource, '$messageActor') >= 10,
+        && substr_count($dataSource, '$messageActor') >= 10
+        && preg_match(
+            '/\$messageActor\s*=\s*estab_workflow_identity_for_selected_route\s*\('
+                . '\s*\$attachmentReadIdentity,\s*'
+                . '\$GLOBALS\s*\["workflowSelectedIdentity"\]\s*\?\?\s*null,'
+                . '\s*\$browserData\s*\);.*?'
+                . '\$sessionCode\s*=\s*\(string\)\s*\('
+                . '\$messageActor\s*\["kuerzel"\].*?'
+                . '\$sessionFunction\s*=\s*\(string\)\s*\('
+                . '\$messageActor\s*\["funktion"\].*?'
+                . '\$sessionUser\s*=\s*\(string\)\s*\('
+                . '\$messageActor\s*\["benutzer"\].*?'
+                . '\$sessionRole\s*=\s*\(string\)\s*\('
+                . '\$messageActor\s*\["rolle"\]/s',
+            $dataSource
+        ) === 1,
     'controller wrappers do not carry the complete selected actor or force reset explicitly'
 );
 $assert(

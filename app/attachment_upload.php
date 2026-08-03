@@ -157,13 +157,22 @@ function estab_attachment_upload_browser_file(
     ?string $capturedAt = null
 ): array {
     $expectedIncidentId = estab_incident_positive_id($expectedIncidentId);
-    $identity = estab_attachment_origin_identity($identity);
     if ($originContext !== null) {
         $originContext = estab_attachment_origin_context_validate(
             $originContext,
             $identity,
             $expectedIncidentId
         );
+        // Carry the exact server-bound authority into both transactional
+        // checks below. In STRICT this includes the selected assignment id;
+        // in LOOSE it includes the fixed-account provenance and exact acting
+        // primary/additional tuple. Rebuilding only the four display fields
+        // would silently turn an old flow into the successor's authority.
+        $identity = estab_attachment_origin_authority_identity(
+            $originContext
+        );
+    } else {
+        $identity = estab_attachment_origin_identity($identity);
     }
     $sessionId = estab_attachment_validate_session_id($sessionId);
     $prefix = estab_attachment_validate_prefix($prefix);

@@ -1080,6 +1080,10 @@ audio[data-estab-sidebar-audio] {
     gap: 0.45rem;
 }
 
+.estab-sidebar-actions .estab-sidebar-action-form {
+    margin: 0;
+}
+
 .estab-sidebar-action {
     align-items: flex-start;
     background: #183654;
@@ -3252,6 +3256,15 @@ form[data-estab-incident-disabled="true"]::before {
 }
 
 @media (max-width: 42rem) {
+    body > aside.estab-session-bar:not(.estab-session-bar-compact) {
+        position: static;
+    }
+
+    body > aside.estab-session-bar:not(.estab-session-bar-compact)
+        .estab-navigation {
+        contain: paint;
+    }
+
     .estab-message-workspace-document,
     .estab-message-workspace {
         height: auto;

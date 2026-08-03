@@ -2,13 +2,14 @@
 
 declare(strict_types=1);
 
+require_once __DIR__ . '/permission_mode.php';
+
 /**
  * System-generated ETB/TBB lifecycle records.
  *
  * Every function in this file participates in the caller's existing
- * transaction. It deliberately performs no commit or rollback: optional
- * historical shift events, book entries and incident close must either all
- * succeed or all fail.
+ * transaction. It deliberately performs no commit or rollback: duty-shift
+ * events, book entries and incident close must either all succeed or all fail.
  */
 
 /** @return array<string,string> field => operator-facing label */
@@ -188,21 +189,117 @@ function estab_logbook_lifecycle_assert_empty_books(
     }
 }
 
+/** Read the authoritative mode for one incident inside the caller's lock. */
+function estab_logbook_lifecycle_permission_mode(
+    mysqli $connection,
+    int $incidentId
+): string {
+    if ($incidentId < 1) {
+        throw new InvalidArgumentException('Logbucheinsatz ist ungültig.');
+    }
+    $statement = $connection->prepare(
+        'SELECT `estab_permission_mode` FROM `nv_einsaetze`'
+        . ' WHERE `einsatz_id` = ? LIMIT 1'
+    );
+    if (!$statement) {
+        throw new RuntimeException(
+            'Berechtigungsmodus des Logbucheinsatzes konnte nicht gelesen werden.'
+        );
+    }
+    try {
+        $statement->bind_param('i', $incidentId);
+        $statement->execute();
+        $result = $statement->get_result();
+        $row = $result->fetch_assoc();
+        $result->free();
+    } finally {
+        $statement->close();
+    }
+    if (!is_array($row)) {
+        throw new RuntimeException('Logbucheinsatz ist nicht vorhanden.');
+    }
+    try {
+        return estab_permission_mode($row['estab_permission_mode'] ?? null);
+    } catch (InvalidArgumentException $exception) {
+        throw new RuntimeException(
+            'Berechtigungsmodus des Logbucheinsatzes ist ungültig.',
+            previous: $exception
+        );
+    }
+}
+
+/**
+ * Resolve the active shift required by a STRICT automatic book entry.
+ *
+ * LOOSE deliberately returns NULL: its books remain usable without a formal
+ * duty shift. The caller already holds the active-incident transaction lock,
+ * and STRICT additionally locks the selected active shift row here.
+ */
+function estab_logbook_lifecycle_active_shift_id(
+    mysqli $connection,
+    int $incidentId
+): ?int {
+    if (
+        estab_logbook_lifecycle_permission_mode($connection, $incidentId)
+            === ESTAB_PERMISSION_MODE_LOOSE
+    ) {
+        return null;
+    }
+    $statement = $connection->prepare(
+        'SELECT `dienstschicht_id` FROM `nv_dienstschichten`'
+        . " WHERE `einsatz_id` = ? AND `status` = 'AKTIV'"
+        . ' LIMIT 1 FOR UPDATE'
+    );
+    if (!$statement) {
+        throw new RuntimeException(
+            'Aktive Dienstschicht konnte nicht vorbereitet werden.'
+        );
+    }
+    try {
+        $statement->bind_param('i', $incidentId);
+        $statement->execute();
+        $result = $statement->get_result();
+        $row = $result->fetch_assoc();
+        $result->free();
+    } finally {
+        $statement->close();
+    }
+    $shiftId = (int) ($row['dienstschicht_id'] ?? 0);
+    if ($shiftId < 1) {
+        throw new RuntimeException(
+            'Ein automatischer Logbucheintrag benötigt im strengen Modus '
+                . 'eine aktive Dienstschicht.'
+        );
+    }
+    return $shiftId;
+}
+
 /**
  * Open both books exactly once when an incident has no historical entries.
  *
  * Existing deployments can already contain one or both legacy books without
- * a canonical opening row.  Such evidence must not be reordered or rewritten;
- * in that case the caller leaves the history untouched.  Fresh incidents are
- * opened atomically without requiring a duty shift.
+ * a canonical opening row. Such evidence must not be reordered or rewritten;
+ * in that case the caller leaves the history untouched. LOOSE may open without
+ * a formal shift. STRICT opens only together with the first activated shift.
  */
 function estab_logbook_lifecycle_open_books_if_empty(
     mysqli $connection,
-    array $incident
+    array $incident,
+    ?int $shiftId = null
 ): bool {
     $incidentId = (int) ($incident['active_einsatz_id'] ?? 0);
     if ($incidentId < 1) {
         throw new RuntimeException('Logbucheröffnung hat keinen aktiven Einsatz.');
+    }
+    $permissionMode = estab_logbook_lifecycle_permission_mode(
+        $connection,
+        $incidentId
+    );
+    if (
+        $permissionMode === ESTAB_PERMISSION_MODE_STRICT
+        && $shiftId === null
+    ) {
+        return false;
     }
     $statement = $connection->prepare(
         'SELECT (SELECT COUNT(*) FROM `nv_etb` WHERE `einsatz_id` = ?)'
@@ -223,8 +320,82 @@ function estab_logbook_lifecycle_open_books_if_empty(
     if ((int) ($row['entries'] ?? 0) !== 0) {
         return false;
     }
-    estab_logbook_lifecycle_open_books($connection, $incident);
+    estab_logbook_lifecycle_open_books($connection, $incident, $shiftId);
     return true;
+}
+
+/**
+ * Bind one automatic logbook insert to the exact incident and book.
+ *
+ * The connection-local marker is deliberately short-lived and is always
+ * cleared. The database trigger still validates the complete row; this marker
+ * prevents ordinary application inserts from impersonating lifecycle output.
+ */
+function estab_logbook_lifecycle_with_system_write_context(
+    mysqli $connection,
+    int $incidentId,
+    string $book,
+    callable $operation
+): mixed {
+    if ($incidentId < 1 || !in_array($book, ['ETB', 'TTB'], true)) {
+        throw new InvalidArgumentException(
+            'Ungültiger automatischer Logbuchkontext.'
+        );
+    }
+    $stateResult = $connection->query(
+        'SELECT @estab_logbook_system_write_incident_id AS `incident_id`,'
+        . ' @estab_logbook_system_write_book AS `book`'
+    );
+    if (!$stateResult) {
+        throw new RuntimeException(
+            'Automatischer Logbuchkontext konnte nicht geprüft werden.'
+        );
+    }
+    try {
+        $state = $stateResult->fetch_assoc();
+    } finally {
+        $stateResult->free();
+    }
+    if (
+        !is_array($state)
+        || ($state['incident_id'] ?? null) !== null
+        || ($state['book'] ?? null) !== null
+    ) {
+        if (!$connection->query(
+            'SET @estab_logbook_system_write_incident_id = NULL,'
+            . ' @estab_logbook_system_write_book = NULL'
+        )) {
+            throw new RuntimeException(
+                'Verbliebener automatischer Logbuchkontext konnte nicht '
+                . 'verworfen werden.'
+            );
+        }
+        throw new LogicException(
+            'Ein verschachtelter oder verbliebener automatischer '
+            . 'Logbuchkontext wurde verworfen.'
+        );
+    }
+    if (!$connection->query(
+        'SET @estab_logbook_system_write_incident_id = ' . $incidentId
+        . ", @estab_logbook_system_write_book = '" . $book . "'"
+    )) {
+        throw new RuntimeException(
+            'Automatischer Logbuchkontext konnte nicht gesetzt werden.'
+        );
+    }
+    try {
+        return $operation();
+    } finally {
+        if (!$connection->query(
+            'SET @estab_logbook_system_write_incident_id = NULL,'
+            . ' @estab_logbook_system_write_book = NULL'
+        )) {
+            throw new RuntimeException(
+                'Automatischer Logbuchkontext konnte nicht zurückgesetzt '
+                . 'werden.'
+            );
+        }
+    }
 }
 
 function estab_logbook_lifecycle_insert_etb(
@@ -236,6 +407,10 @@ function estab_logbook_lifecycle_insert_etb(
     string $type = 'ohne',
     ?int $shiftId = null
 ): int {
+    $shiftId ??= estab_logbook_lifecycle_active_shift_id(
+        $connection,
+        $incidentId
+    );
     $statement = $connection->prepare(
         'INSERT INTO `nv_etb`'
         . ' (`einsatz_id`, `estab_shift_id`, `etb_time`, `etb_aktion`,'
@@ -258,10 +433,21 @@ function estab_logbook_lifecycle_insert_etb(
             $eventTime,
             $type
         );
-        if (!$statement->execute()) {
-            throw new RuntimeException('Automatischer ETB-Eintrag konnte nicht gespeichert werden.');
-        }
-        return (int) $connection->insert_id;
+        return estab_logbook_lifecycle_with_system_write_context(
+            $connection,
+            $incidentId,
+            'ETB',
+            static function () use ($statement, $connection): int {
+                if (!$statement->execute()) {
+                    throw new RuntimeException(
+                        'Automatischer ETB-Eintrag konnte nicht gespeichert '
+                        . 'werden.'
+                    );
+                }
+                // Preserve LAST_INSERT_ID before the marker cleanup query.
+                return (int) $connection->insert_id;
+            }
+        );
     } finally {
         $statement->close();
     }
@@ -282,6 +468,10 @@ function estab_logbook_lifecycle_insert_ttb_record(
     ?int $correctionOf = null,
     ?int $shiftId = null
 ): int {
+    $shiftId ??= estab_logbook_lifecycle_active_shift_id(
+        $connection,
+        $incidentId
+    );
     $labels = [
         'personnel_duty' => 'Betrieb / Personal / Dienst',
         'channel' => 'Kanal / Rufgruppe / Bedienung',
@@ -336,10 +526,21 @@ function estab_logbook_lifecycle_insert_ttb_record(
             $values['operations'],
             $values['receipt']
         );
-        if (!$statement->execute()) {
-            throw new RuntimeException('Automatischer TBB-Eintrag konnte nicht gespeichert werden.');
-        }
-        return (int) $connection->insert_id;
+        return estab_logbook_lifecycle_with_system_write_context(
+            $connection,
+            $incidentId,
+            'TTB',
+            static function () use ($statement, $connection): int {
+                if (!$statement->execute()) {
+                    throw new RuntimeException(
+                        'Automatischer TBB-Eintrag konnte nicht gespeichert '
+                        . 'werden.'
+                    );
+                }
+                // Preserve LAST_INSERT_ID before the marker cleanup query.
+                return (int) $connection->insert_id;
+            }
+        );
     } finally {
         $statement->close();
     }
@@ -554,7 +755,7 @@ function estab_logbook_lifecycle_message_transport(
     );
 }
 
-/** Create the first book rows, optionally linked to a legacy duty shift. */
+/** Create the first book rows under the incident's mode-specific shift rule. */
 function estab_logbook_lifecycle_open_books(
     mysqli $connection,
     array $incident,
@@ -563,6 +764,16 @@ function estab_logbook_lifecycle_open_books(
     $incidentId = (int) ($incident['active_einsatz_id'] ?? 0);
     if ($incidentId < 1) {
         throw new RuntimeException('Logbucheröffnung hat keinen aktiven Einsatz.');
+    }
+    if (
+        estab_logbook_lifecycle_permission_mode($connection, $incidentId)
+            === ESTAB_PERMISSION_MODE_STRICT
+        && $shiftId === null
+    ) {
+        throw new RuntimeException(
+            'Die Logbücher können im strengen Modus erst mit der ersten '
+                . 'Dienstschicht eröffnet werden.'
+        );
     }
     $missing = estab_logbook_lifecycle_missing_header($incident);
     if ($missing !== []) {
@@ -866,10 +1077,26 @@ function estab_logbook_lifecycle_close_books(
         ? (int) ($shift['dienstschicht_id'] ?? 0)
         : 0;
     $lastShiftId = $lastShiftId > 0 ? $lastShiftId : null;
+    $permissionMode = estab_logbook_lifecycle_permission_mode(
+        $connection,
+        $incidentId
+    );
+    if (
+        $lastShiftId === null
+        && $permissionMode === ESTAB_PERMISSION_MODE_STRICT
+    ) {
+        throw new RuntimeException(
+            'Der Logbuchabschluss benötigt im strengen Modus eine '
+                . 'dokumentierte Dienstschicht.'
+        );
+    }
     $roster = $lastShiftId !== null
         ? estab_logbook_lifecycle_roster(
             $connection,
-            $lastShiftId
+            $lastShiftId,
+            $permissionMode === ESTAB_PERMISSION_MODE_STRICT
+                ? 'ABGELOEST'
+                : null
         )
         : [];
     $etbWriter = estab_logbook_lifecycle_writer_text($roster, 'etb');

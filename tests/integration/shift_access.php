@@ -113,6 +113,18 @@ $expectPermissionDenial = static function (
     }
     $assert(false, $message);
 };
+$expectShiftConflict = static function (
+    callable $operation,
+    string $message
+) use ($assert): void {
+    try {
+        $operation();
+    } catch (EstabShiftAccessConflictException) {
+        $assert(true, $message);
+        return;
+    }
+    $assert(false, $message);
+};
 $accountRow = static function (mysqli $connection, string $code): array {
     $statement = $connection->prepare(
         'SELECT `benutzer`, `kuerzel`, `funktion`, `rolle`, `aktiv`, `sid`,'
@@ -172,6 +184,50 @@ $identityFor = static function (array $row): array {
 
 try {
     $status = estab_incident_status($connection);
+    $strictIncident = estab_incident_create(
+        $connection,
+        [
+            'kennung' => 'ACCESS-SHIFT-STRICT-001',
+            'name' => 'Strenger Zugangsschicht-Grenztest',
+            'beginn' => date('Y-m-d\TH:i', time() - 3600),
+            'ort' => 'Integration',
+            'organisation' => 'THW',
+            'fuehrungsstellenname' => 'Führungsstelle Zugangstest Streng',
+            'einsatzleitung' => 'Testleitung',
+            'beschreibung' =>
+                'Leerer STRICT-Einsatz für den Zugangsschicht-Grenztest.',
+            'estab_permission_mode' => ESTAB_PERMISSION_MODE_STRICT,
+        ],
+        'shift-access-strict-negative',
+        true,
+        (int) $status['revision']
+    );
+    $strictIncidentId = (int) $strictIncident['einsatz_id'];
+    $assert(
+        ($strictIncident['estab_permission_mode'] ?? null)
+            === ESTAB_PERMISSION_MODE_STRICT,
+        'strict access-shift boundary fixture was not created in STRICT mode'
+    );
+    $expectShiftConflict(
+        static fn (): array => estab_shift_access_create(
+            $connection,
+            $strictIncidentId,
+            'Im strengen Modus unzulässig',
+            null,
+            null,
+            'shift-access-strict-negative'
+        ),
+        'STRICT admitted an optional access-shift mutation'
+    );
+    $assert(
+        (int) $connection->query(
+            'SELECT COUNT(*) FROM `nv_zugangsschichten`'
+                . ' WHERE `einsatz_id` = ' . $strictIncidentId
+        )->fetch_row()[0] === 0,
+        'rejected STRICT access-shift mutation left partial data'
+    );
+
+    $status = estab_incident_status($connection);
     $incident = estab_incident_create(
         $connection,
         [
@@ -183,12 +239,19 @@ try {
             'fuehrungsstellenname' => 'Führungsstelle Zugangstest',
             'einsatzleitung' => 'Testleitung',
             'beschreibung' => 'Nachweis der optionalen Gruppenzugangssteuerung.',
+            'estab_permission_mode' => ESTAB_PERMISSION_MODE_LOOSE,
         ],
         'shift-access-integration',
         true,
-        (int) $status['revision']
+        (int) $status['revision'],
+        true
     );
     $incidentId = (int) $incident['einsatz_id'];
+    $assert(
+        ($incident['estab_permission_mode'] ?? null)
+            === ESTAB_PERMISSION_MODE_LOOSE,
+        'access-shift fixture did not activate explicitly in LOOSE mode'
+    );
 
     $accounts = [
         ['ung001', 'Unzugeordnet', 'S2', 'Stab'],
@@ -250,14 +313,14 @@ try {
             $incidentId,
             $identityFor($unassigned)
         )['funktion'] === 'S2',
-        'an unassigned fixed account needed a legacy duty shift'
+        'an unassigned LOOSE fixed account needed a formal duty shift'
     );
     $legacyShiftCount = (int) $connection->query(
         'SELECT COUNT(*) FROM `nv_dienstschichten`'
     )->fetch_row()[0];
     $assert(
         $legacyShiftCount === 0,
-        'the optional access test accidentally depended on a legacy duty shift'
+        'the LOOSE access test accidentally depended on a formal duty shift'
     );
     $etbId = estab_logbook_insert_entry(
         $databaseConfig,

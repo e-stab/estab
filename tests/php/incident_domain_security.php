@@ -230,6 +230,18 @@ $migration = $read(
 );
 $ciBootstrap = $read($root . '/tests/integration/incident_ci_bootstrap.php');
 $ciPipeline = $read($root . '/tests/integration/ci.sh');
+$headerStart = strpos(
+    $library,
+    'function estab_incident_update_logbook_header('
+);
+$headerEnd = strpos(
+    $library,
+    '/**' . "\n" . ' * Change one open incident',
+    is_int($headerStart) ? $headerStart : 0
+);
+$headerSource = is_int($headerStart) && is_int($headerEnd)
+    ? substr($library, $headerStart, $headerEnd - $headerStart)
+    : '';
 
 foreach ([
     'estab_incident_active',
@@ -290,15 +302,40 @@ $assert(
         $library,
         'estab_logbook_lifecycle_open_books_if_empty($connection, $activated)'
     )
-        && !str_contains(
+        && str_contains(
             $library,
+            'if (estab_incident_loose_mode($target)) {'
+        ),
+    'incident activation does not preserve mode-specific book opening'
+);
+$assert(
+    ($strictHeaderGate = strpos(
+        $headerSource,
+        'if (estab_incident_duty_shift_required($incident)) {'
+    )) !== false
+        && ($strictShiftLookup = strpos(
+            $headerSource,
+            "' WHERE `einsatz_id` = ? AND `aktiviert_am` IS NOT NULL'"
+        )) !== false
+        && ($bookLookup = strpos(
+            $headerSource,
+            "'SELECT `etb_lfd-nr` AS `id` FROM `nv_etb`"
+        )) !== false
+        && $strictHeaderGate < $strictShiftLookup
+        && $strictShiftLookup < $bookLookup
+        && str_contains(
+            $headerSource,
             "Die Logbuch-Stammdaten sind seit Aktivierung der ersten"
         )
-        && !str_contains(
+        && str_contains(
             $library,
             "EXISTS(SELECT 1 FROM `nv_dienstschichten` AS shift_row"
+        )
+        && str_contains(
+            $library,
+            "(e.`estab_permission_mode` = 'STRICT'"
         ),
-    'incident activation or logbook headers still depend on a duty shift'
+    'STRICT logbook headers are not locked by the first activated duty shift'
 );
 $assert(
     !str_contains($library, 'DELETE FROM `nv_einsaetze`')

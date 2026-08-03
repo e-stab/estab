@@ -354,6 +354,7 @@ function estab_workflow_existing_operational_post(array $post): bool
         }
     }
     try {
+        estab_workflow_requested_acting_function($post);
         $primary = estab_workflow_primary_view_selector($post);
     } catch (InvalidArgumentException) {
         return false;
@@ -749,11 +750,12 @@ function estab_workflow_is_telecommunications(
     bool $allowLooseWriteMode = false
 ): bool
 {
-    return ($allowLooseWriteMode && !estab_permission_role_checks_enforced())
-        || (
-            ($identity['funktion'] ?? '') === 'A/W'
-            && ($identity['rolle'] ?? '') === 'Fernmelder'
-        );
+    unset($allowLooseWriteMode);
+    return estab_auth_identity_has_function(
+        $identity,
+        'A/W',
+        'Fernmelder'
+    );
 }
 
 /** Leiter der Fernmeldebetriebsstelle: Rufnamen und Transportwege disponieren. */
@@ -762,11 +764,12 @@ function estab_workflow_is_telecommunications_lead(
     bool $allowLooseWriteMode = false
 ): bool
 {
-    return ($allowLooseWriteMode && !estab_permission_role_checks_enforced())
-        || (
-            ($identity['funktion'] ?? '') === 'LdF'
-            && ($identity['rolle'] ?? '') === 'Fernmelder'
-        );
+    unset($allowLooseWriteMode);
+    return estab_auth_identity_has_function(
+        $identity,
+        'LdF',
+        'Fernmelder'
+    );
 }
 
 function estab_workflow_is_viewer(
@@ -774,11 +777,8 @@ function estab_workflow_is_viewer(
     bool $allowLooseWriteMode = false
 ): bool
 {
-    return ($allowLooseWriteMode && !estab_permission_role_checks_enforced())
-        || (
-            ($identity['funktion'] ?? '') === 'Si'
-            && ($identity['rolle'] ?? '') === 'Stab'
-        );
+    unset($allowLooseWriteMode);
+    return estab_auth_identity_has_function($identity, 'Si', 'Stab');
 }
 
 function estab_workflow_is_staff_writer(
@@ -786,11 +786,307 @@ function estab_workflow_is_staff_writer(
     bool $allowLooseWriteMode = false
 ): bool
 {
-    return ($allowLooseWriteMode && !estab_permission_role_checks_enforced())
-        || (
-            ($identity['funktion'] ?? '') !== 'Si'
-            && in_array(($identity['rolle'] ?? ''), ['Stab', 'FB'], true)
+    unset($allowLooseWriteMode);
+    foreach (estab_auth_effective_function_roles($identity) as $tuple) {
+        if (estab_auth_has_staff_message_workspace(
+            $tuple['funktion'],
+            $tuple['rolle']
+        )) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/** Return whether the one currently selected route tuple matches exactly. */
+function estab_workflow_selected_identity_is(
+    array $identity,
+    string $function,
+    string $role
+): bool {
+    return is_string($identity['funktion'] ?? null)
+        && is_string($identity['rolle'] ?? null)
+        && hash_equals($function, $identity['funktion'])
+        && hash_equals($role, $identity['rolle']);
+}
+
+/** Return whether the one selected route tuple owns a Stab/FB workspace. */
+function estab_workflow_selected_identity_is_staff_writer(
+    array $identity
+): bool {
+    return is_string($identity['funktion'] ?? null)
+        && is_string($identity['rolle'] ?? null)
+        && estab_auth_has_staff_message_workspace(
+            $identity['funktion'],
+            $identity['rolle']
         );
+}
+
+/**
+ * Parse the optional function selected for a concrete Stab/FB action.
+ *
+ * The value is only a selector.  It never grants a function: callers must
+ * resolve it against the currently effective STRICT duty hat or the current
+ * LOOSE account/additional-function set before using it.
+ */
+function estab_workflow_requested_acting_function(array $request): ?string
+{
+    if (!array_key_exists('acting_function', $request)) {
+        return null;
+    }
+    $function = $request['acting_function'];
+    if (
+        !is_string($function)
+        || preg_match('/\A(?:A\/W|[A-Za-z0-9_]{1,10})\z/D', $function) !== 1
+    ) {
+        throw new InvalidArgumentException(
+            'Ungültige ausgewählte Nachrichtenfunktion'
+        );
+    }
+    return $function;
+}
+
+/**
+ * Resolve one browser-selected ordinary Stab/FB workspace fail-closed.
+ *
+ * STRICT exposes exactly the selected, accepted duty assignment through
+ * estab_auth_effective_function_roles().  LOOSE exposes only the fixed
+ * account function plus server-loaded, explicit personal additions.  A
+ * forged, ambiguous or meanwhile revoked function therefore has no match.
+ */
+function estab_workflow_identity_for_acting_function(
+    array $identity,
+    string $function
+): array {
+    $matches = [];
+    foreach (estab_auth_effective_function_roles($identity) as $tuple) {
+        if (
+            hash_equals($function, $tuple['funktion'])
+            && estab_auth_has_staff_message_workspace(
+                $tuple['funktion'],
+                $tuple['rolle']
+            )
+        ) {
+            $matches[] = $tuple;
+        }
+    }
+    if (count($matches) !== 1) {
+        throw new RuntimeException(
+            'Die ausgewählte Nachrichtenfunktion ist nicht mehr wirksam.'
+        );
+    }
+    return estab_workflow_identity_as_tuple($identity, $matches[0]);
+}
+
+/** Return the exact server-selected Stab/FB function for a continuation. */
+function estab_workflow_staff_acting_function(mixed $identity): ?string
+{
+    if (
+        !is_array($identity)
+        || !is_string($identity['funktion'] ?? null)
+        || !is_string($identity['rolle'] ?? null)
+        || !estab_auth_has_staff_message_workspace(
+            $identity['funktion'],
+            $identity['rolle']
+        )
+    ) {
+        return null;
+    }
+    return $identity['funktion'];
+}
+
+/** Return one effective function as the actor for a concrete workflow route. */
+function estab_workflow_identity_for_request(
+    array $identity,
+    array $request
+): array {
+    $actingFunction = estab_workflow_requested_acting_function($request);
+    if ($actingFunction !== null) {
+        return estab_workflow_identity_for_acting_function(
+            $identity,
+            $actingFunction
+        );
+    }
+    $view = estab_workflow_primary_view_selector($request);
+    if ($view === null) {
+        return $identity;
+    }
+    $target = null;
+    if (
+        str_starts_with($view, 'telecommunications-lead')
+        || str_starts_with($view, 'task:LdF-')
+    ) {
+        $target = ['LdF', 'Fernmelder'];
+    } elseif (
+        str_starts_with($view, 'telecommunications')
+        || str_starts_with($view, 'task:FM-')
+    ) {
+        $target = ['A/W', 'Fernmelder'];
+    } elseif (
+        str_starts_with($view, 'viewer')
+        || $view === 'task:Stab_sichten'
+    ) {
+        $target = ['Si', 'Stab'];
+    }
+    $tuples = estab_auth_effective_function_roles($identity);
+    if ($target !== null) {
+        foreach ($tuples as $tuple) {
+            if (
+                $tuple['funktion'] === $target[0]
+                && $tuple['rolle'] === $target[1]
+            ) {
+                return estab_workflow_identity_as_tuple($identity, $tuple);
+            }
+        }
+        return $identity;
+    }
+    if (
+        str_starts_with($view, 'staff')
+        || str_starts_with($view, 'task:Stab_')
+    ) {
+        foreach ($tuples as $tuple) {
+            if (estab_auth_has_staff_message_workspace(
+                $tuple['funktion'],
+                $tuple['rolle']
+            )) {
+                return estab_workflow_identity_as_tuple($identity, $tuple);
+            }
+        }
+    }
+    return $identity;
+}
+
+/**
+ * Reuse one server-selected route actor after validating it against the
+ * current account and request.
+ *
+ * Object-bearing routes may have selected a more specific tuple than the
+ * generic request selector can derive (for example the exact author function
+ * of a returned message).  The selected value is therefore retained, but is
+ * never trusted as a grant: it must still name the same account, be one of the
+ * account's currently effective functions and independently pass this route
+ * with no additional-function union attached to the probe.
+ */
+function estab_workflow_identity_for_selected_route(
+    array $identity,
+    mixed $selectedIdentity,
+    array $request
+): array {
+    if (!is_array($selectedIdentity)) {
+        return estab_workflow_identity_for_request($identity, $request);
+    }
+    foreach (['benutzer', 'kuerzel'] as $field) {
+        if (
+            !is_string($identity[$field] ?? null)
+            || !is_string($selectedIdentity[$field] ?? null)
+            || !hash_equals($identity[$field], $selectedIdentity[$field])
+        ) {
+            throw new RuntimeException(
+                'Die ausgewählte Nachrichtenfunktion gehört nicht zum Konto.'
+            );
+        }
+    }
+    $selectedFunction = $selectedIdentity['funktion'] ?? null;
+    $selectedRole = $selectedIdentity['rolle'] ?? null;
+    if (!is_string($selectedFunction) || !is_string($selectedRole)) {
+        throw new RuntimeException(
+            'Die ausgewählte Nachrichtenfunktion ist unvollständig.'
+        );
+    }
+    foreach (estab_auth_effective_function_roles($identity) as $tuple) {
+        if (
+            !hash_equals($tuple['funktion'], $selectedFunction)
+            || !hash_equals($tuple['rolle'], $selectedRole)
+        ) {
+            continue;
+        }
+        $probe = [
+            'benutzer' => (string) $identity['benutzer'],
+            'kuerzel' => (string) $identity['kuerzel'],
+            'funktion' => $tuple['funktion'],
+            'rolle' => $tuple['rolle'],
+        ];
+        if (!estab_workflow_route_allowed($probe, 'POST', $request)) {
+            throw new RuntimeException(
+                'Die ausgewählte Nachrichtenfunktion passt nicht zur Aktion.'
+            );
+        }
+        return estab_workflow_identity_as_tuple($identity, $tuple);
+    }
+    throw new RuntimeException(
+        'Die ausgewählte Nachrichtenfunktion ist nicht mehr wirksam.'
+    );
+}
+
+/**
+ * Bind an object-bearing request to the one effective function that may act
+ * on the addressed message.
+ *
+ * Route admission deliberately considers every effective LOOSE function so
+ * an account can reach an explicitly granted additional-function queue.  The
+ * concrete object action must nevertheless carry exactly one function: state
+ * tables, author marks and attachment continuations are function-scoped.  A
+ * minimal probe prevents the account provenance/additional-function list from
+ * widening the per-tuple object check again.
+ */
+function estab_workflow_identity_for_message_operation(
+    array $identity,
+    string $operation,
+    array $message
+): ?array {
+    $tuples = estab_auth_effective_function_roles($identity);
+    $routeFunction = $identity['authorization_route_function'] ?? null;
+    $routeRole = $identity['authorization_route_role'] ?? null;
+    if (is_string($routeFunction) && is_string($routeRole)) {
+        usort(
+            $tuples,
+            static function (array $left, array $right) use (
+                $routeFunction,
+                $routeRole
+            ): int {
+                $leftSelected = hash_equals(
+                    $routeFunction,
+                    $left['funktion']
+                ) && hash_equals($routeRole, $left['rolle']);
+                $rightSelected = hash_equals(
+                    $routeFunction,
+                    $right['funktion']
+                ) && hash_equals($routeRole, $right['rolle']);
+                return (int) $rightSelected <=> (int) $leftSelected;
+            }
+        );
+    }
+    foreach ($tuples as $tuple) {
+        $probe = [
+            'benutzer' => (string) ($identity['benutzer'] ?? ''),
+            'kuerzel' => (string) ($identity['kuerzel'] ?? ''),
+            'funktion' => $tuple['funktion'],
+            'rolle' => $tuple['rolle'],
+        ];
+        if (estab_message_object_allowed($probe, $operation, $message)) {
+            return estab_workflow_identity_as_tuple($identity, $tuple);
+        }
+    }
+    return null;
+}
+
+/** Preserve account provenance while applying one authorized route tuple. */
+function estab_workflow_identity_as_tuple(
+    array $identity,
+    array $tuple
+): array {
+    if (
+        !isset($identity['authorization_account_function'])
+        && isset($identity['funktion'], $identity['rolle'])
+    ) {
+        $identity['authorization_account_function'] = $identity['funktion'];
+        $identity['authorization_account_role'] = $identity['rolle'];
+    }
+    $identity['funktion'] = $tuple['funktion'];
+    $identity['rolle'] = $tuple['rolle'];
+    $identity['authorization_route_function'] = $tuple['funktion'];
+    $identity['authorization_route_role'] = $tuple['rolle'];
+    return $identity;
 }
 
 /** Editable message stages that may add or detach message attachments. */
@@ -1250,6 +1546,20 @@ function estab_workflow_route_allowed(array $identity, string $method, array $re
         }
     }
 
+    try {
+        // Selecting a Stab/FB workspace changes the actor used by every
+        // following field and route check.  It cannot widen the account:
+        // resolution is restricted to the currently effective function set.
+        if (estab_workflow_requested_acting_function($request) !== null) {
+            $identity = estab_workflow_identity_for_request(
+                $identity,
+                $request
+            );
+        }
+    } catch (InvalidArgumentException | RuntimeException) {
+        return false;
+    }
+
     $isTelecommunications = estab_workflow_is_telecommunications($identity);
     $isTelecommunicationsLead =
         estab_workflow_is_telecommunications_lead($identity);
@@ -1613,8 +1923,7 @@ function estab_workflow_route_allowed(array $identity, string $method, array $re
     $roleButtons = [
         'stab_schreiben_x' => $mayWriteStaff,
         'stab_lesen_x' => $isStaffWriter,
-        'stab_korrekturen_x' =>
-            !estab_permission_role_checks_enforced() && $mayWriteStaff,
+        'stab_korrekturen_x' => $mayWriteStaff,
         'stab_anhang_x' => $isStaffWriter,
         'fm_eingang_x' => $mayWriteTelecommunications,
         'fm_ausgang_x' => $mayWriteTelecommunications,

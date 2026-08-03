@@ -42,6 +42,10 @@ class kategorien
         if ($identity === null) {
             throw new EstabCategoryAuthorizationException('Anmeldung erforderlich.');
         }
+        $identity = estab_category_route_identity(
+            $identity,
+            $GLOBALS['workflowSelectedIdentity'] ?? null
+        );
 
         /** @var array<string,string> $conf_4f_tbl */
         global $conf_4f_tbl;
@@ -51,6 +55,7 @@ class kategorien
         $this->dbtyp = estab_category_validate_type($table);
         $this->categoryIdentity = $identity;
         $this->categoryScope = estab_category_scope($this->dbtyp, $identity, $conf_4f_tbl);
+        $this->stab_fkt = $identity['funktion'];
         $this->db_tablname = $this->categoryScope['category_table'];
         $this->db_tablnamelk = $this->categoryScope['link_table'];
         // The surrounding legacy form still performs later mysql_* calls

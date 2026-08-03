@@ -36,9 +36,9 @@ Aufruf sind alle neun Bereiche ausgewählt:
 - alle Nachrichtenvordrucke des Einsatzes,
 - Anhänge zu den Nachrichtenvordrucken samt Integritätsstatus,
 - Nachrichtenereignisse und Nachrichtennachweisköpfe,
-- Dienstorganisation: optionale Zugangsschichten mit allen aktuellen und
-  entfernten Kontenzuordnungen sowie davon getrennt die historischen formalen
-  Dienstschichten, Dienstbesetzungen und Übergaben,
+- Dienstorganisation: formale Dienstschichten, Dienstbesetzungen und Übergaben
+  sowie davon getrennt optionale Zugangsschichten mit allen aktuellen und
+  entfernten Kontenzuordnungen,
 - S6-Fernmeldeplanversionen mit sämtlichen Planeinträgen,
 - Melderaufträge,
 - Betriebsereignisse und Betriebsnachweiskopf.
@@ -48,9 +48,11 @@ werden. Der Server verwirft unbekannte, mehrfachdeutige oder nicht kanonische
 Auswahlwerte; eine leere Auswahl wird nicht als scheinbar vollständiges
 Dossier akzeptiert.
 
-Die Dienstorganisation kennzeichnet optionale Zugangsschichten als aktuellen
-Zugangsmechanismus und `nv_dienst*`-Daten ausdrücklich als historischen
-Legacy-Nachweis. S6-Planung und Melderbeförderung enthalten jeweils alle
+Die Dienstorganisation kennzeichnet `nv_dienst*`-Daten als aktuelle
+Autorisierungs- und Nachweisevidenz für `STRICT` und optionale
+Zugangsschichten als reinen Zugangsmechanismus für `LOOSE`. Nach Schichtende
+bleiben formale Dienstwerte historisch erhalten. S6-Planung und
+Melderbeförderung enthalten jeweils alle
 persistierten Status-, Zeit-, Gültigkeits-, Freigabe-, Empfänger-, Rückweg-
 und Abschlussfelder. Keine ausgewählte leere Sektion verschwindet still: Das
 Dossier sagt ausdrücklich, dass für den Einsatz keine entsprechenden
@@ -142,12 +144,13 @@ Bereich“ gekennzeichnet. Bei einem noch offenen, ausdrücklich vorläufigen
 Abzug bleibt der Bereich für die Fortführung dagegen ungestrichen.
 
 Der PDF-Dialog bietet für die beiden Buchabschnitte zwei ausdrückliche
-Umfänge: **Gesamtbuch** oder einen Legacy-Filter **Historische Dienstschicht**
-mit Nummer, Bezeichnung und Status. Die ausgewählte formale Altschicht wird innerhalb des
+Umfänge: **Gesamtbuch** oder den Filter **Formale Dienstschicht**
+mit Nummer, Bezeichnung und Status. Die ausgewählte formale Dienstschicht wird innerhalb des
 konsistenten Exportsnapshots erneut gegen den gewählten Einsatz geprüft. Eine
 Schichtausgabe enthält nur ETB-/TTB-Zeilen mit genau dieser gespeicherten
 `estab_shift_id`; Gesamtbuch umfasst auch neue und historische Zeilen ohne
-belegbare Schichtzuordnung. Zugangsschichten sind keine Logbuchprovenienz.
+belegbare Schichtzuordnung. Das gilt für aktuelle wie historische formale
+Dienstschichten. Zugangsschichten sind keine Logbuchprovenienz.
 Nachrichtenvordrucke, Anhänge, Nachrichtenereignisse, Dienstorganisation,
 S6-Pläne, Melderläufe und Betriebsereignisse bleiben unabhängig
 davon einsatzweit. Die Auswahl beginnt also kein neues Buch und verändert
@@ -314,12 +317,14 @@ Das Deckblatt kennzeichnet den Rechtsstand unübersehbar:
 
 Daneben nennt es den für den Einsatz gespeicherten Berechtigungsmodus
 **Streng** oder **Locker**. Das ist für die Interpretation der Schreiber-
-Provenienz wesentlich: Im strengen Modus wurden funktions-/rollenbezogene
-Schreibrechte technisch erzwungen; im lockeren Modus blieb die konkrete
-Kontenidentität nachgewiesen, die feste Funktion/Rolle sperrte den
-Schreibschritt jedoch nicht. Modusänderungen stehen mit Vorher-/Nachherwert in
-den einsatzbezogenen Betriebs-/Auditdaten; der PDF-Hinweis allein ersetzt
-diesen maschinenlesbaren Nachweis nicht.
+Provenienz wesentlich: Im strengen Modus stammen operative Identität und
+Rechte aus der ausgewählten Besetzung einer aktiven formalen Dienstschicht;
+im lockeren Modus aus fester Kontofunktion und expliziten Zusatzfunktionen
+ohne formale Schichtpflicht. Echte Modusänderungen sind ausschließlich vor der
+ersten operativen oder formalen Eintragung zulässig und stehen mit
+Vorher-/Nachherwert in den einsatzbezogenen Betriebs-/Auditdaten. Danach bleibt
+der Modus dauerhaft unveränderlich; der PDF-Hinweis allein ersetzt diesen
+maschinenlesbaren Nachweis nicht.
 
 Zusätzlich nennt das Deckblatt Abschlusszeit, abschließende Identität,
 Abschlussvermerk, die mindestens zehn Jahre ab formalem Abschluss reichende
@@ -364,8 +369,10 @@ sämtliche Einzelköpfe, Hashes, gefilterte Snapshot-Leseabzüge und
 Prüfergebnisse aus. Die unveränderten Originalsnapshots stehen im
 maschinenlesbaren Einsatzexport bereit.
 Zugangsschichtmutationen erscheinen mit Objekttyp `ZUGANGSSCHICHT`.
-Nachrichtenzähler-Reparaturen erscheinen ohne Schichtpflicht mit Objekttyp
-`EINSATZ`; beide bleiben dadurch einsatzgebunden hashverkettet nachweisbar.
+Nachrichtenzähler-Reparaturen erscheinen in `STRICT` nach Prüfung der aktiven
+formalen Dienstschicht mit Objekttyp `DIENSTSCHICHT`, in `LOOSE` ohne formale
+Dienstschicht mit Objekttyp `EINSATZ`; beide bleiben dadurch einsatzgebunden
+hashverkettet nachweisbar.
 
 ## Vollständigkeits- und Sicherheitsgrenzen
 

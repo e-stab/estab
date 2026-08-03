@@ -23,6 +23,9 @@ const ESTAB_OPERATIONAL_CONTROL_EXCEPTIONS = [
     'session-activity',
     'legacy-logout',
     'account-image-recovery',
+    'duty-accept',
+    'duty-select',
+    'handover-confirm',
     'messenger-lifecycle',
     'attachment-cleanup',
 ];
@@ -151,6 +154,15 @@ function estab_operational_control_exception(
         '/4fach/fuehrungsstelle.php'
     )) {
         $action = $post['operation_action'] ?? null;
+        if ($action === 'accept_hat') {
+            return 'duty-accept';
+        }
+        if ($action === 'select_hat') {
+            return 'duty-select';
+        }
+        if ($action === 'confirm_handover') {
+            return 'handover-confirm';
+        }
         if (
             $action === 'messenger_transition'
             && is_string($post['transition'] ?? null)
@@ -283,9 +295,9 @@ function estab_operational_write_enforce(
     if (estab_operational_control_exception($server, $post) !== null) {
         return;
     }
-    // Unlike the pure shape helper, this validates the current SID, fixed
-    // account function and optional access-shift gate. A stale or disabled
-    // session must not reach a fachlicher Schreibpfad.
+    // Unlike the pure shape helper, this validates the current SID and the
+    // mode-specific authority: selected active duty in STRICT, or fixed and
+    // additional functions plus the optional access gate in LOOSE.
     $identity = estab_auth_session_identity($session);
     if ($identity === null) {
         estab_operational_redirect_stale_message_post(

@@ -95,17 +95,21 @@ foreach (ESTAB_OPERATIONAL_MESSENGER_LIFECYCLE_ACTIONS as $transition) {
         'personal messenger transition is blocked: ' . $transition
     );
 }
-foreach (['accept_hat', 'select_hat', 'confirm_handover'] as $retiredAction) {
+foreach ([
+    'accept_hat' => 'duty-accept',
+    'select_hat' => 'duty-select',
+    'confirm_handover' => 'handover-confirm',
+] as $dutyAction => $exception) {
     $assert(
         estab_operational_control_exception(
             [
                 'REQUEST_METHOD' => 'POST',
                 'SCRIPT_NAME' => '/4fach/fuehrungsstelle.php',
             ],
-            ['operation_action' => $retiredAction]
-        ) === null,
-        'retired duty-assignment action still bypasses the write guard: '
-            . $retiredAction
+            ['operation_action' => $dutyAction]
+        ) === $exception,
+        'STRICT duty-assignment action is not an explicit bootstrap exception: '
+            . $dutyAction
     );
 }
 $assert(
@@ -166,6 +170,50 @@ $messageController = $read('4fach/data_hndl.php');
 $messageRepository = $read('app/message_repository.php');
 $etb = $read('stabetb/etb.php');
 $tbb = $read('fmtbb/tbb.php');
+$acceptHat = $slice(
+    $dv,
+    'function estab_dv_accept_hat(',
+    'function estab_dv_shift_required_hats('
+);
+$confirmHandover = $slice(
+    $dv,
+    'function estab_dv_confirm_handover_shift(',
+    'function estab_dv_close_shift('
+);
+
+$assert(
+    substr_count(
+        $acceptHat,
+        'estab_incident_duty_shift_required('
+    ) >= 2
+        && strpos(
+            $acceptHat,
+            'estab_incident_duty_shift_required($modeIncident)'
+        ) < strpos($acceptHat, 'estab_dv_prepare_assignment_schema(')
+        && strpos(
+            $acceptHat,
+            'estab_incident_with_active_write('
+        ) < strrpos(
+            $acceptHat,
+            'estab_incident_duty_shift_required($incident)'
+        )
+        && str_contains(
+            $acceptHat,
+            'Formale Dienstfunktionen können nur im strengen'
+        )
+        && str_contains(
+            $confirmHandover,
+            '!estab_incident_duty_shift_required($incident)'
+        )
+        && strpos(
+            $confirmHandover,
+            '!estab_incident_duty_shift_required($incident)'
+        ) < strpos(
+            $confirmHandover,
+            "'SELECT `von_dienstschicht_id`, `an_dienstschicht_id`,"
+        ),
+    'formal duty acceptance or handover remains reachable outside a locked STRICT incident snapshot'
+);
 
 $assert(
     str_contains(
@@ -218,32 +266,112 @@ $assert(
     'operator/admin shift endpoints lack explicit CSRF handling'
 );
 
-/* Fixed account identity is the only operational authorization source. */
+/* STRICT uses one selected hat; LOOSE uses the account plus personal grants. */
 $accountGuard = $slice(
     $dv,
     'function estab_dv_require_operational_account(',
     'function estab_dv_require_active_capability_for_operational_write('
 );
+$activeHatGuard = $slice(
+    $dv,
+    'function estab_dv_require_active_hat_for_operational_write(',
+    'function estab_dv_require_operational_account('
+);
 $assert(
     str_contains($accountGuard, 'FROM `nv_benutzer` AS account')
+        && str_contains(
+            $accountGuard,
+            'SELECT account.`funktion`, account.`rolle`'
+        )
         && str_contains($accountGuard, 'JOIN `nv_einsatz_status` AS active_incident')
         && str_contains($accountGuard, "incident.`estab_status` = 'open'")
         && str_contains($accountGuard, 'BINARY account.`benutzer` = BINARY ?')
         && str_contains($accountGuard, 'BINARY account.`kuerzel` = BINARY ?')
-        && str_contains($accountGuard, 'BINARY account.`funktion` = BINARY ?')
-        && str_contains($accountGuard, 'BINARY account.`rolle` = BINARY ?')
         && str_contains($accountGuard, 'account.`aktiv` = 1')
         && str_contains($accountGuard, 'account.`estab_gesperrt` = 0')
+        && str_contains($accountGuard, '$provenanceFunction')
+        && str_contains($accountGuard, '$provenanceRole')
+        && str_contains(
+            $accountGuard,
+            'estab_auth_identity_has_function('
+        )
         && str_contains($accountGuard, 'LIMIT 1 FOR UPDATE'),
-    'operational writes are not bound to the exact active account and incident'
+    'operational writes are not bound to the authoritative account, acting function and incident'
 );
 $assert(
-    str_contains($accountGuard, 'estab_auth_shift_access_allowed(')
+    str_contains(
+        $accountGuard,
+        'estab_incident_duty_shift_required($incident)'
+    )
+        && str_contains(
+            $accountGuard,
+            'estab_dv_require_active_hat_for_operational_write('
+        )
+        && str_contains($accountGuard, "'duty_assignment_id'")
+        && str_contains($accountGuard, "'estab_permission_mode' => 'STRICT'")
+        && str_contains($activeHatGuard, '`nv_dienstbesetzungen`')
+        && str_contains($activeHatGuard, '`nv_dienstschichten`')
+        && str_contains($activeHatGuard, "duty_shift.`status` = 'AKTIV'")
+        && str_contains($activeHatGuard, "assignment.`status` = 'ANGENOMMEN'")
+        && str_contains($accountGuard, 'estab_auth_shift_access_allowed(')
+        && str_contains($accountGuard, 'estab_auth_fetch_additional_functions(')
         && str_contains($accountGuard, '$requireMessengerAvailable')
-        && !str_contains($accountGuard, 'duty_assignment_id')
-        && !str_contains($accountGuard, 'nv_dienstbesetzungen')
-        && !str_contains($accountGuard, 'nv_dienstschichten'),
-    'account guard still requires a formal duty shift or ignores group access'
+        && str_contains($accountGuard, "'estab_permission_mode'] = 'LOOSE'"),
+    'STRICT selected-hat and LOOSE account/grant/access boundaries are not separated'
+);
+$assert(
+    str_contains(
+        $auth,
+        'function estab_auth_function_role_is_current('
+    )
+        && str_contains(
+            $auth,
+            "\$mode === 'STRICT'"
+        )
+        && substr_count(
+            $accountGuard,
+            'estab_auth_function_role_is_current('
+        ) === 1
+        && !str_contains(
+            $accountGuard,
+            'Die ausgewählte Dienstfunktion gehört nicht mehr zum'
+        )
+        && str_contains(
+            $accountGuard,
+            'Die feste Kontofunktion gehört nicht mehr zum freigegebenen'
+        ),
+    'STRICT selected-hat validation drifted or LOOSE accepts stale tuples'
+);
+$sqlAuthority = $slice(
+    $dv,
+    'function estab_dv_authority_assignment_id(',
+    'function estab_dv_has_write_capability('
+);
+$assert(
+    str_contains(
+        $sqlAuthority,
+        'SELECT @estab_dv_actor_assignment_id AS `actor_assignment_id`'
+    )
+        && str_contains(
+            $sqlAuthority,
+            '@estab_dv_target_assignment_id AS `target_assignment_id`'
+        )
+        && str_contains(
+            $sqlAuthority,
+            'Ein verschachtelter oder verbliebener'
+        )
+        && str_contains($sqlAuthority, '} finally {')
+        && substr_count(
+            $sqlAuthority,
+            'SET @estab_dv_actor_assignment_id = NULL'
+        ) >= 2
+        && substr_count(
+            $dv,
+            'estab_dv_with_sql_authority_context('
+        ) === 6
+        && str_contains($dv, "'actor_permission_mode' =>")
+        && str_contains($dv, "'actor_duty_assignment_id' =>"),
+    'exact SQL assignment context can nest, leak or lose audit provenance'
 );
 $messageStageActor = $slice(
     $messageRepository,
@@ -277,20 +405,16 @@ $messageStateUnset = $slice(
 );
 $assert(
     str_contains($messageStageActor, 'array $actor')
-        && preg_match(
-            '/\$incidentId\s*=.*?;\s*'
-                . '\$operationalActor\s*=\s*'
-                . 'estab_dv_require_operational_account\(\s*'
-                . '\$connection,\s*\$incidentId,\s*\$actor\s*\)/s',
-            $messageStageActor
-        ) === 1
-        && str_contains(
-            $messageStageActor,
-            'estab_incident_role_permissions_enforced($incident)'
-        )
+        && str_contains($messageStageActor, 'estab_dv_require_write_capability(')
+        && str_contains($messageStageActor, "'FERNMELDEBETRIEB'")
+        && str_contains($messageStageActor, "'BEFOERDERUNG'")
         && str_contains($messageStageActor, "\$requiredFunction = \$status === 1 ? 'LdF' : 'A/W'")
-        && str_contains($messageStageActor, "'Fernmelder'"),
-    'shared operator-stage guard does not revalidate account and current mode'
+        && str_contains($messageStageActor, "'Fernmelder'")
+        && !str_contains(
+            $messageStageActor,
+            'estab_incident_role_permissions_enforced'
+        ),
+    'shared operator-stage guard does not require the exact effective capability'
 );
 foreach (
     [
@@ -331,40 +455,118 @@ $assert(
         && str_contains($messageUpdateLock, '$operationalActor' . "['kuerzel']")
         && str_contains($messageReleaseLock, '$operationalActor' . "['kuerzel']")
         && str_contains($messageReleaseLock, 'bool $force = false')
-        && str_contains($messageStateSet, '$operationalActor' . "['funktion']")
-        && str_contains($messageStateUnset, '$operationalActor' . "['funktion']"),
-    'message lock/state authority is still derived from stale scalar input'
+        && str_contains(
+            $messageStateSet,
+            "\$function = (string) (\$operationalActor['funktion'] ?? '');"
+        )
+        && str_contains(
+            $messageStateUnset,
+            "\$function = (string) (\$operationalActor['funktion'] ?? '');"
+        )
+        && str_contains(
+            $messageStateSet,
+            "\$role = (string) (\$operationalActor['rolle'] ?? '');"
+        )
+        && str_contains(
+            $messageStateUnset,
+            "\$role = (string) (\$operationalActor['rolle'] ?? '');"
+        )
+        && str_contains(
+            $messageStateSet,
+            'estab_message_recipient_pattern($function)'
+        )
+        && str_contains(
+            $messageStateUnset,
+            'estab_message_recipient_pattern($function)'
+        )
+        && !str_contains(
+            $messageStateSet,
+            'estab_message_effective_staff_functions('
+        )
+        && !str_contains(
+            $messageStateUnset,
+            'estab_message_effective_staff_functions('
+        ),
+    'message lock/state authority is not bound to the revalidated exact acting function'
+);
+$effectiveCapability = $slice(
+    $dv,
+    'function estab_dv_effective_identity_capability_function(',
+    'function estab_dv_effective_identity_has_capability('
 );
 $capabilityGuard = $slice(
     $dv,
     'function estab_dv_require_account_capability(',
     'function estab_dv_has_account_capability('
 );
+$writeCapabilityGuard = $slice(
+    $dv,
+    'function estab_dv_require_write_capability(',
+    'function estab_dv_authority_assignment_id('
+);
 $assert(
     str_contains($capabilityGuard, 'estab_dv_require_operational_account(')
-        && str_contains($capabilityGuard, 'FROM `nv_funktionsfaehigkeiten` AS capability')
-        && str_contains($capabilityGuard, 'capability.`funktion` = BINARY ?')
-        && str_contains($capabilityGuard, 'capability.`rolle` = BINARY ?')
-        && str_contains($capabilityGuard, 'capability.`faehigkeit` = BINARY ?')
-        && !str_contains($capabilityGuard, 'dienstbesetzung'),
-    'capability enforcement is not derived exclusively from the account tuple'
+        && str_contains(
+            $capabilityGuard,
+            'estab_dv_effective_identity_capability_function('
+        )
+        && str_contains(
+            $writeCapabilityGuard,
+            'estab_dv_effective_identity_capability_function('
+        )
+        && str_contains(
+            $capabilityGuard,
+            'Die aktuell ausgewählte Dienstfunktion besitzt nicht die'
+        )
+        && str_contains(
+            $writeCapabilityGuard,
+            'Die aktuell ausgewählte Dienstfunktion besitzt nicht die'
+        )
+        && str_contains($effectiveCapability, '`nv_funktionsfaehigkeiten`')
+        && str_contains($effectiveCapability, '`funktion` = BINARY ?')
+        && str_contains($effectiveCapability, '`rolle` = BINARY ?')
+        && str_contains($effectiveCapability, '`faehigkeit` = BINARY ?')
+        && str_contains(
+            $effectiveCapability,
+            'estab_auth_effective_function_roles($identity)'
+        ),
+    'STRICT selected-tuple or LOOSE effective-function capability enforcement is incomplete'
 );
 $assert(
-    !str_contains($dv, 'function estab_dv_select_session_hat(')
-        && !str_contains($dv, "\$session['estab_duty_assignment_id'] =")
-        && !str_contains($dv, "\$session['vStab_funktion'] ="),
-    'retired shift selection API can still mutate session function or role'
+    str_contains($dv, 'function estab_dv_select_session_hat(')
+        && str_contains($dv, "\$session['estab_duty_assignment_id'] =")
+        && str_contains($dv, "\$session['vStab_funktion'] =")
+        && str_contains(
+            $dv,
+            '!estab_incident_duty_shift_required($incident)'
+        ),
+    'STRICT shift selection API is absent or available in LOOSE'
 );
 $assert(
-    str_contains($auth, 'unset($session[\'estab_duty_assignment_id\']);')
+    str_contains($auth, 'estab_auth_duty_assignment_matches_session(')
+        && str_contains($auth, 'estab_auth_active_permission_mode(')
+        && str_contains($auth, "\$mode === 'LOOSE' && \$dutyAssignmentId !== null")
+        && str_contains($auth, "\$mode !== 'LOOSE'")
         && str_contains($auth, 'estab_auth_shift_access_allowed(')
+        && str_contains($auth, 'estab_auth_fetch_additional_functions(')
         && str_contains($auth, "\$storedUser['funktion'] ?? ''")
         && str_contains($auth, "\$storedUser['rolle'] ?? ''")
-        && !str_contains($auth, "'duty_assignment_id' => \$dutyAssignmentId"),
-    'runtime authentication still trusts a shift-derived role or assignment id'
+        && str_contains(
+            $auth,
+            "\$authenticatedIdentity['duty_assignment_id'] = \$dutyAssignmentId"
+        ),
+    'runtime authentication does not separate selected STRICT hats from LOOSE grants/access shifts'
 );
 $assert(
     str_contains($messageController, 'estab_auth_shift_access_allowed (')
+        && str_contains(
+            $messageController,
+            'estab_auth_active_permission_mode ($connection)'
+        )
+        && str_contains(
+            $messageController,
+            '$loginPermissionMode === ESTAB_PERMISSION_MODE_LOOSE'
+        )
         && str_contains($messageController, '$login ["funktion"]')
         && str_contains(
             $messageController,
@@ -374,7 +576,7 @@ $assert(
             $messageController,
             '$_SESSION ["estab_duty_assignment_id"] ='
         ),
-    'login does not enforce fixed function and optional group-access state'
+    'login does not separate fixed function checks from the LOOSE-only group gate'
 );
 
 /* Optional access shifts: no membership means allowed, otherwise OR semantics. */
@@ -451,6 +653,44 @@ $assert(
         && str_contains($shiftAccess, 'estab_incident_with_active_write('),
     'access-shift mutations are incomplete, enabled by default, or not incident-bound'
 );
+$accessShiftMutationDomains = [
+    'create' => $slice(
+        $shiftAccess,
+        'function estab_shift_access_create(',
+        'function estab_shift_access_add_member('
+    ),
+    'add member' => $slice(
+        $shiftAccess,
+        'function estab_shift_access_add_member(',
+        'function estab_shift_access_remove_member('
+    ),
+    'remove member' => $slice(
+        $shiftAccess,
+        'function estab_shift_access_remove_member(',
+        'function estab_shift_access_set_enabled('
+    ),
+];
+$setEnabledStart = strpos(
+    $shiftAccess,
+    'function estab_shift_access_set_enabled('
+);
+$accessShiftMutationDomains['set enabled'] = is_int($setEnabledStart)
+    ? substr($shiftAccess, $setEnabledStart)
+    : '';
+foreach ($accessShiftMutationDomains as $mutation => $domain) {
+    $writeSnapshot = strpos($domain, 'estab_incident_with_active_write(');
+    $looseGuard = strpos(
+        $domain,
+        'estab_shift_access_require_loose_incident('
+    );
+    $assert(
+        is_int($writeSnapshot)
+            && is_int($looseGuard)
+            && $writeSnapshot < $looseGuard,
+        'access-shift ' . $mutation
+            . ' does not require LOOSE inside its locked incident snapshot'
+    );
+}
 $assert(
     str_contains($shiftAccess, 'estab_shift_access_acquire_policy_lock(')
         && str_contains($shiftAccess, 'estab_user_admin_acquire_account_lock(')
@@ -521,18 +761,33 @@ $assert(
     'access-shift administration can grant or replace a fachliche role'
 );
 
-/* The administration explains and exposes the simpler model. */
+/* The administration explains and exposes the LOOSE access-shift model. */
 $assert(
-    str_contains($adminUi, '<h1>Optionale Schichten</h1>')
+    str_contains($adminUi, '<h1>Optionale Zugangsschichten</h1>')
+        && str_contains(
+            $adminUi,
+            'Administration · Berechtigungsmodus Locker'
+        )
         && str_contains($adminUi, 'Schichten steuern ausschließlich den Zugang.')
-        && str_contains($adminUi, 'Fachrechte stammen immer aus der festen Funktion')
+        && str_contains(
+            $adminUi,
+            'Fachrechte stammen aus der festen Primärfunktion des Kontos'
+        )
+        && str_contains($adminUi, 'persönlichen Zusatzfunktionen')
+        && str_contains($adminUi, 'nur')
+        && str_contains($adminUi, 'im lockeren Modus')
         && str_contains($adminUi, 'eine aktive')
         && str_contains($adminUi, 'Schicht ist dafür niemals erforderlich')
         && str_contains($adminUi, 'Ohne Zuordnung behält ein')
         && str_contains($adminUi, 'mindestens eine seiner Schichten aktiv ist'),
     'optional-shift behaviour is not explained unambiguously in the UI'
 );
-foreach (['create_shift', 'add_member', 'remove_member', 'set_enabled'] as $action) {
+foreach ([
+    'create_access_shift',
+    'add_access_member',
+    'remove_access_member',
+    'set_access_enabled',
+] as $action) {
     $assert(
         str_contains($adminUi, "'" . $action . "'")
             || str_contains($adminUi, 'value="' . $action . '"'),
@@ -559,23 +814,93 @@ $assert(
     'admin overview conflates account block, function and group access'
 );
 
-/* Operational UIs and ETB/TBB do not depend on a formal duty assignment. */
+/* Operational UI requires a hat only in STRICT and exposes LOOSE grants. */
 $assert(
     str_contains($operationsUi, 'estab_read_require_operational_scope(')
         && str_contains($operationsUi, 'estab_dv_has_write_capability(')
-        && !str_contains($operationsUi, 'duty_assignment_id')
-        && !str_contains($operationsUi, "'accept_hat'")
-        && !str_contains($operationsUi, "'select_hat'")
-        && !str_contains($operationsUi, "'confirm_handover'"),
-    'operator command-post UI still requires or switches a duty assignment'
+        && str_contains(
+            $operationsUi,
+            '$strictMode = estab_incident_duty_shift_required($status)'
+        )
+        && str_contains($operationsUi, 'duty_assignment_id')
+        && str_contains($operationsUi, "'accept_hat'")
+        && str_contains($operationsUi, "'select_hat'")
+        && str_contains($operationsUi, "'confirm_handover'")
+        && str_contains(
+            $operationsUi,
+            '<?php if (!$strictMode || is_array($selectedIdentity)): ?>'
+        ),
+    'operator command-post UI does not bootstrap STRICT hats or bypass them in LOOSE'
+);
+$messengerCandidates = $slice(
+    $dv,
+    'function estab_dv_messenger_candidates(',
+    'function estab_dv_messenger_snapshot('
 );
 $assert(
-    str_contains($dv, 'function estab_dv_messenger_candidates(')
-        && str_contains($dv, "BINARY u.`funktion` = BINARY 'A/W'")
-        && str_contains($dv, "BINARY u.`rolle` = BINARY 'Fernmelder'")
-        && str_contains($dv, 'estab_auth_shift_access_allowed(')
+    str_contains(
+        $messengerCandidates,
+        'estab_incident_duty_shift_required($incident)'
+    )
+        && str_contains(
+            $messengerCandidates,
+            '`nv_dienstbesetzungen` AS assignment'
+        )
+        && str_contains(
+            $messengerCandidates,
+            "assignment.`status` = 'ANGENOMMEN'"
+        )
+        && str_contains(
+            $messengerCandidates,
+            "BINARY assignment.`funktion` = BINARY 'A/W'"
+        )
+        && str_contains(
+            $messengerCandidates,
+            "BINARY assignment.`rolle` = BINARY 'Fernmelder'"
+        )
+        && str_contains(
+            $messengerCandidates,
+            'estab_auth_fetch_additional_functions('
+        )
+        && !str_contains(
+            $messengerCandidates,
+            '`nv_benutzer_zusatzfunktionen`'
+        )
+        && str_contains(
+            $messengerCandidates,
+            "hash_equals('A/W', \$extra['funktion'])"
+        )
+        && str_contains(
+            $messengerCandidates,
+            "hash_equals('Fernmelder', \$extra['rolle'])"
+        )
+        && str_contains(
+            $messengerCandidates,
+            'estab_auth_shift_access_allowed('
+        )
         && str_contains($operationsUi, '$users = estab_dv_messenger_candidates('),
-    'messenger candidates are not fixed A/W accounts with effective access'
+    'messenger candidates do not split STRICT staffing from fail-closed LOOSE grants'
+);
+$messengerTarget = $slice(
+    $dv,
+    'function estab_dv_require_messenger_target(',
+    'function estab_dv_assign_messenger('
+);
+$assert(
+    str_contains($messengerTarget, 'estab_incident_duty_shift_required($incident)')
+        && str_contains($messengerTarget, '`nv_dienstbesetzungen` AS assignment')
+        && str_contains($messengerTarget, "assignment.`status` = 'ANGENOMMEN'")
+        && str_contains($messengerTarget, 'estab_auth_fetch_additional_functions(')
+        && str_contains($messengerTarget, 'estab_auth_shift_access_allowed(')
+        && str_contains(
+            $messengerTarget,
+            "'permission_mode' => ESTAB_PERMISSION_MODE_STRICT"
+        )
+        && str_contains(
+            $messengerTarget,
+            "'permission_mode' => ESTAB_PERMISSION_MODE_LOOSE"
+        ),
+    'messenger target is not revalidated against the authoritative mode'
 );
 $messengerAssign = $slice(
     $dv,
@@ -584,12 +909,44 @@ $messengerAssign = $slice(
 );
 $assert(
     str_contains($messengerAssign, "'FERNMELDEBETRIEB'")
-        && str_contains($messengerAssign, "u.`funktion` = BINARY 'A/W'")
-        && str_contains($messengerAssign, "u.`rolle` = BINARY 'Fernmelder'")
-        && str_contains($messengerAssign, 'estab_auth_shift_access_allowed(')
-        && !str_contains($messengerAssign, 'nv_dienstbesetzungen')
-        && !str_contains($messengerAssign, 'nv_dienstschichten'),
-    'messenger dispatch still derives authority or candidates from duty shifts'
+        && str_contains($messengerAssign, 'estab_dv_require_messenger_target(')
+        && str_contains(
+            $messengerAssign,
+            "'actor_function' => (string) \$selected['funktion']"
+        )
+        && str_contains(
+            $messengerAssign,
+            "'actor_role' => (string) \$selected['rolle']"
+        )
+        && str_contains($messengerAssign, "'messenger_function' =>")
+        && str_contains($messengerAssign, "'messenger_role' =>")
+        && str_contains($messengerAssign, "'messenger_duty_assignment_id' =>")
+        && str_contains($messengerAssign, "'permission_mode' =>")
+        && substr_count(
+            $messengerAssign,
+            'estab_dv_with_sql_authority_context('
+        ) === 1
+        && str_contains(
+            $messengerAssign,
+            'estab_dv_authority_assignment_id($selected)'
+        )
+        && str_contains(
+            $messengerAssign,
+            "'estab_permission_mode' =>"
+        )
+        && str_contains(
+            $messengerAssign,
+            "\$messengerAuthority['dienstbesetzung_id']"
+        )
+        && str_contains(
+            $messengerAssign,
+            'return (int) $connection->insert_id;'
+        )
+        && !str_contains(
+            $messengerAssign,
+            '$jobId = (int) $connection->insert_id;'
+        ),
+    'messenger dispatch loses actor or target authority provenance'
 );
 $generalWriteGuard = $slice(
     $dv,
@@ -615,7 +972,7 @@ $assert(
         && preg_match(
             '/estab_dv_require_operational_account\(\s*'
                 . '\$connection,\s*\$incidentId,\s*\$identity,\s*'
-                . '\$requireMessengerAvailable\s*\)/s',
+                . '\$requireMessengerAvailable,\s*true\s*\)/s',
             $generalWriteGuard
         ) === 1
         && preg_match(
@@ -631,34 +988,105 @@ $assert(
         && str_contains(
             $messengerTransition,
             "hash_equals((string) \$row['melder_kuerzel'], \$actorCode)"
+        )
+        && str_contains(
+            $messengerTransition,
+            "'actor_function' => (string) \$selected['funktion']"
+        )
+        && str_contains(
+            $messengerTransition,
+            "'actor_role' => (string) \$selected['rolle']"
         ),
     'general writes do not block an away messenger or personal lifecycle cannot progress'
 );
 $assert(
     str_contains(
         $logbook,
-        'estab_dv_require_active_capability_for_operational_write('
+        '$writerIdentity = estab_dv_require_write_capability('
     )
+        && str_contains(
+            $logbook,
+            'estab_logbook_manual_writer_context('
+        )
+        && str_contains(
+            $logbook,
+            "\$function = (string) (\$writerIdentity['funktion'] ?? '');"
+        )
         && str_contains($logbook, "'EINSATZTAGEBUCH'")
         && str_contains($logbook, "'BEFOERDERUNG'")
+        && str_contains(
+            $logbook,
+            'estab_incident_duty_shift_required($incident)'
+        )
+        && str_contains($logbook, "duty_shift.`status` = 'AKTIV'")
+        && str_contains($logbook, "assignment.`status` = 'ANGENOMMEN'")
+        && str_contains(
+            $logbook,
+            'estab_logbook_designated_writer_assignment('
+        )
         && str_contains($logbook, "'shift_id' => null")
         && str_contains($logbook, "'writer_assignment_id' => null")
-        && str_contains($logbook, "in_array(\$function, ['ETB', 'S2'], true)")
-        && str_contains($logbook, "\$function === 'A/W'"),
-    'ETB/TBB authorship is not capability-based and shift-independent'
+        && str_contains(
+            $logbook,
+            "estab_auth_identity_has_function(\$selected, 'ETB', 'Stab')"
+        )
+        && str_contains(
+            $logbook,
+            "estab_auth_identity_has_function(\$selected, 'S2', 'Stab')"
+        )
+        && str_contains($logbook, "'A/W'")
+        && str_contains($logbook, "'Fernmelder'"),
+    'ETB/TBB authorship does not enforce STRICT writers and exact LOOSE effective functions'
 );
 $assert(
-    !str_contains(
+    str_contains(
         $logbookLifecycle,
         'function estab_logbook_lifecycle_active_shift_id('
     )
+        && str_contains(
+            $logbookLifecycle,
+            'function estab_logbook_lifecycle_permission_mode('
+        )
+        && str_contains(
+            $logbookLifecycle,
+            '=== ESTAB_PERMISSION_MODE_LOOSE'
+        )
+        && str_contains(
+            $logbookLifecycle,
+            '$permissionMode === ESTAB_PERMISSION_MODE_STRICT'
+        )
+        && substr_count(
+            $logbookLifecycle,
+            '$shiftId ??= estab_logbook_lifecycle_active_shift_id('
+        ) >= 2
         && substr_count($logbookLifecycle, '?int $shiftId = null') >= 3
         && str_contains($logbookLifecycle, '`estab_shift_id`')
-        && !str_contains(
+        && str_contains(
             $logbookLifecycle,
-            'Eine aktive Dienstschicht ist erforderlich'
+            'function estab_logbook_lifecycle_with_system_write_context('
+        )
+        && str_contains(
+            $logbookLifecycle,
+            'SELECT @estab_logbook_system_write_incident_id AS `incident_id`'
+        )
+        && str_contains(
+            $logbookLifecycle,
+            '@estab_logbook_system_write_book AS `book`'
+        )
+        && substr_count(
+            $logbookLifecycle,
+            'estab_logbook_lifecycle_with_system_write_context('
+        ) === 3
+        && substr_count(
+            $logbookLifecycle,
+            'SET @estab_logbook_system_write_incident_id = NULL'
+        ) >= 2
+        && str_contains(
+            $logbookLifecycle,
+            'eine aktive Dienstschicht.'
         ),
-    'logbook lifecycle still requires an active formal duty shift'
+    'logbook lifecycle does not enforce a duty shift only in STRICT while '
+        . 'retaining shiftless LOOSE operation'
 );
 foreach (['ETB' => $etb, 'TBB' => $tbb] as $name => $source) {
     $scope = strpos($source, 'estab_read_require_operational_scope (');
@@ -673,16 +1101,39 @@ foreach (['ETB' => $etb, 'TBB' => $tbb] as $name => $source) {
     );
 }
 
-/* Attachments keep the same incident/account/capability boundary. */
+/* Attachments keep the same incident/account/effective-function boundary. */
 $assert(
     str_contains($attachment, 'estab_attachment_require_operational_identity(')
         && substr_count(
             $attachment,
             'estab_attachment_require_operational_identity('
         ) >= 5
-        && str_contains($attachment, 'complete fixed account identity')
-        && !str_contains($attachment, "'duty_assignment_id' =>"),
-    'attachment domain is not fixed-account and incident scoped'
+        && str_contains($attachment, 'exact acting tuple and active incident')
+        && str_contains(
+            $attachment,
+            'estab_attachment_origin_context_validate('
+        )
+        && str_contains(
+            $attachment,
+            'estab_auth_identity_has_function('
+        )
+        && str_contains(
+            $attachment,
+            "\$storedIdentity['funktion']"
+        )
+        && str_contains($attachment, "\$storedIdentity['rolle']")
+        && str_contains(
+            $attachment,
+            'estab_attachment_origin_permission_context('
+        )
+        && str_contains($attachment, "'permission_revision' =>")
+        && str_contains($attachment, "'duty_assignment_id' =>")
+        && str_contains($attachment, "'function_source' =>")
+        && str_contains(
+            $attachment,
+            'estab_attachment_origin_authority_identity('
+        ),
+    'attachment domain is not exact-effective-function and incident scoped'
 );
 
 echo "DV operations security: OK ({$assertions} assertions)\n";

@@ -184,10 +184,11 @@ ensure_entry()
     assert_no_runtime_error
 }
 
+# This HTTP suite deliberately reuses the explicitly LOOSE central incident.
 # Authentication with the fixed account function and an active incident are
 # mandatory before logbook data is rendered. Optional access shifts never
-# provide fachliche permissions and no legacy duty shift must be active. Only
-# S2/ETB may write ETB and only A/W may write TBB.
+# provide fachliche permissions. Only S2/ETB may write ETB and only A/W may
+# write TTB.
 assert_status 303 "$base_url/stabetb/etb.php"
 assert_status 303 "$base_url/fmtbb/tbb.php"
 

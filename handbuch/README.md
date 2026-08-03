@@ -14,14 +14,18 @@ Die Laufzeitoberfläche besteht aus:
 - `handbuch.js` für die lokale Suche ohne externe Abhängigkeiten.
 
 Bei fachlichen oder sichtbaren Änderungen müssen die betroffenen Kapitel im
-selben Commit angepasst werden. Besonders zu prüfen sind feste Rollen, der pro
-Einsatz gewählte Berechtigungsmodus und Nachrichtenlauf,
-Einsatz-/Zugangsschichtgrenzen, Anhänge, ETB/TBB, Korrekturen, Abschluss,
+selben Commit angepasst werden. Besonders zu prüfen sind feste und zusätzliche
+Kontofunktionen, ausgewählte formale Dienstbesetzungen, der pro Einsatz
+gewählte Berechtigungsmodus und Nachrichtenlauf, Einsatz-, Dienst- und
+Zugangsschichtgrenzen, Anhänge, ETB/TBB, Korrekturen, Abschluss,
 Exporte, Präsenz/Logout sowie die getrennte HTTP-Basic-Administration. Bei
-„Locker“ dürfen nur ausdrücklich angebotene Funktions-/Rollengrenzen in den
-operativen Schreibwegen von Nachrichtenworkflow, ETB/TBB, S6-Planung und
-Melderlauf erweitert beschrieben werden; Übersichten, Nachweisung, Archive der
-zweiten Sichtung, Kategorien und Administration bleiben rollenstreng. Interne
+„Locker“ müssen feste Kontofunktion und explizite Zusatzfunktionen als
+Rechtsquelle beschrieben werden; eine pauschale Freigabe fachfremder Konten
+ist falsch. Bei „Streng“ sind aktive, angenommene und ausgewählte formale
+Dienstbesetzungen verbindlich. Eine echte Modusänderung ist nur vor jeder
+operativen oder formalen Eintragung zulässig; danach bleibt der Einsatzmodus
+dauerhaft unveränderlich, während das Speichern desselben Werts idempotent
+bleibt. Interne
 Links müssen über die zentrale Anwendungs-URL-API entstehen und auch bei einem
 konfigurierten Base-Path funktionieren.
 

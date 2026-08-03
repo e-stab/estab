@@ -216,6 +216,7 @@ if ($requestMethod === 'POST') {
         $error = $exception->getMessage();
     } catch (EstabIncidentCloseBlockedException $exception) {
         http_response_code(409);
+        $strictClose = ($exception->preflight['strict_mode'] ?? true) === true;
         $error = $exception->getMessage()
             . ' Offen: ' . (int) ($exception->preflight['open_messages'] ?? 0)
             . ' Nachrichten, '
@@ -234,9 +235,25 @@ if ($requestMethod === 'POST') {
             . (int) (
                 $exception->preflight['offene_fernmeldeplanentwuerfe'] ?? 0
             )
-            . ' Fernmeldeplanentwürfe. Historische formale Schichtdaten '
-            . 'werden nur noch informativ ausgewiesen und blockieren den '
-            . 'Einsatzabschluss nicht.';
+            . ' Fernmeldeplanentwürfe.';
+        if ($strictClose) {
+            $error .= ' Im strengen Modus zusätzlich offen: '
+                . (int) ($exception->preflight['offene_schichten'] ?? 0)
+                . ' Schichten, '
+                . (int) ($exception->preflight['offene_besetzungen'] ?? 0)
+                . ' Besetzungen und '
+                . (int) (
+                    $exception->preflight['offene_uebergabeanforderungen'] ?? 0
+                )
+                . ' Übergabeanforderungen. ETB und TBB sind '
+                . (($exception->preflight['logbuecher_eroeffnet'] ?? false)
+                    ? 'ordnungsgemäß eröffnet.'
+                    : 'noch nicht mit der ersten Dienstschicht eröffnet.');
+        } else {
+            $error .= ' Im lockeren Modus sind formale Schichten, Besetzungen '
+                . 'und Übergabeanforderungen historische Hinweise und keine '
+                . 'Abschlussblocker.';
+        }
     } catch (EstabIncidentConflictException $exception) {
         http_response_code(409);
         $error = $exception->getMessage()
@@ -367,15 +384,16 @@ $activeMissingHeader = is_array($status) && $activeId !== null
           <span><?= incident_admin_html(incident_admin_datetime($status['beginn'])) ?>
             bis <?= incident_admin_html(incident_admin_datetime($status['ende'])) ?></span>
           <span data-estab-active-permission-mode>
-            Schreibrechte: <strong><?= incident_admin_html(
+            Berechtigungsmodus: <strong><?= incident_admin_html(
                 estab_permission_mode_label($status['estab_permission_mode'])
             ) ?></strong>
             <?php if (
                 ($status['estab_permission_mode'] ?? null)
                     === ESTAB_PERMISSION_MODE_LOOSE
             ): ?>
-              · Funktions- und Rollenrechte werden für Schreibaktionen nicht
-              erzwungen.
+              · Rechte folgen der festen Kontofunktion und ausdrücklich
+              vergebenen Zusatzfunktionen; eine formale Dienstschicht ist
+              nicht erforderlich.
             <?php endif; ?>
           </span>
           <?php if ($activeMissingHeader !== []): ?>
@@ -403,6 +421,8 @@ $activeMissingHeader = is_array($status) && $activeId !== null
             aufbewahrt.</p>
         </header>
         <?php if (is_array($activePreflight)): ?>
+          <?php $strictPreflight =
+              ($activePreflight['strict_mode'] ?? true) === true; ?>
           <p class="estab-tool-feedback <?= $activePreflight['closable']
               ? 'estab-tool-feedback-success'
               : 'estab-tool-feedback-error' ?>">
@@ -423,12 +443,24 @@ $activeMissingHeader = is_array($status) && $activeId !== null
             ETB und TBB sind
             <?= $activePreflight['logbuecher_eroeffnet']
                 ? 'ordnungsgemäß eröffnet.'
-                : 'noch ohne Eröffnungszeile; das blockiert den Abschluss nicht.' ?>
-            Historische formale Dienstplanung (nicht blockierend):
-            <?= (int) $activePreflight['offene_schichten'] ?> Schichten,
-            <?= (int) $activePreflight['offene_besetzungen'] ?> Besetzungen,
-            <?= (int) $activePreflight['offene_uebergabeanforderungen'] ?>
-            Übergabeanforderungen.
+                : ($strictPreflight
+                    ? 'noch nicht mit der ersten Dienstschicht eröffnet; das '
+                        . 'blockiert den Abschluss im strengen Modus.'
+                    : 'noch ohne Eröffnungszeile; beim Abschluss im lockeren '
+                        . 'Modus werden die nötigen Buchzeilen angelegt.') ?>
+            <?php if ($strictPreflight): ?>
+              Verbindliche Führungsorganisation (blockierend):
+              <?= (int) $activePreflight['offene_schichten'] ?> offene Schichten,
+              <?= (int) $activePreflight['offene_besetzungen'] ?> offene Besetzungen,
+              <?= (int) $activePreflight['offene_uebergabeanforderungen'] ?>
+              offene Übergabeanforderungen.
+            <?php else: ?>
+              Historische formale Dienstplanung (nicht blockierend):
+              <?= (int) $activePreflight['offene_schichten'] ?> Schichten,
+              <?= (int) $activePreflight['offene_besetzungen'] ?> Besetzungen,
+              <?= (int) $activePreflight['offene_uebergabeanforderungen'] ?>
+              Übergabeanforderungen.
+            <?php endif; ?>
           </p>
         <?php endif; ?>
         <form class="estab-tool-form" method="post" data-estab-dirty-guard>
@@ -533,16 +565,18 @@ $activeMissingHeader = is_array($status) && $activeId !== null
                         ? 'selected' : ''
                 ?>>Locker</option>
               </select>
-              <small><strong>Streng:</strong> Schreibaktionen richten sich nach
-                der fest zugewiesenen Funktion und Rolle. <strong>Locker:</strong>
-                jedes angemeldete, aktive und ungesperrte Funktionskonto darf
-                fachliche Schreibaktionen in Nachrichten-, Logbuch- und
-                Führungsstellenabläufen ausführen. Reine Lesebereiche,
-                Kategorien und Administration bleiben rollenstreng.
-                Einsatzgrenzen,
-                optionaler Schichtzugang, Objektzustände, Sperren, CSRF,
-                Pflichtfelder und Nachweise bleiben in beiden Modi
-                verbindlich.</small>
+              <small><strong>Streng:</strong> Operative Funktion und Rechte
+                stammen aus einer persönlich angenommenen und ausgewählten
+                Besetzung in der aktiven Dienstschicht. Ohne diese Auswahl
+                sind keine operativen Eingaben möglich. <strong>Locker:</strong>
+                es ist keine formale Dienstschicht erforderlich; wirksam sind
+                ausschließlich die feste Kontofunktion und die in der
+                Benutzerverwaltung ausdrücklich vergebenen globalen
+                Zusatzfunktionen. Zusatzfunktionen gelten nur in diesem Modus.
+                Es erhält niemals pauschal jedes Konto alle Rechte.
+                Einsatzgrenzen, optionaler Zugangsschichtzugang,
+                Objektzustände, Sperren, CSRF, Pflichtfelder und Nachweise
+                bleiben verbindlich.</small>
             </div>
             <div class="estab-tool-field estab-tool-field-wide">
               <label class="estab-tool-check">
@@ -552,8 +586,9 @@ $activeMissingHeader = is_array($status) && $activeId !== null
                   value="1"
                   <?= ($old['confirm_loose_permissions'] ?? null) === '1'
                       ? 'checked' : '' ?>>
-                Ich bestätige die einsatzweite Erweiterung der Schreibrechte,
-                falls ich „Locker“ auswähle.
+                Ich bestätige den Betrieb ohne formale Dienstschicht, falls
+                ich „Locker“ auswähle. Rechte folgen dann nur der festen
+                Kontofunktion und ausdrücklich vergebenen Zusatzfunktionen.
               </label>
             </div>
             <div class="estab-tool-field">
@@ -690,7 +725,7 @@ $activeMissingHeader = is_array($status) && $activeId !== null
                       <span>Ort: <?= incident_admin_html($incident['ort']) ?></span>
                     <?php endif; ?>
                     <span data-estab-permission-mode>
-                      Schreibrechte: <strong><?= incident_admin_html(
+                      Berechtigungsmodus: <strong><?= incident_admin_html(
                           estab_permission_mode_label(
                               $incident['estab_permission_mode']
                           )
@@ -770,11 +805,14 @@ $activeMissingHeader = is_array($status) && $activeId !== null
                       <label class="estab-tool-check">
                         <input type="checkbox"
                           name="confirm_loose_permissions" value="1">
-                        Erweiterte Schreibrechte bei Wechsel auf „Locker“
-                        ausdrücklich bestätigen.
+                        Umschaltung von verbindlicher Dienstbesetzung auf
+                        feste Kontofunktion und ausdrücklich vergebene
+                        Zusatzfunktionen ohne formale Dienstschicht bestätigen.
                       </label>
-                      <small>Der Wechsel wird sofort wirksam, global
-                        serialisiert und im Einsatzprotokoll festgehalten.</small>
+                      <small>Ein Wechsel ist nur möglich, solange noch keine
+                        operative oder formale Eintragung für den Einsatz
+                        existiert. Er wird global serialisiert und im
+                        Einsatzprotokoll festgehalten.</small>
                       <button class="estab-button" type="submit">
                         Modus speichern
                       </button>
@@ -933,7 +971,9 @@ $activeMissingHeader = is_array($status) && $activeId !== null
                         <label class="estab-tool-check">
                           <input type="checkbox"
                             name="confirm_loose_permissions" value="1" required>
-                          Einsatz mit erweiterten Schreibrechten aktivieren
+                          Einsatz im Modus „Locker“ aktivieren: Rechte stammen
+                          ohne formale Dienstschicht aus fester Kontofunktion
+                          und ausdrücklich vergebenen Zusatzfunktionen
                         </label>
                       <?php endif; ?>
                       <button class="estab-button estab-button-primary"

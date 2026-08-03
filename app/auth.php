@@ -817,7 +817,9 @@ function estab_auth_account_matches_session(
     array $storedUser,
     array $identity,
     string $sessionId,
-    ?DateTimeInterface $now = null
+    ?DateTimeInterface $now = null,
+    ?mysqli $connection = null,
+    ?int $dutyAssignmentId = null
 ): bool {
     $storedSessionId = $storedUser['sid'] ?? null;
     if (
@@ -842,16 +844,465 @@ function estab_auth_account_matches_session(
         return false;
     }
 
-    // Function and role always come from the authoritative account. Optional
-    // access-shift memberships may switch the account's access as a group,
-    // but they never replace this fachliche identity or grant another role.
-    return hash_equals(
-        (string) ($storedUser['funktion'] ?? ''),
-        (string) ($identity['funktion'] ?? '')
-    ) && hash_equals(
-        (string) ($storedUser['rolle'] ?? ''),
-        (string) ($identity['rolle'] ?? '')
+    if ($dutyAssignmentId === null) {
+        return hash_equals(
+            (string) ($storedUser['funktion'] ?? ''),
+            (string) ($identity['funktion'] ?? '')
+        ) && hash_equals(
+            (string) ($storedUser['rolle'] ?? ''),
+            (string) ($identity['rolle'] ?? '')
+        );
+    }
+
+    return $connection instanceof mysqli
+        && estab_auth_duty_assignment_matches_session(
+            $connection,
+            $dutyAssignmentId,
+            (string) ($identity['kuerzel'] ?? ''),
+            (string) ($identity['funktion'] ?? ''),
+            (string) ($identity['rolle'] ?? '')
+        );
+}
+
+/**
+ * Validate the exact selected duty assignment used as identity in STRICT.
+ *
+ * LOOSE deliberately rejects a selected hat: its identity always comes from
+ * the fixed account plus explicitly administered additional functions.
+ */
+function estab_auth_duty_assignment_matches_session(
+    mysqli $connection,
+    int $assignmentId,
+    string $userCode,
+    string $function,
+    string $role
+): bool {
+    if (
+        $assignmentId < 1
+        || preg_match('/\A[a-z0-9_]{1,6}\z/D', $userCode) !== 1
+        || preg_match('/\A(?:A\/W|[A-Za-z0-9_]{1,10})\z/D', $function) !== 1
+        || !in_array($role, ['Stab', 'FB', 'Fernmelder'], true)
+    ) {
+        return false;
+    }
+    $statement = $connection->prepare(
+        'SELECT 1 FROM `nv_dienstbesetzungen` AS duty_assignment'
+        . ' JOIN `nv_dienstschichten` AS duty_shift'
+        . ' ON duty_shift.`dienstschicht_id` ='
+        . ' duty_assignment.`dienstschicht_id`'
+        . ' JOIN `nv_einsatz_status` AS active_incident'
+        . ' ON active_incident.`singleton_id` = 1'
+        . ' AND active_incident.`active_einsatz_id` = duty_shift.`einsatz_id`'
+        . ' JOIN `nv_einsaetze` AS incident'
+        . ' ON incident.`einsatz_id` = duty_shift.`einsatz_id`'
+        . ' WHERE duty_assignment.`dienstbesetzung_id` = ?'
+        . " AND duty_assignment.`status` = 'ANGENOMMEN'"
+        . " AND duty_shift.`status` = 'AKTIV'"
+        . " AND incident.`estab_status` = 'open'"
+        . " AND BINARY incident.`estab_permission_mode` = BINARY 'STRICT'"
+        . ' AND BINARY duty_assignment.`benutzer_kuerzel` = BINARY ?'
+        . ' AND BINARY duty_assignment.`funktion` = BINARY ?'
+        . ' AND BINARY duty_assignment.`rolle` = BINARY ? LIMIT 1'
     );
+    if (!$statement) {
+        throw new RuntimeException('Could not prepare duty-session validation');
+    }
+    try {
+        $statement->bind_param(
+            'isss',
+            $assignmentId,
+            $userCode,
+            $function,
+            $role
+        );
+        if (!$statement->execute()) {
+            throw new RuntimeException('Could not validate duty-session assignment');
+        }
+        $result = $statement->get_result();
+        $valid = $result->fetch_row() !== null;
+        $result->free();
+        return $valid;
+    } finally {
+        $statement->close();
+    }
+}
+
+/** Return the active incident's authoritative mode, or STRICT without one. */
+function estab_auth_active_permission_mode(mysqli $connection): string
+{
+    $result = $connection->query(
+        'SELECT incident.`estab_permission_mode`'
+        . ' FROM `nv_einsatz_status` AS active_incident'
+        . ' LEFT JOIN `nv_einsaetze` AS incident'
+        . ' ON incident.`einsatz_id` = active_incident.`active_einsatz_id`'
+        . ' WHERE active_incident.`singleton_id` = 1 LIMIT 1'
+    );
+    if (!$result) {
+        throw new RuntimeException('Could not read active permission mode');
+    }
+    try {
+        $row = $result->fetch_assoc();
+    } finally {
+        $result->free();
+    }
+    $mode = is_array($row) ? ($row['estab_permission_mode'] ?? null) : null;
+    if ($mode === null) {
+        return 'STRICT';
+    }
+    if (!is_string($mode) || !in_array($mode, ['STRICT', 'LOOSE'], true)) {
+        throw new RuntimeException('Active permission mode is invalid');
+    }
+    return $mode;
+}
+
+/**
+ * Merge the fixed/matrix function roles with the capability catalogue.
+ *
+ * One function may carry several capabilities, but it must have exactly one
+ * role across both sources. Callers that are about to replace the active
+ * matrix can lock the capability rows in the same transaction, so a direct
+ * concurrent catalogue change cannot invalidate the decision before commit.
+ *
+ * @param array<string,string> $roles
+ * @return array<string,string>
+ */
+function estab_auth_merge_function_role_catalog(
+    mysqli $connection,
+    array $roles,
+    bool $forUpdate = false
+): array {
+    $canonicalRoles = [];
+    foreach ($roles as $function => $role) {
+        if (
+            !is_string($function)
+            || !is_string($role)
+            || preg_match('/\A(?:A\/W|[A-Za-z0-9_]{1,10})\z/D', $function)
+                !== 1
+            || !in_array($role, ['Stab', 'FB', 'Fernmelder'], true)
+            || (
+                isset($canonicalRoles[$function])
+                && !hash_equals($canonicalRoles[$function], $role)
+            )
+        ) {
+            throw new RuntimeException(
+                'Empfängermatrix und Fachfunktionskatalog widersprechen sich.'
+            );
+        }
+        $canonicalRoles[$function] = $role;
+    }
+
+    $statement = $connection->prepare(
+        'SELECT `funktion`, `rolle` FROM `nv_funktionsfaehigkeiten`'
+        . ' ORDER BY `funktion`, `faehigkeit`'
+        . ($forUpdate ? ' FOR UPDATE' : '')
+    );
+    if (!$statement) {
+        throw new RuntimeException(
+            'Fachfunktionskatalog konnte nicht vorbereitet werden.'
+        );
+    }
+    try {
+        if (!$statement->execute()) {
+            throw new RuntimeException(
+                'Fachfunktionskatalog konnte nicht gelesen werden.'
+            );
+        }
+        $result = $statement->get_result();
+        while (($row = $result->fetch_assoc()) !== null) {
+            $function = (string) ($row['funktion'] ?? '');
+            $role = (string) ($row['rolle'] ?? '');
+            if (
+                preg_match('/\A(?:A\/W|[A-Za-z0-9_]{1,10})\z/D', $function)
+                    !== 1
+                || !in_array($role, ['Stab', 'FB', 'Fernmelder'], true)
+                || (
+                    isset($canonicalRoles[$function])
+                    && !hash_equals($canonicalRoles[$function], $role)
+                )
+            ) {
+                throw new RuntimeException(
+                    'Empfängermatrix und Fachfunktionskatalog '
+                    . 'widersprechen sich.'
+                );
+            }
+            $canonicalRoles[$function] = $role;
+        }
+        $result->free();
+    } finally {
+        $statement->close();
+    }
+    uksort($canonicalRoles, 'strnatcasecmp');
+    return $canonicalRoles;
+}
+
+/**
+ * Return whether one function owns a legacy Stab/FB message workspace.
+ *
+ * ETB is a capability-only function. It may operate the shared incident
+ * logbook through EINSATZTAGEBUCH, but it never owns a recipient queue,
+ * message state or category tables. Si has its separate review workflow.
+ */
+function estab_auth_has_staff_message_workspace(
+    mixed $functionValue,
+    mixed $roleValue
+): bool {
+    return is_string($functionValue)
+        && is_string($roleValue)
+        && !in_array($functionValue, ['Si', 'ETB'], true)
+        && in_array($roleValue, ['Stab', 'FB'], true);
+}
+
+/** Return whether a canonical function may be granted personally in LOOSE. */
+function estab_auth_extra_function_is_eligible(
+    mixed $functionValue,
+    mixed $roleValue
+): bool {
+    return is_string($functionValue)
+        && is_string($roleValue)
+        && preg_match('/\A(?:A\/W|[A-Za-z0-9_]{1,10})\z/D', $functionValue)
+            === 1
+        && in_array($roleValue, ['Stab', 'FB', 'Fernmelder'], true);
+}
+
+/**
+ * Read the current active matrix and capability catalogue as one role map.
+ *
+ * The fixed Si/A/W/LdF roles are part of the same namespace. The active
+ * matrix must retain S2 as its single non-automatic red-copy target. This
+ * independent runtime check prevents a corrupt database row from turning an
+ * otherwise stale personal grant back into authority.
+ *
+ * @return array<string,string>
+ */
+function estab_auth_current_function_role_catalog(
+    mysqli $connection,
+    string $matrixTable = 'nv_empfmtx'
+): array {
+    $roles = [
+        'Si' => 'Stab',
+        'A/W' => 'Fernmelder',
+        'LdF' => 'Fernmelder',
+    ];
+    $seenMatrixFunctions = [];
+    $lageTargets = 0;
+    $statement = $connection->prepare(
+        'SELECT `mtx_fkt`, `mtx_rolle`, `mtx_rc2`, `mtx_auto` FROM '
+        . estab_auth_table($matrixTable)
+        . " WHERE `mtx_typ` = 'cb' AND `mtx_fkt` <> ''"
+        . ' ORDER BY `mtx_fkt`, `mtx_rolle`, `mtx_x`, `mtx_y`'
+    );
+    if (!$statement) {
+        throw new RuntimeException(
+            'Empfängermatrix konnte nicht für den Funktionskatalog vorbereitet werden.'
+        );
+    }
+    try {
+        if (!$statement->execute()) {
+            throw new RuntimeException(
+                'Empfängermatrix konnte nicht für den Funktionskatalog gelesen werden.'
+            );
+        }
+        $result = $statement->get_result();
+        while (($row = $result->fetch_assoc()) !== null) {
+            $function = trim((string) ($row['mtx_fkt'] ?? ''));
+            $role = trim((string) ($row['mtx_rolle'] ?? ''));
+            if (
+                preg_match('/\A[A-Za-z0-9_]{1,6}\z/D', $function) !== 1
+                || !in_array($role, ['Stab', 'FB'], true)
+                || isset($seenMatrixFunctions[$function])
+                || isset($roles[$function])
+            ) {
+                throw new RuntimeException(
+                    'Die Empfängermatrix enthält keine eindeutige '
+                    . 'Funktionszuordnung.'
+                );
+            }
+            $seenMatrixFunctions[$function] = true;
+            $roles[$function] = $role;
+            if (
+                hash_equals('S2', $function)
+                && hash_equals('Stab', $role)
+                && in_array((string) ($row['mtx_rc2'] ?? ''), ['1', 't'], true)
+                && !in_array((string) ($row['mtx_auto'] ?? ''), ['1', 't'], true)
+            ) {
+                $lageTargets++;
+            }
+        }
+        $result->free();
+    } finally {
+        $statement->close();
+    }
+    if ($lageTargets !== 1) {
+        throw new RuntimeException(
+            'Die Empfängermatrix benötigt S2 als unveränderliches '
+            . 'Lage-/Dokumentationsziel.'
+        );
+    }
+    return estab_auth_merge_function_role_catalog($connection, $roles);
+}
+
+/**
+ * Decide whether one function/role tuple still belongs to the authoritative
+ * runtime catalogue.
+ *
+ * Primary account functions and explicitly granted additional functions use
+ * this exact boundary. A stale tuple is therefore never kept effective merely
+ * because it is still present in nv_benutzer.
+ */
+function estab_auth_function_role_is_current(
+    mysqli $connection,
+    mixed $functionValue,
+    mixed $roleValue
+): bool {
+    if (!is_string($functionValue) || !is_string($roleValue)) {
+        return false;
+    }
+    $function = trim($functionValue);
+    $role = trim($roleValue);
+    if (
+        preg_match('/\A(?:A\/W|[A-Za-z0-9_]{1,10})\z/D', $function) !== 1
+        || !in_array($role, ['Stab', 'FB', 'Fernmelder'], true)
+    ) {
+        return false;
+    }
+    $canonicalRoles = estab_auth_current_function_role_catalog($connection);
+    return isset($canonicalRoles[$function])
+        && hash_equals($canonicalRoles[$function], $role);
+}
+
+/**
+ * Load only additional functions that still exist in the authoritative maps.
+ *
+ * The table is administrative state, never session input. A removed matrix
+ * function therefore fails closed immediately without deleting its audit
+ * evidence; the administration may subsequently remove that stale grant.
+ *
+ * @return list<array{funktion:string,rolle:string}>
+ */
+function estab_auth_fetch_additional_functions(
+    mysqli $connection,
+    string $userCode,
+    bool $forUpdate = false
+): array {
+    $userCode = strtolower(trim($userCode));
+    if (preg_match('/\A[a-z0-9_]{1,6}\z/D', $userCode) !== 1) {
+        throw new InvalidArgumentException('Invalid additional-function account');
+    }
+    $canonicalRoles = estab_auth_current_function_role_catalog($connection);
+    $statement = $connection->prepare(
+        'SELECT extra.`funktion`, extra.`rolle`'
+        . ' FROM `nv_benutzer_zusatzfunktionen` AS extra'
+        . ' WHERE BINARY extra.`benutzer_kuerzel` = BINARY ?'
+        . ' ORDER BY extra.`funktion`, extra.`rolle`'
+        . ($forUpdate ? ' FOR UPDATE' : '')
+    );
+    if (!$statement) {
+        throw new RuntimeException('Could not prepare additional functions');
+    }
+    try {
+        $statement->bind_param('s', $userCode);
+        if (!$statement->execute()) {
+            throw new RuntimeException('Could not read additional functions');
+        }
+        $result = $statement->get_result();
+        $rows = [];
+        while (($row = $result->fetch_assoc()) !== null) {
+            $function = (string) ($row['funktion'] ?? '');
+            $role = (string) ($row['rolle'] ?? '');
+            if (
+                preg_match('/\A(?:A\/W|[A-Za-z0-9_]{1,10})\z/D', $function)
+                    !== 1
+                || !in_array($role, ['Stab', 'FB', 'Fernmelder'], true)
+            ) {
+                throw new RuntimeException('Stored additional function is invalid');
+            }
+            if (
+                !isset($canonicalRoles[$function])
+                || !hash_equals($canonicalRoles[$function], $role)
+                || !estab_auth_extra_function_is_eligible($function, $role)
+            ) {
+                // Keep stale rows as revocable audit evidence, but never turn
+                // them into an effective function.
+                continue;
+            }
+            $rows[] = ['funktion' => $function, 'rolle' => $role];
+        }
+        $result->free();
+        return $rows;
+    } finally {
+        $statement->close();
+    }
+}
+
+/**
+ * Return the base/selected function plus server-attached LOOSE additions.
+ *
+ * @return list<array{funktion:string,rolle:string}>
+ */
+function estab_auth_effective_function_roles(array $identity): array
+{
+    $functions = [];
+    $seen = [];
+    $append = static function (mixed $function, mixed $role) use (
+        &$functions,
+        &$seen
+    ): void {
+        if (
+            !is_string($function)
+            || !is_string($role)
+            || preg_match('/\A(?:A\/W|[A-Za-z0-9_]{1,10})\z/D', $function)
+                !== 1
+            || !in_array($role, ['Stab', 'FB', 'Fernmelder'], true)
+        ) {
+            return;
+        }
+        $key = $function . "\0" . $role;
+        if (isset($seen[$key])) {
+            return;
+        }
+        $seen[$key] = true;
+        $functions[] = ['funktion' => $function, 'rolle' => $role];
+    };
+    $accountFunction = $identity['authorization_account_function']
+        ?? $identity['funktion']
+        ?? null;
+    $accountRole = $identity['authorization_account_role']
+        ?? $identity['rolle']
+        ?? null;
+    $append($accountFunction, $accountRole);
+    $additional = ($identity['estab_permission_mode'] ?? null) === 'LOOSE'
+        ? ($identity['estab_additional_functions'] ?? [])
+        : [];
+    if (is_array($additional)) {
+        foreach ($additional as $row) {
+            if (
+                is_array($row)
+                && estab_auth_extra_function_is_eligible(
+                    $row['funktion'] ?? null,
+                    $row['rolle'] ?? null
+                )
+            ) {
+                $append($row['funktion'] ?? null, $row['rolle'] ?? null);
+            }
+        }
+    }
+    return $functions;
+}
+
+function estab_auth_identity_has_function(
+    array $identity,
+    string $function,
+    string $role
+): bool {
+    foreach (estab_auth_effective_function_roles($identity) as $candidate) {
+        if (
+            hash_equals($function, $candidate['funktion'])
+            && hash_equals($role, $candidate['rolle'])
+        ) {
+            return true;
+        }
+    }
+    return false;
 }
 
 /**
@@ -866,16 +1317,21 @@ function estab_auth_account_matches_session(
  */
 function estab_auth_shift_access_state(
     mysqli $connection,
-    string $userCode
+    string $userCode,
+    bool $forUpdate = false
 ): array {
     $userCode = strtolower(trim($userCode));
     if (preg_match('/\A[a-z0-9_]{1,6}\z/D', $userCode) !== 1) {
         throw new InvalidArgumentException('Invalid access-shift account code');
     }
     $statement = $connection->prepare(
-        'SELECT COUNT(*) AS `memberships`,'
-        . ' COALESCE(SUM(CASE WHEN access_shift.`zugang_aktiv` = 1'
-        . ' THEN 1 ELSE 0 END), 0) AS `active_memberships`'
+        ($forUpdate
+            ? 'SELECT access_shift.`zugangsschicht_id`,'
+                . ' access_shift.`zugang_aktiv`,'
+                . ' membership.`zugangsschicht_mitglied_id`'
+            : 'SELECT COUNT(*) AS `memberships`,'
+                . ' COALESCE(SUM(CASE WHEN access_shift.`zugang_aktiv` = 1'
+                . ' THEN 1 ELSE 0 END), 0) AS `active_memberships`')
         . ' FROM `nv_einsatz_status` AS active_incident'
         . ' JOIN `nv_zugangsschichten` AS access_shift'
         . ' ON access_shift.`einsatz_id` = active_incident.`active_einsatz_id`'
@@ -885,6 +1341,10 @@ function estab_auth_shift_access_state(
         . ' AND membership.`entfernt_am` IS NULL'
         . ' WHERE active_incident.`singleton_id` = 1'
         . ' AND BINARY membership.`benutzer_kuerzel` = BINARY ?'
+        . ($forUpdate
+            ? ' ORDER BY access_shift.`zugangsschicht_id`,'
+                . ' membership.`zugangsschicht_mitglied_id` FOR UPDATE'
+            : '')
     );
     if (!$statement) {
         throw new RuntimeException('Could not prepare access-shift check');
@@ -894,12 +1354,25 @@ function estab_auth_shift_access_state(
         if (!$statement->execute()) {
             throw new RuntimeException('Could not execute access-shift check');
         }
-        $row = $statement->get_result()->fetch_assoc();
+        $result = $statement->get_result();
+        if ($forUpdate) {
+            $memberships = 0;
+            $activeMemberships = 0;
+            while (($row = $result->fetch_assoc()) !== null) {
+                $memberships++;
+                if ((int) ($row['zugang_aktiv'] ?? 0) === 1) {
+                    $activeMemberships++;
+                }
+            }
+        } else {
+            $row = $result->fetch_assoc();
+            $memberships = (int) ($row['memberships'] ?? 0);
+            $activeMemberships = (int) ($row['active_memberships'] ?? 0);
+        }
+        $result->free();
     } finally {
         $statement->close();
     }
-    $memberships = (int) ($row['memberships'] ?? 0);
-    $activeMemberships = (int) ($row['active_memberships'] ?? 0);
     return [
         'managed' => $memberships > 0,
         'allowed' => $memberships === 0 || $activeMemberships > 0,
@@ -910,9 +1383,14 @@ function estab_auth_shift_access_state(
 
 function estab_auth_shift_access_allowed(
     mysqli $connection,
-    string $userCode
+    string $userCode,
+    bool $forUpdate = false
 ): bool {
-    return estab_auth_shift_access_state($connection, $userCode)['allowed'];
+    return estab_auth_shift_access_state(
+        $connection,
+        $userCode,
+        $forUpdate
+    )['allowed'];
 }
 
 /** Resolve the same session store used by 4fcfg/dbcfg.inc.php. */
@@ -984,9 +1462,37 @@ function estab_auth_current_session_identity(
         }
         estab_auth_table($userTable);
 
-        // Old sessions may still carry a selected duty assignment from a
-        // previous release. It is no longer an authorization source.
-        unset($session['estab_duty_assignment_id']);
+        $dutyAssignmentValue = $session['estab_duty_assignment_id'] ?? null;
+        $dutyAssignmentId = null;
+        if (is_int($dutyAssignmentValue) && $dutyAssignmentValue > 0) {
+            $dutyAssignmentId = $dutyAssignmentValue;
+        } elseif (
+            is_string($dutyAssignmentValue)
+            && preg_match('/\A[1-9][0-9]{0,18}\z/D', $dutyAssignmentValue)
+                === 1
+        ) {
+            $parsedDutyAssignment = filter_var(
+                $dutyAssignmentValue,
+                FILTER_VALIDATE_INT
+            );
+            if (
+                !is_int($parsedDutyAssignment)
+                || $parsedDutyAssignment < 1
+            ) {
+                throw new RuntimeException(
+                    'Authentication duty assignment is invalid'
+                );
+            }
+            $dutyAssignmentId = $parsedDutyAssignment;
+        } elseif ($dutyAssignmentValue !== null) {
+            throw new RuntimeException(
+                'Authentication duty assignment is invalid'
+            );
+        }
+        $authenticatedIdentity = $identity;
+        if ($dutyAssignmentId !== null) {
+            $authenticatedIdentity['duty_assignment_id'] = $dutyAssignmentId;
+        }
 
         $cacheKey = hash('sha256', json_encode([
             'server' => (string) ($databaseConfig['server'] ?? ''),
@@ -999,12 +1505,14 @@ function estab_auth_current_session_identity(
             'table' => $userTable,
             'sid' => $sessionId,
             'identity' => $identity,
+            'duty_assignment_id' => $dutyAssignmentId,
         ], JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE));
 
         if ($useRequestCache && array_key_exists($cacheKey, $requestCache)) {
-            if ($requestCache[$cacheKey] === true) {
-                $session['ROLLE'] = $identity['rolle'];
-                return $identity;
+            if (is_array($requestCache[$cacheKey])) {
+                $cachedIdentity = $requestCache[$cacheKey];
+                $session['ROLLE'] = (string) $cachedIdentity['rolle'];
+                return $cachedIdentity;
             }
             estab_auth_invalidate_local_session($session);
             return null;
@@ -1020,17 +1528,40 @@ function estab_auth_current_session_identity(
                 $identity['kuerzel']
             );
             $now = new DateTimeImmutable('now', new DateTimeZone('UTC'));
-            $valid = is_array($storedUser)
+            $mode = estab_auth_active_permission_mode($connection);
+            $authenticatedIdentity['estab_permission_mode'] = $mode;
+            $valid = !($mode === 'LOOSE' && $dutyAssignmentId !== null)
+                && is_array($storedUser)
                 && estab_auth_account_matches_session(
                     $storedUser,
                     $identity,
                     $sessionId,
-                    $now
-                )
-                && estab_auth_shift_access_allowed(
+                    $now,
                     $connection,
-                    (string) $identity['kuerzel']
+                    $dutyAssignmentId
+                )
+                && (
+                    $mode === 'STRICT'
+                    || estab_auth_function_role_is_current(
+                        $connection,
+                        $identity['funktion'] ?? null,
+                        $identity['rolle'] ?? null
+                    )
+                )
+                && (
+                    $mode !== 'LOOSE'
+                    || estab_auth_shift_access_allowed(
+                        $connection,
+                        (string) $identity['kuerzel']
+                    )
                 );
+            if ($valid && $mode === 'LOOSE') {
+                $authenticatedIdentity['estab_additional_functions'] =
+                    estab_auth_fetch_additional_functions(
+                        $connection,
+                        (string) $identity['kuerzel']
+                    );
+            }
             if (!$valid && is_array($storedUser)) {
                 // The exact SID condition prevents an expired or superseded
                 // browser from clearing a newer login of the same account.
@@ -1047,7 +1578,9 @@ function estab_auth_current_session_identity(
             }
         }
         if ($useRequestCache) {
-            $requestCache[$cacheKey] = $valid;
+            $requestCache[$cacheKey] = $valid
+                ? $authenticatedIdentity
+                : false;
         }
         if (!$valid) {
             estab_auth_invalidate_local_session($session);
@@ -1055,8 +1588,8 @@ function estab_auth_current_session_identity(
         }
 
         // Legacy routes still consult this duplicate role field.
-        $session['ROLLE'] = $identity['rolle'];
-        return $identity;
+        $session['ROLLE'] = $authenticatedIdentity['rolle'];
+        return $authenticatedIdentity;
     } catch (Throwable $exception) {
         error_log(
             'eStab session validation failed: ' . $exception->getMessage()

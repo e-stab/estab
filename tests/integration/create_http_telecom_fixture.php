@@ -4,8 +4,9 @@ declare(strict_types=1);
 
 /**
  * Publish disposable HTTP-test telecommunications plans through production
- * domain functions. Direct SQL would bypass the fixed S6 capability and
- * the exact immutable draft/release transitions proved by migration 94.
+ * domain functions. This fixture runs only in the explicitly LOOSE central
+ * incident. Direct SQL would bypass the fixed S6 capability and the exact
+ * immutable draft/release transitions proved by migration 94.
  */
 
 require_once dirname(__DIR__, 2) . '/app/dv_operations.php';
@@ -75,6 +76,11 @@ try {
     if (!is_int($incidentId) || $incidentId < 1) {
         throw new RuntimeException(
             'HTTP telecommunications fixture requires an active incident'
+        );
+    }
+    if (($incident['estab_permission_mode'] ?? null) !== 'LOOSE') {
+        throw new RuntimeException(
+            'HTTP telecommunications fixture requires the explicit LOOSE mode'
         );
     }
     $accountStatement = $connection->prepare(

@@ -15,6 +15,12 @@ estab_navigation_require_session($_SESSION, 'forms', $_SERVER);
 $readIdentity = session_status() === PHP_SESSION_ACTIVE
     ? estab_read_session_identity($_SESSION)
     : null;
+estab_navigation_require_selected_duty(
+    $_SESSION,
+    $readIdentity,
+    'forms',
+    $_SERVER
+);
 estab_session_ui_start($_SESSION);
 
 $files = [];
@@ -23,31 +29,40 @@ $noActiveIncident = false;
 $connection = null;
 try {
     $connection = estab_auth_connect($conf_4f_db);
-    $readScope = estab_read_require_operational_scope(
+    $files = estab_read_with_locked_operational_scope(
         $connection,
-        $readIdentity
-    );
-    $incidentId = (int) $readScope['incident']['active_einsatz_id'];
-    $files = estab_generated_form_list_for_incident(
-        $connection,
-        $conf_4f_tbl['nachrichten'],
-        (string) $conf_4f_db['datenbank'],
-        (string) $conf_4f['vordruck_dir'],
-        $incidentId
-    );
-    $files = estab_read_filter_generated_forms_for_incident(
-        $connection,
-        $conf_4f_tbl['nachrichten'],
-        $files,
-        $readScope['identity'],
-        $incidentId
+        $readIdentity,
+        static function (array $readScope) use (
+            $connection,
+            $conf_4f_tbl,
+            $conf_4f_db,
+            $conf_4f
+        ): array {
+            $incidentId = (int) (
+                $readScope['incident']['active_einsatz_id']
+            );
+            $generated = estab_generated_form_list_for_incident(
+                $connection,
+                $conf_4f_tbl['nachrichten'],
+                (string) $conf_4f_db['datenbank'],
+                (string) $conf_4f['vordruck_dir'],
+                $incidentId
+            );
+            return estab_read_filter_generated_forms_for_incident(
+                $connection,
+                $conf_4f_tbl['nachrichten'],
+                $generated,
+                $readScope['identity'],
+                $incidentId
+            );
+        }
     );
 } catch (EstabNoActiveIncidentException) {
     http_response_code(409);
     $noActiveIncident = true;
 } catch (EstabReadPermissionException) {
     http_response_code(403);
-    $listError = 'Ihre angemeldete Funktion darf die Vordruckliste nicht öffnen.';
+    $listError = 'Keine Ihrer aktuell wirksamen Funktionen darf die Vordruckliste öffnen.';
 } catch (Throwable $exception) {
     error_log('eStab generated-form list failed: ' . $exception->getMessage());
     http_response_code(503);

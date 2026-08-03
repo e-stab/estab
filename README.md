@@ -164,13 +164,16 @@ das Kennwort erscheint weder in Argumentliste noch Log.
 
 Eine Neuinstallation beginnt absichtlich ohne aktiven Einsatz. Anmeldung und
 Administration bleiben erreichbar, operative Eingaben sind aber fail-closed
-gesperrt. Eine Dienst- oder Zugangsschicht ist dagegen **keine fachliche
-Schreibvoraussetzung**. Die erste Einrichtung erfolgt in dieser Reihenfolge:
+gesperrt. Im Berechtigungsmodus **Streng** ist zusätzlich eine aktive formale
+Dienstschicht mit persönlich angenommener und ausgewählter Besetzung
+Voraussetzung. Nur im Modus **Locker** entfällt diese Dienstschichtpflicht.
+Die erste Einrichtung erfolgt in dieser Reihenfolge:
 
 Der in eStab geprüfte und unterstützte Produktumfang ist eine Führungsstelle
 **mit eingerichteter Fernmeldebetriebsstelle**. Deshalb müssen persönliche
-Konten mit den festen Funktionen LdF und Fernmelder vorhanden sein; eine
-Schichtannahme ist nicht erforderlich. Je Einsatz wird genau ein TBB geführt. Eine
+Konten und im strengen Betrieb mindestens die Dienstfunktionen LdF und
+Fernmelder vorhanden sein. Die zugeteilte Besetzung muss von der betreffenden
+Person angenommen und ausgewählt werden. Je Einsatz wird genau ein TBB geführt. Eine
 Führungsstelle ohne eigene Fernmeldebetriebsstelle, insbesondere ein reiner
 ETB-Betrieb, gehört derzeit nicht zum unterstützten Produktumfang. Diese
 Produktgrenze ist keine formale THW-Freigabe; deren gesonderter Vorbehalt ist
@@ -180,29 +183,38 @@ unten dokumentiert.
    Einsatzbezeichnung, Beginn, **Bedarfsträger**, **Namen der
    Führungsstelle**, verantwortlicher Einsatz-/Führungsleitung sowie
    Einsatzauftrag und Ausgangslage anlegen, den Berechtigungsmodus wählen und
-   den Einsatz aktivieren. **Streng** ist der sichere Standard und erzwingt
-   die bisherigen funktions- und rollenbezogenen Schreibrechte. **Locker**
-   darf nur nach einer ausdrücklichen Warnungsbestätigung gewählt werden und
-   lockert ausschließlich die festen Funktions-/Rollengates ausdrücklich
-   angebotener Schreibschritte in Nachrichtenworkflow, ETB/TBB, S6-Planung
-   und Melderlauf. Der
+   den Einsatz aktivieren. **Streng** ist der sichere Standard: Operative
+   Identität und Rechte stammen ausschließlich aus der persönlich
+   angenommenen und ausgewählten Besetzung einer aktiven formalen
+   Dienstschicht. **Locker** darf nur nach ausdrücklicher Bestätigung gewählt
+   werden. Dort ist keine formale Dienstschicht nötig; Rechte ergeben sich aus
+   der festen Kontofunktion und den in der Benutzerverwaltung explizit
+   vergebenen globalen Zusatzfunktionen. Der
    Führungsstellenname ist die lokale Anschrift/Absendereinheit und darf nicht
    mit Einsatzname, Bedarfsträger oder Einsatzleitung verwechselt werden.
    Die Datenbank legt dabei bereits genau zwei leere, bei 1 beginnende
    Nummernköpfe an: einen für ETB und einen für TBB.
 2. Unter `/4fadm/users.php` persönliche Konten mit genau einer festen Funktion
-   anlegen. Im strengen Modus bestimmen diese Kontofunktion und die daraus
-   serverseitig abgeleitete Rolle die fachlichen Schreibrechte; eine
-   Funktions- oder Hutauswahl nach der Anmeldung gibt es in keinem Modus.
-3. Optional unter `/4fadm/fuehrungsstelle.php` einsatzgebundene
-   **Zugangsschichten** anlegen und Konten zuordnen. Damit lassen sich allein
-   Kontozugang und laufende Sitzungen einer Gruppe gemeinsam steuern, nicht
-   deren Fachrechte. Unzugeordnete Konten bleiben zugelassen; bei mehreren
-   Zuordnungen genügt für den Kontozugang eine aktive Gruppe.
-4. Die Personen melden sich mit ihren vorhandenen Konten an. Im empfohlenen
-   strengen Regelbetrieb schreiben Konten mit `ETB/Stab` oder `S2/Stab` das
-   ETB; das TTB führen Konten mit der festen Funktion `Fernmelder`.
-5. Im strengen Regelbetrieb erstellt S6 einmalig den ersten Fernmeldeplan mit
+   anlegen. Für lockere Einsätze können dort gezielt Zusatzfunktionen vergeben
+   werden, etwa `S6/Stab` für ein LdF-Konto. Diese Zuordnungen sind global,
+   gelten ausschließlich im Modus **Locker** und geben nur die Rechte der
+   jeweils zugeteilten Funktion frei.
+3. Im strengen Betrieb unter `/4fadm/fuehrungsstelle.php` eine formale
+   Dienstschicht anlegen, aktivieren und die benötigten Funktionen persönlich
+   besetzen. Die Personen nehmen ihre Besetzung nach der Anmeldung an und
+   wählen sie als aktuelle Dienstfunktion aus. Ein Konto darf nur mit dieser
+   ausgewählten Besetzung operativ handeln.
+4. Nur für den lockeren Betrieb können optional einsatzgebundene
+   **Zugangsschichten** angelegt und Konten zugeordnet werden. Damit lassen
+   sich Kontozugang und laufende Sitzungen einer Gruppe gemeinsam steuern,
+   nicht deren Fachrechte. Unzugeordnete Konten bleiben zugelassen; bei
+   mehreren Zuordnungen genügt für den Kontozugang eine aktive Gruppe.
+5. Die Personen melden sich mit ihren vorhandenen Konten an. Im empfohlenen
+   strengen Regelbetrieb schreiben ausgewählte Besetzungen `ETB/Stab` oder
+   `S2/Stab` das ETB; das TTB führt eine ausgewählte Besetzung
+   `Fernmelder`.
+6. Im strengen Regelbetrieb erstellt eine ausgewählte S6-Besetzung einmalig
+   den ersten Fernmeldeplan mit
    den vorgesehenen Wegen und veröffentlicht ihn. Für jede spätere Änderung
    erzeugt **Bearbeitung starten** eine vollständig vorbefüllte Kopie der
    aktiven Fassung. Kopfdaten und einzelne Wege lassen sich im Entwurf ändern,
@@ -227,35 +239,36 @@ unten dokumentiert.
    beziehungsweise Rufgruppe und Bandlage erscheinen nur bei Funk; eine
    Verkehrsform oder besondere Behandlung gehört zu jedem Weg. Erst nach der
    Veröffentlichung kann die LdF-Stufe einen Ausgang auf den neuen
-   verbindlichen Weg disponieren. Im lockeren Modus dürfen andere gültige
-   Konten diese ausdrücklich angebotenen Schreibstufen übernehmen; Plan- und
-   Workflowzustand bleiben unverändert verbindlich.
+   verbindlichen Weg disponieren. Im lockeren Modus darf ein Konto diese
+   Schreibstufe nur mit der festen oder zusätzlich vergebenen Funktion `S6`
+   übernehmen; Plan- und Workflowzustand bleiben unverändert verbindlich.
 
 Der Modus gehört zum Einsatz und ist weder eine `.env`-Option noch eine
 Eigenschaft des Kontos oder einer Zugangsschicht. Bestehende Einsätze erhalten
 beim Upgrade **Streng**; neue Einsätze sind ebenfalls darauf voreingestellt.
-Die Administration kann einen noch offenen Einsatz revisionsgesichert
-umstellen. Der Wechsel nach **Locker** verlangt eine zusätzliche Bestätigung
-und jeder echte Wechsel wird mit altem und neuem Modus auditiert. Die
-Statusleiste zeigt den wirksamen Modus, damit eine gelockerte fachliche
-Aufgabentrennung nicht unbemerkt bleibt.
+Die Administration kann den Modus eines offenen Einsatzes nur
+revisionsgesichert umstellen, solange noch keinerlei operative oder formale
+Eintragung für diesen Einsatz besteht. Bereits die erste solche Eintragung
+friert den Modus dauerhaft ein; das spätere Löschen einzelner Daten hebt diese
+Sperre nicht auf. Das idempotente Speichern desselben Modus bleibt ohne neue
+Revision und ohne Auditereignis möglich. Der Wechsel nach **Locker** verlangt
+eine zusätzliche Bestätigung und jeder echte Wechsel wird mit altem und neuem
+Modus auditiert. Die Statusleiste zeigt den wirksamen Modus, damit eine
+gelockerte fachliche Schichtorganisation nicht unbemerkt bleibt.
 
 Auch im lockeren Modus muss jede schreibende Person mit ihrem konkreten,
 aktiven und ungesperrten Konto angemeldet sein. Ein gegebenenfalls durch eine
 deaktivierte Zugangsschicht entzogener Zugang bleibt entzogen. Ebenso bleiben
 aktiver offener Einsatz, Einsatzzuordnung, CSRF- und Eingabevalidierung,
 Workflowzustände, Sperrinhaber, unveränderliche Nachweise, Anhangintegrität,
-Audit und Aufbewahrung verbindlich. Der Modus erteilt keinen anonymen Zugriff,
-ändert keine gespeicherte Funktion/Rolle und erweitert die allgemeinen
-Leserechte nicht. Rollenstrenge reine Übersichten, Nachweisung,
-Zweitsichtungsarchive, Kategorienverwaltung und administrative Rechte bleiben
-auch in **Locker** unverändert. Nur für eine ausdrücklich gewählte schreibende
-Workflowstufe erhält das Konto die dafür erforderliche Objektsicht. Eine
-zurückgewiesene Ausgangsmeldung darf dann auch von einer anderen Funktion
-übernommen werden; Ereignisnachweis und Fachdaten bewahren ursprüngliche und
-neu verantwortliche Funktion. Status, Richtung und Sperrinhaber bleiben
-verbindlich. Für den fachlichen Regelbetrieb wird **Streng** empfohlen;
-**Locker** ist eine bewusst zu verantwortende Einsatzentscheidung.
+Audit und Aufbewahrung verbindlich. Der Modus erteilt keinen anonymen oder
+pauschalen Zugriff. Menüs, Lesen und Schreiben folgen auch in **Locker** der
+festen Kontofunktion sowie den ausdrücklich vergebenen Zusatzfunktionen.
+Konten ohne passende Funktion erhalten den Arbeitsschritt nicht. Administrative
+Rechte werden durch Zusatzfunktionen nie erweitert. Status, Richtung und
+Sperrinhaber bleiben verbindlich. Für den fachlichen Regelbetrieb wird
+**Streng** empfohlen; **Locker** ist eine bewusst zu verantwortende
+Einsatzentscheidung.
 
 Migration 97 lässt Führungsstellennamen bereits vorhandener Einsätze bewusst
 `NULL`, statt einen Wert aus Einsatzname, Bedarfsträger, Einsatzleitung oder
@@ -269,7 +282,8 @@ Erstschreib-Sperrmarker. Auch das spätere Löschen einzelner Fachdaten hebt
 diese Sperre nicht auf. Formal abgeschlossene Alt-Einsätze bleiben
 unverändert.
 
-Zugangsschichten verändern keine Funktion und keine Rolle. Das Aktivieren
+Zugangsschichten gelten nur im lockeren Modus und verändern keine Funktion und
+keine Rolle. Das Aktivieren
 einer Gruppe meldet niemanden an; das Deaktivieren widerruft die Sitzungen der
 zugeordneten Konten, sofern sie nicht zugleich einer anderen aktiven Gruppe
 angehören. Die dauerhafte manuelle Kontosperre ist davon unabhängig und hat
@@ -278,11 +292,13 @@ aktuellen Stand betroffenen Zugänge und Sitzungen. Ändert sich bis zum
 Bestätigen irgendein Schichtstatus, eine aktuelle Zuordnung oder der relevante
 Konto-/Sitzungszustand, wird die alte Bestätigung verworfen. Auch das Entfernen
 einer Zuordnung ist an genau ihr unveränderliches Zuordnungsintervall gebunden.
-Historische formale Dienstschichten, Besetzungen und Übergaben
-bleiben als exportierbare Evidenz erhalten, steuern aber weder Anmeldung noch
-Fachrechte und sperren keine Eingabe.
+Im strengen Modus werden stattdessen formale Dienstschichten, persönliche
+Besetzungen und Übergaben aktiv geführt. Nur die angenommene, aktuell
+ausgewählte Besetzung einer aktiven Schicht begründet dort operative
+Identität und Fachrechte.
 
-Führungsstellenname, Einsatz, Berechtigungsmodus und feste Kontofunktion müssen
+Führungsstellenname, Einsatz, Berechtigungsmodus und die wirksame Funktion
+müssen
 in Statusleiste beziehungsweise Führungsstellenansicht eindeutig erkennbar
 sein. Ohne
 gültigen Führungsstellennamen oder aktiven Einsatz nimmt eStab keine operative
@@ -334,20 +350,28 @@ erscheint genau einmal in der Betriebsspalte. Bei formal
 geschlossenen Büchern wird der unbeschriebene Rest der letzten Formularseite
 diagonal gestrichen; offene vorläufige Abzüge bleiben fortführbar. Der formale
 Einsatzabschluss erzeugt die letzten Buchzeilen und setzt eine
-Mindestaufbewahrung von zehn Jahren. Fehlende oder noch offene historische
-Dienstschichten und fehlende schichtbezogene Eröffnungszeilen blockieren den
-formalen Einsatzabschluss nicht.
-Bei einem neuen Einsatz erzeugt bereits dessen Aktivierung die ersten ETB- und
-TTB-Zeilen atomar und ohne Schichtbezug. Vorhandene Legacy-Bücher werden beim
-Upgrade oder erneuten Aktivieren nicht umsortiert und nicht rückwirkend ergänzt.
+Mindestaufbewahrung von zehn Jahren. Im strengen Modus müssen ETB und TTB zuvor
+über die erste aktive formale Dienstschicht eröffnet sein; offene formale
+Dienstorganisation bleibt dort ein Abschlussblocker. Im lockeren Modus ist
+keine formale Dienstschicht erforderlich.
+Bei einem neuen strengen Einsatz erzeugt die Aktivierung der ersten formalen
+Dienstschicht die ersten ETB- und TTB-Zeilen atomar mit Schichtprovenienz. Bei
+einem lockeren Einsatz kann bereits die Einsatzaktivierung beide Bücher
+schichtlos eröffnen. Ist ein strenger Einsatz bereits aktiv, sind beide Bücher
+noch ungeöffnet und bestehen weiterhin keinerlei operative oder formale
+Eintragungen, erzeugt der bestätigte Wechsel nach `LOOSE` die beiden
+schichtfreien Eröffnungszeilen atomar mit dem Moduswechsel. Vorhandene
+Legacy-Bücher werden beim Upgrade oder erneuten
+Aktivieren nicht umsortiert und nicht rückwirkend ergänzt.
 Für operative Daten genügt eine Kontoanmeldung nicht: Zusätzlich muss ein
 aktiver Einsatz bestehen. Jeder operative Schreibpfad gleicht konkrete
-Kontenidentität, Kontosperre, Zugangsschichtwirkung, aktiven Einsatz und dessen
-Berechtigungsmodus erneut in der Datenbank ab. Im strengen Modus werden
-zusätzlich feste Kontofunktion und serverseitig abgeleitete Rolle erzwungen;
-im lockeren Modus sind nur diese funktions-/rollenbezogenen Schreibprüfungen
-für Nachrichtworkflow, ETB/TBB, S6-Planung und Melderlauf gelockert. Eine
-optionale Zugangsschicht kann einen
+Kontenidentität, Kontosperre, aktiven Einsatz und dessen Berechtigungsmodus
+erneut in der Datenbank ab. Im strengen Modus werden zusätzlich aktive
+Dienstschicht, persönliche Annahme und die exakt ausgewählte Besetzung
+erzwungen; Funktion und Rolle des operativen Vorgangs stammen aus dieser
+Besetzung. Im lockeren Modus ist keine formale Dienstschicht erforderlich.
+Stattdessen werden feste Kontofunktion und ausdrücklich vergebene
+Zusatzfunktionen geprüft. Eine optionale Zugangsschicht kann dort einen
 zugeordneten Zugang gemeinsam entziehen, ist aber keine Eingabevoraussetzung.
 Diese Grenze gilt auch für ETB, TBB, Kategorien, Nachrichten, Vordrucke und
 Anhänge. Unter `/4fach/vordrucke.php` erscheinen nur abgeschlossene
@@ -466,8 +490,10 @@ Ablagekennzeichen, gespeicherte Dateinamen und die vollständige
 ETB-Anlagennummer. Optional kann eine Bearbeitungszuordnung als Suchhilfe
 gespeichert werden; sie erweitert keine Rechte. eStab prüft beim Speichern den
 Berechtigungsmodus und ein konkret authentifiziertes, ungesperrtes Konto; im
-strengen Modus zusätzlich die feste Kontofunktion. Der reine Online-/Präsenzstatus
-und eine Schichtzuordnung sind dafür keine Gültigkeitsmerkmale. eStab friert die lesbare Angabe
+strengen Modus zusätzlich die ausgewählte, angenommene Besetzung der aktiven
+Dienstschicht, im lockeren Modus eine passende feste oder zusätzliche
+Kontofunktion. Der reine Online-/Präsenzstatus ist dafür kein
+Gültigkeitsmerkmal. eStab friert die lesbare Angabe
 `Funktion (Rolle): Name [Kürzel]` im Eintrag ein. Sie erscheint in Webliste und
 Suche, aber bewusst nicht im amtlichen Fb-Fü-2-PDF.
 
@@ -484,23 +510,23 @@ alle referenzierenden, auch verzweigten Folgeeinträge oder rückwärts den
 Bezugspfad. Die Tiefe ist auf 1 bis 25 begrenzt, ein abgeschnittener Pfad wird
 sichtbar gemeldet und eine eigene Druckansicht kann geöffnet werden.
 
-Neue ETB-/TBB-Zeilen dürfen die Legacy-Felder für Dienstschicht und
-Dienstbesetzung `NULL` lassen. Die Felder werden nicht mit einer
-Zugangsschicht befüllt: Sie bewahren ausschließlich belegte historische
-Provenienz. Im strengen Modus dürfen ETB-Einträge nur Konten mit der festen
-Funktion `ETB` oder `S2` und Rolle `Stab` schreiben; TTB-Einträge nur Konten
-mit der festen Funktion `Fernmelder`. Im lockeren Modus entfällt diese
-Funktions-/Rollenbedingung. Anwendung und Insert-Trigger prüfen in beiden Modi
-die konkrete aktive und ungesperrte Kontenidentität sowie den aktiven Einsatz
+Neue manuelle ETB-/TTB-Zeilen speichern im strengen Modus die aktive
+Dienstschicht und die schreibende Besetzung. Automatische Systemzeilen dürfen
+ohne persönliche Besetzung bleiben. Im lockeren Modus bleiben diese beiden
+Provenienzfelder `NULL`; eine Zugangsschicht wird dort niemals eingetragen.
+ETB-Einträge erfordern die wirksame Funktion `ETB` oder `S2` mit Rolle `Stab`,
+TTB-Einträge die wirksame Funktion `Fernmelder`. Im strengen Modus stammt sie
+aus der ausgewählten Besetzung, im lockeren Modus aus der festen oder einer
+expliziten Zusatzfunktion. Anwendung und Insert-Trigger prüfen diese Grenzen
 unabhängig voneinander.
 
-Beim PDF-Einsatzdossier ist für ETB/TBB **Gesamtbuch** oder – für historischen
-Bestand mit belegter Provenienz – genau eine frühere formale Dienstschicht
-auswählbar. Dieser Legacy-Filter filtert ausschließlich ETB und TBB; Zeilen
+Beim PDF-Einsatzdossier ist für ETB/TBB **Gesamtbuch** oder – bei belegter
+Provenienz – genau eine aktuelle oder historische formale Dienstschicht
+auswählbar. Dieser Dienstschichtfilter filtert ausschließlich ETB und TBB; Zeilen
 ohne belegte Schichtzuordnung erscheinen nur im Gesamtbuch. Alle weiteren
 ausgewählten Dossierbereiche bleiben einsatzweit vollständig. Deckblatt und
 einsatzgebundener `pdf_export`-Audit halten den gewählten Umfang samt
-historischen Schichtmetadaten fest.
+Schichtmetadaten fest.
 
 ### Ohne lokalen Image-Build
 
@@ -550,24 +576,24 @@ entstehen. OCI-Tags – auch `latest` – gibt es absichtlich nicht.
 | Pfad | Zweck | Schutz |
 | --- | --- | --- |
 | `/` | Einstieg, direkter Anmeldebutton und Modulübersicht | öffentlich bis zur Modulanmeldung |
-| `/4fach/index.php` | öffentlicher Einstieg in die vollständige Anwendung mit Kontoauswahl und Benutzeranmeldung | operative Daten erst mit eStab-Sitzung und aktivem Einsatz; feste Funktions-/Rollengates gelten im strengen Einsatzmodus und sind im ausdrücklich gewählten lockeren Modus nur für vorgesehene Schreibschritte in Nachrichtenworkflow, ETB/TBB, S6-Planung und Melderlauf gelockert |
+| `/4fach/index.php` | öffentlicher Einstieg in die vollständige Anwendung mit Kontoauswahl und Benutzeranmeldung | operative Daten erst mit eStab-Sitzung und aktivem Einsatz; in `STRICT` nur mit ausgewählter angenommener Besetzung einer aktiven Dienstschicht, in `LOOSE` nach fester Kontofunktion plus ausdrücklich vergebenen Zusatzfunktionen |
 | `/4fach/activity.php` | meldet echte Interaktion einer angemeldeten Browseroberfläche | ausschließlich POST mit eStab-Sitzung, exakter SID und Session-CSRF; Statuspolling ruft den Endpunkt nicht auf |
 | `/4fach/logout.php` | zentrale Abmeldung aus Sitzungsleiste und Nachrichtenarbeitsbereich | eStab-Sitzung, ausschließlich POST mit Session-CSRF |
-| `/4fach/katgoedt.php` | globale, Funktions- und persönliche Kategorien | feste Kontofunktion und Rollenprüfung in beiden Einsatzmodi, bei Nachrichtenbezug zusätzlich Objektprüfung, CSRF für Änderungen |
-| `/4fach/fuehrungsstelle.php` | freigegebenen S6-Plan lesen sowie S6- und Melderabläufe bearbeiten | eStab-Sitzung, aktiver Einsatz und unveränderte Ablauf-/Objektregeln; Fachzuständigkeit der festen Kontofunktion im strengen Modus, im lockeren Modus nur diese Schreibprüfung gelockert; keine Hutauswahl |
-| `/4fueltg/ue_ltg.php` | einsatzgebundene Meldungsübersicht | ausschließlich festes Konto `S2/Stab` mit `LAGE_DOKUMENTATION` |
-| `/4fach/nachwea.php` | Nachweisung der aufgenommenen und beförderten Nachrichten | ausschließlich festes Konto mit Funktion `LdF` oder `Fernmelder` |
-| `/4fach/vordrucke.php` | abgeschlossene Vordrucke des aktiven Einsatzes im aktuellen, mit dem Einsatzdossier gemeinsamen PDF-Layout öffnen | feste Kontofunktion; zugrunde liegende Nachricht, Abschluss- und Druckstatus werden erneut geprüft, das persistierte Archiv bleibt unverändert |
-| `/4fach/anhang.php`, `/4fach/download.php`, `/4fach/showpic.php` | Anhänge auswählen, auflisten, herunterladen oder als Bildvorschau öffnen | feste Kontofunktion; verknüpfte Anhänge erben exakt die Leserechte mindestens einer verknüpften Nachricht, freie Anhänge sind nur für Uploader oder S2, Si und LdF sichtbar |
-| `/4fach/email.php` | strukturell geprüfte `.eml`-Anlage als passive Textansicht öffnen und auf die getrennte Originaldatei verweisen | dieselbe feste Kontofunktion und Objektberechtigung wie beim Download; erneute Integritätsprüfung, keine aktive Mail-HTML-/Remote-Darstellung und keine Behauptung einer DKIM-/S/MIME-verifizierten Absenderidentität |
-| `/stabetb/etb.php`, `/fmtbb/tbb.php` | einsatzlokal fortlaufendes ETB und TBB lesen, berichtigen und fachabhängig ergänzen; ETB mit kombinierbarer Volltext-/Art-/Nummer-/Bezugs-/Anlagensuche und optionaler eindeutiger Anlagenzuordnung | angemeldete Konten lesen nach Objektregel; im strengen Modus schreibt ETB nur `ETB/Stab` oder `S2/Stab` und TTB nur `Fernmelder`, im lockeren Modus entfällt ausschließlich diese Rollen-/Funktionsprüfung; aktiver Einsatz erforderlich, keine aktive Schicht erforderlich, gespeicherte Zeilen append-only |
+| `/4fach/katgoedt.php` | globale, Funktions- und persönliche Kategorien | nach Einsatzmodus wirksame Funktion und Rollenprüfung – ausgewählte Dienstbesetzung in `STRICT`, feste oder zusätzliche Kontofunktion in `LOOSE`; bei Nachrichtenbezug zusätzlich Objektprüfung, CSRF für Änderungen |
+| `/4fach/fuehrungsstelle.php` | freigegebenen S6-Plan lesen sowie S6- und Melderabläufe bearbeiten | eStab-Sitzung, aktiver Einsatz und unveränderte Ablauf-/Objektregeln; in `STRICT` Fachzuständigkeit der ausgewählten Dienstbesetzung, in `LOOSE` der festen oder zusätzlichen Kontofunktion |
+| `/4fueltg/ue_ltg.php` | einsatzgebundene Meldungsübersicht | ausschließlich wirksame Funktion `S2/Stab` mit `LAGE_DOKUMENTATION`: in `STRICT` aus der ausgewählten Dienstbesetzung, in `LOOSE` aus fester oder zusätzlicher Kontofunktion |
+| `/4fach/nachwea.php` | Nachweisung der aufgenommenen und beförderten Nachrichten | ausschließlich wirksame Funktion `LdF` oder `Fernmelder` gemäß Einsatzmodus |
+| `/4fach/vordrucke.php` | abgeschlossene Vordrucke des aktiven Einsatzes im aktuellen, mit dem Einsatzdossier gemeinsamen PDF-Layout öffnen | nach Einsatzmodus wirksame Funktion; zugrunde liegende Nachricht, Abschluss- und Druckstatus werden erneut geprüft, das persistierte Archiv bleibt unverändert |
+| `/4fach/anhang.php`, `/4fach/download.php`, `/4fach/showpic.php` | Anhänge auswählen, auflisten, herunterladen oder als Bildvorschau öffnen | nach Einsatzmodus wirksame Funktion; verknüpfte Anhänge erben exakt die Leserechte mindestens einer verknüpften Nachricht, freie Anhänge sind nur für Uploader oder wirksame Funktionen S2, Si und LdF sichtbar |
+| `/4fach/email.php` | strukturell geprüfte `.eml`-Anlage als passive Textansicht öffnen und auf die getrennte Originaldatei verweisen | dieselbe wirksame Funktion und Objektberechtigung wie beim Download; erneute Integritätsprüfung, keine aktive Mail-HTML-/Remote-Darstellung und keine Behauptung einer DKIM-/S/MIME-verifizierten Absenderidentität |
+| `/stabetb/etb.php`, `/fmtbb/tbb.php` | einsatzlokal fortlaufendes ETB und TBB lesen, berichtigen und fachabhängig ergänzen; ETB mit kombinierbarer Volltext-/Art-/Nummer-/Bezugs-/Anlagensuche und optionaler eindeutiger Anlagenzuordnung | ETB erfordert `ETB/Stab` oder `S2/Stab`, TTB `Fernmelder`; in `STRICT` aus ausgewählter aktiver Dienstbesetzung mit Schichtprovenienz, in `LOOSE` aus fester oder zusätzlicher Kontofunktion ohne formale Schichtpflicht; gespeicherte Zeilen append-only |
 | `/4fadm/admin.php` | Administration | separates HTTP Basic Auth |
-| `/4fadm/incidents.php` | Einsätze samt Führungsstellennamen und Berechtigungsmodus anlegen, historische Fehlwerte einmalig bestätigen, aktivieren und deaktivieren | HTTP Basic Auth, Session-CSRF, revisionsgesicherter globaler Status; Standard `Streng`, Wechsel zu `Locker` nur nach ausdrücklicher Warnungsbestätigung und mit Audit; die erste operative Eintragung setzt atomar einen dauerhaften Sperrmarker für den bestätigten Führungsstellennamen |
-| `/4fadm/fuehrungsstelle.php` | optionale einsatzgebundene Zugangsschichten anlegen, Konten zuordnen und Gruppen gemeinsam aktivieren/deaktivieren | HTTP Basic Auth, Session-CSRF; unzugeordnete Konten bleiben erlaubt, Mehrfachzuordnungen gelten per OR, Deaktivierung kann Sitzungen widerrufen und verändert keine Fachrechte |
-| `/4fadm/users.php` | Benutzer anlegen, Funktionen fest zuweisen, sperren/entsperren und Kennwörter zurücksetzen | HTTP Basic Auth, Session-CSRF; Rollen werden serverseitig abgeleitet und aktive Sitzungen atomar widerrufen |
+| `/4fadm/incidents.php` | Einsätze samt Führungsstellennamen und Berechtigungsmodus anlegen, historische Fehlwerte einmalig bestätigen, aktivieren und deaktivieren | HTTP Basic Auth, Session-CSRF, revisionsgesicherter globaler Status; Standard `Streng`, echte Modusänderung nur vor jeder operativen oder formalen Eintragung, Wechsel zu `Locker` nur nach ausdrücklicher Warnungsbestätigung und mit Audit; unverändertes Speichern bleibt idempotent; die erste operative Eintragung setzt atomar einen dauerhaften Sperrmarker für den bestätigten Führungsstellennamen |
+| `/4fadm/fuehrungsstelle.php` | in `STRICT` formale Dienstschichten und persönliche Funktionsbesetzungen führen; in `LOOSE` optionale Zugangsschichten verwalten | HTTP Basic Auth, Session-CSRF; eine aktive angenommene und ausgewählte Dienstbesetzung begründet nur in `STRICT` Fachrechte, Zugangsschichten entziehen nur in `LOOSE` gemeinsam Zugang und verleihen keine Rechte |
+| `/4fadm/users.php` | Benutzer anlegen, feste Funktion und globale Zusatzfunktionen verwalten, sperren/entsperren und Kennwörter zurücksetzen | HTTP Basic Auth, Session-CSRF; Zusatzfunktionen gelten ausschließlich in `LOOSE`, Rollen werden serverseitig abgeleitet und aktive Sitzungen bei Änderungen atomar widerrufen |
 | `/4fadm/self_registration.php` | öffentliche Kontoanlage sofort deaktivieren, dauerhaft oder für 15 Minuten bis 24 Stunden aktivieren | HTTP Basic Auth, Session-CSRF, ausdrückliche Sicherheitsbestätigung, optimistische Revision, globaler Advisory-Lock und transaktionales Audit; befristete Freigaben enden automatisch nach Datenbank-UTC und werden direkt im Konto-INSERT nochmals geprüft |
 | `/4fadm/password_policy.php` | globale Kennwortrichtlinie prüfen, als revisionsgebundene Änderung voranzeigen und anschließend ausdrücklich bestätigen | HTTP Basic Auth, Session-CSRF; konfigurierbare Mindestlänge 8–128 Unicode-Codepoints (Standard 12), höchstens 1024 UTF-8-Bytes, 1024 Browser-Eingabeeinheiten, optionale Unicode-Zeichenklassen, Argon2id und transaktionales Audit; nur künftig gesetzte Funktionskonto-Kennwörter werden gegen die Richtlinie geprüft |
-| `/4fadm/incident_export.php` | neun wählbare PDF-Abschnitte: ETB, TBB, Nachrichtenvordrucke, Anhänge, Nachrichtenereignisse, Dienstorganisation, S6-Fernmeldepläne, Melderläufe und Betriebsereignisse; ETB/TBB als Gesamtbuch oder per Legacy-Dienstschicht | HTTP Basic Auth, Session-CSRF, einsatzgebundene Abfragen; Dienstorganisation enthält optionale Zugangsschichten samt aktuellen/entfernten Zuordnungen und getrennt gekennzeichnete historische `nv_dienst*`-Evidenz; der historische Schichtfilter betrifft nur ETB/TBB |
+| `/4fadm/incident_export.php` | neun wählbare PDF-Abschnitte: ETB, TBB, Nachrichtenvordrucke, Anhänge, Nachrichtenereignisse, Dienstorganisation, S6-Fernmeldepläne, Melderläufe und Betriebsereignisse; ETB/TBB als Gesamtbuch oder per Dienstschicht | HTTP Basic Auth, Session-CSRF, einsatzgebundene Abfragen; Dienstorganisation enthält formale Dienstschichten, Besetzungen und Übergaben sowie getrennt die optionalen lockeren Zugangsschichten; der Schichtfilter betrifft nur ETB/TBB |
 | `/4fadm/system_status.php` | ausführlicher Laufzeitstatus | HTTP Basic Auth |
 | `/4fadm/export.php` | Einsatzexporte auflisten, erstellen, als ZIP herunterladen und einzeln löschen | HTTP Basic Auth; POST-Erstellung/-Löschung mit Session-CSRF; Download nur über validierte Exportkennung |
 | `/4fadm/make_fkt.php` | aktive Empfängermatrix und einzelne Standardmatrix atomar bearbeiten | HTTP Basic Auth, Session-CSRF; Rollenabgleich und Sitzungswiderruf committen mit der aktiven Matrix |
@@ -619,25 +645,25 @@ ein anderes gültiges Konto den ausdrücklich angebotenen Schreibschritt
 
 Ein Eingang läuft immer über `1 → 4 → 8`. Ein Ausgang läuft über
 `4 → 1 → 2 → 8`; nach einer formalen Rückgabe entsteht
-`4 → 10 → 4 → 1 → 2 → 8`. Es gibt keine Autosichtung. Im strengen Modus
-bleibt die Nachricht bei unbesetztem Si in dieser Warteschlange, ohne dass der
-Fernmelder einen Sichtervermerk erzeugen kann. Im lockeren Modus darf ein
-anderes Konto die angebotene Si-Stufe bearbeiten, die Stufe aber nicht
-überspringen.
-Beim Eingang erfasst im strengen Modus der Fernmelder den empfangenen
-Rufnamen; im lockeren Modus kann ein anderes Konto diese Aufnahmestufe
-übernehmen. In beiden Modi kann die Aufnahmestufe das Feld „Absender“ weder im
+`4 → 10 → 4 → 1 → 2 → 8`. Es gibt keine Autosichtung. Die Nachricht
+bleibt bei fehlender wirksamer Si-Funktion in dieser Warteschlange, ohne dass
+der Fernmelder einen Sichtervermerk erzeugen kann. In `STRICT` muss eine
+ausgewählte Si-Besetzung, in `LOOSE` die feste oder zusätzliche Funktion Si
+die Stufe bearbeiten; kein Modus darf sie überspringen.
+Beim Eingang erfasst in `STRICT` eine ausgewählte Fernmelder-Besetzung, in
+`LOOSE` ein Konto mit fester oder zusätzlicher Funktion Fernmelder den
+empfangenen Rufnamen. In beiden Modi kann die Aufnahmestufe das Feld „Absender“ weder im
 Formular noch über einen manipulierten Request schreiben. Sie erfasst außerdem
 Medium, Aufnahmezeit und Aufnahmezeichen.
-Im strengen Modus muss anschließend LdF daraus einen nicht leeren Absender
-festlegen und den Eingangsweg ausdrücklich bestätigen. Im lockeren Modus darf
-ein anderes aktives und ungesperrtes Konto genau diese angebotene
-Workflowstufe übernehmen; Absenderpflicht, Richtung, Status und Sperrinhaber
+Anschließend muss LdF daraus einen nicht leeren Absender festlegen und den
+Eingangsweg ausdrücklich bestätigen: in `STRICT` als ausgewählte
+Dienstbesetzung, in `LOOSE` als feste oder zusätzliche Kontofunktion.
+Absenderpflicht, Richtung, Status und Sperrinhaber
 bleiben dabei verbindlich. Ändert das handelnde Konto das Medium, ist eine
 Begründung Pflicht; Aufnahmezeit und Aufnahmezeichen der Aufnahmestufe bleiben
 unveränderlich.
 Bestätigung, ursprüngliches und bestätigtes Medium, etwaige Begründung sowie
-die tatsächliche Kontoidentität mit fester Funktion und Rolle werden atomar in
+die tatsächliche Kontoidentität mit wirksamer Funktion und Rolle werden atomar in
 der Nachrichten-Ereigniskette nachgewiesen.
 Die nummerierte Aufnahme erzeugt außerdem genau einen TBB-Eintrag des Typs
 `nachricht`. Dieser Typ ist dem automatischen, mit der Nachricht verknüpften
@@ -669,8 +695,8 @@ ist im Formular sichtbar.
 Die Liste übernimmt nichts automatisch: Eine freie Eingabe bleibt jederzeit
 möglich, die Browser-Autovervollständigung ist für diese Felder ausgeschaltet
 und ohne JavaScript bleibt die native Browserliste als Rückfalloption
-erhalten. Aktiver Einsatz, feste Kontofunktion, serverseitig abgeleitete Rolle, Richtung und
-Sperrbesitz werden im selben Datenbank-Statement wie die Zuordnungen erneut
+erhalten. Aktiver Einsatz, nach Einsatzmodus wirksame Funktion und Rolle,
+Richtung und Sperrbesitz werden im selben Datenbank-Statement wie die Zuordnungen erneut
 geprüft; Werte anderer Einsätze werden nicht offengelegt. Der lokale Absender
 eines Ausgangs bleibt davon unberührt: Er wird serverseitig aus dem
 autoritativen Führungsstellennamen des in derselben Schreibtransaktion
@@ -786,8 +812,10 @@ Die Anmeldeformulare bleiben mit `target="_self"` im aktuellen Kontext. Die
 Anmeldekarte nennt das vorgemerkte Ziel und bietet immer
 „Anmeldung abbrechen · Zur Übersicht“; dieser Link verlässt auch aus einem
 Frame heraus den Arbeitsbereich auf Top-Level. Nach erfolgreicher Anmeldung
-wird das vorgemerkte, für die feste Kontofunktion zulässige Ziel direkt
-geöffnet; eine zusätzliche Hutauswahl ist nicht erforderlich.
+wird das vorgemerkte, nach wirksamer Funktion zulässige Ziel direkt
+geöffnet. In `STRICT` muss vor operativer Arbeit eine angenommene Besetzung der
+aktiven Dienstschicht ausgewählt werden; in `LOOSE` sind feste Kontofunktion
+und Zusatzfunktionen ohne Hutauswahl wirksam.
 Auch ein Browserformular, dessen Sitzung inzwischen abgelaufen ist, führt per
 HTTP 303 zum Login; seine nicht verarbeiteten Eingaben werden dabei ausdrücklich
 nicht erneut gesendet. Der Login weist sichtbar darauf hin, dass die Eingabe
@@ -806,12 +834,20 @@ Bereiche: Übersicht, Nachrichtenvordruck, Führungsstellenbetrieb,
 Meldungsübersicht, Vordrucke, ETB, TBB, Nachweisung und BOS-Info; hinzu kommen
 Administration und Handbuch als zwei Dienste. Anonym sind damit elf Links
 sichtbar. Nach der Anmeldung blendet die Navigation unzulässige Spezialziele
-direkt anhand der festen Kontofunktion aus: Gewöhnliche
-Stab-/FB-Funktionen, Si und S6 sehen einschließlich der beiden Dienste neun
-Links; S2 sowie LdF und Fernmelder sehen jeweils den einen für sie freigegebenen
-Spezialbereich und damit zehn. Die Endpunkte prüfen die
+anhand der nach Einsatzmodus wirksamen Funktionsmenge aus. In `STRICT` stammt
+sie ausschließlich aus der ausgewählten Dienstbesetzung, in `LOOSE` aus fester
+Kontofunktion und expliziten Zusatzfunktionen. Gewöhnliche Stab-/FB-Funktionen,
+Si und S6 sehen einschließlich der beiden Dienste neun Links; die wirksame
+Funktion S2 ergänzt die Meldungsübersicht, LdF oder Fernmelder die Nachweisung.
+Im lockeren Modus kann ein gezielt kombiniertes Konto deshalb beide
+Spezialbereiche und insgesamt elf Links sehen. Die Endpunkte prüfen die
 Berechtigung unabhängig von dieser Navigation erneut. Der aktive Bereich wird
 markiert, interne Ziele öffnen immer im selben Browserkontext. Der
+Nachrichtenarbeitsbereich bietet bei mehreren gewöhnlichen Stabs- oder
+Fachberaterfunktionen getrennte Aktionen `Schreiben als …` und `Lesen als …`.
+Der gewählte Funktionskontext bleibt über Formular-, Listen-, Status- und
+Detailaufrufe erhalten und wird serverseitig gegen die aktuelle feste oder
+zusätzliche Kontofunktion sowie das konkrete Nachrichtenobjekt geprüft. Der
 Nachrichtenarbeitsbereich besteht aus genau zwei
 modernen `iframe`-Elementen: links der vollhohen `vorgaben`-Sidebar und rechts
 dem `mainframe` für die Fachansicht. Auf Status und Sitzungsidentität folgen
@@ -917,8 +953,8 @@ und [Tests, Funktionsnachweis und Monitoring](docs/TESTS-UND-MONITORING.md).
 
 Die aktive Nachrichtenablage speichert freie Texte als rohes UTF-8 und nutzt
 Prepared Statements. Detail-, Status-, Sichtungs-, Transport-, Sperr- und
-Logout-Aktionen sind POST-/CSRF-gebunden und werden zusätzlich gegen feste
-Kontofunktion, serverseitig abgeleitete Rolle, Empfänger, Objektstatus und gegebenenfalls
+Logout-Aktionen sind POST-/CSRF-gebunden und werden zusätzlich gegen die nach
+Einsatzmodus wirksame Funktion und Rolle, Empfänger, Objektstatus und gegebenenfalls
 Sperrinhaber geprüft. Normale Stab-/FB-Funktionen lesen nur eine terminale
 Empfängerkopie oder ihren eigenen Ausgang. Si, LdF und Fernmelder lesen nur ihre
 aktuelle Warteschlange beziehungsweise Sperre oder Nachrichten mit ihrer
@@ -996,7 +1032,6 @@ PDF-Export keinen Ersatz, sondern kennzeichnet ihn ausdrücklich als
 - [Funktionsmatrix und Freigabeprotokoll](docs/FUNKTIONSNACHWEIS.md)
 - [Architektur und Sicherheitsentscheidungen](docs/ARCHITEKTUR-UND-SICHERHEIT.md)
 - [Nachweis der SVN- und Release-Migration](migration/README.md)
-- [Index der unverändert übernommenen Originaldokumentation](docs/legacy/README.md)
 - [Aktuelles Web-Handbuch](handbuch/)
 - [Historisches Anwendungshandbuch Version 1.1 von 2011](doku/Handbuch_eStab.pdf)
 
@@ -1036,9 +1071,12 @@ veröffentlichten Archive 0.9.26b und 0.9.26c sind als geprüfte
 Snapshot-Commits und annotierte Git-Tags dokumentiert.
 
 Die separat versionierten 95 Originaldokumente waren nie Teil des Trunks. Ihr
-vollständiger r85-Endbestand liegt unverändert unter
-`docs/legacy/svn-r85/`; eine nicht belegte Dokument-Einzelcommithistorie wird
-nicht erfunden. Prüfsummen, Ref-/Tree-Identitäten, deterministische
+vollständiger r85-Endbestand bleibt unverändert im fest gebundenen Git-Commit
+`9cd6fc0779ed72181d71aa9042f85c971c92f0c1` unter
+`docs/legacy/svn-r85/` erhalten, wird aber wegen seiner Größe nicht mehr im
+aktuellen Arbeitsbaum ausgeliefert; eine nicht belegte
+Dokument-Einzelcommithistorie wird nicht erfunden. Prüfsummen,
+Ref-/Tree-Identitäten, deterministische
 Unicode-sichere Dateimanifeste und SVN-Properties liegen unter `migration/`.
 Historische `svn:ignore`-Werte bleiben dort dokumentarisch vollständig
 erhalten; nur heute passende Regeln wurden selektiv und Git-gerecht in

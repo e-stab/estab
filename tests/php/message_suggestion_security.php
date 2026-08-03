@@ -53,6 +53,12 @@ $identity = static fn (
 $aw = $identity('aw0001', 'A/W', 'Fernmelder');
 $ldf = $identity('ldf001', 'LdF', 'Fernmelder');
 $s2 = $identity('s20001', 'S2', 'Stab');
+$s2WithTelecommunicationsGrant = $s2 + [
+    'estab_permission_mode' => ESTAB_PERMISSION_MODE_LOOSE,
+    'estab_additional_functions' => [
+        ['funktion' => 'A/W', 'rolle' => 'Fernmelder'],
+    ],
+];
 
 $assert(
     estab_read_message_suggestion_policy(
@@ -67,6 +73,13 @@ $assert(
         '05_gegenstelle'
     ) === ['direction' => null],
     'LdF lost incident callsign suggestions'
+);
+$assert(
+    estab_read_message_suggestion_policy(
+        $s2WithTelecommunicationsGrant,
+        '05_gegenstelle'
+    ) === ['direction' => null],
+    'LOOSE explicit A/W additional function lost incident callsign suggestions'
 );
 $assert(
     estab_read_message_suggestion_policy(
@@ -107,6 +120,64 @@ $expectReadDenial(
 $expectInvalidInput(
     static fn (): array => estab_read_ldf_mapping_policy($ldf, 'X'),
     'an unknown LdF mapping direction was accepted'
+);
+
+$strictCapabilityScope = estab_read_effective_capability_scope(
+    $ldf + ['duty_assignment_id' => 73],
+    'FERNMELDEBETRIEB'
+);
+$looseCapabilityScope = estab_read_effective_capability_scope(
+    array_replace($s2WithTelecommunicationsGrant, [
+        'funktion' => 'A/W',
+        'rolle' => 'Fernmelder',
+        'authorization_account_function' => 'S2',
+        'authorization_account_role' => 'Stab',
+    ]),
+    'BEFOERDERUNG'
+);
+$assert(
+    str_contains(
+        $strictCapabilityScope['sql'],
+        "`incident`.`estab_permission_mode` = BINARY 'STRICT'"
+    )
+        && str_contains(
+            $strictCapabilityScope['sql'],
+            'duty.`dienstbesetzung_id` = ?'
+        )
+        && str_contains(
+            $strictCapabilityScope['sql'],
+            "duty_shift.`status` = 'AKTIV'"
+        )
+        && str_contains(
+            $strictCapabilityScope['sql'],
+            "duty.`status` = 'ANGENOMMEN'"
+        )
+        && $strictCapabilityScope['params'] === [
+            'LdF', 'Fernmelder', 'FERNMELDEBETRIEB', 73,
+            'LdF', 'Fernmelder', 'LdF', 'Fernmelder',
+            'LdF', 'Fernmelder',
+        ],
+    'suggestion capability scope lost the exact STRICT duty-assignment proof'
+);
+$assert(
+    str_contains(
+        $looseCapabilityScope['sql'],
+        "`incident`.`estab_permission_mode` = BINARY 'LOOSE'"
+    )
+        && str_contains(
+            $looseCapabilityScope['sql'],
+            '`account`.`funktion` = BINARY ?'
+        )
+        && str_contains(
+            $looseCapabilityScope['sql'],
+            'FROM `nv_benutzer_zusatzfunktionen` AS extra'
+        )
+        && $looseCapabilityScope['params'] === [
+            'A/W', 'Fernmelder', 'BEFOERDERUNG', 0,
+            'A/W', 'Fernmelder', 'A/W', 'Fernmelder',
+            'A/W', 'Fernmelder',
+        ],
+    'suggestion capability scope lost the exact LOOSE account/grant proof'
 );
 foreach (
     [
@@ -243,15 +314,14 @@ foreach (
         'function estab_read_mapping_normalized_sql(',
         'function estab_read_ldf_mapping_suggestions(',
         'function estab_read_message_suggestions(',
+        'function estab_read_effective_capability_scope(',
         'estab_read_require_operational_scope(',
+        'estab_read_effective_capability_scope(',
         'estab_message_table($messageTable)',
         'JOIN `nv_benutzer` AS account',
-        'JOIN `nv_funktionsfaehigkeiten` AS capability',
         'JOIN `nv_einsatz_status` AS active',
         'active.`active_einsatz_id` = ?',
         'BINARY account.`benutzer` = BINARY ?',
-        'BINARY account.`funktion` = BINARY ?',
-        'BINARY account.`rolle` = BINARY ?',
         'account.`aktiv` = 1',
         'account.`estab_gesperrt` = 0',
         'candidate.`einsatz_id` = active.`active_einsatz_id`',

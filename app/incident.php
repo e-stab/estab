@@ -42,8 +42,22 @@ function estab_incident_permission_mode(
     }
 }
 
-/** Return whether fixed function/role write permissions remain enforced. */
+/** Fachrollen remain enforced in every incident mode. */
 function estab_incident_role_permissions_enforced(array $incident): bool
+{
+    try {
+        estab_permission_mode($incident['estab_permission_mode'] ?? null);
+        return true;
+    } catch (InvalidArgumentException $exception) {
+        throw new EstabIncidentConfigurationException(
+            'Der Berechtigungsmodus des Einsatzes ist ungültig.',
+            previous: $exception
+        );
+    }
+}
+
+/** STRICT binds operations to an active, accepted duty assignment. */
+function estab_incident_duty_shift_required(array $incident): bool
 {
     try {
         return estab_permission_mode(
@@ -55,6 +69,11 @@ function estab_incident_role_permissions_enforced(array $incident): bool
             previous: $exception
         );
     }
+}
+
+function estab_incident_loose_mode(array $incident): bool
+{
+    return !estab_incident_duty_shift_required($incident);
 }
 
 final class EstabIncidentInputException extends InvalidArgumentException
@@ -79,7 +98,7 @@ final class EstabNoActiveIncidentException extends RuntimeException
 
 final class EstabIncidentCloseBlockedException extends EstabIncidentConflictException
 {
-    /** @param array<string, int|bool> $preflight */
+    /** @param array<string, int|bool|string> $preflight */
     public function __construct(
         string $message,
         public readonly array $preflight
@@ -597,7 +616,11 @@ function estab_incident_list(mysqli $connection): array
         . ' CASE WHEN s.`active_einsatz_id` = e.`einsatz_id` THEN 1 ELSE 0 END'
         . ' AS `ist_aktiv`,'
         . ' CASE WHEN'
-        . ' EXISTS(SELECT 1 FROM `nv_etb` AS etb_row'
+        . " (e.`estab_permission_mode` = 'STRICT'"
+        . ' AND EXISTS(SELECT 1 FROM `nv_dienstschichten` AS shift_row'
+        . '   WHERE shift_row.`einsatz_id` = e.`einsatz_id`'
+        . '     AND shift_row.`aktiviert_am` IS NOT NULL))'
+        . ' OR EXISTS(SELECT 1 FROM `nv_etb` AS etb_row'
         . '   WHERE etb_row.`einsatz_id` = e.`einsatz_id`)'
         . ' OR EXISTS(SELECT 1 FROM `nv_tbb` AS tbb_row'
         . '   WHERE tbb_row.`einsatz_id` = e.`einsatz_id`)'
@@ -758,9 +781,13 @@ function estab_incident_has_operational_data(
         . ' OR EXISTS(SELECT 1 FROM `nv_komplan` WHERE `einsatz_id` = ?)'
         . ' OR EXISTS(SELECT 1 FROM `nv_etbtitel` WHERE `einsatz_id` = ?)'
         . ' OR EXISTS(SELECT 1 FROM `nv_tbbtitel` WHERE `einsatz_id` = ?)'
+        // Every assignment belongs to a duty shift through a restrictive FK.
         . ' OR EXISTS(SELECT 1 FROM `nv_dienstschichten` WHERE `einsatz_id` = ?)'
         . ' OR EXISTS(SELECT 1 FROM `nv_dienstuebergaben` WHERE `einsatz_id` = ?)'
         . ' OR EXISTS(SELECT 1 FROM `nv_dienstuebergabe_anfragen`'
+        . ' WHERE `einsatz_id` = ?)'
+        // Every access-shift membership belongs to one access shift.
+        . ' OR EXISTS(SELECT 1 FROM `nv_zugangsschichten`'
         . ' WHERE `einsatz_id` = ?)'
         . ' OR EXISTS(SELECT 1 FROM `nv_fernmeldeplaene` WHERE `einsatz_id` = ?)'
         . ' OR EXISTS(SELECT 1 FROM `nv_melderauftraege` WHERE `einsatz_id` = ?)'
@@ -777,7 +804,8 @@ function estab_incident_has_operational_data(
     }
     try {
         $statement->bind_param(
-            'iiiiiiiiiiiiiiiii',
+            'iiiiiiiiiiiiiiiiii',
+            $incidentId,
             $incidentId,
             $incidentId,
             $incidentId,
@@ -990,10 +1018,12 @@ function estab_incident_update_command_post_name(
 }
 
 /**
- * Complete the mandatory ETB/TBB opening header before either book is opened.
+ * Complete the mandatory ETB/TBB opening header before its mode-specific lock.
  *
- * Optional access shifts and historical duty shifts do not lock these fields.
- * Once either book contains a row, the factual opening header is immutable.
+ * STRICT locks the factual header with the first activated duty shift, exactly
+ * as before shifts became optional. LOOSE ignores retained duty-shift history.
+ * Both modes lock unconditionally once either book contains a row. Optional
+ * access shifts never affect these factual incident fields.
  */
 function estab_incident_update_logbook_header(
     mysqli $connection,
@@ -1048,6 +1078,32 @@ function estab_incident_update_logbook_header(
             if (!hash_equals($current, $expected[$field])) {
                 throw new EstabIncidentConflictException(
                     'Die Logbuch-Stammdaten wurden zwischenzeitlich geändert.'
+                );
+            }
+        }
+        if (estab_incident_duty_shift_required($incident)) {
+            $lockStatement = $connection->prepare(
+                'SELECT `dienstschicht_id` FROM `nv_dienstschichten`'
+                . ' WHERE `einsatz_id` = ? AND `aktiviert_am` IS NOT NULL'
+                . ' ORDER BY `dienstschicht_id` LIMIT 1 FOR UPDATE'
+            );
+            if (!$lockStatement) {
+                throw new RuntimeException(
+                    'Logbuch-Stammdaten konnten nicht geprüft werden.'
+                );
+            }
+            try {
+                $lockStatement->bind_param('i', $incidentId);
+                $lockStatement->execute();
+                $started =
+                    $lockStatement->get_result()->fetch_row() !== null;
+            } finally {
+                $lockStatement->close();
+            }
+            if ($started) {
+                throw new EstabIncidentConflictException(
+                    'Die Logbuch-Stammdaten sind seit Aktivierung der ersten '
+                    . 'Dienstschicht unveränderlich.'
                 );
             }
         }
@@ -1184,13 +1240,21 @@ function estab_incident_update_permission_mode(
             $incident['revision'] = $expectedRevision;
             return $incident;
         }
+        if (estab_incident_has_operational_data($connection, $incidentId)) {
+            throw new EstabIncidentConflictException(
+                'Der Berechtigungsmodus ist nach der ersten operativen oder '
+                . 'formalen Eintragung unveränderlich.'
+            );
+        }
         if (
             $mode === ESTAB_PERMISSION_MODE_LOOSE
             && !$confirmedLoose
         ) {
             throw new EstabIncidentInputException(
-                'Bestätigen Sie ausdrücklich die einsatzweite Erweiterung '
-                . 'der Schreibrechte.'
+                'Bestätigen Sie ausdrücklich die Umschaltung von '
+                . 'verbindlicher Dienstbesetzung auf feste Kontofunktion '
+                . 'und ausdrücklich vergebene Zusatzfunktionen ohne '
+                . 'formale Dienstschicht.'
             );
         }
         if ($expectedRevision >= PHP_INT_MAX) {
@@ -1271,6 +1335,23 @@ function estab_incident_update_permission_mode(
         } finally {
             $statusStatement->close();
         }
+        $activeTarget =
+            (int) ($status['active_einsatz_id'] ?? 0) === $incidentId;
+        if ($mode === ESTAB_PERMISSION_MODE_LOOSE && $activeTarget) {
+            // A newly activated LOOSE incident opens both books immediately.
+            // Apply the same invariant when an already-active STRICT incident
+            // changes mode: otherwise no later activation would ever create
+            // its canonical, shift-free opening rows. Keep this inside the
+            // serialized mode-change transaction so a failed opening rolls
+            // the mode and status revision back together.
+            $looseActiveIncident = $status;
+            $looseActiveIncident['estab_permission_mode'] = $mode;
+            $looseActiveIncident['revision'] = $nextRevision;
+            estab_logbook_lifecycle_open_books_if_empty(
+                $connection,
+                $looseActiveIncident
+            );
+        }
         estab_incident_audit(
             $connection,
             $incidentId,
@@ -1279,14 +1360,21 @@ function estab_incident_update_permission_mode(
             $nextRevision,
             ['vorher' => $currentMode, 'nachher' => $mode]
         );
+        $returnIncident = $activeTarget
+            ? estab_incident_status($connection)
+            : array_replace(
+                $incident,
+                [
+                    'estab_permission_mode' => $mode,
+                    'revision' => $nextRevision,
+                ]
+            );
         if (!$connection->commit()) {
             throw new RuntimeException(
                 'Berechtigungsmodus konnte nicht gespeichert werden.'
             );
         }
-        $incident['estab_permission_mode'] = $mode;
-        $incident['revision'] = $nextRevision;
-        return $incident;
+        return $returnIncident;
     } catch (Throwable $exception) {
         $connection->query(
             'SET @estab_permission_mode_admin_write_id = NULL'
@@ -1322,17 +1410,21 @@ function estab_incident_activate_locked(
         );
     }
     if (
-        !estab_incident_role_permissions_enforced($target)
+        estab_incident_loose_mode($target)
         && !$confirmedLoose
     ) {
         throw new EstabIncidentInputException(
-            'Bestätigen Sie vor der Aktivierung ausdrücklich den lockeren '
-            . 'Berechtigungsmodus.'
+            'Bestätigen Sie vor der Aktivierung ausdrücklich, dass im '
+            . 'lockeren Modus Rechte ohne formale Dienstschicht aus fester '
+            . 'Kontofunktion und ausdrücklich vergebenen Zusatzfunktionen '
+            . 'stammen.'
         );
     }
     estab_incident_command_post_name($target);
     if ((int) ($status['active_einsatz_id'] ?? 0) === $incidentId) {
-        estab_logbook_lifecycle_open_books_if_empty($connection, $status);
+        if (estab_incident_loose_mode($target)) {
+            estab_logbook_lifecycle_open_books_if_empty($connection, $status);
+        }
         return estab_incident_status($connection);
     }
 
@@ -1377,7 +1469,9 @@ function estab_incident_activate_locked(
         ]
     );
     $activated = estab_incident_status($connection);
-    estab_logbook_lifecycle_open_books_if_empty($connection, $activated);
+    if (estab_incident_loose_mode($target)) {
+        estab_logbook_lifecycle_open_books_if_empty($connection, $activated);
+    }
     return estab_incident_status($connection);
 }
 
@@ -1396,8 +1490,9 @@ function estab_incident_create(
         && !$confirmedLoose
     ) {
         throw new EstabIncidentInputException(
-            'Bestätigen Sie ausdrücklich die einsatzweite Erweiterung der '
-            . 'Schreibrechte.'
+            'Bestätigen Sie ausdrücklich, dass im lockeren Modus Rechte '
+            . 'ohne formale Dienstschicht aus fester Kontofunktion und '
+            . 'ausdrücklich vergebenen Zusatzfunktionen stammen.'
         );
     }
     $actor = estab_incident_actor($actor);
@@ -1659,6 +1754,8 @@ function estab_incident_deactivate(
  *   incomplete_attachments:int,
  *   attachment_integrity_errors:int,
  *   legacy_attachments_unverifiable:int,
+ *   permission_mode:string,
+ *   strict_mode:bool,
  *   logbuecher_eroeffnet:bool,
  *   evidence_errors:int,
  *   offene_schichten:int,
@@ -1682,6 +1779,8 @@ function estab_incident_close_preflight(
     }
     $statement = $connection->prepare(
         'SELECT'
+        . ' (SELECT `estab_permission_mode` FROM `nv_einsaetze`'
+        . '   WHERE `einsatz_id` = ? LIMIT 1) AS `permission_mode`,'
         . ' (SELECT COUNT(*) FROM `nv_nachrichten`'
         . '   WHERE `einsatz_id` = ? AND `x00_status` <> 8)'
         . ' AS `open_messages`,'
@@ -1691,6 +1790,9 @@ function estab_incident_close_preflight(
         . ' (SELECT COUNT(*) FROM `nv_anhang`'
         . '   WHERE `einsatz_id` = ? AND `status` IN (2, 8))'
         . ' AS `incomplete_attachments`,'
+        . ' (SELECT COUNT(*) FROM `nv_dienstschichten`'
+        . '   WHERE `einsatz_id` = ? AND `aktiviert_am` IS NOT NULL)'
+        . ' AS `started_shifts`,'
         . ' (SELECT COUNT(*) FROM `nv_etb`'
         . '   WHERE `einsatz_id` = ? AND `estab_book_lfd` = 1)'
         . ' AS `etb_opening_rows`,'
@@ -1703,7 +1805,9 @@ function estab_incident_close_preflight(
     }
     try {
         $statement->bind_param(
-            'iiiii',
+            'iiiiiii',
+            $incidentId,
+            $incidentId,
             $incidentId,
             $incidentId,
             $incidentId,
@@ -1722,12 +1826,22 @@ function estab_incident_close_preflight(
     if (!is_array($row)) {
         throw new RuntimeException('Abschlussprüfung lieferte kein Ergebnis.');
     }
+    $permissionSnapshot = [
+        'estab_permission_mode' => $row['permission_mode'] ?? null,
+    ];
+    $strictMode = estab_incident_duty_shift_required($permissionSnapshot);
+    $permissionMode = $strictMode
+        ? ESTAB_PERMISSION_MODE_STRICT
+        : ESTAB_PERMISSION_MODE_LOOSE;
     $preflight = [
         'open_messages' => (int) ($row['open_messages'] ?? 0),
         'locked_messages' => (int) ($row['locked_messages'] ?? 0),
         'incomplete_attachments' => (int) ($row['incomplete_attachments'] ?? 0),
+        'permission_mode' => $permissionMode,
+        'strict_mode' => $strictMode,
         'logbuecher_eroeffnet' =>
-            (int) ($row['etb_opening_rows'] ?? 0) === 1
+            (!$strictMode || (int) ($row['started_shifts'] ?? 0) > 0)
+            && (int) ($row['etb_opening_rows'] ?? 0) === 1
             && (int) ($row['tbb_opening_rows'] ?? 0) === 1,
     ];
     if ($attachmentRoot !== null) {
@@ -1824,17 +1938,29 @@ function estab_incident_close_preflight(
         (int) ($operations['betriebsereignisse'] ?? 0);
     $preflight['evidence_errors'] = $messageEvidenceErrors
         + ($preflight['betriebsereigniskette_gueltig'] ? 0 : 1);
-    // Legacy duty shifts, their assignments and their handover requests are
-    // retained as historical evidence, but the optional shift concept must
-    // never prevent the incident itself from being closed.  Likewise, empty
-    // books can receive their first (closing) row during the close transaction.
-    $preflight['closable'] = $preflight['open_messages'] === 0
+    $commonClosable = $preflight['open_messages'] === 0
         && $preflight['locked_messages'] === 0
         && $preflight['incomplete_attachments'] === 0
         && $preflight['attachment_integrity_errors'] === 0
         && $preflight['offene_melderauftraege'] === 0
         && $preflight['offene_fernmeldeplanentwuerfe'] === 0
         && $preflight['evidence_errors'] === 0;
+    // STRICT restores the binding formal close preflight from before shifts
+    // became optional. The optional closingShiftId has already removed the
+    // one shift currently being closed from the organisational counts. LOOSE
+    // deliberately retains the later behaviour: historical shift artefacts do
+    // not block, and an empty ETB/TBB can receive its opening/closing rows in
+    // the close transaction itself.
+    $preflight['closable'] = $commonClosable
+        && (
+            !$strictMode
+            || (
+                $preflight['logbuecher_eroeffnet']
+                && $preflight['offene_schichten'] === 0
+                && $preflight['offene_besetzungen'] === 0
+                && $preflight['offene_uebergabeanforderungen'] === 0
+            )
+        );
     return $preflight;
 }
 
@@ -1923,9 +2049,14 @@ function estab_incident_close(
             $attachmentRoot
         );
         if (!$preflight['closable']) {
+            $openingBlocker = ($preflight['strict_mode'] ?? false)
+                && !$preflight['logbuecher_eroeffnet']
+                ? ' ETB und TBB müssen zuvor mit der ersten Dienstschicht '
+                    . 'ordnungsgemäß eröffnet werden.'
+                : '';
             throw new EstabIncidentCloseBlockedException(
                 'Der Einsatz kann erst nach Abschluss aller offenen Vorgänge '
-                . 'formal geschlossen werden.',
+                . 'formal geschlossen werden.' . $openingBlocker,
                 $preflight
             );
         }

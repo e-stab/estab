@@ -187,6 +187,37 @@ $assert(
         && str_contains($domain, "['plan_created', 'plan_revision_started']"),
     'parallel or stale telecommunications drafts are not rejected'
 );
+$createPlanStart = strpos($domain, 'function estab_dv_create_telecom_plan(');
+$revisePlanStart = strpos(
+    $domain,
+    'function estab_dv_start_telecom_plan_revision('
+);
+$updatePlanStart = strpos($domain, 'function estab_dv_update_telecom_plan_draft(');
+$createPlanSource = is_int($createPlanStart) && is_int($revisePlanStart)
+    ? substr($domain, $createPlanStart, $revisePlanStart - $createPlanStart)
+    : '';
+$revisePlanSource = is_int($revisePlanStart) && is_int($updatePlanStart)
+    ? substr($domain, $revisePlanStart, $updatePlanStart - $revisePlanStart)
+    : '';
+$assert(
+    str_contains(
+        $createPlanSource,
+        '// Capture LAST_INSERT_ID before the authority'
+    )
+        && str_contains(
+            $createPlanSource,
+            'return (int) $connection->insert_id;'
+        )
+        && str_contains(
+            $revisePlanSource,
+            '// Capture LAST_INSERT_ID before the authority'
+        )
+        && str_contains(
+            $revisePlanSource,
+            'return (int) $connection->insert_id;'
+        ),
+    'plan insert IDs are read after the SQL authority context has reset them'
+);
 $assert(
     str_contains($domain, "AND `status` = 'ENTWURF'")
         && str_contains($domain, 'plan_draft_updated')
