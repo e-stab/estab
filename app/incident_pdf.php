@@ -2921,18 +2921,27 @@ final class EstabIncidentPdf extends vordruckaspdf
     }
 
     /**
-     * Run one fixed renderer command without invoking a shell.
+     * Run one allow-listed renderer command without invoking a shell.
      *
-     * @param list<string> $arguments
+     * @param list<string> $rendererArguments
      * @return array{exit_code:int,stdout:string,stderr:string,timed_out:bool}
      */
     private static function runAttachmentProcess(
-        array $arguments,
+        string $renderer,
+        array $rendererArguments,
         string $workingDirectory,
         int $timeoutSeconds
     ): array {
         if (
-            $arguments === []
+            !in_array(
+                $renderer,
+                [
+                    ESTAB_INCIDENT_PDF_PDFINFO,
+                    ESTAB_INCIDENT_PDF_PDFTOPPM,
+                ],
+                true
+            )
+            || $rendererArguments === []
             || $timeoutSeconds < 1
             || $timeoutSeconds > ESTAB_INCIDENT_PDF_PROCESS_SECONDS
             || !is_dir($workingDirectory)
@@ -2942,11 +2951,27 @@ final class EstabIncidentPdf extends vordruckaspdf
                 'Anlagen-Renderer wurde ungültig aufgerufen.'
             );
         }
-        foreach ($arguments as $argument) {
+        $workspacePrefix = rtrim($workingDirectory, DIRECTORY_SEPARATOR)
+            . DIRECTORY_SEPARATOR;
+        foreach ($rendererArguments as $argument) {
             if (
                 !is_string($argument)
                 || $argument === ''
                 || str_contains($argument, "\0")
+                || (
+                    str_contains($argument, DIRECTORY_SEPARATOR)
+                    && (
+                        !str_starts_with($argument, $workspacePrefix)
+                        || str_contains(
+                            $argument,
+                            DIRECTORY_SEPARATOR . '..' . DIRECTORY_SEPARATOR
+                        )
+                        || str_contains(
+                            $argument,
+                            DIRECTORY_SEPARATOR . '.' . DIRECTORY_SEPARATOR
+                        )
+                    )
+                )
             ) {
                 throw new EstabIncidentPdfInputException(
                     'Anlagen-Renderer enthält ein ungültiges Argument.'
@@ -2958,6 +2983,22 @@ final class EstabIncidentPdf extends vordruckaspdf
                 'Der PDF-Anlagen-Renderer ist in dieser Laufzeit nicht verfügbar.'
             );
         }
+
+        $arguments = [
+            ESTAB_INCIDENT_PDF_PRLIMIT,
+            '--as=402653184',
+            '--cpu=30',
+            '--fsize=' . ESTAB_INCIDENT_PDF_MAX_RASTER_PAGE_BYTES,
+            '--nofile=64',
+            '--nproc=16',
+            '--core=0',
+            '--',
+            ESTAB_INCIDENT_PDF_SETPRIV,
+            '--no-new-privs',
+            '--',
+            $renderer,
+            ...$rendererArguments,
+        ];
 
         $descriptors = [
             0 => ['file', '/dev/null', 'r'],
@@ -2971,6 +3012,10 @@ final class EstabIncidentPdf extends vordruckaspdf
             'TMPDIR' => $workingDirectory,
         ];
         $pipes = [];
+        // The executable is selected from the two fixed Poppler constants
+        // above, absolute path arguments stay inside the private workspace,
+        // and proc_open receives an argv array with shell expansion disabled.
+        // nosemgrep: semgrep.php-dangerous-dynamic-exec
         $process = @proc_open(
             $arguments,
             $descriptors,
@@ -3351,21 +3396,9 @@ final class EstabIncidentPdf extends vordruckaspdf
         $sourcePath = $workspace . DIRECTORY_SEPARATOR
             . 'source-' . $attachmentPosition . '.pdf';
         self::writeAttachmentWorkspaceFile($sourcePath, $data);
-        $limits = [
-            ESTAB_INCIDENT_PDF_PRLIMIT,
-            '--as=402653184',
-            '--cpu=30',
-            '--fsize=' . ESTAB_INCIDENT_PDF_MAX_RASTER_PAGE_BYTES,
-            '--nofile=64',
-            '--nproc=16',
-            '--core=0',
-            '--',
-            ESTAB_INCIDENT_PDF_SETPRIV,
-            '--no-new-privs',
-            '--',
-        ];
         $infoResult = self::runAttachmentProcess(
-            array_merge($limits, [ESTAB_INCIDENT_PDF_PDFINFO, $sourcePath]),
+            ESTAB_INCIDENT_PDF_PDFINFO,
+            [$sourcePath],
             $workspace,
             self::attachmentProcessTimeout(
                 $deadline,
@@ -3406,8 +3439,8 @@ final class EstabIncidentPdf extends vordruckaspdf
                 . 'raster-' . $attachmentPosition . '-' . $pageNumber;
             $path = $prefix . '.jpg';
             $renderResult = self::runAttachmentProcess(
-                array_merge($limits, [
-                    ESTAB_INCIDENT_PDF_PDFTOPPM,
+                ESTAB_INCIDENT_PDF_PDFTOPPM,
+                [
                     '-f',
                     (string) $pageNumber,
                     '-l',
@@ -3422,7 +3455,7 @@ final class EstabIncidentPdf extends vordruckaspdf
                     'quality=82,progressive=n,optimize=y',
                     $sourcePath,
                     $prefix,
-                ]),
+                ],
                 $workspace,
                 self::attachmentProcessTimeout(
                     $deadline,
