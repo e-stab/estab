@@ -855,12 +855,14 @@ if ( debug == true ){
 
   Anhang ausgewaehlt und kann in Vordruck uebernommen werde
 \**********************************************************************/
-  if ( $attachmentMessageContext &&
-       $attachmentStaffOrigin and
-       ( (isset ($_POST["ah_auswahl_x"])) OR
-         (isset ($_POST["ah_abbrechen_x"]))
-       )
-      ){
+  if (
+    $attachmentMessageContext
+    && $attachmentStaffOrigin
+    && (
+      isset ($_POST["ah_auswahl_x"])
+      || isset ($_POST["ah_abbrechen_x"])
+    )
+  ) {
 
     if ( debug == true ){ echo "### 559 Anhang ausgewaehlt und kann in Vordruck uebernommen werden ";  echo "<br>\n";}
 
@@ -934,12 +936,14 @@ if ( debug == true ){
 
 \**********************************************************************/
     // Anhang ausgewaelt und kann in Vordruck uebernommen werden
-  if ( $attachmentMessageContext &&
-       $attachmentTelecommunicationsOrigin and
-       ( (isset ($_POST["ah_auswahl_x"])) OR
-         (isset ($_POST["ah_abbrechen_x"]))
-       )
-      ){
+  if (
+    $attachmentMessageContext
+    && $attachmentTelecommunicationsOrigin
+    && (
+      isset ($_POST["ah_auswahl_x"])
+      || isset ($_POST["ah_abbrechen_x"])
+    )
+  ) {
 
     if ( debug == true ){ echo "### 417 anhang.php Vordruck aufrufen mit Daten füllen ";  echo "<br>\n";}
 

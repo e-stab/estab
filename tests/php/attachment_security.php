@@ -2678,7 +2678,11 @@ $assert(
             '/(?<![A-Za-z0-9_])store_formdata\s*\(\$attachmentOriginContext\)/',
             $controllerSource
         ) !== 1
-        && substr_count($controllerSource, '$attachmentMessageContext &&') === 2
+        && preg_match_all(
+            '/\$attachmentMessageContext\s*&&\s*'
+                . '\$attachment(?:Staff|Telecommunications)Origin\s*&&/s',
+            $controllerSource
+        ) === 2
         && str_contains(
             $controllerSource,
             'Zum Übernehmen von Anhängen öffnen Sie bitte zuerst einen Nachrichtenvordruck.'
@@ -2856,18 +2860,11 @@ $assert(
             $controllerSource,
             'array ("FM-Eingang", "FM-Eingang_Anhang")'
         )
-        && str_contains(
-            $controllerSource,
-            '$attachmentMessageContext &&'
-        )
-        && str_contains(
-            $controllerSource,
-            '$attachmentStaffOrigin and'
-        )
-        && str_contains(
-            $controllerSource,
-            '$attachmentTelecommunicationsOrigin and'
-        )
+        && preg_match_all(
+            '/\$attachmentMessageContext\s*&&\s*'
+                . '\$attachment(?:Staff|Telecommunications)Origin\s*&&/s',
+            $controllerSource
+        ) === 2
         && str_contains(
             $controllerSource,
             '$correctionData = $originMessage;'
