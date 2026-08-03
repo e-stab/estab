@@ -3159,14 +3159,9 @@ Nachricht als Sichtung anzeigen
       }
     }
     $loginAction = estab_auth_html ($conf_4f ["MainURL"]);
-    $loginDestinationField = $loginDestination === null
-      ? ""
-      : "<input type=\"hidden\" name=\"next\" value=\"".
-        htmlspecialchars (
-          $loginDestination,
-          ENT_QUOTES | ENT_SUBSTITUTE,
-          "UTF-8"
-        )."\">";
+    $loginDestinationField = estab_navigation_login_destination_field (
+      $loginDestination
+    );
     echo "<!doctype html>\n";
     echo "<html lang=\"de\">\n";
     echo "<head>\n";
@@ -3222,13 +3217,16 @@ Nachricht als Sichtung anzeigen
       echo "<div class=\"estab-auth-actions\">\n";
       echo "<form action=\"".$loginAction."\" method=\"POST\" target=\"_self\">\n";
       echo estab_csrf_field ()."\n";
+      // The navigation renderer validates the allow-listed destination and
+      // escapes it for the hidden input attribute before returning markup.
+      // nosemgrep: php.lang.security.injection.echoed-request.echoed-request
       echo $loginDestinationField."\n";
       echo "<button class=\"estab-button estab-button-primary\" type=\"submit\" name=\"login_flow\" value=\"existing\">Mit bestehendem Konto anmelden</button>\n";
       echo "</form>\n";
       if ($registrationAllowed) {
         echo "<form action=\"".$loginAction."\" method=\"POST\" target=\"_self\">\n";
         echo estab_csrf_field ()."\n";
-        echo $loginDestinationField."\n";
+        echo $loginDestinationField."\n"; // nosemgrep: php.lang.security.injection.echoed-request.echoed-request
         echo "<button class=\"estab-button\" type=\"submit\" name=\"login_flow\" value=\"new\">Neues Konto anlegen</button>\n";
         echo "</form>\n";
       } else {
@@ -3255,7 +3253,7 @@ Nachricht als Sichtung anzeigen
       }
       echo "<form action=\"".$loginAction."\" method=\"POST\" target=\"_self\">\n";
       echo estab_csrf_field ()."\n";
-      echo $loginDestinationField."\n";
+      echo $loginDestinationField."\n"; // nosemgrep: php.lang.security.injection.echoed-request.echoed-request
       echo "<button class=\"estab-button\" type=\"submit\" name=\"login\" value=\"Anmelden\">Zurück zur Auswahl</button>\n";
       echo "</form>\n";
     } elseif (
@@ -3268,7 +3266,7 @@ Nachricht als Sichtung anzeigen
            "kann deshalb momentan nicht sicher angelegt werden.</p>\n";
       echo "<form action=\"".$loginAction."\" method=\"POST\" target=\"_self\">\n";
       echo estab_csrf_field ()."\n";
-      echo $loginDestinationField."\n";
+      echo $loginDestinationField."\n"; // nosemgrep: php.lang.security.injection.echoed-request.echoed-request
       echo "<button class=\"estab-button\" type=\"submit\" name=\"login\" value=\"Anmelden\">Zurück zur Auswahl</button>\n";
       echo "</form>\n";
     } else {
@@ -3300,7 +3298,7 @@ Nachricht als Sichtung anzeigen
              ))."</p>\n";
       }
       echo estab_csrf_field ()."\n";
-      echo $loginDestinationField."\n";
+      echo $loginDestinationField."\n"; // nosemgrep: php.lang.security.injection.echoed-request.echoed-request
       echo "<input type=\"hidden\" name=\"login_flow\" value=\"".
            htmlspecialchars (
              (string) $loginFlow,
@@ -3352,7 +3350,7 @@ Nachricht als Sichtung anzeigen
       echo "</form>\n";
       echo "<form action=\"".$loginAction."\" method=\"POST\" target=\"_self\">\n";
       echo estab_csrf_field ()."\n";
-      echo $loginDestinationField."\n";
+      echo $loginDestinationField."\n"; // nosemgrep: php.lang.security.injection.echoed-request.echoed-request
       echo "<button class=\"estab-button\" type=\"submit\" name=\"login\" value=\"Anmelden\">Andere Kontoaktion wählen</button>\n";
       echo "</form>\n";
     }
