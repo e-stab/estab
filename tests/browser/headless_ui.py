@@ -4067,7 +4067,7 @@ class BrowserAcceptance:
         assert self.config.admin_user is not None
         assert self.config.admin_password is not None
         credentials = (
-            f"{self.config.admin_user}:{self.config.admin_password}".encode("utf-8")
+            f"{self.config.admin_user}:{self.config.admin_password}".encode()
         )
         authorization = "Basic " + base64.b64encode(credentials).decode("ascii")
         self.cdp.call(
@@ -4549,9 +4549,7 @@ class BrowserAcceptance:
         assert self.config.admin_user is not None
         assert self.config.admin_password is not None
         credentials = (
-            f"{self.config.admin_user}:{self.config.admin_password}".encode(
-                "utf-8"
-            )
+            f"{self.config.admin_user}:{self.config.admin_password}".encode()
         )
         authorization = "Basic " + base64.b64encode(credentials).decode("ascii")
         surfaces = (
