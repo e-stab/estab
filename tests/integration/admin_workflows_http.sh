@@ -365,7 +365,7 @@ write_matrix_payload()
 
     printf 'csrf_token=%s&admin_action=%s&lagerot=%s' \
         "$csrf_token" "$action" "$redcopy_position" >"$destination"
-    while IFS='|' read -r row column function_name role redcopy auto; do
+    while IFS='|' read -r row column function_name role _redcopy auto; do
         position="${row}${column}"
         if [ -n "$changed_position" ] && [ "$position" = "$changed_position" ]; then
             function_name=$changed_function

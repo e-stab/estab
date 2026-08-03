@@ -1204,7 +1204,6 @@ create_runtime_snapshot()
 
     active_compose_environment=$runtime_snapshot_directory/.env
     active_compose_file=$runtime_snapshot_directory/compose.yaml
-    runtime_snapshot_ready=1
 }
 
 verify_productive_runtime_mount()
@@ -1781,7 +1780,6 @@ maintenance_lock_project=
 maintenance_lock_token=
 maintenance_lock_image=
 runtime_snapshot_directory=
-runtime_snapshot_ready=0
 runtime_snapshot_in_use=0
 runtime_snapshot_created=0
 snapshot_parent=

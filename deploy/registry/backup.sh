@@ -797,8 +797,8 @@ verify_no_foreign_storage_consumers()
         foreign_conflict=
         while IFS='	' read -r foreign_mount_type foreign_mount_source; do
             [ -n "$foreign_mount_type" ] || continue
-            while IFS='	' read -r target_role target_destination \
-                target_type target_name target_source
+            while IFS='	' read -r target_role _target_destination \
+                _target_type _target_name target_source
             do
                 [ -n "$target_role" ] || continue
                 if [ "$foreign_mount_source" = "$target_source" ] ||

@@ -1577,7 +1577,6 @@ aw_subject_marker='AW-EINGANG-BETREFF'
 aw_author_marker='awz001'
 aw_received_at='281915Jul2026'
 aw_written_at='1917'
-aw_reviewed_at='281918Jul2026'
 aw_upload_file=$work_dir/aw-large-valid.jpeg
 cp "$repo_root/4fach/design/HS/null.jpg" "$aw_upload_file"
 dd if=/dev/zero bs=1048576 count=6 >>"$aw_upload_file" 2>/dev/null

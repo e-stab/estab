@@ -156,9 +156,6 @@ telecom_plan_version=0
 telecom_plan_b_version=0
 telecom_route_text='CI Betriebsstelle · CI Rufname · Kanal 404 · G/U · Gegenverkehr'
 telecom_route_b_text='CI Ersatz-Betriebsstelle · CI Ersatz-Rufname · Kanal 505 · O/U · Wechselverkehr'
-incoming_form_cleanup_owned=false
-outgoing_form_cleanup_owned=false
-mutation_started=false
 message_auto_increment=1
 protocol_auto_increment=1
 message_count_before=0
@@ -1765,8 +1762,6 @@ do
     esac
 done
 
-mutation_started=true
-
 # The end-to-end workflow owns two immutable incident identities. LOOSE is
 # configured before its first lifecycle entry and carries every operational
 # write below. STRICT remains empty and exists only to prove that direct routes
@@ -2549,8 +2544,6 @@ if ! generated_form_check absent E "$incoming_number"; then
     echo 'Message workflow HTTP: incoming form existed before completion' >&2
     exit 1
 fi
-incoming_form_cleanup_owned=true
-
 load_dashboard "$si_cookies" 'Si queue before incoming LdF translation'
 assert_body_absent \
     "$incoming_marker" \
@@ -3367,8 +3360,6 @@ if ! generated_form_check absent A "$outgoing_number"; then
     echo 'Message workflow HTTP: outgoing form existed before completion' >&2
     exit 1
 fi
-outgoing_form_cleanup_owned=true
-
 load_dashboard "$s1_cookies" 'S1 list at outgoing status 4'
 assert_body "$outgoing_marker" 'S1 list at outgoing status 4'
 assert_body 'alt="liegt vorm Sichter"' 'S1 status-4 Si indicator'
