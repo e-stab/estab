@@ -902,7 +902,7 @@ ensure_private_directory()
         die "$private_directory_label must be a real, non-symlink directory"
     fi
     if [ ! -d "$private_directory" ]; then
-        mkdir -p -m 0700 "$private_directory" ||
+        mkdir -p "$private_directory" ||
             die "cannot create $private_directory_label"
     fi
     chmod 0700 "$private_directory" ||
@@ -945,8 +945,12 @@ runtime_state_base()
             { [ -e "$state_parent" ] && [ ! -d "$state_parent" ]; }; then
             die "XDG state parent must be a real directory"
         fi
-        [ -d "$state_parent" ] || mkdir -p -m 0700 "$state_parent" ||
-            die "cannot create XDG state parent"
+        if [ ! -d "$state_parent" ]; then
+            mkdir -p "$state_parent" ||
+                die "cannot create XDG state parent"
+            chmod 0700 "$state_parent" ||
+                die "cannot protect XDG state parent"
+        fi
         state_parent=$(CDPATH='' cd -- "$state_parent" && pwd -P) ||
             die "cannot canonicalize XDG state parent"
         state_base=$state_parent/estab-deploy
