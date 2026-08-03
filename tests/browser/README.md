@@ -127,7 +127,12 @@ Geprüft werden:
   `390x844` CSS-Pixeln: Navigation, Adminidentität und Karten bleiben sichtbar,
   die Karten überlappen sich nicht, erzeugen kein horizontales
   Dokument-Scrolling, sind vollständig klickbar und bilden mobil eine
-  einheitliche Spalte;
+  einheitliche Spalte; das Einsatzarchiv wird bei denselben Breiten zusätzlich
+  geometrisch vermessen: Der Einsatzkopf bleibt vollbreit, die Kennung
+  höchstens zweizeilig, Status und Verwaltungstitel bleiben sichtbar, alle
+  Aktionsfelder liegen ohne Überdeckung darunter und jedes aktive
+  Bedienelement bleibt fokussierbar, treffbar sowie mindestens 44 × 44
+  CSS-Pixel groß;
 - die Kennwortrichtlinien-Seite bei `1280x800` und `390x844` CSS-Pixeln als
   vollständig geladene Werkzeugseite mit genau einer gemeinsamen Leiste,
   sichtbarer Navigation, Kopf- und Fußbereich sowie einer mindestens

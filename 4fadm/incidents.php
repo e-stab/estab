@@ -712,12 +712,49 @@ $activeMissingHeader = is_array($status) && $activeId !== null
               <?php
                 $ended = ($incident['estab_status'] ?? null) === 'closed';
               ?>
-              <article class="estab-tool-card<?= $incident['ist_aktiv'] ? ' estab-tool-card-active' : '' ?>">
-                <div>
-                  <span class="estab-tool-card-code">
-                    <?= incident_admin_html($incident['kennung']) ?>
-                  </span>
-                  <h3><?= incident_admin_html($incident['name']) ?></h3>
+              <article
+                class="estab-tool-card estab-incident-card<?=
+                    $incident['ist_aktiv'] ? ' estab-tool-card-active' : ''
+                ?>"
+                data-estab-incident-card
+                aria-labelledby="incident-card-code-<?=
+                    (int) $incident['einsatz_id']
+                ?> incident-card-title-<?= (int) $incident['einsatz_id'] ?>">
+                <div class="estab-incident-card-overview"
+                  data-estab-incident-summary>
+                  <div class="estab-incident-card-heading">
+                    <div>
+                      <span
+                        class="estab-tool-card-code"
+                        id="incident-card-code-<?=
+                            (int) $incident['einsatz_id']
+                        ?>">
+                        <?= incident_admin_html($incident['kennung']) ?>
+                      </span>
+                      <h3 id="incident-card-title-<?=
+                          (int) $incident['einsatz_id']
+                      ?>"><?= incident_admin_html($incident['name']) ?></h3>
+                    </div>
+                    <?php if ($incident['ist_aktiv']): ?>
+                      <span
+                        class="estab-tool-badge estab-tool-badge-success"
+                        data-estab-incident-card-status>
+                        Aktiv
+                      </span>
+                    <?php elseif ($ended): ?>
+                      <span
+                        class="estab-tool-badge estab-tool-badge-neutral"
+                        data-estab-incident-card-status>
+                        Formal abgeschlossen
+                      </span>
+                    <?php else: ?>
+                      <span
+                        class="estab-tool-badge estab-tool-badge-warning"
+                        data-estab-incident-card-status>
+                        Nicht aktiv
+                      </span>
+                    <?php endif; ?>
+                  </div>
                   <div class="estab-tool-card-meta">
                     <span><?= incident_admin_html(incident_admin_datetime($incident['beginn'])) ?>
                       bis <?= incident_admin_html(incident_admin_datetime($incident['ende'])) ?></span>
@@ -774,9 +811,16 @@ $activeMissingHeader = is_array($status) && $activeId !== null
                     </p>
                   <?php endif; ?>
                 </div>
-                <div class="estab-tool-card-actions">
+                <div
+                  class="estab-tool-card-actions estab-incident-card-actions"
+                  data-estab-incident-actions>
+                  <h4 class="estab-incident-card-actions-title">
+                    Einsatz verwalten
+                  </h4>
                   <?php if (!$ended): ?>
-                    <form class="estab-tool-form" method="post"
+                    <form
+                      class="estab-tool-form estab-incident-action"
+                      method="post"
                       data-estab-dirty-guard data-estab-permission-mode-form>
                       <?= estab_csrf_field() ?>
                       <input type="hidden" name="admin_action"
@@ -827,7 +871,8 @@ $activeMissingHeader = is_array($status) && $activeId !== null
                           $incident
                       );
                     ?>
-                    <details class="estab-tool-field"
+                    <details
+                      class="estab-tool-field estab-incident-action"
                       <?= $headerMissing !== [] ? 'open' : '' ?>>
                       <summary>Pflichtangaben für ETB und TBB</summary>
                       <?php if ($headerMissing !== []): ?>
@@ -889,7 +934,9 @@ $activeMissingHeader = is_array($status) && $activeId !== null
                           $incident['fuehrungsstellenname_gesperrt'] ?? 1
                       ) === 0
                   ): ?>
-                    <form class="estab-tool-form" method="post"
+                    <form
+                      class="estab-tool-form estab-incident-action"
+                      method="post"
                       data-estab-dirty-guard>
                       <?= estab_csrf_field() ?>
                       <input type="hidden" name="admin_action"
@@ -933,7 +980,7 @@ $activeMissingHeader = is_array($status) && $activeId !== null
                       ($incident['fuehrungsstellenname'] ?? null) !== null
                   ): ?>
                     <div
-                      class="estab-tool-field"
+                      class="estab-tool-field estab-incident-action"
                       data-estab-command-post-readonly>
                       <span>Name der Führungsstelle</span>
                       <strong><?= incident_admin_html(
@@ -944,16 +991,10 @@ $activeMissingHeader = is_array($status) && $activeId !== null
                         änderbar.</small>
                     </div>
                   <?php endif; ?>
-                  <?php if ($incident['ist_aktiv']): ?>
-                    <span class="estab-tool-badge estab-tool-badge-success">
-                      Aktiv
-                    </span>
-                  <?php elseif ($ended): ?>
-                    <span class="estab-tool-badge estab-tool-badge-neutral">
-                      Formal abgeschlossen
-                    </span>
-                  <?php else: ?>
-                    <form method="post">
+                  <?php if (!$incident['ist_aktiv'] && !$ended): ?>
+                    <form
+                      class="estab-tool-form estab-incident-action"
+                      method="post">
                       <?= estab_csrf_field() ?>
                       <input type="hidden" name="admin_action" value="activate">
                       <input
@@ -985,7 +1026,9 @@ $activeMissingHeader = is_array($status) && $activeId !== null
                     </form>
                   <?php endif; ?>
                   <?php if ($incident['estab_legal_hold']): ?>
-                    <form method="post">
+                    <form
+                      class="estab-tool-form estab-incident-action"
+                      method="post">
                       <?= estab_csrf_field() ?>
                       <input type="hidden" name="admin_action" value="release_legal_hold">
                       <input type="hidden" name="einsatz_id"
@@ -995,7 +1038,9 @@ $activeMissingHeader = is_array($status) && $activeId !== null
                       </button>
                     </form>
                   <?php else: ?>
-                    <form class="estab-tool-form" method="post">
+                    <form
+                      class="estab-tool-form estab-incident-action"
+                      method="post">
                       <?= estab_csrf_field() ?>
                       <input type="hidden" name="admin_action" value="set_legal_hold">
                       <input type="hidden" name="einsatz_id"

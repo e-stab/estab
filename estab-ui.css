@@ -3064,6 +3064,81 @@ form[data-estab-incident-disabled="true"]::before {
     min-width: 9rem;
 }
 
+/*
+ * Incident cards contain several complete administrative forms. Keeping them
+ * in the generic card's intrinsic `auto` column would collapse the incident
+ * summary to a few pixels. The archive therefore presents the summary first
+ * and arranges the independent actions in a responsive grid below it.
+ */
+.estab-incident-card {
+    align-items: start;
+    grid-template-columns: minmax(0, 1fr);
+}
+
+.estab-incident-card-overview,
+.estab-incident-card-heading > div,
+.estab-incident-card-actions,
+.estab-incident-action {
+    min-width: 0;
+}
+
+.estab-incident-card-heading {
+    align-items: flex-start;
+    display: flex;
+    gap: 0.75rem 1rem;
+    justify-content: space-between;
+}
+
+.estab-incident-card-heading .estab-tool-badge {
+    flex: 0 0 auto;
+}
+
+.estab-incident-card .estab-tool-card-code {
+    overflow-wrap: break-word;
+    word-break: normal;
+}
+
+.estab-incident-card .estab-tool-card-meta > span {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.estab-incident-card-heading h3,
+.estab-incident-action {
+    overflow-wrap: anywhere;
+    word-break: normal;
+}
+
+.estab-incident-card-actions {
+    align-items: stretch;
+    border-top: 1px solid #c5d1dd;
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
+    justify-content: stretch;
+    padding-top: 1rem;
+    width: 100%;
+}
+
+.estab-incident-card-actions-title {
+    color: #183454;
+    font-size: 1rem;
+    grid-column: 1 / -1;
+    margin: 0;
+}
+
+.estab-incident-action {
+    align-content: start;
+    background: #f8fafc;
+    border: 1px solid #c5d1dd;
+    border-radius: 9px;
+    padding: 0.85rem;
+}
+
+.estab-incident-action .estab-button {
+    width: 100%;
+}
+
 .estab-tool-badge {
     border-radius: 999px;
     display: inline-flex;
@@ -3538,6 +3613,19 @@ form[data-estab-incident-disabled="true"]::before {
     .estab-tool-card-actions .estab-button {
         min-width: 0;
         width: 100%;
+    }
+
+    .estab-incident-card-heading {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .estab-incident-card-heading .estab-tool-badge {
+        align-self: flex-start;
+    }
+
+    .estab-incident-card-actions {
+        grid-template-columns: minmax(0, 1fr);
     }
 
     .estab-tool-table-responsive {

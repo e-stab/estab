@@ -900,6 +900,11 @@ Kennwortrichtlinie sowie Systemstatus. Breite Fach- und Prüftabellen bleiben
 auf kleinen Bildschirmen
 als Karten lesbar oder werden in einem ausdrücklich begrenzten Tabellenbereich
 gescrollt; sie erzeugen kein horizontales Scrollen des gesamten Dokuments.
+Im Einsatzarchiv steht der vollständige Einsatzkopf einschließlich Status
+immer oberhalb der Verwaltungsaktionen. Berechtigungsmodus, Logbuchdaten,
+Führungsstellenname, Aktivierung und Aufbewahrungssperre bilden darunter ein
+responsives Aktionsraster; keine Aktion darf Kennung oder Einsatzdaten auf
+Zeichenbreite zusammendrücken oder eine Nachbaraktion überdecken.
 Historische interne Generatoren und Installer besitzen keine direkte
 Weboberfläche und werden vom Webserver abgewiesen.
 

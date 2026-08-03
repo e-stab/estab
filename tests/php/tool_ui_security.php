@@ -142,8 +142,31 @@ $assert(
         && str_contains($incident, 'for="incident-start"')
         && str_contains($incident, 'data-estab-no-active-incident')
         && str_contains($incident, 'estab-tool-status-danger')
-        && str_contains($incident, 'estab-tool-card-active'),
+        && str_contains($incident, 'estab-tool-card-active')
+        && str_contains($incident, 'data-estab-incident-card')
+        && str_contains($incident, 'data-estab-incident-summary')
+        && str_contains($incident, 'data-estab-incident-actions')
+        && str_contains($incident, 'estab-incident-card-overview')
+        && str_contains($incident, 'estab-incident-card-heading')
+        && str_contains($incident, 'data-estab-incident-card-status')
+        && str_contains($incident, 'estab-incident-card-actions')
+        && str_contains($incident, 'estab-incident-action')
+        && str_contains($incident, 'Einsatz verwalten'),
     'incident administration lost labelled controls or clear active-state UI'
+);
+$assert(
+    preg_match(
+        '~\.estab-incident-card\s*\{[^}]*grid-template-columns\s*:\s*'
+            . 'minmax\(0\s*,\s*1fr\)[^}]*\}~s',
+        $stylesheet
+    ) === 1
+        && preg_match(
+            '~\.estab-incident-card-actions\s*\{[^}]*display\s*:\s*grid\s*;'
+                . '[^}]*grid-template-columns\s*:\s*repeat\(auto-fit\s*,'
+                . '\s*minmax\(18rem\s*,\s*1fr\)\)[^}]*\}~s',
+            $stylesheet
+        ) === 1,
+    'incident cards can collapse their summary or crowd actions on desktop'
 );
 $assert(
     substr_count($incident, "incident_admin_html(\$status['kennung'])") === 1

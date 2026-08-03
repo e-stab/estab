@@ -1671,7 +1671,11 @@ insbesondere:
   `1280 × 800` und `390 × 844` CSS-Pixeln sichtbar, überlappungsfrei und
   bedienbar. Die Selbstregistrierungsseite zeigt alle acht festen Zeitfenster,
   getrennte Aktionen und drei revisionsgebundene Formulare, ohne die
-  gespeicherte Freigabe zu ändern.
+  gespeicherte Freigabe zu ändern. Im Einsatzarchiv vermisst Chrome zusätzlich
+  jede Einsatzkarte: Der vollständige Kopf muss oberhalb des responsiven
+  Aktionsrasters liegen, die Kennung darf nicht zeichenweise kollabieren,
+  Aktionsfelder dürfen sich nicht überdecken und alle aktiven Controls müssen
+  innerhalb ihrer Karte fokussierbar und mindestens 44 × 44 Pixel groß sein.
 - Reale Klicks auf die BOS-Karte und eine statische BOS-Unterseite behalten
   den separaten kompakten Disclosure-Modus; das reale Öffnen seiner
   Bereichsauswahl und der Rückweg zur Übersicht funktionieren.

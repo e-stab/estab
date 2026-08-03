@@ -4726,6 +4726,11 @@ class BrowserAcceptance:
                     require_responsive_table=responsive_table,
                     require_target=require_target,
                 )
+                if path == "/4fadm/incidents.php":
+                    self._assert_incident_archive_layout(
+                        f"{label} bei {width}×{height} px",
+                        mobile=width <= 390,
+                    )
                 if path == "/4fadm/self_registration.php" and width == 1280:
                     self_registration_state = self.cdp.evaluate(
                         """
@@ -4845,6 +4850,297 @@ class BrowserAcceptance:
                         "nicht exakt in Unicode-Codepoints: "
                         f"{password_length_state!r}",
                     )
+
+    def _assert_incident_archive_layout(
+        self,
+        description: str,
+        *,
+        mobile: bool,
+    ) -> None:
+        state = self.cdp.evaluate(
+            """
+            (() => {
+                const visible = element => {
+                    if (!element) return false;
+                    let ancestor = element.parentElement;
+                    while (ancestor) {
+                        if (
+                            ancestor.matches("details:not([open])") &&
+                            element !== ancestor.querySelector(":scope > summary")
+                        ) {
+                            return false;
+                        }
+                        ancestor = ancestor.parentElement;
+                    }
+                    const style = getComputedStyle(element);
+                    const rect = element.getBoundingClientRect();
+                    return style.display !== "none" &&
+                        style.visibility !== "hidden" &&
+                        rect.width > 0 && rect.height > 0;
+                };
+                const overlaps = (first, second) =>
+                    Math.min(first.right, second.right) -
+                        Math.max(first.left, second.left) > 0.5 &&
+                    Math.min(first.bottom, second.bottom) -
+                        Math.max(first.top, second.top) > 0.5;
+                const cards = Array.from(document.querySelectorAll(
+                    "[data-estab-incident-card]"
+                )).filter(visible);
+                return {
+                    cards: cards.map(card => {
+                        const longTextProbes = [
+                            {
+                                node: card.querySelector(
+                                    ".estab-incident-card-heading h3"
+                                ),
+                                boundary: card.querySelector(
+                                    "[data-estab-incident-summary]"
+                                )
+                            },
+                            {
+                                node: card.querySelector(
+                                    "[data-estab-command-post-readonly] strong"
+                                ),
+                                boundary: card.querySelector(
+                                    "[data-estab-command-post-readonly]"
+                                )
+                            }
+                        ].filter(probe => probe.node && probe.boundary);
+                        const originalProbeText = longTextProbes.map(
+                            probe => probe.node.textContent
+                        );
+                        longTextProbes.forEach((probe, index) => {
+                            probe.node.textContent =
+                                `GEOMETRIEPROBE${index}` + "X".repeat(240);
+                        });
+                        const longTextContained =
+                            longTextProbes.length >= 1 &&
+                            longTextProbes.every(probe => {
+                                const boundaryRect =
+                                    probe.boundary.getBoundingClientRect();
+                                const nodeRect = probe.node.getBoundingClientRect();
+                                return probe.boundary.scrollWidth <=
+                                        probe.boundary.clientWidth + 1 &&
+                                    nodeRect.left >= boundaryRect.left - 0.5 &&
+                                    nodeRect.right <= boundaryRect.right + 0.5;
+                            });
+                        longTextProbes.forEach((probe, index) => {
+                            probe.node.textContent = originalProbeText[index];
+                        });
+                        const cardRect = card.getBoundingClientRect();
+                        const overview = card.querySelector(
+                            "[data-estab-incident-summary]"
+                        );
+                        const actions = card.querySelector(
+                            "[data-estab-incident-actions]"
+                        );
+                        const title = actions?.querySelector(
+                            ".estab-incident-card-actions-title"
+                        );
+                        const status = card.querySelector(
+                            "[data-estab-incident-card-status]"
+                        );
+                        const code = card.querySelector(
+                            ".estab-tool-card-code"
+                        );
+                        const overviewRect =
+                            overview?.getBoundingClientRect() || null;
+                        const actionsRect =
+                            actions?.getBoundingClientRect() || null;
+                        const codeRect = code?.getBoundingClientRect() || null;
+                        const codeStyle = code ? getComputedStyle(code) : null;
+                        const parsedLineHeight = codeStyle
+                            ? Number.parseFloat(codeStyle.lineHeight)
+                            : 0;
+                        const lineHeight = Number.isFinite(parsedLineHeight)
+                            ? parsedLineHeight
+                            : Number.parseFloat(codeStyle?.fontSize || "0") * 1.2;
+                        const panels = Array.from(
+                            actions?.querySelectorAll(
+                                ":scope > .estab-incident-action"
+                            ) || []
+                        ).filter(visible);
+                        const panelRects = panels.map(panel => {
+                            const rect = panel.getBoundingClientRect();
+                            return {
+                                left: rect.left,
+                                right: rect.right,
+                                top: rect.top,
+                                bottom: rect.bottom,
+                                width: rect.width
+                            };
+                        });
+                        const panelOverlaps = [];
+                        for (
+                            let first = 0;
+                            first < panelRects.length;
+                            first += 1
+                        ) {
+                            for (
+                                let second = first + 1;
+                                second < panelRects.length;
+                                second += 1
+                            ) {
+                                if (overlaps(
+                                    panelRects[first],
+                                    panelRects[second]
+                                )) {
+                                    panelOverlaps.push([first, second]);
+                                }
+                            }
+                        }
+                        const firstPanel = panelRects[0] || null;
+                        const controls = Array.from(card.querySelectorAll(
+                            ".estab-incident-action button:not([disabled])," +
+                            ".estab-incident-action summary," +
+                            ".estab-incident-action select:not([disabled])," +
+                            ".estab-incident-action textarea:not([disabled])," +
+                            ".estab-incident-action input:not([type=hidden])" +
+                                ":not([disabled])"
+                        )).filter(visible);
+                        const controlStates = controls.map(control => {
+                            const target = control.matches(
+                                'input[type="checkbox"],input[type="radio"]'
+                            ) ? control.closest("label") : control;
+                            const panel = control.closest(
+                                ".estab-incident-action"
+                            );
+                            if (!target || !panel) {
+                                return {
+                                    ok: false,
+                                    element: control.tagName.toLowerCase(),
+                                    type: control.getAttribute("type") || "",
+                                    name: control.getAttribute("name") || "",
+                                    reason: "target-or-panel-missing"
+                                };
+                            }
+                            target.scrollIntoView({
+                                block: "center",
+                                inline: "nearest"
+                            });
+                            const rect = target.getBoundingClientRect();
+                            const panelRect = panel.getBoundingClientRect();
+                            const pointX = rect.left + rect.width / 2;
+                            const pointY = rect.top + rect.height / 2;
+                            const hit = document.elementFromPoint(
+                                pointX,
+                                pointY
+                            );
+                            control.focus({preventScroll: true});
+                            const largeEnough =
+                                rect.width >= 44 && rect.height >= 44;
+                            const contained =
+                                rect.left >= panelRect.left - 0.5 &&
+                                rect.right <= panelRect.right + 0.5;
+                            const hitTarget = Boolean(hit) &&
+                                (target === hit || target.contains(hit) ||
+                                    hit.contains(target));
+                            const focused =
+                                document.activeElement === control;
+                            return {
+                                ok: largeEnough && contained && hitTarget && focused,
+                                element: control.tagName.toLowerCase(),
+                                type: control.getAttribute("type") || "",
+                                name: control.getAttribute("name") || "",
+                                width: rect.width,
+                                height: rect.height,
+                                largeEnough,
+                                contained,
+                                hitTarget,
+                                focused
+                            };
+                        });
+                        const controlFailures = controlStates.filter(
+                            control => !control.ok
+                        );
+                        return {
+                            cardWidth: cardRect.width,
+                            overviewWidth: overviewRect?.width || 0,
+                            overviewActionsOverlap: Boolean(
+                                overviewRect && actionsRect &&
+                                overlaps(overviewRect, actionsRect)
+                            ),
+                            actionsBelowOverview: Boolean(
+                                overviewRect && actionsRect &&
+                                actionsRect.top >= overviewRect.bottom - 0.5
+                            ),
+                            actionDisplay: actions
+                                ? getComputedStyle(actions).display
+                                : "",
+                            actionTitleVisible: visible(title),
+                            statusVisible: visible(status),
+                            codeVisible: visible(code),
+                            longTextContained,
+                            panelCount: panelRects.length,
+                            panelOverlaps,
+                            panelsContained: Boolean(actionsRect) &&
+                                panelRects.every(rect =>
+                                    rect.left >= actionsRect.left - 0.5 &&
+                                    rect.right <= actionsRect.right + 0.5
+                                ),
+                            panelsSingleColumn: Boolean(firstPanel) &&
+                                panelRects.every(rect =>
+                                    Math.abs(rect.left - firstPanel.left) <= 1 &&
+                                    Math.abs(rect.right - firstPanel.right) <= 1
+                                ),
+                            narrowestPanel: panelRects.reduce(
+                                (width, rect) => Math.min(width, rect.width),
+                                panelRects.length > 0
+                                    ? panelRects[0].width
+                                    : 0
+                            ),
+                            codeLines: codeRect && lineHeight > 0
+                                ? Math.ceil(codeRect.height / lineHeight)
+                                : 0,
+                            controlCount: controls.length,
+                            controlsUsable: controlFailures.length === 0,
+                            controlFailures,
+                            cardScrollFits:
+                                card.scrollWidth <= card.clientWidth + 1
+                        };
+                    })
+                };
+            })()
+            """
+        )
+        self._truth(
+            isinstance(state, dict)
+            and isinstance(state.get("cards"), list)
+            and len(state["cards"]) >= 1,
+            f"{description}: keine vermessbare Einsatzkarte vorhanden.",
+        )
+        for index, card in enumerate(state["cards"], start=1):
+            self._truth(
+                card.get("overviewWidth", 0) >= card.get("cardWidth", 0) * 0.85
+                and card.get("overviewActionsOverlap") is False
+                and card.get("actionsBelowOverview") is True
+                and card.get("actionDisplay") == "grid"
+                and card.get("actionTitleVisible") is True
+                and card.get("statusVisible") is True
+                and card.get("codeVisible") is True
+                and card.get("longTextContained") is True
+                and int(card.get("panelCount", 0)) >= 1
+                and card.get("panelOverlaps") == []
+                and card.get("panelsContained") is True
+                and 1 <= int(card.get("codeLines", 0)) <= 2
+                and int(card.get("controlCount", 0)) >= 1
+                and card.get("controlsUsable") is True
+                and card.get("cardScrollFits") is True,
+                f"{description}: Einsatzkarte {index} kollabiert, überlappt "
+                f"oder verliert Status/Aktionen: {card!r}",
+            )
+            if mobile:
+                self._truth(
+                    card.get("panelsSingleColumn") is True,
+                    f"{description}: Aktionskacheln der Einsatzkarte {index} "
+                    "bilden mobil keine einheitliche Spalte.",
+                )
+            else:
+                self._truth(
+                    float(card.get("narrowestPanel", 0)) >= 260,
+                    f"{description}: Eine Aktionskachel der Einsatzkarte "
+                    f"{index} ist am Desktop zu schmal: {card!r}",
+                )
 
     def _assert_tool_page_layout(
         self,
