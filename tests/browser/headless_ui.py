@@ -6535,7 +6535,7 @@ class BrowserAcceptance:
             "[data-estab-sound-toggle]",
             f"blockierter Sound-Schalter in {location}",
         )
-        blocked = self.cdp.wait_for(
+        self.cdp.wait_for(
             _frame_expression(
                 "vorgaben",
                 """
