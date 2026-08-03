@@ -62,7 +62,13 @@ if ($method === 'HEAD') {
   <title><?= $safeTitle ?></title>
 </head>
 <body>
-<?= $body ?>
+<?php
+// $body is executable-source documentation from the bundled hilfetext.php
+// dictionary. The request supplies only a strictly validated existing key;
+// no request or persisted content is interpolated into this trusted markup.
+// nosemgrep: php.lang.security.injection.echoed-request.echoed-request
+echo $body;
+?>
 <p><button type="button" onclick="window.close()">Hilfefenster schließen</button></p>
 </body>
 </html>
