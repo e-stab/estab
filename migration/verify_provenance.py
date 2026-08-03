@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Generate and verify the self-contained historical source provenance.
 
 The committed manifests were generated from Git refs which had first been
@@ -11,21 +10,21 @@ from __future__ import annotations
 
 import argparse
 import base64
-import io
 import csv
-from dataclasses import dataclass
 import hashlib
+import io
 import json
 import os
-from pathlib import Path
 import re
 import shutil
 import subprocess
 import sys
 import tarfile
 import tempfile
-from typing import Any, Iterable
-
+from collections.abc import Iterable
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
 
 FORMAT = "estab-source-provenance-v1"
 SVN_REPOSITORY = "https://svn.code.sf.net/p/estab/svn"
@@ -241,8 +240,7 @@ def run_git(repository: Path, arguments: list[str]) -> bytes:
             ["git", *arguments],
             cwd=repository,
             check=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            capture_output=True,
         ).stdout
     except FileNotFoundError as error:
         raise ProvenanceError("git is required for full provenance verification") from error
