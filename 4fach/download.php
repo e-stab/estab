@@ -23,6 +23,28 @@ function estab_download_error(int $status, string $message): never
     exit;
 }
 
+/** Send generated binary bytes without routing them through an HTML sink. */
+function estab_download_write_bytes(string $bytes): void
+{
+    $output = fopen('php://output', 'wb');
+    if (!is_resource($output)) {
+        throw new RuntimeException('Could not open the HTTP response stream');
+    }
+    try {
+        $written = 0;
+        $length = strlen($bytes);
+        while ($written < $length) {
+            $chunk = fwrite($output, substr($bytes, $written, 1048576));
+            if ($chunk === false || $chunk === 0) {
+                throw new RuntimeException('Could not write the HTTP response');
+            }
+            $written += $chunk;
+        }
+    } finally {
+        fclose($output);
+    }
+}
+
 $readIdentity = session_status() === PHP_SESSION_ACTIVE
     ? estab_read_session_identity($_SESSION)
     : null;
@@ -404,7 +426,7 @@ if ($area === 'attachment' && is_array($attachmentIntegrity)) {
 }
 
 if (is_string($document)) {
-    echo $document;
+    estab_download_write_bytes($document);
 } else {
     fpassthru($stream);
     fclose($stream);

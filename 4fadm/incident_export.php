@@ -35,6 +35,30 @@ function incident_export_actor(array $server): string
     return estab_incident_actor($server['REMOTE_USER'] ?? null);
 }
 
+/** Send the completed PDF through a binary stream, never an HTML output sink. */
+function incident_export_send_pdf(string $bytes): void
+{
+    $output = fopen('php://output', 'wb');
+    if (!is_resource($output)) {
+        throw new RuntimeException('Der PDF-Ausgabestrom ist nicht verfügbar.');
+    }
+    try {
+        $written = 0;
+        $length = strlen($bytes);
+        while ($written < $length) {
+            $chunk = fwrite($output, substr($bytes, $written, 1048576));
+            if ($chunk === false || $chunk === 0) {
+                throw new RuntimeException(
+                    'Das Einsatzdossier konnte nicht ausgegeben werden.'
+                );
+            }
+            $written += $chunk;
+        }
+    } finally {
+        fclose($output);
+    }
+}
+
 $requestMethod = $_SERVER['REQUEST_METHOD'] ?? '';
 $error = null;
 $incidents = [];
@@ -182,7 +206,7 @@ if ($requestMethod === 'POST') {
         header("Content-Security-Policy: sandbox; default-src 'none'");
         header('X-Content-Type-Options: nosniff');
         header('X-Robots-Tag: noindex, nofollow');
-        echo $rendered['bytes'];
+        incident_export_send_pdf($rendered['bytes']);
         exit;
     } catch (EstabCsrfException) {
         http_response_code(403);
