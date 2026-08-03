@@ -410,7 +410,7 @@ function estab_message_derived_subject(mixed $source, string $action): string
  * Replies retain a safe authoritative phone number; forwards deliberately
  * start without one because their counterparty has not been selected yet.
  *
- * @return array{11_rufnummer:string,12_betreff:string}
+ * @return array{'11_rufnummer':string,'12_betreff':string}
  */
 function estab_message_followup_contact_fields(
     array $source,
