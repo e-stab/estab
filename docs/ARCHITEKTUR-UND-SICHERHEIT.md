@@ -151,6 +151,19 @@ gelten per OR. Aktivierung erzeugt keine Sitzung; Deaktivierung widerruft eine
 Sitzung, sofern kein anderer aktiver Gruppenzugang verbleibt. Die dauerhafte
 manuelle Kontosperre bleibt davon unabhängig und vorrangig.
 
+Die Melderbeauftragung besitzt eine eng begrenzte Trennung zwischen handelnder
+und beauftragter Identität. Das schreibende LdF bleibt konkret authentisiert,
+aktiv, ungesperrt und modeabhängig autorisiert. Das ausgewählte Zielkonto muss
+ungesperrt und fachlich Fernmelder sein, benötigt für die reine Beauftragung
+aber keine laufende Sitzung: in `STRICT` bleibt eine persönlich angenommene
+Fernmelder-Besetzung der aktiven Dienstschicht Pflicht, in `LOOSE` die feste
+beziehungsweise zusätzliche Fernmelderfunktion samt gegebenenfalls wirksamem
+Zugangsschicht-Gate. Oberfläche und Serverantwort kennzeichnen inaktive oder
+abgemeldete Ziele und fordern LdF zur separaten Information auf. Diese
+Ausnahme gilt nicht für die persönliche Übernahme und weitere Laufzustände;
+sie verlangen weiterhin die authentisierte Identität genau des beauftragten
+Kontos.
+
 ### Einsatzbezogener Berechtigungsmodus
 
 `nv_einsaetze.estab_permission_mode` speichert genau einen Modus je Einsatz:
@@ -1018,6 +1031,15 @@ Schreiberbesetzung entstehen, müssen in `STRICT` aber weiterhin die aktive
 formale Dienstschicht als Provenienz tragen. Nur in `LOOSE` dürfen auch sie
 schichtlos sein. Die Anwendung setzt denselben Vertrag für
 Navigation, Leser und Writer um.
+
+Migration 119 ersetzt ausschließlich den Melderauftrag-Insert-Trigger und
+entfernt dort nur die Live-Sitzungsbedingung des Ziel-Fernmelders. Sperre,
+fachliche Zielautorität, `STRICT`-Dienstbesetzung,
+`LOOSE`-Fest-/Zusatzfunktion und Zugangsschicht-Gate sowie alle Einsatz-,
+Nachrichten-, Zustands- und Unveränderlichkeitsregeln bleiben bestehen. Der
+Trigger akzeptiert beim Upgrade nur den eindeutig erkannten Vorgänger aus
+Migration 118 oder seine eigene kanonische Fassung; bestehende Melderläufe und
+Evidenz werden nicht verändert.
 
 Migration 113 ergänzt davon unabhängig die globale Kennwortrichtlinie. Sie
 akzeptiert nur die eigene InnoDB-/`utf8mb4`-Tabelle mit genau einer

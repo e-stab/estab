@@ -796,6 +796,92 @@ run_browser_acceptance() {
         fi
         run_timed 4m python3 -B tests/browser/headless_ui.py
 
+        echo "CI integration: running inactive messenger selection acceptance"
+        messenger_ldf_name='Inactive Messenger Browser LdF'
+        messenger_ldf_code=e2i01
+        inactive_messenger_name='Inactive Messenger Browser Fernmelder'
+        inactive_messenger_code=e2i02
+        online_messenger_name='Online Messenger Browser Fernmelder'
+        online_messenger_code=e2i03
+        inactive_messenger_marker="BROWSER-MELDER-${roundtrip_token}"
+        inactive_messenger_destination="BROWSER-MELDERZIEL-${roundtrip_token}"
+        browser_login_password=$(tr -d '\r\n' <"$ESTAB_TEST_LOGIN_PASSWORD_FILE")
+        sh tests/integration/provision_user.sh \
+            "$inactive_messenger_name" \
+            "$inactive_messenger_code" \
+            A/W \
+            "$browser_login_password"
+        sh tests/integration/provision_user.sh \
+            "$messenger_ldf_name" \
+            "$messenger_ldf_code" \
+            LdF \
+            "$browser_login_password"
+        sh tests/integration/provision_user.sh \
+            "$online_messenger_name" \
+            "$online_messenger_code" \
+            A/W \
+            "$browser_login_password"
+        unset browser_login_password
+
+        cleanup_inactive_messenger_browser_fixture() {
+            run_timed 2m "$container_cli" compose run --rm --no-deps -T \
+                --env "COMPOSE_PROJECT_NAME=$COMPOSE_PROJECT_NAME" \
+                --env ESTAB_INACTIVE_MESSENGER_BROWSER_FIXTURE=1 \
+                --env ESTAB_INACTIVE_MESSENGER_FIXTURE_ACTION=cleanup \
+                --env \
+                    "ESTAB_INACTIVE_MESSENGER_FIXTURE_MARKER=$inactive_messenger_marker" \
+                --env \
+                    "ESTAB_INACTIVE_MESSENGER_LDF_CODE=$messenger_ldf_code" \
+                --env \
+                    "ESTAB_INACTIVE_MESSENGER_SIGNED_OUT_CODE=$inactive_messenger_code" \
+                --env \
+                    "ESTAB_INACTIVE_MESSENGER_ONLINE_CODE=$online_messenger_code" \
+                --volume "$repo_root:/workspace:ro" \
+                --workdir /workspace \
+                app php -d auto_prepend_file= \
+                tests/integration/inactive_messenger_browser_fixture.php
+        }
+        trap 'cleanup_inactive_messenger_browser_fixture >/dev/null 2>&1 || true' EXIT
+        run_timed 3m "$container_cli" compose run --rm --no-deps -T \
+            --env "COMPOSE_PROJECT_NAME=$COMPOSE_PROJECT_NAME" \
+            --env ESTAB_INACTIVE_MESSENGER_BROWSER_FIXTURE=1 \
+            --env ESTAB_INACTIVE_MESSENGER_FIXTURE_ACTION=create \
+            --env \
+                "ESTAB_INACTIVE_MESSENGER_FIXTURE_MARKER=$inactive_messenger_marker" \
+            --env \
+                "ESTAB_INACTIVE_MESSENGER_LDF_CODE=$messenger_ldf_code" \
+            --env \
+                "ESTAB_INACTIVE_MESSENGER_SIGNED_OUT_CODE=$inactive_messenger_code" \
+            --env \
+                "ESTAB_INACTIVE_MESSENGER_ONLINE_CODE=$online_messenger_code" \
+            --volume "$repo_root:/workspace:ro" \
+            --workdir /workspace \
+            app php -d auto_prepend_file= \
+            tests/integration/inactive_messenger_browser_fixture.php
+
+        export ESTAB_TEST_LOGIN_NAME=$messenger_ldf_name
+        export ESTAB_TEST_LOGIN_CODE=$messenger_ldf_code
+        export ESTAB_TEST_LOGIN_FUNCTION=LdF
+        export ESTAB_TEST_INACTIVE_MESSENGER_CODE=$inactive_messenger_code
+        export ESTAB_TEST_ONLINE_MESSENGER_CODE=$online_messenger_code
+        export \
+            ESTAB_TEST_INACTIVE_MESSENGER_MESSAGE_MARKER=$inactive_messenger_marker
+        export \
+            ESTAB_TEST_INACTIVE_MESSENGER_DESTINATION=$inactive_messenger_destination
+        if [[ -n ${ESTAB_CI_LOG_DIR:-} ]]; then
+            export \
+                ESTAB_BROWSER_ARTIFACT_DIR="$ESTAB_CI_LOG_DIR/browser-inactive-messenger"
+        fi
+        run_timed 3m python3 -B tests/browser/headless_ui.py \
+            --inactive-messenger
+        cleanup_inactive_messenger_browser_fixture
+        trap - EXIT
+        unset \
+            ESTAB_TEST_INACTIVE_MESSENGER_CODE \
+            ESTAB_TEST_ONLINE_MESSENGER_CODE \
+            ESTAB_TEST_INACTIVE_MESSENGER_MESSAGE_MARKER \
+            ESTAB_TEST_INACTIVE_MESSENGER_DESTINATION
+
         echo "CI integration: running real-browser S6 plan versioning acceptance"
         telecom_login_name='Telecommunications Browser S6'
         telecom_login_code=e2t006

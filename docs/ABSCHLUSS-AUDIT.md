@@ -2,13 +2,15 @@
 
 > Vollständig abgeschlossener lokaler Nachweisstand: Am 3. August 2026 endete der
 > server-, datenbank-, HTTP-, Browser-, Container- und Wiederherstellungslauf
-> von `tests/integration/ci.sh` einschließlich Migration 118 mit Exitcode 0
-> und `CI integration: OK`. Die separat mit der festgelegten
-> unprivilegierten Containeridentität ausgeführte statische PHP-8.5-Suite
-> endete ebenfalls mit Exitcode 0 und lintete 277 aktive PHP-Dateien.
+> von `tests/integration/ci.sh` einschließlich Migration 119 mit Exitcode 0
+> und `CI integration: OK`. Die separat mit einer unprivilegierten
+> Containeridentität ausgeführte statische PHP-8.5-Suite endete ebenfalls mit
+> Exitcode 0 und lintete 278 aktive PHP-Dateien.
 
 > Browser-Geltungsgrenze: Chrome 150 bestand den allgemeinen UI-Lauf und die
-> S6-Fernmeldeplan-Versionierung einschließlich mobiler Darstellung. Für die
+> S6-Fernmeldeplan-Versionierung einschließlich mobiler Darstellung sowie die
+> Auswahl eines abgemeldeten, fachlich berechtigten Fernmelders samt sichtbarem
+> Status und Hinweis zur separaten Information. Für die
 > Umschaltung `STRICT`/`LOOSE`, die sichtbare Warnung und einen
 > Mehrfunktions-Schreibfall mit expliziter Wahl der handelnden Funktion
 > existiert jedoch weiterhin kein eigenes
@@ -19,7 +21,7 @@
 > lokalen Laufs.
 
 Dieses Audit beschreibt den am 3. August 2026 lokal geprüften Quellstand mit
-Migrationen bis einschließlich Migration 118. Es trennt automatisiert
+Migrationen bis einschließlich Migration 119. Es trennt automatisiert
 nachgewiesene Eigenschaften von noch ausstehenden externen Freigaben und
 manuellen Abnahmen.
 
@@ -27,8 +29,9 @@ manuellen Abnahmen.
 
 Quell-, Datenbank-, HTTP-, Browser-, Container- und Wiederherstellungsstand
 sind für den unten protokollierten Lauf technisch grün. Der Browsernachweis
-deckt den allgemeinen UI-Lauf und den Fernmeldeplan ab, nicht jedoch die
-Bedienung des Berechtigungsmodus. Dies ist keine formale fachliche oder
+deckt den allgemeinen UI-Lauf, den Fernmeldeplan und die Beauftragung eines
+abgemeldeten Fernmelders ab, nicht jedoch die Bedienung des
+Berechtigungsmodus. Dies ist keine formale fachliche oder
 öffentliche Produktfreigabe.
 
 Eine öffentliche OCI-Veröffentlichung ist trotzdem nicht freigegeben:
@@ -50,11 +53,11 @@ Zusatzfunktionen; es gibt keine pauschale Freigabe.
 | --- | --- | --- |
 | Keine blockierende „Anmeldung erforderlich“-Textseite | Direkte geschützte GET-Aufrufe antworten mit HTTP 303 zum Bestandslogin. Nur symbolische Allowlist-Ziele werden als `next` übernommen. Abgelaufene POST-Inhalte werden nicht wiederholt. Der Login besitzt einen sichtbaren Abbruch zur öffentlichen Übersicht. Frame-lokale Abläufe verwenden ein Content-Login und erzeugen keinen verschachtelten Arbeitsbereich. | `tests/php/auth_security.php`, `tests/php/navigation_security.php`, HTTP-Surface, Auth-Smoke und allgemeiner UI-Lauf in Chrome 150 erfolgreich |
 | Bedienbare, einheitliche Navigation | Gemeinsame Bereichsnavigation, Sitzungsanzeige, Logout, Sidebar, responsive Karten, BOS-Arbeitsbereich und Dirty-Guard | statische UI-Verträge, HTTP-Surface und allgemeiner UI-Lauf in Chrome 150 erfolgreich |
-| Einsatzbezogener Berechtigungsmodus | `STRICT` verlangt die angenommene und ausgewählte Besetzung einer aktiven formalen Dienstschicht. `LOOSE` benötigt keine formale Dienstschicht, erzwingt aber feste Kontofunktion oder explizite Zusatzfunktion. Objekt-, Stufen-, Konto-, Einsatz-, CSRF-, Audit- und Integritätsgrenzen bleiben bestehen. | Permission-Mode-Vertrag 99 Assertions, Anhang-Scope 30 Assertions, Single-Dispatch 249 Assertions sowie die MariaDB-/HTTP-Matrizen im vollständigen Lauf bis Migration 118; die dedizierte Browser-Modusabnahme bleibt offen |
+| Einsatzbezogener Berechtigungsmodus | `STRICT` verlangt die angenommene und ausgewählte Besetzung einer aktiven formalen Dienstschicht. `LOOSE` benötigt keine formale Dienstschicht, erzwingt aber feste Kontofunktion oder explizite Zusatzfunktion. Objekt-, Stufen-, Konto-, Einsatz-, CSRF-, Audit- und Integritätsgrenzen bleiben bestehen. | Permission-Mode-Vertrag 99 Assertions, Anhang-Scope 30 Assertions, Single-Dispatch 249 Assertions sowie die MariaDB-/HTTP-Matrizen im vollständigen Lauf bis Migration 119; die dedizierte Browser-Modusabnahme bleibt offen |
 | Skalierbare Nachrichtensuche | Meldungsübersicht und beide Varianten der zweiten Sichtung teilen immer sichtbare Suche, kombinierbare Filter, Filterchips, eindeutige Treffer-/Seitenangaben, stabile Sortierung und responsive Ergebnisdarstellung. Zählung und Seite werden serverseitig nach Einsatz- und Rechtegrenze bestimmt. | 99 Parser-/SQL-Assertions, 108 UI-Assertions, authentifizierter HTTP-Lauf mit S2, Fernmelder und Si sowie 145 MariaDB-Assertions mit 10.000 Ziel- und 257 Fremdeinsatzmeldungen |
-| Dienstvorschriftsgebundener Betrieb | Aktiver Einsatz, Führungsstellenname, persönliche Dienstbesetzungen in `STRICT`, feste und zusätzliche Kontofunktionen in `LOOSE`, optionale lockere Zugangsschichten, verbindlicher Eingangs-/Ausgangslauf, Sichtung, LdF-Entscheidung, Transportnachweis, S6-Plan, Melderlauf und unveränderliche Ereignisketten | Aktueller MariaDB-/HTTP-Nachweis bis Migration 118: DV-Evidenz 52 Assertions sowie DV-Operations 236 Assertions und 95 Ereignisse |
+| Dienstvorschriftsgebundener Betrieb | Aktiver Einsatz, Führungsstellenname, persönliche Dienstbesetzungen in `STRICT`, feste und zusätzliche Kontofunktionen in `LOOSE`, optionale lockere Zugangsschichten, verbindlicher Eingangs-/Ausgangslauf, Sichtung, LdF-Entscheidung, Transportnachweis, S6-Plan, Melderlauf und unveränderliche Ereignisketten | Aktueller MariaDB-/HTTP-Nachweis bis Migration 119: DV-Evidenz 52 Assertions sowie DV-Operations 243 Assertions und 95 Ereignisse; abgemeldeter Fernmelder mit Status und Informationshinweis zusätzlich im dedizierten Chrome-150-Lauf bestätigt |
 | Versionierter Fernmeldeplan | „Bearbeitung starten“ kopiert den vollständigen aktiven Plan mit neuen Wege-IDs in genau einen Entwurf. Kopf und Wege lassen sich ändern, ergänzen und löschen; die Auswahl schreibt `Fernsprecher`, `Funk`, `Melder`, `Telefax`, `Fernschreiber` und `Datenübertragung` aus und zeigt nur mediengerechte Felder. Dirty-Schutz verhindert unbeabsichtigten Verlust. Erst das Aktivieren veröffentlicht eine neue unveränderliche Version; alte und verworfene Fassungen bleiben mit Kopf, Wegen und Ereignissen lesbar. | `tests/php/telecom_plan_security.php`, echte MariaDB in `tests/integration/dv_operations.php` mit exaktem Kopiervergleich und konkurrierendem Bearbeitungsstart, authentifizierter HTTP-Lauf sowie `tests/browser/headless_ui.py --telecom-plan` in Chrome 150 einschließlich Edit/Add/Delete, Medienumschaltung, Dirty-Schutz, Publizieren, Historie und `390 × 844` CSS-Pixeln erfolgreich |
-| Benutzer-, Rollen- und Kennwortschutz | Administrativ provisionierte Konten, Sperren, Entsperren, Kennwortreset, Sitzungswiderruf, feste serverseitige Funktion/Rolle und explizite globale Zusatzfunktionen ausschließlich für `LOOSE` sowie eine revisionsgesicherte prospektive Kennwortrichtlinie. Die konfigurierbare Mindestlänge liegt bei 8–128 Unicode-Codepoints (Standard 12); höchstens 1024 UTF-8-Bytes und optionale Unicode-Zeichenklassen gelten für Anlage, Reset und aktivierte Selbstregistrierung. Browserfelder erlauben 1024 Eingabeeinheiten und zählen die Mindestlänge exakt in Codepoints; die Serverprüfung bleibt verbindlich. Titlecase erfüllt die Großbuchstabenpflicht, Unicode-Steuerzeichen sind verboten, Formatzeichen einschließlich ZWJ erlaubt. Neue und geänderte Kennwörter werden mit Argon2id gespeichert; Klartext und eindeutige Alt-Hashes werden nach erfolgreichem Login migriert. bcrypt wird nur bei einem eingegebenen Kennwort unter 72 UTF-8-Bytes automatisch migriert, ein längerer ambivalenter Alt-Hash benötigt einen administrativen Reset. Stärkere oder gemischte Argon2id-Kosten werden nicht zurückgestuft. Sitzungen und das getrennte Basic-Auth-Secret bleiben unberührt. | Aktueller Lauf bis Migration 118: 98 Assertions zur Benutzerverwaltung und Zusatzfunktionsänderung, 66 Kennwortrichtlinien-Assertions sowie erfolgreicher Administrationsworkflow über HTTP |
+| Benutzer-, Rollen- und Kennwortschutz | Administrativ provisionierte Konten, Sperren, Entsperren, Kennwortreset, Sitzungswiderruf, feste serverseitige Funktion/Rolle und explizite globale Zusatzfunktionen ausschließlich für `LOOSE` sowie eine revisionsgesicherte prospektive Kennwortrichtlinie. Die konfigurierbare Mindestlänge liegt bei 8–128 Unicode-Codepoints (Standard 12); höchstens 1024 UTF-8-Bytes und optionale Unicode-Zeichenklassen gelten für Anlage, Reset und aktivierte Selbstregistrierung. Browserfelder erlauben 1024 Eingabeeinheiten und zählen die Mindestlänge exakt in Codepoints; die Serverprüfung bleibt verbindlich. Titlecase erfüllt die Großbuchstabenpflicht, Unicode-Steuerzeichen sind verboten, Formatzeichen einschließlich ZWJ erlaubt. Neue und geänderte Kennwörter werden mit Argon2id gespeichert; Klartext und eindeutige Alt-Hashes werden nach erfolgreichem Login migriert. bcrypt wird nur bei einem eingegebenen Kennwort unter 72 UTF-8-Bytes automatisch migriert, ein längerer ambivalenter Alt-Hash benötigt einen administrativen Reset. Stärkere oder gemischte Argon2id-Kosten werden nicht zurückgestuft. Sitzungen und das getrennte Basic-Auth-Secret bleiben unberührt. | Aktueller Lauf bis Migration 119: 98 Assertions zur Benutzerverwaltung und Zusatzfunktionsänderung, 66 Kennwortrichtlinien-Assertions sowie erfolgreicher Administrationsworkflow über HTTP |
 | Kontrollierte Selbstregistrierung | Die Administration kann die öffentliche Kontoanlage sofort deaktivieren, dauerhaft aktivieren oder ab jetzt für 15 Minuten bis 24 Stunden freigeben. Befristungen enden ohne Hintergrunddienst exakt nach Datenbank-UTC. Ein globaler Lock, Revisionen und der atomische Konto-INSERT verhindern, dass ein bereits geöffnetes Formular eine Deaktivierung oder Ablaufgrenze überholt. Bestehende Konten, Anmeldungen und Sitzungen bleiben unabhängig. | 31 echte MariaDB-Assertions, 28 Handler-Assertions und erfolgreicher Basic-Auth-/CSRF-geschützter HTTP-Lauf; aktuelle Browserabnahme offen |
 | Belastbare Präsenzanzeige | Echte Browserinteraktion hält die Fachsitzung aktiv; nach 15 Minuten erscheint sie inaktiv, nach 12 Stunden wird sie serverseitig widerrufen. Statuspolls und automatische Refreshes zählen nicht. Der Aktivitätsendpunkt verlangt POST, gültige SID und Session-CSRF; PHP-GC ist auf 43.200 Sekunden angeglichen. HTTP Basic Auth bleibt separat. | Grenzwertmatrix in `tests/php/auth_security.php`; Monitorvertrag in `tests/php/session_ui_security.php`; Aktiv-/Inaktivdarstellung in `tests/php/sidebar_ui_security.php`; Endpoint- und Sitzungsablauf in `tests/integration/http_surface_http.sh` und `tests/integration/http_smoke.sh` |
 | Einsatzbezogene Daten und Exporte | ETB, TTB, Nachrichten, Anhänge, Vordrucke, Tabellenexport und PDF-Dossier bleiben einsatzgebunden | HTTP-, Export-, PDF- und Restore-Integrationen; Incident-Export 35 Assertions |
@@ -80,10 +83,10 @@ protokollierte Kernstand lautet:
 
 | Teilnachweis | Ergebnis |
 | --- | --- |
-| Migration und Schema | 24 Migrationen bis einschließlich Migration 118 angewendet; 42 Schema-Prüfungen |
+| Migration und Schema | 25 Migrationen bis einschließlich Migration 119 angewendet; 42 Schema-Prüfungen |
 | Einsatzdomäne | 69 Assertions |
 | DV-Evidenz | 52 Assertions |
-| DV-Operations einschließlich STRICT/LOOSE und Fernmeldeplan | 236 Assertions, 95 Ereignisse |
+| DV-Operations einschließlich STRICT/LOOSE, Fernmeldeplan und inaktiver Melderziele | 243 Assertions, 95 Ereignisse |
 | Optionale Zugangsschichten | 29 Assertions |
 | Benutzerverwaltung | 98 Assertions |
 | Kennwortrichtlinie gegen MariaDB | 66 Assertions |
@@ -93,7 +96,7 @@ protokollierte Kernstand lautet:
 | Sichtbare Anhangdarstellung | 11 Assertions |
 | Einsatzbezogene Nachrichtenvorschläge | 32 Assertions |
 | Nachrichtensuche mit 10.000 Zielzeilen | 145 Assertions |
-| Echter Browser | Chrome 150: öffentliche BOS-Informationen, Web-Handbuch, allgemeiner 12-Schritt-UI-Lauf, S6-Fernmeldeplan-Versionierung, Meldungsüberschriften und Nachrichtenvorschläge erfolgreich; Fernmeldeplan, Meldungsübersicht und allgemeine UI zusätzlich mobil geprüft |
+| Echter Browser | Chrome 150: öffentliche BOS-Informationen, Web-Handbuch, allgemeiner 12-Schritt-UI-Lauf, Auswahl eines abgemeldeten fachlich berechtigten Fernmelders mit Status und separatem Informationshinweis, S6-Fernmeldeplan-Versionierung, Meldungsüberschriften und Nachrichtenvorschläge erfolgreich; Fernmeldeplan, Meldungsübersicht und allgemeine UI zusätzlich mobil geprüft |
 
 HTTP-Surface, Selbstregistrierung, Auth-Smoke, Logbücher, Kategorien,
 Nachrichtenworkflow, Administrationsworkflow sowie Backup und Restore endeten
@@ -104,7 +107,8 @@ server-/containerseitigen Gate enthalten.
 Das verpflichtende Browser-Gate lief in Chrome 150 erfolgreich. Es deckte die
 öffentlichen BOS-Informationen, das Web-Handbuch, den allgemeinen
 12-Schritt-UI-Lauf, die S6-Fernmeldeplan-Versionierung,
-Meldungsüberschriften und Nachrichtenvorschläge ab. Ein dediziertes
+die inaktive Melderauswahl, Meldungsüberschriften und Nachrichtenvorschläge ab.
+Ein dediziertes
 Browserszenario für die `STRICT`/`LOOSE`-Umschaltung, ihre Warnanzeige und
 einen Mehrfunktions-Schreibweg mit expliziter Wahl der handelnden Funktion
 fehlt weiterhin; diese Modusabnahme bleibt manuell beziehungsweise als eigene
@@ -115,14 +119,9 @@ SELinux-Enforcing-System ausgeführt. Er ist deshalb kein Nachweis für das
 tatsächliche Relabeling unter SELinux; die dafür im Testhandbuch beschriebene
 Abnahme bleibt offen.
 
-Die anschließend separat mit der festgelegten unprivilegierten
-Containeridentität ausgeführte statische PHP-8.5-Suite endete mit Exitcode 0
-und lintete 277 aktive PHP-Dateien. Darin bestanden insbesondere der
-Berechtigungsmodusvertrag mit 99 Assertions, der exakte
-LOOSE-Anhang-Scope mit 30 Assertions und der Single-Dispatch-Vertrag mit 249
-Assertions. Die übrigen statischen Sicherheits-, Workflow-, Shell-,
-Provenienz-, PDF- und GitHub-Actions-Verträge waren Bestandteil desselben
-erfolgreichen Gesamtlaufs.
+Die getrennt ausgeführte statische PHP-8.5-Suite endete mit Exitcode 0 und
+lintete 278 aktive PHP-Dateien. Sie bleibt ein eigenständiger Nachweis neben
+dem Integrations-Transcript.
 
 ## Git- und Remote-Geltungsgrenze
 
@@ -143,8 +142,8 @@ Für die Remote-Veröffentlichung erneut zu prüfen sind:
 
 Ob diese Tags bereits auf `origin` vorhanden sind, ist unmittelbar vor der
 Veröffentlichung neu zu prüfen. Der lokal geprüfte Quellstand bis Migration
-118 besitzt den oben dokumentierten erfolgreichen CI-, Browser- und
-statischen Nachweis. Daraus folgt nichts über einen noch nicht gelaufenen
+119 besitzt den oben dokumentierten erfolgreichen CI- und Browsernachweis.
+Daraus folgt nichts über einen noch nicht gelaufenen
 Remote-Workflow.
 
 ## Noch ausstehende Freigaben

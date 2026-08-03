@@ -85,6 +85,9 @@ $telecomDraftDiscardMigration = $read(
 $operationalAuthorityMigration = $read(
     $root . '/docker/db/migrations/118-operational-authority.sql'
 );
+$inactiveMessengerDispatchMigration = $read(
+    $root . '/docker/db/migrations/119-inactive-messenger-dispatch.sql'
+);
 $baseline = $read($root . '/docker/db/init/10-schema.sql');
 $verify = $read($root . '/docker/db/verify.sql');
 $health = $read($root . '/health.php');
@@ -113,6 +116,9 @@ $selfRegistrationSql = $normaliseSql($selfRegistrationMigration);
 $standardCategoriesSql = $normaliseSql($standardCategoriesMigration);
 $telecomDraftDiscardSql = $normaliseSql($telecomDraftDiscardMigration);
 $operationalAuthoritySql = $normaliseSql($operationalAuthorityMigration);
+$inactiveMessengerDispatchSql = $normaliseSql(
+    $inactiveMessengerDispatchMigration
+);
 $baselineSql = $normaliseSql($baseline);
 $verifySql = $normaliseSql($verify);
 $readinessSql = $normaliseSql(estab_readiness_schema_query());
@@ -949,6 +955,120 @@ $assert(
             'wrong-book TTB system marker was accepted'
         ),
     'Schema integration omits migration-118 strict/loose authority evidence'
+);
+
+$inactiveMessengerTriggerStart = strpos(
+    $inactiveMessengerDispatchSql,
+    'CREATE OR REPLACE TRIGGER `estab_dv94_messenger_insert`'
+);
+$inactiveMessengerTriggerEnd = strpos(
+    $inactiveMessengerDispatchSql,
+    '-- Refuse to acknowledge the migration',
+    is_int($inactiveMessengerTriggerStart)
+        ? $inactiveMessengerTriggerStart
+        : 0
+);
+$inactiveMessengerTriggerSql = is_int($inactiveMessengerTriggerStart)
+    && is_int($inactiveMessengerTriggerEnd)
+    ? substr(
+        $inactiveMessengerDispatchSql,
+        $inactiveMessengerTriggerStart,
+        $inactiveMessengerTriggerEnd - $inactiveMessengerTriggerStart
+    )
+    : '';
+$assert(
+    substr_count(
+        $inactiveMessengerDispatchMigration,
+        'CREATE OR REPLACE TRIGGER `estab_dv94_messenger_insert`'
+    ) === 1
+        && !str_contains(
+            $inactiveMessengerDispatchMigration,
+            'DROP TRIGGER'
+        )
+        && str_contains(
+            $inactiveMessengerDispatchSql,
+            "`version` = '118-operational-authority.sql'"
+        )
+        && str_contains(
+            $inactiveMessengerDispatchSql,
+            'Inactive messenger migration blocked: predecessor ledger is missing'
+        )
+        && str_contains(
+            $inactiveMessengerDispatchSql,
+            'Inactive messenger migration blocked: trigger collision'
+        )
+        && str_contains(
+            $inactiveMessengerDispatchSql,
+            'Inactive messenger migration failed: trigger mismatch'
+        ),
+    'Migration 119 is not checksum-ledgered, atomic, retryable, and collision-safe'
+);
+$assert(
+    str_contains(
+        $inactiveMessengerTriggerSql,
+        'DECLARE inactive_messenger_target_allowed TINYINT UNSIGNED DEFAULT 1'
+    )
+        && str_contains(
+            $inactiveMessengerTriggerSql,
+            'inactive_messenger_target_allowed = 1'
+        )
+        && !str_contains(
+            $inactiveMessengerTriggerSql,
+            'messenger_account.`aktiv` = 1'
+        )
+        && str_contains(
+            $inactiveMessengerTriggerSql,
+            'messenger_account.`estab_gesperrt` = 0'
+        )
+        && str_contains(
+            $inactiveMessengerTriggerSql,
+            'supervisor_account.`aktiv` = 1'
+        )
+        && str_contains(
+            $inactiveMessengerTriggerSql,
+            'supervisor_account.`estab_gesperrt` = 0'
+        ),
+    'Migration 119 does not separate inactive target presence from active LdF authority'
+);
+foreach ([
+    'messenger_assignment.`status` = BINARY \'ANGENOMMEN\'',
+    'messenger_shift.`status` = BINARY \'AKTIV\'',
+    'supervisor_assignment.`status` = BINARY \'ANGENOMMEN\'',
+    'supervisor_shift.`status` = BINARY \'AKTIV\'',
+    'messenger_extra',
+    'supervisor_extra',
+    'messenger_access_memberships > 0 AND messenger_enabled_access = 0',
+    'supervisor_access_memberships > 0 AND supervisor_enabled_access = 0',
+    '@estab_dv_actor_assignment_id',
+    '@estab_dv_target_assignment_id',
+] as $preservedMessengerAuthority) {
+    $assert(
+        str_contains(
+            $inactiveMessengerTriggerSql,
+            $preservedMessengerAuthority
+        ),
+        'Migration 119 weakens messenger authority: '
+            . $preservedMessengerAuthority
+    );
+}
+$assert(
+    str_contains(
+        $schemaIntegration,
+        'inactive authorised Fernmelder was not accepted as messenger target'
+    )
+        && str_contains(
+            $schemaIntegration,
+            'blocked inactive Fernmelder was accepted as messenger target'
+        )
+        && str_contains(
+            $schemaIntegration,
+            'inactive LdF was accepted as messenger supervisor'
+        )
+        && str_contains(
+            $schemaIntegration,
+            'inactive messenger migration trigger collision was changed or recorded'
+        ),
+    'Schema integration omits migration-119 positive, negative, or collision evidence'
 );
 foreach ([
     'idx_benutzer_funktion_aktiv',
@@ -2282,6 +2402,7 @@ foreach ([
         '116-standard-categories.sql',
         '117-telecom-draft-discard.sql',
         '118-operational-authority.sql',
+        '119-inactive-messenger-dispatch.sql',
         'nv_benutzer_zusatzfunktionen',
         'estab:migration:118:additional-user-functions:v1',
         'Manual ETB entry requires an active accepted duty assignment',
@@ -2289,6 +2410,7 @@ foreach ([
         'STRICT ETB entry requires duty shift provenance',
         'STRICT TTB entry requires duty shift provenance',
         'Discarded telecommunications drafts are immutable evidence',
+        'inactive_messenger_target_allowed',
     ] as $fragment) {
         $assert(
             str_contains($runtimeSchemaContract, $fragment),
@@ -2829,6 +2951,7 @@ foreach ([
     '116-standard-categories.sql',
     '117-telecom-draft-discard.sql',
     '118-operational-authority.sql',
+    '119-inactive-messenger-dispatch.sql',
     'operational-authority grant table was not migrated canonically',
     'strict telecommunications plan accepted an account without an active S6 assignment',
     'loose telecommunications plan rejected an explicit S6 additional function',
@@ -2865,7 +2988,7 @@ foreach ([
     'blocked self-registration table collision was changed or recorded',
     'self-registration migration did not recover after removing the collision',
     'incident permission mode was not migrated fail-closed and canonically',
-    'migration 114 rewrote one of the existing twenty-three ledger rows',
+    'migration 114 rewrote one of the existing twenty-four ledger rows',
     'LOOSE manual ETB/TBB entries were accepted from their fixed account function',
     'STRICT system ETB without a shift was accepted',
     'STRICT ETB entry requires duty shift provenance',
@@ -2889,7 +3012,7 @@ foreach ([
     'missing ETB head was not rejected explicitly',
     'missing TTB head was not rejected explicitly',
     'MariaDB default snapshot isolation is not enabled for concurrency tests',
-    'assert_equal "24"',
+    'assert_equal "25"',
 ] as $marker) {
     $assert(
         str_contains($schemaIntegration, $marker),
@@ -2956,7 +3079,7 @@ $assert(
         && str_contains($verifySql, "index_name <> 'PRIMARY') = 0")
         && str_contains(
             $verifySql,
-            '(SELECT COUNT(*) FROM `estab_schema_migrations`) = 24'
+            '(SELECT COUNT(*) FROM `estab_schema_migrations`) = 25'
         )
         && str_contains($verifySql, "'96-etb-duty-function.sql'")
         && str_contains(
@@ -2987,7 +3110,11 @@ $assert(
         && str_contains($verifySql, "'116-standard-categories.sql'")
         && str_contains($verifySql, "'117-telecom-draft-discard.sql'")
         && str_contains($verifySql, "'118-operational-authority.sql'")
-        && str_contains($verifySql, ") = 24) AS `schema_migrations_ok`")
+        && str_contains(
+            $verifySql,
+            "'119-inactive-messenger-dispatch.sql'"
+        )
+        && str_contains($verifySql, ") = 25) AS `schema_migrations_ok`")
         && str_contains(
             $verifySql,
             'Discarded telecommunications drafts are immutable evidence'
@@ -3014,7 +3141,7 @@ $assert(
         && str_contains($readinessSql, "index_name <> 'PRIMARY') = 0")
         && str_contains(
             $readinessSql,
-            '(SELECT COUNT(*) FROM estab_schema_migrations) = 24'
+            '(SELECT COUNT(*) FROM estab_schema_migrations) = 25'
         )
         && str_contains($readinessSql, "'96-etb-duty-function.sql'")
         && str_contains(
@@ -3062,7 +3189,11 @@ $assert(
         )
         && str_contains(
             $readinessSql,
-            "checksum REGEXP BINARY '^[0-9a-f]{64}$') = 24"
+            "'119-inactive-messenger-dispatch.sql'"
+        )
+        && str_contains(
+            $readinessSql,
+            "checksum REGEXP BINARY '^[0-9a-f]{64}$') = 25"
         ),
     'Runtime readiness does not require the exact final ETB catalogue and ledger'
 );
@@ -3110,6 +3241,7 @@ $releaseMigrationFiles = [
     '116-standard-categories.sql',
     '117-telecom-draft-discard.sql',
     '118-operational-authority.sql',
+    '119-inactive-messenger-dispatch.sql',
 ];
 foreach ([
     'verify.sql' => $verifySql,
@@ -3281,6 +3413,10 @@ $assert(
             $readiness,
             "'118-operational-authority.sql'"
         )
+        && str_contains(
+            $readiness,
+            "'119-inactive-messenger-dispatch.sql'"
+        )
         && str_contains($verify, "'50-global-incidents.sql'")
         && str_contains($verify, "'45-global-incidents-prepare.sql'")
         && str_contains($verify, "'55-global-incidents-finish.sql'")
@@ -3302,9 +3438,10 @@ $assert(
         && str_contains($verify, "'116-standard-categories.sql'")
         && str_contains($verify, "'117-telecom-draft-discard.sql'")
         && str_contains($verify, "'118-operational-authority.sql'")
-        && str_contains($verify, 'estab_schema_migrations`) = 24')
-        && str_contains($readiness, 'estab_schema_migrations) = 24'),
-    'Migration ledger/readiness does not require all twenty-four release migrations'
+        && str_contains($verify, "'119-inactive-messenger-dispatch.sql'")
+        && str_contains($verify, 'estab_schema_migrations`) = 25')
+        && str_contains($readiness, 'estab_schema_migrations) = 25'),
+    'Migration ledger/readiness does not require all twenty-five release migrations'
 );
 $assert(
     str_contains($readiness, "require_once __DIR__ . '/bootstrap.php'")

@@ -59,7 +59,11 @@ Die verbindlichen Regeln sind:
    formale Dienstschicht erforderlich; dort muss die feste Kontofunktion oder
    eine ausdrücklich vergebene globale Zusatzfunktion fachlich passen.
    Optionale Zugangsschichten können nur in `LOOSE` den Gruppenzugang
-   entziehen und verleihen keine Fachrechte.
+   entziehen und verleihen keine Fachrechte. Eng begrenzte Ausnahme für das
+   Ziel eines Melderauftrags: Das schreibende LdF bleibt aktiv und
+   authentisiert, der fachlich geeignete und ungesperrte Ziel-Fernmelder darf
+   bei der Beauftragung aber inaktiv oder abgemeldet sein. Seine persönliche
+   Übernahme bleibt authentisierungspflichtig.
 10. „Nicht aktiv“ und „formal abgeschlossen“ sind getrennte Zustände. Ein
     formaler Abschluss ist nur nach einer vollständigen Preflight-Prüfung
     möglich und sperrt sämtliche weiteren operativen Änderungen.
@@ -105,7 +109,7 @@ Die verbindlichen Regeln sind:
 | `nv_dienstschichten`, `nv_dienstbesetzungen`, `nv_dienstuebergaben` | Formale Dienstbetriebs-, persönliche Besetzungs- und Übergabeevidenz; in `STRICT` aktuelle Quelle von operativer Identität und Rechten |
 | `nv_benutzer_zusatzfunktionen` | Globale, administrativ vergebene Zusatzfunktionen je Konto; ausschließlich in `LOOSE` wirksam |
 | `nv_fernmeldeplaene`, `nv_fernmeldeplan_eintraege` | Versionierte, nach Freigabe unveränderliche S6-Kommunikationsplanung |
-| `nv_melderauftraege` | Vollständige Melderkette vom LdF-Auftrag bis zur Rückmeldung |
+| `nv_melderauftraege` | Vollständige Melderkette vom LdF-Auftrag bis zur Rückmeldung; fachliche Zielberechtigung bleibt modusabhängig, die Live-Sitzung des Ziel-Fernmelders ist erst für persönliche Übernahme und Folgeschritte erforderlich |
 | `nv_betriebsereignis_kopf`, `nv_betriebsereignisse` | Einsatzbezogene Hashkette für Schicht-, Besetzungs-, Plan- und Melderereignisse |
 | `nv_logbuch_koepfe` | Exakt zwei vorab durch den Einsatz-Insert-Trigger angelegte, sperrbare nächste lokale Zähler je Einsatz (`ETB`, `TTB`); technische globale Primärschlüssel bleiben davon getrennt |
 
@@ -368,6 +372,14 @@ Einsatz-API:
   Gruppenzugang steuern. Ohne passende wirksame Funktion bleiben Menü, Lesen
   und Schreiben gesperrt. Ohne aktiven Einsatz bleibt jeder operative POST
   ebenfalls serverseitig gesperrt.
+- Die Melderauswahl führt alle ungesperrten, im aktuellen Modus fachlich
+  geeigneten Fernmelder auf, auch wenn deren Präsenz inaktiv oder die Sitzung
+  beendet ist. In `STRICT` bleibt die angenommene Ziel-Besetzung der aktiven
+  Dienstschicht, in `LOOSE` die feste beziehungsweise zusätzliche Funktion
+  samt Zugangsschicht-Gate Pflicht. Statuskennzeichnung und Hinweis fordern
+  LdF bei fehlender Aktivität zur separaten Information auf; Übernahme und
+  weitere persönliche Schritte bleiben dem erneut selbst angemeldeten
+  Zielkonto vorbehalten.
 - Nachrichten, Sperren, Sichtung, Transport, Gelesen-/Erledigt-Zustände und
   Kategoriezuordnungen prüfen die aktive Nachricht innerhalb einer
   `estab_incident_with_active_write()`-Transaktion. Listen und Zähler lesen nur
@@ -652,6 +664,13 @@ Schichtprovenienz bleibt für sie in `STRICT` dennoch Pflicht; nur in `LOOSE`
 dürfen Systemzeilen ohne formale Dienstschicht entstehen. Die
 Zusatzfunktionstabelle und alle ersetzten Trigger werden beim Upgrade
 kollisionsgeprüft.
+
+Migration 119 ersetzt danach nur den Insert-Trigger für Melderaufträge. Sie
+entfernt die Live-Sitzungsbedingung des Ziel-Fernmelders, ohne dessen
+Kontosperre, fachliche `STRICT`-/`LOOSE`-Autorität oder Zugangsschicht-Gate zu
+lockern. Das disponierende LdF bleibt aktiv, authentisiert und fachlich
+autorisiert. Bestandsläufe werden nicht verändert; ein fremder oder fehlender
+Vorgängertrigger blockiert den Ledgerabschluss.
 
 Migration 50 bleibt bytegenau auf der bereits im Ledger verwendeten
 Prüfsumme. Vor- oder Nachbedingungen werden ausschließlich in neuen

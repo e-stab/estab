@@ -507,6 +507,7 @@ if ($requestMethod === 'POST') {
             dv_operations_redirect('plan_activated');
         }
         if ($action === 'assign_messenger') {
+            $assignmentDetails = null;
             estab_dv_assign_messenger(
                 $connection,
                 $incidentId,
@@ -517,9 +518,23 @@ if ($requestMethod === 'POST') {
                 $_POST['melder_kuerzel'] ?? null,
                 $_POST['ziel'] ?? null,
                 $operationIdentity,
-                $conf_4f_tbl['protokoll']
+                $conf_4f_tbl['protokoll'],
+                $assignmentDetails
             );
-            dv_operations_redirect('messenger_assigned');
+            $requiresNotification = !is_array($assignmentDetails)
+                || ($assignmentDetails['requires_separate_notification']
+                    ?? true) === true;
+            $presenceState = is_array($assignmentDetails)
+                && is_string($assignmentDetails['presence_state'] ?? null)
+                    ? $assignmentDetails['presence_state']
+                    : 'unknown';
+            dv_operations_redirect(
+                $requiresNotification
+                    ? 'messenger_assigned_notification_required'
+                    : 'messenger_assigned',
+                'melderauftraege',
+                ['presence' => $presenceState]
+            );
         }
         if ($action === 'messenger_transition') {
             $transition = $_POST['transition'] ?? null;
@@ -753,10 +768,21 @@ $flashMessages = [
         . 'Bearbeitung auf Basis des aktiven Plans starten.',
     'plan_activated' => 'Der Fernmeldeplan wurde freigegeben und versioniert.',
     'messenger_assigned' => 'Der Melderauftrag wurde verbindlich erteilt.',
+    'messenger_assigned_notification_required' =>
+        'Der Melderauftrag wurde verbindlich erteilt.',
     'messenger_updated' => 'Der Melderstatus wurde nachgewiesen.',
 ];
 $result = $_GET['result'] ?? null;
 $flash = is_string($result) ? ($flashMessages[$result] ?? null) : null;
+$flashWarning = null;
+if ($result === 'messenger_assigned_notification_required') {
+    $presenceResult = $_GET['presence'] ?? null;
+    $presenceLabel = estab_dv_messenger_presence_label(
+        is_string($presenceResult) ? $presenceResult : null
+    );
+    $flashWarning = 'Status des Fernmelders: ' . $presenceLabel . '. '
+        . 'Der LdF muss ihn separat über den Auftrag informieren.';
+}
 $highlightEntryId = null;
 $entryResult = $_GET['entry'] ?? null;
 if (is_string($entryResult)) {
@@ -864,6 +890,11 @@ foreach ($plans as $plan) {
   <?php if ($flash !== null): ?>
     <p class="estab-tool-feedback estab-tool-feedback-success" role="status">
       <?= dv_operations_html($flash) ?>
+    </p>
+  <?php endif; ?>
+  <?php if ($flashWarning !== null): ?>
+    <p class="estab-tool-feedback estab-tool-feedback-warning" role="status">
+      <?= dv_operations_html($flashWarning) ?>
     </p>
   <?php endif; ?>
 
@@ -1669,7 +1700,7 @@ foreach ($plans as $plan) {
       </section>
     <?php endif; ?>
 
-    <section class="estab-tool-panel">
+    <section class="estab-tool-panel" id="melderauftraege">
       <header class="estab-tool-panel-heading">
         <h2>Melderaufträge</h2>
         <p>Übernahme, tatsächlicher Empfänger, Rücknachricht, Rückkehr und
@@ -1678,7 +1709,7 @@ foreach ($plans as $plan) {
       </header>
       <?php if ($isLdf): ?>
         <form class="estab-tool-form" method="post"
-          action="fuehrungsstelle.php">
+          action="fuehrungsstelle.php" data-estab-messenger-assignment>
           <?= estab_csrf_field() ?>
           <input type="hidden" name="operation_action"
             value="assign_messenger">
@@ -1693,19 +1724,38 @@ foreach ($plans as $plan) {
             </select>
           </label>
           <label>Melder
-            <select name="melder_kuerzel" required>
+            <select name="melder_kuerzel" required
+              data-estab-messenger-select>
               <?php if ($users === []): ?>
-                <option value="">Kein angemeldeter Fernmelder verfügbar</option>
+                <option value="">Kein fachlich berechtigter Fernmelder verfügbar</option>
+              <?php else: ?>
+                <option value="" selected>Bitte Fernmelder auswählen</option>
               <?php endif; ?>
               <?php foreach ($users as $user): ?>
-                <option value="<?= dv_operations_html($user['kuerzel']) ?>">
+                <option value="<?= dv_operations_html($user['kuerzel']) ?>"
+                  data-estab-presence-state="<?= dv_operations_html(
+                      $user['presence_state']
+                  ) ?>" data-estab-presence-label="<?= dv_operations_html(
+                      $user['presence_label']
+                  ) ?>" data-estab-notification-required="<?=
+                      ($user['requires_separate_notification'] ?? true)
+                          ? '1'
+                          : '0' ?>">
                   <?= dv_operations_html(
                       $user['benutzer'] . ' (' . $user['kuerzel'] . ')'
+                          . ' · ' . $user['presence_label']
                   ) ?>
                 </option>
               <?php endforeach; ?>
             </select>
           </label>
+          <p class="estab-tool-notice estab-tool-notice-warning" role="status"
+            aria-live="polite" hidden data-estab-messenger-presence-warning>
+            <strong>Separat informieren:</strong>
+            Der gewählte Fernmelder ist aktuell
+            <span data-estab-messenger-presence-label>nicht aktiv</span>.
+            Der LdF muss ihn separat über den Auftrag informieren.
+          </p>
           <label>Ziel
             <input name="ziel" maxlength="255" required>
           </label>
@@ -1863,6 +1913,31 @@ foreach ($plans as $plan) {
       if (select) select.addEventListener('change', function () {
         update(form);
       });
+    });
+  document.querySelectorAll('[data-estab-messenger-assignment]')
+    .forEach(function (form) {
+      var select = form.querySelector('[data-estab-messenger-select]');
+      var warning = form.querySelector(
+        '[data-estab-messenger-presence-warning]'
+      );
+      var label = warning && warning.querySelector(
+        '[data-estab-messenger-presence-label]'
+      );
+      function updateMessengerPresence() {
+        if (!select || !warning) return;
+        var option = select.options[select.selectedIndex] || null;
+        var required = option
+          && option.dataset.estabNotificationRequired === '1';
+        warning.hidden = !required;
+        if (label && option) {
+          label.textContent = option.dataset.estabPresenceLabel
+            || 'nicht aktiv';
+        }
+      }
+      updateMessengerPresence();
+      if (select) {
+        select.addEventListener('change', updateMessengerPresence);
+      }
     });
   function changed(form) {
     if (form.hasAttribute('data-estab-dirty-initial')) return true;

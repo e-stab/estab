@@ -63,6 +63,7 @@ if [ ! -r "$fixture" ] \
     || [ ! -r "$ESTAB_MIGRATIONS_DIR/116-standard-categories.sql" ] \
     || [ ! -r "$ESTAB_MIGRATIONS_DIR/117-telecom-draft-discard.sql" ] \
     || [ ! -r "$ESTAB_MIGRATIONS_DIR/118-operational-authority.sql" ] \
+    || [ ! -r "$ESTAB_MIGRATIONS_DIR/119-inactive-messenger-dispatch.sql" ] \
     || [ ! -x "$ESTAB_MIGRATOR_BIN" ]; then
     echo "schema migrator test: fixture, baseline, or migrator is unavailable" >&2
     exit 1
@@ -80,7 +81,7 @@ pre_110_migrations=$(mktemp -d "${TMPDIR:-/tmp}/estab-pre-110-migrations.XXXXXX"
 
 for migration_path in "$ESTAB_MIGRATIONS_DIR"/*.sql; do
     case "$(basename "$migration_path")" in
-        110-etb-tbb-rules.sql|111-logbook-shift-assignment.sql|112-optional-access-shifts.sql|113-password-policy.sql|114-self-registration-policy.sql|115-incident-permission-mode.sql|116-standard-categories.sql|117-telecom-draft-discard.sql|118-operational-authority.sql)
+        110-etb-tbb-rules.sql|111-logbook-shift-assignment.sql|112-optional-access-shifts.sql|113-password-policy.sql|114-self-registration-policy.sql|115-incident-permission-mode.sql|116-standard-categories.sql|117-telecom-draft-discard.sql|118-operational-authority.sql|119-inactive-messenger-dispatch.sql)
             continue
             ;;
     esac
@@ -355,11 +356,12 @@ SELECT GROUP_CONCAT(CONCAT(version, ':', checksum, ':', state)
    '112-optional-access-shifts.sql', '113-password-policy.sql',
    '114-self-registration-policy.sql', '115-incident-permission-mode.sql',
    '116-standard-categories.sql', '117-telecom-draft-discard.sql',
-   '118-operational-authority.sql'
+   '118-operational-authority.sql',
+   '119-inactive-messenger-dispatch.sql'
  )"
 )" \
     "migration 110 upgrade rewrote a released migration ledger row"
-assert_equal "1|1|1|1|1|1|1|1|1|1|3|1|2|1" "$(database_query "$logbook_upgrade_database" "
+assert_equal "1|1|1|1|1|1|1|1|1|1|1|3|1|2|1" "$(database_query "$logbook_upgrade_database" "
 SELECT CONCAT(
          (SELECT COUNT(*) FROM estab_schema_migrations
            WHERE version = '110-etb-tbb-rules.sql' AND state = 'applied'), '|',
@@ -386,6 +388,9 @@ SELECT CONCAT(
              AND state = 'applied'), '|',
          (SELECT COUNT(*) FROM estab_schema_migrations
            WHERE version = '118-operational-authority.sql'
+             AND state = 'applied'), '|',
+         (SELECT COUNT(*) FROM estab_schema_migrations
+           WHERE version = '119-inactive-messenger-dispatch.sql'
              AND state = 'applied'), '|',
          (SELECT COUNT(*) FROM information_schema.statistics
            WHERE table_schema = DATABASE() AND table_name = 'nv_etb'
@@ -571,7 +576,7 @@ SELECT GROUP_CONCAT(kategorie ORDER BY BINARY kategorie SEPARATOR ',')
   FROM nv_masterkatego"
 )" \
     "fresh installation did not receive exact standard categories"
-assert_equal "7|7|1|1|1|24" "$(database_query "$fresh_database" "
+assert_equal "7|7|1|1|1|1|25" "$(database_query "$fresh_database" "
 SELECT CONCAT(
          COUNT(*), '|', COUNT(DISTINCT BINARY kategorie), '|',
          (SELECT COUNT(*) FROM estab_schema_migrations
@@ -584,6 +589,10 @@ SELECT CONCAT(
              AND checksum REGEXP BINARY '^[0-9a-f]{64}$'), '|',
          (SELECT COUNT(*) FROM estab_schema_migrations
            WHERE version = '118-operational-authority.sql'
+             AND state = 'applied'
+             AND checksum REGEXP BINARY '^[0-9a-f]{64}$'), '|',
+         (SELECT COUNT(*) FROM estab_schema_migrations
+           WHERE version = '119-inactive-messenger-dispatch.sql'
              AND state = 'applied'
              AND checksum REGEXP BINARY '^[0-9a-f]{64}$'), '|',
          (SELECT COUNT(*) FROM estab_schema_migrations
@@ -701,6 +710,166 @@ VALUES
    'Immutable draft evidence', 's6117');
 SET @estab_dv_actor_assignment_id = NULL;
 SET @estab_dv_target_assignment_id = NULL"
+
+# An account's `aktiv` value is browser presence, not its suitability for a
+# newly created messenger assignment. Migration 119 permits an inactive,
+# unblocked A/W target with exact STRICT duty provenance while keeping the
+# assigning LdF active and enforcing the durable account block.
+database_query "$fresh_database" "
+INSERT INTO nv_nachrichten
+  (\`04_richtung\`, \`06_befwegausw\`, \`12_betreff\`, \`12_inhalt\`,
+   \`x00_status\`, \`x01_abschluss\`)
+VALUES
+  ('A', 'Me', 'Migration 119 STRICT messenger target',
+   'Inactive authorised messenger target fixture.', 2, 'f');
+SET @inactive_messenger_message_id = LAST_INSERT_ID();
+UPDATE nv_benutzer
+   SET aktiv = 0, estab_gesperrt = 1
+ WHERE BINARY kuerzel = BINARY 'aw118'"
+if database_query "$fresh_database" "
+SET @estab_dv_actor_assignment_id = (
+  SELECT dienstbesetzung_id FROM nv_dienstbesetzungen
+   WHERE dienstschicht_id = (
+     SELECT dienstschicht_id FROM nv_dienstschichten
+      WHERE einsatz_id = (
+        SELECT einsatz_id FROM nv_einsaetze
+         WHERE kennung = 'SCHEMA-TELECOM-DISCARD'
+      ) AND BINARY status = BINARY 'AKTIV'
+   ) AND BINARY benutzer_kuerzel = BINARY 'ldf118'
+     AND BINARY funktion = BINARY 'LdF'
+     AND BINARY rolle = BINARY 'Fernmelder'
+);
+SET @estab_dv_target_assignment_id = (
+  SELECT dienstbesetzung_id FROM nv_dienstbesetzungen
+   WHERE dienstschicht_id = (
+     SELECT dienstschicht_id FROM nv_dienstschichten
+      WHERE einsatz_id = (
+        SELECT einsatz_id FROM nv_einsaetze
+         WHERE kennung = 'SCHEMA-TELECOM-DISCARD'
+      ) AND BINARY status = BINARY 'AKTIV'
+   ) AND BINARY benutzer_kuerzel = BINARY 'aw118'
+     AND BINARY funktion = BINARY 'A/W'
+     AND BINARY rolle = BINARY 'Fernmelder'
+);
+INSERT INTO nv_melderauftraege
+  (einsatz_id, nachricht_id, melder_kuerzel, ziel, beauftragt_von)
+SELECT einsatz_id, \`00_lfd\`, 'aw118', 'Blocked target must fail', 'ldf118'
+  FROM nv_nachrichten
+ WHERE \`12_betreff\` = 'Migration 119 STRICT messenger target'" \
+    >"$failure_log" 2>&1; then
+    echo "schema migrator test: blocked inactive Fernmelder was accepted as messenger target" >&2
+    exit 1
+fi
+if ! grep -q 'Messenger assignment account functions are invalid' \
+    "$failure_log"; then
+    echo "schema migrator test: blocked inactive messenger failure was not explicit" >&2
+    sed -n '1,120p' "$failure_log" >&2
+    exit 1
+fi
+database_query "$fresh_database" "
+UPDATE nv_benutzer
+   SET estab_gesperrt = 0
+ WHERE BINARY kuerzel = BINARY 'aw118';
+UPDATE nv_benutzer
+   SET aktiv = 0
+ WHERE BINARY kuerzel = BINARY 'ldf118'"
+if database_query "$fresh_database" "
+SET @estab_dv_actor_assignment_id = (
+  SELECT dienstbesetzung_id FROM nv_dienstbesetzungen
+   WHERE dienstschicht_id = (
+     SELECT dienstschicht_id FROM nv_dienstschichten
+      WHERE einsatz_id = (
+        SELECT einsatz_id FROM nv_einsaetze
+         WHERE kennung = 'SCHEMA-TELECOM-DISCARD'
+      ) AND BINARY status = BINARY 'AKTIV'
+   ) AND BINARY benutzer_kuerzel = BINARY 'ldf118'
+);
+SET @estab_dv_target_assignment_id = (
+  SELECT dienstbesetzung_id FROM nv_dienstbesetzungen
+   WHERE dienstschicht_id = (
+     SELECT dienstschicht_id FROM nv_dienstschichten
+      WHERE einsatz_id = (
+        SELECT einsatz_id FROM nv_einsaetze
+         WHERE kennung = 'SCHEMA-TELECOM-DISCARD'
+      ) AND BINARY status = BINARY 'AKTIV'
+   ) AND BINARY benutzer_kuerzel = BINARY 'aw118'
+);
+INSERT INTO nv_melderauftraege
+  (einsatz_id, nachricht_id, melder_kuerzel, ziel, beauftragt_von)
+SELECT einsatz_id, \`00_lfd\`, 'aw118', 'Inactive LdF must fail', 'ldf118'
+  FROM nv_nachrichten
+ WHERE \`12_betreff\` = 'Migration 119 STRICT messenger target'" \
+    >"$failure_log" 2>&1; then
+    echo "schema migrator test: inactive LdF was accepted as messenger supervisor" >&2
+    exit 1
+fi
+if ! grep -q 'Messenger assignment account functions are invalid' \
+    "$failure_log"; then
+    echo "schema migrator test: inactive LdF failure was not explicit" >&2
+    sed -n '1,120p' "$failure_log" >&2
+    exit 1
+fi
+database_query "$fresh_database" "
+UPDATE nv_benutzer
+   SET aktiv = 1
+ WHERE BINARY kuerzel = BINARY 'ldf118';
+SET @estab_dv_actor_assignment_id = (
+  SELECT dienstbesetzung_id FROM nv_dienstbesetzungen
+   WHERE dienstschicht_id = (
+     SELECT dienstschicht_id FROM nv_dienstschichten
+      WHERE einsatz_id = (
+        SELECT einsatz_id FROM nv_einsaetze
+         WHERE kennung = 'SCHEMA-TELECOM-DISCARD'
+      ) AND BINARY status = BINARY 'AKTIV'
+   ) AND BINARY benutzer_kuerzel = BINARY 'ldf118'
+);
+SET @estab_dv_target_assignment_id = (
+  SELECT dienstbesetzung_id FROM nv_dienstbesetzungen
+   WHERE dienstschicht_id = (
+     SELECT dienstschicht_id FROM nv_dienstschichten
+      WHERE einsatz_id = (
+        SELECT einsatz_id FROM nv_einsaetze
+         WHERE kennung = 'SCHEMA-TELECOM-DISCARD'
+      ) AND BINARY status = BINARY 'AKTIV'
+   ) AND BINARY benutzer_kuerzel = BINARY 'aw118'
+);
+INSERT INTO nv_melderauftraege
+  (einsatz_id, nachricht_id, melder_kuerzel, ziel, beauftragt_von)
+SELECT einsatz_id, \`00_lfd\`, 'aw118', 'Inactive authorised target', 'ldf118'
+  FROM nv_nachrichten
+ WHERE \`12_betreff\` = 'Migration 119 STRICT messenger target';
+SET @estab_dv_actor_assignment_id = NULL;
+SET @estab_dv_target_assignment_id = NULL"
+assert_equal "BEAUFTRAGT|0|0|1|ANGENOMMEN|ANGENOMMEN|AKTIV" "$(
+    database_query "$fresh_database" "
+SELECT CONCAT(
+         messenger_job.status, '|', messenger_account.aktiv, '|',
+         messenger_account.estab_gesperrt, '|', supervisor_account.aktiv,
+         '|', messenger_assignment.status, '|', supervisor_assignment.status,
+         '|', duty_shift.status
+       )
+  FROM nv_melderauftraege AS messenger_job
+  JOIN nv_benutzer AS messenger_account
+    ON BINARY messenger_account.kuerzel =
+       BINARY messenger_job.melder_kuerzel
+  JOIN nv_benutzer AS supervisor_account
+    ON BINARY supervisor_account.kuerzel =
+       BINARY messenger_job.beauftragt_von
+  JOIN nv_dienstbesetzungen AS messenger_assignment
+    ON BINARY messenger_assignment.benutzer_kuerzel =
+       BINARY messenger_job.melder_kuerzel
+  JOIN nv_dienstbesetzungen AS supervisor_assignment
+    ON BINARY supervisor_assignment.benutzer_kuerzel =
+       BINARY messenger_job.beauftragt_von
+   AND supervisor_assignment.dienstschicht_id =
+       messenger_assignment.dienstschicht_id
+  JOIN nv_dienstschichten AS duty_shift
+    ON duty_shift.dienstschicht_id = messenger_assignment.dienstschicht_id
+ WHERE messenger_job.ziel = 'Inactive authorised target'
+   AND BINARY messenger_assignment.funktion = BINARY 'A/W'
+   AND BINARY supervisor_assignment.funktion = BINARY 'LdF'"
+)" \
+    "inactive authorised Fernmelder was not accepted as messenger target"
 
 if database_query "$fresh_database" "
 SET @estab_dv_actor_assignment_id = (
@@ -1085,7 +1254,9 @@ INSERT INTO nv_benutzer
 VALUES
   ('Migration 118 LdF grant', 'ld118', 'LdF', 'Fernmelder', 1, '', 0),
   ('Migration 118 primary S6', 'sp118', 'S6', 'Stab', 1, '', 0),
-  ('Migration 118 unrelated', 's3118', 'S3', 'Stab', 1, '', 0);
+  ('Migration 118 unrelated', 's3118', 'S3', 'Stab', 1, '', 0),
+  ('Migration 119 inactive loose A/W', 'aw119', 'A/W', 'Fernmelder',
+   0, '', 0);
 INSERT INTO nv_benutzer_zusatzfunktionen
   (benutzer_kuerzel, funktion, rolle, vergeben_von)
 VALUES ('ld118', 'S6', 'Stab', 'schema-migrator-test');
@@ -1106,7 +1277,31 @@ SET @authority_access_shift_id = LAST_INSERT_ID();
 INSERT INTO nv_zugangsschicht_mitglieder
   (zugangsschicht_id, benutzer_kuerzel, zugeordnet_von)
 VALUES
-  (@authority_access_shift_id, 'ld118', 'schema-migrator-test')"
+  (@authority_access_shift_id, 'ld118', 'schema-migrator-test'),
+  (@authority_access_shift_id, 'aw119', 'schema-migrator-test');
+INSERT INTO nv_nachrichten
+  (\`04_richtung\`, \`06_befwegausw\`, \`12_betreff\`, \`12_inhalt\`,
+   \`x00_status\`, \`x01_abschluss\`)
+VALUES
+  ('A', 'Me', 'Migration 119 LOOSE messenger target',
+   'Inactive target with optional access-shift fixture.', 2, 'f')"
+if database_query "$fresh_database" "
+SET @estab_dv_actor_assignment_id = NULL;
+SET @estab_dv_target_assignment_id = NULL;
+INSERT INTO nv_melderauftraege
+  (einsatz_id, nachricht_id, melder_kuerzel, ziel, beauftragt_von)
+SELECT einsatz_id, \`00_lfd\`, 'aw119', 'Disabled loose access', 'ldf118'
+  FROM nv_nachrichten
+ WHERE \`12_betreff\` = 'Migration 119 LOOSE messenger target'" \
+    >"$failure_log" 2>&1; then
+    echo "schema migrator test: disabled LOOSE access shift accepted an inactive messenger target" >&2
+    exit 1
+fi
+if ! grep -q 'Messenger access shift is inactive' "$failure_log"; then
+    echo "schema migrator test: disabled LOOSE messenger access failure was not explicit" >&2
+    sed -n '1,120p' "$failure_log" >&2
+    exit 1
+fi
 if database_query "$fresh_database" "
 INSERT INTO nv_fernmeldeplaene
   (einsatz_id, version, einsatzbezeichnung, herkunft, gueltig_ab,
@@ -1157,6 +1352,36 @@ UPDATE nv_zugangsschichten
    SELECT einsatz_id FROM nv_einsaetze
     WHERE kennung = 'SCHEMA-TELECOM-DISCARD'
  ) AND bezeichnung = 'Migration 118 disabled access'"
+database_query "$fresh_database" "
+SET @estab_dv_actor_assignment_id = NULL;
+SET @estab_dv_target_assignment_id = NULL;
+INSERT INTO nv_melderauftraege
+  (einsatz_id, nachricht_id, melder_kuerzel, ziel, beauftragt_von)
+SELECT einsatz_id, \`00_lfd\`, 'aw119', 'Enabled loose access', 'ldf118'
+  FROM nv_nachrichten
+ WHERE \`12_betreff\` = 'Migration 119 LOOSE messenger target'"
+assert_equal "BEAUFTRAGT|0|0|1|1" "$(database_query "$fresh_database" "
+SELECT CONCAT(
+         messenger_job.status, '|', messenger_account.aktiv, '|',
+         messenger_account.estab_gesperrt, '|', supervisor_account.aktiv,
+         '|', access_shift.zugang_aktiv
+       )
+  FROM nv_melderauftraege AS messenger_job
+  JOIN nv_benutzer AS messenger_account
+    ON BINARY messenger_account.kuerzel =
+       BINARY messenger_job.melder_kuerzel
+  JOIN nv_benutzer AS supervisor_account
+    ON BINARY supervisor_account.kuerzel =
+       BINARY messenger_job.beauftragt_von
+  JOIN nv_zugangsschicht_mitglieder AS access_member
+    ON BINARY access_member.benutzer_kuerzel =
+       BINARY messenger_job.melder_kuerzel
+   AND access_member.entfernt_am IS NULL
+  JOIN nv_zugangsschichten AS access_shift
+    ON access_shift.zugangsschicht_id = access_member.zugangsschicht_id
+   AND access_shift.einsatz_id = messenger_job.einsatz_id
+ WHERE messenger_job.ziel = 'Enabled loose access'")" \
+    "enabled LOOSE access shift rejected an inactive authorised messenger target"
 if ! database_query "$fresh_database" "
 INSERT INTO nv_fernmeldeplaene
   (einsatz_id, version, einsatzbezeichnung, herkunft, gueltig_ab,
@@ -2236,7 +2461,7 @@ finish_checksum=$(
         awk '{print $1}'
 )
 assert_equal \
-    "24|24|$prepare_checksum|$incident_predecessor_checksum|$finish_checksum" \
+    "25|25|$prepare_checksum|$incident_predecessor_checksum|$finish_checksum" \
     "$(database_query "$predecessor_database" "
 SELECT CONCAT(
          COUNT(*), '|',
@@ -2476,7 +2701,7 @@ SELECT CONCAT(
        )")" \
     "second upgrade run changed existing global categories or links"
 
-assert_equal "24" "$(fixture_query "
+assert_equal "25" "$(fixture_query "
 SELECT COUNT(*) FROM estab_schema_migrations
  WHERE state = 'applied'
    AND checksum REGEXP BINARY '^[0-9a-f]{64}$'")" \
@@ -2505,6 +2730,12 @@ SELECT COUNT(*) FROM estab_schema_migrations
    AND state = 'applied'
    AND checksum REGEXP BINARY '^[0-9a-f]{64}$'")" \
     "operational-authority migration was not recorded"
+assert_equal "1" "$(fixture_query "
+SELECT COUNT(*) FROM estab_schema_migrations
+ WHERE version = '119-inactive-messenger-dispatch.sql'
+   AND state = 'applied'
+   AND checksum REGEXP BINARY '^[0-9a-f]{64}$'")" \
+    "inactive messenger dispatch migration was not recorded"
 assert_equal "1|5|4|2|1|0|6|0" "$(fixture_query "
 SELECT CONCAT(
          (SELECT COUNT(*) FROM information_schema.tables
@@ -2689,6 +2920,137 @@ SELECT CONCAT(
              AND routine_name LIKE 'estab_migrate_118_%')
        )")" \
     "operational-authority helper collision did not recover cleanly"
+
+# Migration 119 replaces exactly one trigger with one atomic DDL statement.
+# Retrying an applying ledger row must keep the canonical body; a present
+# same-name foreign trigger must remain untouched and unacknowledged.
+inactive_messenger_dispatch_checksum=$(
+    sha256sum \
+        "$ESTAB_MIGRATIONS_DIR/119-inactive-messenger-dispatch.sql" |
+        awk '{print $1}'
+)
+fixture_query "
+DELETE FROM estab_schema_migrations
+ WHERE version = '119-inactive-messenger-dispatch.sql'"
+ESTAB_DB_NAME="$test_database" "$ESTAB_MIGRATOR_BIN"
+ESTAB_DB_NAME="$test_database" "$ESTAB_MIGRATOR_BIN"
+assert_equal \
+    "$inactive_messenger_dispatch_checksum|applied|1|0|1|1|1" \
+    "$(fixture_query "
+SELECT CONCAT(
+         (SELECT checksum FROM estab_schema_migrations
+           WHERE version = '119-inactive-messenger-dispatch.sql'), '|',
+         (SELECT state FROM estab_schema_migrations
+           WHERE version = '119-inactive-messenger-dispatch.sql'), '|',
+         (SELECT COUNT(*) FROM information_schema.triggers
+           WHERE trigger_schema = DATABASE()
+             AND trigger_name = 'estab_dv94_messenger_insert'
+             AND action_statement LIKE
+                   '%inactive_messenger_target_allowed%'), '|',
+         (SELECT COUNT(*) FROM information_schema.triggers
+           WHERE trigger_schema = DATABASE()
+             AND trigger_name = 'estab_dv94_messenger_insert'
+             AND action_statement LIKE CONCAT(
+                   '%messenger_account.', CHAR(96), 'aktiv', CHAR(96),
+                   ' = 1%')), '|',
+         (SELECT COUNT(*) FROM information_schema.triggers
+           WHERE trigger_schema = DATABASE()
+             AND trigger_name = 'estab_dv94_messenger_insert'
+             AND action_statement LIKE CONCAT(
+                   '%supervisor_account.', CHAR(96), 'aktiv', CHAR(96),
+                   ' = 1%')), '|',
+         (SELECT COUNT(*) FROM information_schema.triggers
+           WHERE trigger_schema = DATABASE()
+             AND trigger_name = 'estab_dv94_messenger_insert'
+             AND action_statement LIKE CONCAT(
+                   '%messenger_account.', CHAR(96), 'estab_gesperrt',
+                   CHAR(96), ' = 0%')), '|',
+         (SELECT COUNT(*) FROM information_schema.triggers
+           WHERE trigger_schema = DATABASE()
+             AND trigger_name = 'estab_dv94_messenger_insert'
+             AND action_statement LIKE '%messenger_assignment%'
+             AND action_statement LIKE '%supervisor_assignment%'
+             AND action_statement LIKE '%messenger_extra%'
+             AND action_statement LIKE '%supervisor_extra%'
+             AND action_statement LIKE '%nv_zugangsschicht_mitglieder%')
+       )")" \
+    "inactive messenger migration trigger contract is not canonical"
+
+# Simulate operator-approved recovery after the atomic trigger DDL completed
+# but before its ledger acknowledgement survived. The final trigger itself is
+# the durable successor marker accepted by migration 119 on this retry.
+fixture_query "
+DELETE FROM estab_schema_migrations
+ WHERE version = '119-inactive-messenger-dispatch.sql'"
+ESTAB_DB_NAME="$test_database" "$ESTAB_MIGRATOR_BIN"
+assert_equal "$inactive_messenger_dispatch_checksum|applied|25|1" "$(fixture_query "
+SELECT CONCAT(
+         (SELECT checksum FROM estab_schema_migrations
+           WHERE version = '119-inactive-messenger-dispatch.sql'), '|',
+         (SELECT state FROM estab_schema_migrations
+           WHERE version = '119-inactive-messenger-dispatch.sql'), '|',
+         (SELECT COUNT(*) FROM estab_schema_migrations
+           WHERE state = 'applied'
+             AND checksum REGEXP BINARY '^[0-9a-f]{64}$'), '|',
+         (SELECT COUNT(*) FROM information_schema.triggers
+           WHERE trigger_schema = DATABASE()
+             AND trigger_name = 'estab_dv94_messenger_insert'
+             AND action_statement LIKE
+                   '%inactive_messenger_target_allowed%')
+       )")" \
+    "inactive messenger migration missing-ledger retry was not canonical"
+
+fixture_query "
+DELETE FROM estab_schema_migrations
+ WHERE version = '119-inactive-messenger-dispatch.sql';
+CREATE OR REPLACE TRIGGER estab_dv94_messenger_insert
+BEFORE INSERT ON nv_melderauftraege FOR EACH ROW
+SET @estab_foreign_inactive_messenger_trigger = 1"
+if ESTAB_DB_NAME="$test_database" \
+    "$ESTAB_MIGRATOR_BIN" >"$failure_log" 2>&1; then
+    echo "schema migrator test: foreign inactive messenger trigger was accepted" >&2
+    exit 1
+fi
+if ! grep -q \
+    'Inactive messenger migration blocked: trigger collision' \
+    "$failure_log"; then
+    echo "schema migrator test: inactive messenger collision failure was not explicit" >&2
+    sed -n '1,120p' "$failure_log" >&2
+    exit 1
+fi
+assert_equal "1|0" "$(fixture_query "
+SELECT CONCAT(
+         (SELECT COUNT(*) FROM information_schema.triggers
+           WHERE trigger_schema = DATABASE()
+             AND trigger_name = 'estab_dv94_messenger_insert'
+             AND action_statement LIKE
+                   '%estab_foreign_inactive_messenger_trigger%'), '|',
+         (SELECT COUNT(*) FROM estab_schema_migrations
+           WHERE version = '119-inactive-messenger-dispatch.sql')
+       )")" \
+    "inactive messenger migration trigger collision was changed or recorded"
+fixture_query "
+DELETE FROM estab_schema_migrations
+ WHERE version = '118-operational-authority.sql';
+DROP TRIGGER estab_dv94_messenger_insert"
+ESTAB_DB_NAME="$test_database" "$ESTAB_MIGRATOR_BIN"
+ESTAB_DB_NAME="$test_database" "$ESTAB_MIGRATOR_BIN"
+assert_equal "1|1|1" "$(fixture_query "
+SELECT CONCAT(
+         (SELECT COUNT(*) FROM estab_schema_migrations
+           WHERE version = '118-operational-authority.sql'
+             AND state = 'applied'), '|',
+         (SELECT COUNT(*) FROM estab_schema_migrations
+           WHERE version = '119-inactive-messenger-dispatch.sql'
+             AND state = 'applied'), '|',
+         (SELECT COUNT(*) FROM information_schema.triggers
+           WHERE trigger_schema = DATABASE()
+             AND trigger_name = 'estab_dv94_messenger_insert'
+             AND action_statement LIKE
+                   '%inactive_messenger_target_allowed%')
+       )")" \
+    "inactive messenger migration did not recover after predecessor restoration"
+
 assert_equal "1|1|1|1|1|1|1|1|1|1|1|1|1|1|1|11" "$(fixture_query "
 SELECT CONCAT(
          (SELECT COUNT(*) FROM estab_schema_migrations
@@ -3495,7 +3857,7 @@ SELECT CONCAT(
     "password-policy migration did not recover after removing the collision"
 
 # Migration 114 must only ever replace its own missing ledger acknowledgement.
-# Snapshot every field of the existing twenty-three records so retries and rejected
+# Snapshot every field of the existing twenty-four records so retries and rejected
 # collisions prove that the released history remains byte-for-byte unchanged.
 pre_114_ledger_snapshot="$(fixture_query "
 SELECT GROUP_CONCAT(
@@ -3512,7 +3874,7 @@ SELECT GROUP_CONCAT(
        )
   FROM estab_schema_migrations
  WHERE version <> '114-self-registration-policy.sql'")"
-assert_equal "23|23" "$(fixture_query "
+assert_equal "24|24" "$(fixture_query "
 SELECT CONCAT(
          COUNT(*), '|',
          SUM(state = 'applied' AND checksum REGEXP BINARY '^[0-9a-f]{64}$')
@@ -3666,7 +4028,7 @@ SELECT GROUP_CONCAT(
        )
   FROM estab_schema_migrations
  WHERE version <> '114-self-registration-policy.sql'")" \
-    "migration 114 rewrote one of the existing twenty-three ledger rows"
+    "migration 114 rewrote one of the existing twenty-four ledger rows"
 
 fixture_query "
 ALTER TABLE nv_selbstregistrierung
@@ -3773,7 +4135,7 @@ SELECT GROUP_CONCAT(
        )
   FROM estab_schema_migrations
  WHERE version <> '114-self-registration-policy.sql'")" \
-    "migration 114 rewrote one of the existing twenty-three ledger rows"
+    "migration 114 rewrote one of the existing twenty-four ledger rows"
 
 # Reproduce interruption after some autocommitted migration-99 phases. The
 # canonical status/time index remains, the direction/number index is missing,
@@ -4294,23 +4656,27 @@ ESTAB_DB_NAME="$test_database" "$ESTAB_MIGRATOR_BIN"
 
 # The predecessor-recovery probes above deliberately remove the migration-111
 # and migration-112 ledger rows and therefore finish with their owned trigger
-# definitions.  Migration 117 then owns the draft-discard transition layered
-# onto the plan trigger, and migration 118 owns all six operational authority
-# triggers. Restore both successor layers in order before exercising the
-# runtime authority boundary; otherwise this test would validate migration-112
-# behavior while leaving already-recorded successor rows untouched.
+# definitions. Migration 117 then owns the draft-discard transition,
+# migration 118 owns all six operational-authority triggers, and migration 119
+# owns the final messenger-insert trigger. Restore all successor layers in
+# order before exercising the runtime authority boundary.
 fixture_query "
 DELETE FROM estab_schema_migrations
  WHERE version IN (
    '117-telecom-draft-discard.sql',
-   '118-operational-authority.sql'
+   '118-operational-authority.sql',
+   '119-inactive-messenger-dispatch.sql'
  )"
 ESTAB_DB_NAME="$test_database" "$ESTAB_MIGRATOR_BIN"
 ESTAB_DB_NAME="$test_database" "$ESTAB_MIGRATOR_BIN"
-assert_equal "1|2|6" "$(fixture_query "
+assert_equal "1|1|2|6|1" "$(fixture_query "
 SELECT CONCAT(
          (SELECT COUNT(*) FROM estab_schema_migrations
            WHERE version = '118-operational-authority.sql'
+             AND state = 'applied'
+             AND checksum REGEXP BINARY '^[0-9a-f]{64}$'), '|',
+         (SELECT COUNT(*) FROM estab_schema_migrations
+           WHERE version = '119-inactive-messenger-dispatch.sql'
              AND state = 'applied'
              AND checksum REGEXP BINARY '^[0-9a-f]{64}$'), '|',
          (SELECT COUNT(*) FROM information_schema.triggers
@@ -4332,9 +4698,14 @@ SELECT CONCAT(
                'estab_dv94_messenger_update'
              )
              AND action_statement LIKE
-                   '%nv_benutzer_zusatzfunktionen%')
+                   '%nv_benutzer_zusatzfunktionen%'), '|',
+         (SELECT COUNT(*) FROM information_schema.triggers
+           WHERE trigger_schema = DATABASE()
+             AND trigger_name = 'estab_dv94_messenger_insert'
+             AND action_statement LIKE
+                   '%inactive_messenger_target_allowed%')
        )")" \
-    "predecessor recovery did not restore the final operational-authority layer"
+    "predecessor recovery did not restore final operational-authority layers"
 
 assert_equal "1|1|1|2|4|0" "$(fixture_query "
 SELECT CONCAT(

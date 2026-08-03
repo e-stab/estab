@@ -46,7 +46,7 @@ Während einer erstmaligen oder aus `applying` wiederaufgenommenen Baseline
 entsteht zusätzlich der Datensatz
 `114-self-registration-fresh-default` in `estab_schema_baselines`. Sein
 Checksum ist exakt die SHA-256 der unveränderten Migration 114. Der Marker
-bleibt bis hinter allen vierundzwanzig Migrationen auf `applying`. Dann setzt ein
+bleibt bis hinter allen fünfundzwanzig Migrationen auf `applying`. Dann setzt ein
 einziges atomisches InnoDB-Multi-Table-Update ausschließlich die noch pristine
 Richtlinienzeile `ENVIRONMENT/NULL/0/migration-114` auf
 `DISABLED/NULL/1/fresh-install` und gleichzeitig den Marker auf `applied`.
@@ -106,6 +106,7 @@ Derzeit sind folgende explizite Migrationen vorhanden:
 | `docker/db/migrations/116-standard-categories.sql` | ergänzt ausschließlich bei einer vollständig leeren globalen Kategorienliste die editier- und löschbaren Vorgaben `Allgemein` sowie `EA1` bis `EA6`; ein bereits vorhandener Betreiberkatalog bleibt vollständig unverändert |
 | `docker/db/migrations/117-telecom-draft-discard.sql` | erweitert den Fernmeldeplan-Zustandsautomaten um das kontrollierte Archivieren eines inhaltlich unveränderten Entwurfs als `ERSETZT`; Freigabedaten bleiben leer und vorhandene Wege werden nicht gelöscht; unveränderliche Felder werden NULL-sicher verglichen und eine Planfreigabe ist nur im gespeicherten Gültigkeitsfenster zulässig |
 | `docker/db/migrations/118-operational-authority.sql` | stellt formale Dienstbesetzungsautorität in `STRICT` wieder her und ergänzt globale Zusatzfunktionen für `LOOSE`; ersetzt die abschließenden ETB-/TTB-, Fernmeldeplan- und Meldertrigger, ohne Vorgängermigrationen oder Fachdaten umzuschreiben |
+| `docker/db/migrations/119-inactive-messenger-dispatch.sql` | erlaubt LdF, einen ungesperrten und modusabhängig fachlich geeigneten Fernmelder auch ohne laufende Sitzung oder bei inaktiver Präsenz mit einem Melderlauf zu beauftragen; aktive angenommene Fernmelder-Besetzung in `STRICT`, feste beziehungsweise zusätzliche Funktion und Zugangsschicht-Gate in `LOOSE` sowie authentisierte persönliche Übernahme bleiben unverändert |
 
 Migration 95 klassifiziert vorhandene Zeilen bereits beim Hinzufügen der
 Spalte mit dem einmaligen Anfangswert `integrity_required=0` und stellt danach
@@ -141,8 +142,8 @@ eigenen Zwischenstände. Gemischte Katalogdaten, ein abweichender
 Primärschlüssel oder fremde Indizes blockieren vor der nächsten Änderung und
 bleiben zur Untersuchung erhalten. `verify.sql` und die Laufzeit-Readiness
 verlangen danach exakt sieben Katalogzeilen, das vollständige neue ENUM,
-ausschließlich den zweispaltigen Primärschlüssel und alle vierundzwanzig
-angewendeten Migrationen einschließlich Version 118.
+ausschließlich den zweispaltigen Primärschlüssel und alle fünfundzwanzig
+angewendeten Migrationen einschließlich Version 119.
 
 Migration 97 fügt `nv_einsaetze.fuehrungsstellenname` als
 `VARCHAR(128) NULL` unmittelbar hinter `organisation` und
@@ -359,7 +360,7 @@ Migration 114 ergänzt entsprechend die eigene, kollisionsgeprüfte Tabelle
 ausdrücklich geöffnete Installation beim Upgrade. Nach der ersten Adminaktion
 sind nur `DISABLED`, `PERMANENT` oder `UNTIL` samt UTC-Endzeit, Revision und
 Audit-Akteur maßgeblich. `verify.sql` und die Laufzeit-Readiness prüfen beide
-Singleton-Tabellen und alle vierundzwanzig Ledgerzeilen gemeinsam.
+Singleton-Tabellen und alle fünfundzwanzig Ledgerzeilen gemeinsam.
 
 Bei einer vom aktuellen Runner selbst begonnenen Neuinstallation ist dagegen
 der checksumgebundene Baseline-Marker maßgeblich: Solange Migration 114 noch
@@ -454,7 +455,8 @@ Für Korrekturen muss diese öffentliche Nummer exakt zur intern gebundenen
 direkten Originalzeile passen. Historischer Freitext wird durch die Migration
 nicht umgedeutet oder überschrieben.
 
-Migration 118 ersetzt diesen Zwischenvertrag abschließend. Sie legt die
+Migration 118 ersetzt diesen Zwischenvertrag für die modeabhängige operative
+Autorität. Sie legt die
 kollisionsgeprüfte InnoDB-/`utf8mb4_unicode_ci`-Tabelle
 `nv_benutzer_zusatzfunktionen` mit eindeutigem Konto-/Funktionsschlüssel,
 serverseitig abgeleiteter Rolle, Vergabezeit und Vergabeakteur an. Der
@@ -482,7 +484,29 @@ desselben Werts möglich. Bereits erfasste Fachdaten oder formale
 Dienstorganisation dürfen nicht durch späteres Löschen zu einem erneuten
 Moduswechsel führen.
 
-Fachgrundlage für diese Migration ist das bereitgestellte Handbuch ETB/TBB,
+Migration 119 ersetzt anschließend ausschließlich den
+`BEFORE INSERT`-Trigger für Melderaufträge. Für die disponierende Person bleibt
+der Vertrag aus Migration 118 unverändert: Das LdF-Konto muss aktiv und
+ungesperrt sein und in `STRICT` die ausgewählte, persönlich angenommene
+LdF-Besetzung der aktiven Dienstschicht beziehungsweise in `LOOSE` eine feste
+oder zusätzliche LdF-Funktion mit wirksamem Zugangsschicht-Gate besitzen. Das
+Zielkonto muss ungesperrt und fachlich Fernmelder sein. `STRICT` bindet es
+weiterhin an eine persönlich angenommene Fernmelder-Besetzung der aktiven
+Dienstschicht; `LOOSE` verlangt weiterhin feste beziehungsweise zusätzliche
+Fernmelderfunktion und ein gegebenenfalls zugeordnetes aktives
+Zugangsschicht-Gate. Nur `nv_benutzer.aktiv` des Zielkontos, also seine
+gegenwärtige Live-Sitzung, ist keine Voraussetzung der Beauftragung mehr.
+
+Die Migration verändert keine vorhandenen Melderläufe, Sitzungen,
+Funktionszuordnungen oder Dienstbesetzungen. Sie akzeptiert als Vorgänger nur
+den eindeutig erkannten Trigger aus Migration 118 oder ihren eigenen
+kanonischen Zieltrigger; ein fehlender oder fremder gleichnamiger Trigger
+blockiert vor dem Ledgerabschluss. Die Anwendung kennzeichnet aktive,
+inaktive und abgemeldete geeignete Zielkonten und fordert LdF bei fehlender
+Aktivität zur separaten Information auf. Übernahme und Folgeschritte bleiben
+an eine spätere authentisierte Sitzung genau des beauftragten Kontos gebunden.
+
+Fachgrundlage für Migration 118 ist das bereitgestellte Handbuch ETB/TBB,
 Version 1.0, Stand März 2022, SHA-256
 `2457d1deccd01892655bbc329b08885a0b3c8b3ebfb6372c79997d3427d1ae59`.
 Migration und grüner Schemacheck stellen keine formale THW-Freigabe des
@@ -710,6 +734,11 @@ Für jede Abnahme werden festgehalten:
   angenommene und ausgewählte Dienstbesetzung; `LOOSE` scheitert ohne passende
   feste oder explizite Zusatzfunktion; Zusatzfunktionen bleiben in `STRICT`
   wirkungslos,
+- Nachweis des Migration-119-Vertrags: Beauftragung eines fachlich geeigneten,
+  ungesperrten, aber inaktiven oder abgemeldeten Ziel-Fernmelders gelingt;
+  gesperrte, fachfremde oder im jeweiligen Modus nicht autorisierte Zielkonten
+  bleiben abgewiesen, die persönliche Übernahme gelingt erst nach eigener
+  Anmeldung,
 - Name der freigebenden Person.
 
 Ein Rückrollen nur des App-Images ist ausschließlich zulässig, wenn die

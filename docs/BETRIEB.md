@@ -447,8 +447,8 @@ ihn anschließend wieder her.
 podman compose run --rm migrate
 ```
 
-Ein bereits aktueller Bestand meldet alle vierundzwanzig Migrationen
-einschließlich `118-operational-authority.sql` als vorhanden und
+Ein bereits aktueller Bestand meldet alle fünfundzwanzig Migrationen
+einschließlich `119-inactive-messenger-dispatch.sql` als vorhanden und
 führt trotzdem den vollständigen Read-only-Schematest aus. Die Ausgabe muss
 `Post-migration schema verification passed` und anschließend
 `All schema migrations are applied` enthalten. Erst danach sollte der Stack
@@ -503,6 +503,17 @@ globale Zusatzfunktionen je Benutzer und ersetzt die abschließenden
 Fachtrigger: `STRICT` verlangt eine aktive, persönlich angenommene und
 ausgewählte Dienstbesetzung; `LOOSE` arbeitet ohne formale Dienstschicht, aber
 nur mit passender fester oder ausdrücklicher Zusatzfunktion.
+
+Migration 119 ändert davon ausschließlich die Zielpräsenz bei einem
+Melderauftrag. LdF darf einen ungesperrten, fachlich geeigneten Fernmelder auch
+bei inaktiver Präsenz oder ohne laufende Sitzung auswählen. In `STRICT` bleibt
+für das Ziel die persönlich angenommene Fernmelder-Besetzung der aktiven
+Dienstschicht Pflicht; in `LOOSE` bleiben feste beziehungsweise zusätzliche
+Fernmelderfunktion und ein gegebenenfalls zugeordnetes aktives
+Zugangsschicht-Gate Pflicht. Die Oberfläche kennzeichnet den Zustand und
+fordert LdF zur separaten Information auf. Erst für Übernahme und weitere
+persönliche Schritte meldet sich der beauftragte Fernmelder mit dem eigenen
+Konto an.
 
 ### 5. Ersten Einsatz aktivieren und Berechtigungsmodus vorbereiten
 

@@ -45,6 +45,14 @@ korrigierbare Ereigniszeit `occurred_at` ist ausdrücklich keine Stoppuhr.
 einsatzgebundenen Zugangsschichten und Kontenzuordnungen ab.
 `dv_operations.php` bildet formale Dienstschichten samt persönlicher
 Besetzung, S6-Planung, Melderlauf und Betriebsereignisdaten ab.
+Bei der Melderbeauftragung trennt das Modul fachliche Eignung von der
+Browserpräsenz des Zielkontos: LdF kann einen ungesperrten Fernmelder auch
+inaktiv oder abgemeldet auswählen. `STRICT` verlangt für das Ziel weiterhin
+eine persönlich angenommene Fernmelder-Besetzung der aktiven Dienstschicht,
+`LOOSE` weiterhin feste beziehungsweise zusätzliche Fernmelderfunktion und
+ein gegebenenfalls wirksames Zugangsschicht-Gate. Status und Hinweis zur
+separaten Information sind Darstellung; Übernahme und Folgeschritte bleiben
+authentisiert an das beauftragte Konto gebunden.
 `operational_guard.php` ist die
 gemeinsame fail-closed Grenze für authentifizierte operative Schreibrequests.
 

@@ -267,8 +267,8 @@ Prüfsumme unverändert. Migration 55 stellt die kanonischen Attribute wieder
 her. `migrations/70-user-account-blocking.sql` ergänzt anschließend die
 dauerhafte, kollisionsgeprüfte Kontosperre.
 
-Der aktuelle Ledger umfasst vierundzwanzig checksumgebundene Migrationen bis
-`migrations/118-operational-authority.sql`. Migration 110 führt die
+Der aktuelle Ledger umfasst fünfundzwanzig checksumgebundene Migrationen bis
+`migrations/119-inactive-messenger-dispatch.sql`. Migration 110 führt die
 einsatzlokalen ETB-/TTB-Nummern, Buchköpfe, strukturierten TBB-Inhalt,
 Append-only-Regeln und zehnjährige Aufbewahrungsuntergrenze ein. Migration 111
 ergänzt nullable Schicht-/Schreiberfremdschlüssel für beide Bücher und die
@@ -390,8 +390,22 @@ Modusänderung nur vor jeder operativen oder formalen Eintragung zu und hält de
 Modus danach dauerhaft fest, auch wenn einzelne Daten später gelöscht würden;
 das Speichern desselben Werts bleibt ohne Revision und Audit idempotent.
 
-`verify.sql` und die Laufzeit-Readiness verlangen alle vierundzwanzig
-Ledgerzeilen einschließlich Migration 118, die kanonische Modusspalte, beide
+Migration 119 ersetzt nur den Insert-Trigger für Melderaufträge. Das
+disponierende LdF bleibt aktiv, ungesperrt und nach Einsatzmodus autorisiert.
+Das Zielkonto bleibt ungesperrt und fachlich als Fernmelder gebunden: in
+`STRICT` über eine persönlich angenommene Fernmelder-Besetzung der aktiven
+Dienstschicht, in `LOOSE` über feste beziehungsweise zusätzliche Funktion und
+ein gegebenenfalls zugeordnetes aktives Zugangsschicht-Gate. Ausschließlich
+die Live-Sitzung beziehungsweise Präsenz des Zielkontos entfällt als
+Beauftragungsbedingung. Inaktive und abgemeldete geeignete Fernmelder können
+damit disponiert werden; die Anwendung weist LdF auf die erforderliche
+separate Information hin. Persönliche Übernahme und weitere Statusschritte
+bleiben authentisiert an das beauftragte Konto gebunden. Die Migration erkennt
+nur den kanonischen Vorgänger- oder Zieltrigger und verändert keine
+Bestandsläufe.
+
+`verify.sql` und die Laufzeit-Readiness verlangen alle fünfundzwanzig
+Ledgerzeilen einschließlich Migration 119, die kanonische Modusspalte, beide
 Modus-Guard-Trigger, die Zusatzfunktionstabelle und die sechs aktuellen
 modebewussten Fachtrigger sowie die übrigen Spalten, Indexe und Fremdschlüssel.
 Ein aktueller Migratorlauf endet erst nach

@@ -817,11 +817,55 @@ $assert(
         && str_contains($readiness, "'117-telecom-draft-discard.sql'")
         && str_contains($verify, "'118-operational-authority.sql'")
         && str_contains($readiness, "'118-operational-authority.sql'")
+        && str_contains(
+            $verify,
+            "'119-inactive-messenger-dispatch.sql'"
+        )
+        && str_contains(
+            $readiness,
+            "'119-inactive-messenger-dispatch.sql'"
+        )
         && str_contains($verify, 'estab_permission_mode')
         && str_contains($readiness, 'estab_permission_mode')
-        && str_contains($verify, 'estab_schema_migrations`) = 24')
-        && str_contains($readiness, 'estab_schema_migrations) = 24'),
-    'Migrations 115-118 and exact ledger are outside verify/readiness gates'
+        && str_contains($verify, 'estab_schema_migrations`) = 25')
+        && str_contains($readiness, 'estab_schema_migrations) = 25')
+        && str_contains($verify, 'inactive_messenger_target_allowed')
+        && str_contains($readiness, 'inactive_messenger_target_allowed')
+        && str_contains($readiness, 'nv_zugangsschicht_mitglieder')
+        && str_contains($readiness, "'%FOR UPDATE%'")
+        && str_contains($readiness, "'%messenger_shift%'")
+        && str_contains($readiness, "'%supervisor_shift%'")
+        && str_contains(
+            $readiness,
+            "'%messenger_assignment%ANGENOMMEN%'"
+        )
+        && str_contains($readiness, "'%messenger_shift%AKTIV%'")
+        && str_contains(
+            $readiness,
+            "'%supervisor_assignment%ANGENOMMEN%'"
+        )
+        && str_contains($readiness, "'%supervisor_shift%AKTIV%'")
+        && str_contains(
+            $readiness,
+            "'%messenger_access_memberships%messenger_enabled_access%'"
+        )
+        && str_contains(
+            $readiness,
+            "'%supervisor_access_memberships%supervisor_enabled_access%'"
+        )
+        && str_contains(
+            $readiness,
+            "'%supervisor_account.`estab_gesperrt` = 0%'"
+        )
+        && str_contains(
+            $readiness,
+            '. "AND action_statement NOT LIKE "'
+        )
+        && str_contains(
+            $readiness,
+            "'%messenger_account.`aktiv` = 1%'"
+        ),
+    'Migrations 115-119 and exact ledger are outside verify/readiness gates'
 );
 $assert(
     str_contains($permissionSource, 'Missing context fails closed')

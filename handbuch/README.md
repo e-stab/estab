@@ -25,7 +25,11 @@ ist falsch. Bei „Streng“ sind aktive, angenommene und ausgewählte formale
 Dienstbesetzungen verbindlich. Eine echte Modusänderung ist nur vor jeder
 operativen oder formalen Eintragung zulässig; danach bleibt der Einsatzmodus
 dauerhaft unveränderlich, während das Speichern desselben Werts idempotent
-bleibt. Interne
+bleibt. Bei Melderaufträgen ist außerdem sauber zwischen fachlicher Eignung
+und aktueller Browserpräsenz zu unterscheiden: LdF darf eine geeignete,
+ungesperrte Fernmelderperson auch inaktiv oder abgemeldet auswählen, muss sie
+dann aber separat informieren; Übernahme und weitere Schritte bestätigt die
+Person später authentisiert selbst. Interne
 Links müssen über die zentrale Anwendungs-URL-API entstehen und auch bei einem
 konfigurierten Base-Path funktionieren.
 
@@ -33,3 +37,9 @@ konfigurierten Base-Path funktionieren.
 HTTP-Oberflächentest, den echten Browser-Akzeptanztest und die Prüfung des
 Laufzeitimage-Inhalts. Die historische PDF-Datei wird dabei weder geändert
 noch wieder in das App-Image aufgenommen.
+
+Für die Melderauswahl muss der dedizierte Browsermodus
+`tests/browser/headless_ui.py --inactive-messenger` einen abgemeldeten,
+fachlich geeigneten Fernmelder mit sichtbarem Status in der LdF-Auswahl und
+nach seiner Auswahl den Hinweis zur separaten Information prüfen. Ein
+vorheriger allgemeiner Browserlauf gilt dafür nicht als Ersatz.

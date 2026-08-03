@@ -166,6 +166,12 @@ $logbook = $read('app/logbook.php');
 $logbookLifecycle = $read('app/logbook_lifecycle.php');
 $operationsUi = $read('4fach/fuehrungsstelle.php');
 $adminUi = $read('4fadm/fuehrungsstelle.php');
+$browserAcceptance = $read('tests/browser/headless_ui.py');
+$integrationCi = $read('tests/integration/ci.sh');
+$integration = $read('tests/integration/dv_operations.php');
+$inactiveMessengerFixture = $read(
+    'tests/integration/inactive_messenger_browser_fixture.php'
+);
 $messageController = $read('4fach/data_hndl.php');
 $messageRepository = $read('app/message_repository.php');
 $etb = $read('stabetb/etb.php');
@@ -878,8 +884,42 @@ $assert(
             $messengerCandidates,
             'estab_auth_shift_access_allowed('
         )
+        && str_contains(
+            $messengerCandidates,
+            'AS `estab_sitzung_vorhanden`'
+        )
+        && substr_count(
+            $messengerCandidates,
+            "'^[A-Za-z0-9,-]{1,50}$' THEN 1 ELSE 0 END"
+        ) === 2
+        && str_contains(
+            $messengerCandidates,
+            'estab_dv_messenger_presence_details($row)'
+        )
+        && str_contains(
+            $messengerCandidates,
+            "\$row['estab_sitzung_vorhanden']"
+        )
+        && !str_contains($messengerCandidates, 'AND u.`aktiv` = 1')
+        && !str_contains($messengerCandidates, "\$row['sid']")
         && str_contains($operationsUi, '$users = estab_dv_messenger_candidates('),
-    'messenger candidates do not split STRICT staffing from fail-closed LOOSE grants'
+    'messenger candidates do not retain fachliche gates while exposing only '
+        . 'server-derived, non-sensitive presence state'
+);
+$messengerPresence = $slice(
+    $dv,
+    'function estab_dv_messenger_presence_label(',
+    'function estab_dv_messenger_candidates('
+);
+$assert(
+    str_contains($messengerPresence, 'estab_auth_presence_state($account)')
+        && str_contains(
+            $messengerPresence,
+            "'requires_separate_notification' => \$state !== 'online'"
+        )
+        && str_contains($messengerPresence, "'signed_out' => 'abgemeldet'")
+        && str_contains($messengerPresence, "'inactive' => 'inaktiv'"),
+    'messenger presence does not derive notification duty on the server'
 );
 $messengerTarget = $slice(
     $dv,
@@ -899,8 +939,25 @@ $assert(
         && str_contains(
             $messengerTarget,
             "'permission_mode' => ESTAB_PERMISSION_MODE_LOOSE"
+        )
+        && str_contains(
+            $messengerTarget,
+            'estab_dv_messenger_presence_details($row)'
+        )
+        && !str_contains(
+            $messengerTarget,
+            "(\$row['aktiv'] ?? 0) !== 1"
+        )
+        && substr_count(
+            $messengerTarget,
+            "'^[A-Za-z0-9,-]{1,50}$' THEN 1 ELSE 0 END"
+        ) === 2
+        && str_contains(
+            $integration,
+            "\$malformedSessionId = 'invalid session!'"
         ),
-    'messenger target is not revalidated against the authoritative mode'
+    'messenger target is not revalidated against authoritative fachliche '
+        . 'gates independently from presence'
 );
 $messengerAssign = $slice(
     $dv,
@@ -922,6 +979,16 @@ $assert(
         && str_contains($messengerAssign, "'messenger_role' =>")
         && str_contains($messengerAssign, "'messenger_duty_assignment_id' =>")
         && str_contains($messengerAssign, "'permission_mode' =>")
+        && str_contains($messengerAssign, "'messenger_presence_state' =>")
+        && str_contains(
+            $messengerAssign,
+            "'separate_notification_required' =>"
+        )
+        && str_contains($messengerAssign, '?array &$assignmentDetails = null')
+        && str_contains(
+            $messengerAssign,
+            "'requires_separate_notification' =>"
+        )
         && substr_count(
             $messengerAssign,
             'estab_dv_with_sql_authority_context('
@@ -947,6 +1014,92 @@ $assert(
             '$jobId = (int) $connection->insert_id;'
         ),
     'messenger dispatch loses actor or target authority provenance'
+);
+$assert(
+    str_contains($operationsUi, 'data-estab-messenger-select')
+        && str_contains(
+            $operationsUi,
+            'data-estab-notification-required'
+        )
+        && str_contains(
+            $operationsUi,
+            'data-estab-messenger-presence-warning'
+        )
+        && str_contains(
+            $operationsUi,
+            'Der LdF muss ihn separat über den Auftrag informieren.'
+        )
+        && str_contains($operationsUi, 'Bitte Fernmelder auswählen')
+        && str_contains($operationsUi, '$flashWarning =')
+        && str_contains(
+            $operationsUi,
+            'estab-tool-feedback-warning'
+        )
+        && str_contains($operationsUi, 'Status des Fernmelders: ')
+        && str_contains(
+            $operationsUi,
+            "'messenger_assigned_notification_required'"
+        )
+        && str_contains($operationsUi, "['presence' => \$presenceState]"),
+    'messenger assignment UI does not label presence and preserve the '
+        . 'separate-notification warning across PRG'
+);
+$assert(
+    str_contains(
+        $integration,
+        'signed-out messenger accepted a job without authenticating'
+    )
+        && str_contains(
+            $integration,
+            'rejected signed-out acceptance changed the messenger job'
+        ),
+    'messenger lifecycle does not prove authentication after offline dispatch'
+);
+$assert(
+    str_contains($browserAcceptance, '"--inactive-messenger"')
+        && str_contains(
+            $browserAcceptance,
+            'ESTAB_TEST_INACTIVE_MESSENGER_CODE'
+        )
+        && str_contains(
+            $browserAcceptance,
+            'ESTAB_TEST_ONLINE_MESSENGER_CODE'
+        )
+        && str_contains(
+            $browserAcceptance,
+            'Bitte Fernmelder auswählen'
+        )
+        && str_contains(
+            $browserAcceptance,
+            'messenger_assigned_notification_required'
+        )
+        && str_contains(
+            $browserAcceptance,
+            '.estab-tool-feedback-warning'
+        )
+        && str_contains($browserAcceptance, 'run_inactive_messenger')
+        && str_contains($integrationCi, '--inactive-messenger')
+        && str_contains(
+            $integrationCi,
+            'ESTAB_TEST_INACTIVE_MESSENGER_CODE'
+        )
+        && str_contains(
+            $integrationCi,
+            'inactive_messenger_browser_fixture.php'
+        )
+        && str_contains(
+            $inactiveMessengerFixture,
+            "ESTAB_INACTIVE_MESSENGER_BROWSER_FIXTURE') !== '1'"
+        )
+        && str_contains(
+            $inactiveMessengerFixture,
+            "['create', 'cleanup']"
+        )
+        && str_contains(
+            $inactiveMessengerFixture,
+            'Refusing inactive-messenger fixture outside a disposable project'
+        ),
+    'CI does not provision and exercise the inactive-messenger browser mode'
 );
 $generalWriteGuard = $slice(
     $dv,

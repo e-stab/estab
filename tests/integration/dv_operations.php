@@ -2752,6 +2752,47 @@ try {
                 . 'function and fixed-account provenance'
         );
 
+        $setLooseMessengerSignedOut = $connection->prepare(
+            'UPDATE `nv_benutzer` SET `aktiv` = 0, `sid` = ?, '
+                . '`estab_letzte_aktivitaet` = UTC_TIMESTAMP(6)'
+                . ' WHERE BINARY `kuerzel` = BINARY ?'
+        );
+        if (!$setLooseMessengerSignedOut) {
+            throw new RuntimeException(
+                'Could not prepare LOOSE messenger presence probe'
+            );
+        }
+        try {
+            $emptySessionId = '';
+            $setLooseMessengerSignedOut->bind_param(
+                'ss',
+                $emptySessionId,
+                $codes['messenger']
+            );
+            $setLooseMessengerSignedOut->execute();
+        } finally {
+            $setLooseMessengerSignedOut->close();
+        }
+        $setLooseMessengerInactive = $connection->prepare(
+            'UPDATE `nv_benutzer` SET `aktiv` = 1,'
+                . ' `estab_letzte_aktivitaet` ='
+                . ' UTC_TIMESTAMP(6) - INTERVAL 20 MINUTE'
+                . ' WHERE BINARY `kuerzel` = BINARY ?'
+        );
+        if (!$setLooseMessengerInactive) {
+            throw new RuntimeException(
+                'Could not prepare LOOSE inactive messenger probe'
+            );
+        }
+        try {
+            $setLooseMessengerInactive->bind_param(
+                's',
+                $codes['aw_extension']
+            );
+            $setLooseMessengerInactive->execute();
+        } finally {
+            $setLooseMessengerInactive->close();
+        }
         $looseMessengerCandidates = estab_dv_messenger_candidates(
             $connection,
             $loosePermissionIncidentId
@@ -2768,6 +2809,11 @@ try {
             $s3Identity['kuerzel'],
         ];
         sort($expectedLooseCandidateCodes);
+        $looseCandidatesByCode = array_column(
+            $looseMessengerCandidates,
+            null,
+            'kuerzel'
+        );
         $assert(
             $looseCandidateCodes === $expectedLooseCandidateCodes
                 && !in_array(
@@ -2779,9 +2825,23 @@ try {
                     $looseMessengerCandidates,
                     static fn (array $candidate): bool =>
                         $candidate['dienstbesetzung_id'] !== null
-                ) === [],
-            'LOOSE messenger candidates did not use only fixed and explicit '
-                . 'A/W functions independently of formal duty assignments'
+                ) === []
+                && ($looseCandidatesByCode[$codes['messenger']]
+                    ['presence_state'] ?? null) === 'signed_out'
+                && ($looseCandidatesByCode[$codes['messenger']]
+                    ['requires_separate_notification'] ?? null) === true
+                && ($looseCandidatesByCode[$codes['aw_extension']]
+                    ['presence_state'] ?? null) === 'inactive'
+                && !array_key_exists(
+                    'sid',
+                    $looseCandidatesByCode[$codes['messenger']] ?? []
+                )
+                && !array_key_exists(
+                    'estab_letzte_aktivitaet',
+                    $looseCandidatesByCode[$codes['messenger']] ?? []
+                ),
+            'LOOSE messenger candidates did not retain fachliche authority '
+                . 'while reducing inactive and signed-out presence without SID'
         );
 
         $looseEtbId = estab_logbook_insert_entry(
@@ -2798,14 +2858,69 @@ try {
             $permissionTtbEntry('loose-success'),
             $s3Identity
         );
+        $looseAssignmentDetails = null;
         $looseModeJobId = estab_dv_assign_messenger(
             $connection,
             $loosePermissionIncidentId,
             $loosePermissionMessageId,
-            $s3Identity['kuerzel'],
+            $codes['messenger'],
             'Gegenstelle Integration',
-            $s3Identity
+            $s3Identity,
+            'nv_protokoll',
+            $looseAssignmentDetails
         );
+        $expect(
+            EstabDvPermissionException::class,
+            static fn (): string => estab_dv_transition_messenger(
+                $connection,
+                $loosePermissionIncidentId,
+                $looseModeJobId,
+                'accept',
+                $messengerIdentity
+            ),
+            'signed-out messenger accepted a job without authenticating'
+        );
+        $assert(
+            (string) $scalar(
+                $connection,
+                'SELECT `status` FROM `nv_melderauftraege`'
+                    . ' WHERE `einsatz_id` = ? AND `melderauftrag_id` = ?',
+                'ii',
+                $loosePermissionIncidentId,
+                $looseModeJobId
+            ) === 'BEAUFTRAGT',
+            'rejected signed-out acceptance changed the messenger job'
+        );
+        $restoreLooseMessengerSession = $connection->prepare(
+            'UPDATE `nv_benutzer` SET `aktiv` = 1, `sid` = ?,'
+                . ' `estab_letzte_aktivitaet` = UTC_TIMESTAMP(6)'
+                . ' WHERE BINARY `kuerzel` = BINARY ?'
+        );
+        if (!$restoreLooseMessengerSession) {
+            throw new RuntimeException(
+                'Could not prepare LOOSE messenger presence restore'
+            );
+        }
+        try {
+            $restoredMessengerSession =
+                'dv-session-' . $suffix . '-' . $codes['messenger'];
+            $restoreLooseMessengerSession->bind_param(
+                'ss',
+                $restoredMessengerSession,
+                $codes['messenger']
+            );
+            $restoreLooseMessengerSession->execute();
+            $restoredExtensionSession =
+                'dv-session-' . $suffix . '-' . $codes['aw_extension'];
+            $restoreLooseMessengerSession->bind_param(
+                'ss',
+                $restoredExtensionSession,
+                $codes['aw_extension']
+            );
+            $restoreLooseMessengerSession->execute();
+        } finally {
+            $restoreLooseMessengerSession->close();
+        }
         $loosePlanRevision = estab_dv_start_telecom_plan_revision(
             $connection,
             $loosePermissionIncidentId,
@@ -2899,7 +3014,7 @@ try {
                     . $s3Identity['benutzer'] . '|'
                     . $s3Identity['funktion'] . '|'
                     . $s3Identity['rolle'] . '|'
-                    . $s3Identity['kuerzel'] . '|BEAUFTRAGT',
+                    . $codes['messenger'] . '|BEAUFTRAGT',
             'LOOSE did not persist the account and exact ETB/A-W functions'
         );
         $assert(
@@ -2944,6 +3059,35 @@ try {
                 $looseModeJobId
             ) === 'LOOSE|A/W|Fernmelder|NULL',
             'LOOSE messenger assignment lost target function provenance'
+        );
+        $assert(
+            is_array($looseAssignmentDetails)
+                && ($looseAssignmentDetails['job_id'] ?? null)
+                    === $looseModeJobId
+                && ($looseAssignmentDetails['presence_state'] ?? null)
+                    === 'signed_out'
+                && ($looseAssignmentDetails[
+                    'requires_separate_notification'
+                ] ?? null) === true
+                && (string) $scalar(
+                    $connection,
+                    'SELECT CONCAT('
+                        . "JSON_UNQUOTE(JSON_EXTRACT(`details`,"
+                        . " '$.messenger_presence_state')), ?,"
+                        . " JSON_UNQUOTE(JSON_EXTRACT(`details`,"
+                        . " '$.separate_notification_required')))"
+                        . ' FROM `nv_betriebsereignisse`'
+                        . ' WHERE `einsatz_id` = ?'
+                        . " AND `objekttyp` = 'MELDERAUFTRAG'"
+                        . ' AND `objekt_id` = ?'
+                        . " AND `aktion` = 'messenger_assigned'",
+                    'sii',
+                    '|',
+                    $loosePermissionIncidentId,
+                    $looseModeJobId
+                ) === 'signed_out|true',
+            'LOOSE messenger assignment did not preserve presence and the '
+                . 'separate-notification duty in API result and audit'
         );
         $assert(
             estab_dv_transition_messenger(
@@ -3238,6 +3382,28 @@ try {
             } finally {
                 $disableAccess->close();
             }
+            $disabledMessengerCandidates = estab_dv_messenger_candidates(
+                $connection,
+                $loosePermissionIncidentId
+            );
+            $assert(
+                !in_array(
+                    $s3Identity['kuerzel'],
+                    array_column($disabledMessengerCandidates, 'kuerzel'),
+                    true
+                ),
+                'LOOSE messenger candidates ignored a disabled access shift'
+            );
+            $expect(
+                EstabDvConflictException::class,
+                static fn (): array => estab_dv_require_messenger_target(
+                    $connection,
+                    $loosePermissionIncidentId,
+                    $s3Identity['kuerzel'],
+                    $loosePermissionIncident
+                ),
+                'LOOSE messenger target ignored a disabled access shift'
+            );
             $expect(
                 EstabReadPermissionException::class,
                 static fn (): array => estab_read_require_operational_scope(
@@ -3655,6 +3821,47 @@ try {
         $connection->rollback();
     }
 
+    $setStrictMessengerSignedOut = $connection->prepare(
+        'UPDATE `nv_benutzer` SET `aktiv` = 1, `sid` = ?,'
+            . ' `estab_letzte_aktivitaet` = UTC_TIMESTAMP(6)'
+            . ' WHERE BINARY `kuerzel` = BINARY ?'
+    );
+    if (!$setStrictMessengerSignedOut) {
+        throw new RuntimeException(
+            'Could not prepare STRICT messenger presence probe'
+        );
+    }
+    try {
+        $malformedSessionId = 'invalid session!';
+        $setStrictMessengerSignedOut->bind_param(
+            'ss',
+            $malformedSessionId,
+            $codes['messenger']
+        );
+        $setStrictMessengerSignedOut->execute();
+    } finally {
+        $setStrictMessengerSignedOut->close();
+    }
+    $setStrictMessengerInactive = $connection->prepare(
+        'UPDATE `nv_benutzer` SET `aktiv` = 1,'
+            . ' `estab_letzte_aktivitaet` ='
+            . ' UTC_TIMESTAMP(6) - INTERVAL 20 MINUTE'
+            . ' WHERE BINARY `kuerzel` = BINARY ?'
+    );
+    if (!$setStrictMessengerInactive) {
+        throw new RuntimeException(
+            'Could not prepare STRICT inactive messenger probe'
+        );
+    }
+    try {
+        $setStrictMessengerInactive->bind_param(
+            's',
+            $codes['aw_extension']
+        );
+        $setStrictMessengerInactive->execute();
+    } finally {
+        $setStrictMessengerInactive->close();
+    }
     $messengerCandidates = estab_dv_messenger_candidates(
         $connection,
         $incidentId
@@ -3663,6 +3870,11 @@ try {
     $candidateAssignments = array_column(
         $messengerCandidates,
         'dienstbesetzung_id',
+        'kuerzel'
+    );
+    $strictCandidatesByCode = array_column(
+        $messengerCandidates,
+        null,
         'kuerzel'
     );
     sort($candidateCodes);
@@ -3680,8 +3892,23 @@ try {
             && (int) ($candidateAssignments[$codes['messenger']] ?? 0)
                 === $assignments['messenger']
             && (int) ($candidateAssignments[$codes['aw_extension']] ?? 0)
-                === $awExtensionId,
-        'STRICT messenger UI did not retain exact accepted A/W assignments'
+                === $awExtensionId
+            && ($strictCandidatesByCode[$codes['messenger']]
+                ['presence_state'] ?? null) === 'signed_out'
+            && ($strictCandidatesByCode[$codes['messenger']]
+                ['requires_separate_notification'] ?? null) === true
+            && ($strictCandidatesByCode[$codes['aw_extension']]
+                ['presence_state'] ?? null) === 'inactive'
+            && !array_key_exists(
+                'sid',
+                $strictCandidatesByCode[$codes['messenger']] ?? []
+            )
+            && !array_key_exists(
+                'aktiv',
+                $strictCandidatesByCode[$codes['messenger']] ?? []
+            ),
+        'STRICT messenger UI did not retain exact accepted A/W assignments '
+            . 'with non-sensitive inactive and signed-out presence'
     );
     $expect(
         EstabDvPermissionException::class,
@@ -3701,13 +3928,16 @@ try {
         'LdF privilege ignored the account’s fixed function'
     );
 
+    $strictAssignmentDetails = null;
     $cancelledJobId = estab_dv_assign_messenger(
         $connection,
         $incidentId,
         $messageId,
         $codes['messenger'],
         'Gegenstelle Integration',
-        $ldfIdentity
+        $ldfIdentity,
+        'nv_protokoll',
+        $strictAssignmentDetails
     );
     $assert(
         $cancelledJobId > 0
@@ -3720,6 +3950,18 @@ try {
                 $cancelledJobId
             ) === 1,
         'messenger dispatch lost its insert id while clearing SQL authority'
+    );
+    $assert(
+        is_array($strictAssignmentDetails)
+            && ($strictAssignmentDetails['job_id'] ?? null)
+                === $cancelledJobId
+            && ($strictAssignmentDetails['presence_state'] ?? null)
+                === 'signed_out'
+            && ($strictAssignmentDetails[
+                'requires_separate_notification'
+            ] ?? null) === true,
+        'STRICT messenger dispatch did not return its non-sensitive presence '
+            . 'and notification duty'
     );
     $assert(
         (string) $scalar(
@@ -3747,6 +3989,26 @@ try {
         'STRICT messenger assignment lost its exact target duty provenance'
     );
     $assert(
+        (string) $scalar(
+            $connection,
+            'SELECT CONCAT('
+                . "JSON_UNQUOTE(JSON_EXTRACT(`details`,"
+                . " '$.messenger_presence_state')), ?,"
+                . " JSON_UNQUOTE(JSON_EXTRACT(`details`,"
+                . " '$.separate_notification_required')))"
+                . ' FROM `nv_betriebsereignisse`'
+                . ' WHERE `einsatz_id` = ?'
+                . " AND `objekttyp` = 'MELDERAUFTRAG'"
+                . ' AND `objekt_id` = ?'
+                . " AND `aktion` = 'messenger_assigned'",
+            'sii',
+            '|',
+            $incidentId,
+            $cancelledJobId
+        ) === 'signed_out|true',
+        'STRICT messenger audit lost presence and separate-notification duty'
+    );
+    $assert(
         estab_dv_transition_messenger(
             $connection,
             $incidentId,
@@ -3757,6 +4019,36 @@ try {
         ) === 'ABGEBROCHEN',
         'pre-acceptance cancellation was not retained'
     );
+    $restoreStrictMessengerSession = $connection->prepare(
+        'UPDATE `nv_benutzer` SET `aktiv` = 1, `sid` = ?,'
+            . ' `estab_letzte_aktivitaet` = UTC_TIMESTAMP(6)'
+            . ' WHERE BINARY `kuerzel` = BINARY ?'
+    );
+    if (!$restoreStrictMessengerSession) {
+        throw new RuntimeException(
+            'Could not prepare STRICT messenger presence restore'
+        );
+    }
+    try {
+        $restoredMessengerSession =
+            'dv-session-' . $suffix . '-' . $codes['messenger'];
+        $restoreStrictMessengerSession->bind_param(
+            'ss',
+            $restoredMessengerSession,
+            $codes['messenger']
+        );
+        $restoreStrictMessengerSession->execute();
+        $restoredExtensionSession =
+            'dv-session-' . $suffix . '-' . $codes['aw_extension'];
+        $restoreStrictMessengerSession->bind_param(
+            'ss',
+            $restoredExtensionSession,
+            $codes['aw_extension']
+        );
+        $restoreStrictMessengerSession->execute();
+    } finally {
+        $restoreStrictMessengerSession->close();
+    }
     $redispatchHistory = estab_dv_require_no_open_messenger_for_redispatch(
         $connection,
         $incidentId,

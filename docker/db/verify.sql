@@ -1897,9 +1897,31 @@ SELECT
             '%Discarded telecommunications drafts are immutable evidence%')
          OR (trigger_name = 'estab_dv94_messenger_insert'
           AND action_statement LIKE '%messenger_assignment%'
+          AND action_statement LIKE '%messenger_shift%'
           AND action_statement LIKE '%supervisor_assignment%'
+          AND action_statement LIKE '%supervisor_shift%'
           AND action_statement LIKE '%messenger_extra%'
           AND action_statement LIKE '%supervisor_extra%'
+          AND action_statement LIKE
+            '%messenger_assignment%ANGENOMMEN%'
+          AND action_statement LIKE '%messenger_shift%AKTIV%'
+          AND action_statement LIKE
+            '%supervisor_assignment%ANGENOMMEN%'
+          AND action_statement LIKE '%supervisor_shift%AKTIV%'
+          AND action_statement LIKE
+            '%messenger_access_memberships%messenger_enabled_access%'
+          AND action_statement LIKE
+            '%supervisor_access_memberships%supervisor_enabled_access%'
+          AND action_statement LIKE
+            '%inactive_messenger_target_allowed%'
+          AND action_statement NOT LIKE
+            '%messenger_account.`aktiv` = 1%'
+          AND action_statement LIKE
+            '%messenger_account.`estab_gesperrt` = 0%'
+          AND action_statement LIKE
+            '%supervisor_account.`aktiv` = 1%'
+          AND action_statement LIKE
+            '%supervisor_account.`estab_gesperrt` = 0%'
           AND action_statement LIKE '%estab_dv_actor_assignment_id%'
           AND action_statement LIKE '%estab_dv_target_assignment_id%')
          OR (trigger_name = 'estab_dv94_messenger_update'
@@ -1914,7 +1936,7 @@ SELECT
        BINARY 'STRICT', BINARY 'LOOSE'
      )) = 0)
        AS `incident_permission_mode_ok`,
-  ((SELECT COUNT(*) FROM `estab_schema_migrations`) = 24
+  ((SELECT COUNT(*) FROM `estab_schema_migrations`) = 25
    AND
    (SELECT COUNT(*)
       FROM `estab_schema_migrations`
@@ -1942,10 +1964,11 @@ SELECT
        '115-incident-permission-mode.sql',
        '116-standard-categories.sql',
        '117-telecom-draft-discard.sql',
-       '118-operational-authority.sql'
+       '118-operational-authority.sql',
+       '119-inactive-messenger-dispatch.sql'
      )
        AND `state` = 'applied'
-       AND `checksum` REGEXP BINARY '^[0-9a-f]{64}$') = 24)
+       AND `checksum` REGEXP BINARY '^[0-9a-f]{64}$') = 25)
        AS `schema_migrations_ok`;
 
 SELECT `table_name`, `engine`, `table_collation`

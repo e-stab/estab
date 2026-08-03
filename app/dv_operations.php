@@ -5191,6 +5191,42 @@ function estab_dv_resolve_active_route(
     return $row;
 }
 
+/** Return the user-facing label for a server-derived messenger presence. */
+function estab_dv_messenger_presence_label(mixed $state): string
+{
+    return match ($state) {
+        'online' => 'aktiv',
+        'inactive' => 'inaktiv',
+        'signed_out' => 'abgemeldet',
+        'expired' => 'Sitzung abgelaufen',
+        'blocked' => 'gesperrt',
+        default => 'nicht aktiv',
+    };
+}
+
+/**
+ * Reduce authentication state to the non-sensitive messenger presence API.
+ *
+ * The caller supplies only a boolean session marker, never the SID itself.
+ * Every state other than `online` requires the LdF to notify the selected
+ * messenger outside eStab before relying on the assignment.
+ *
+ * @return array{
+ *   presence_state:string,
+ *   presence_label:string,
+ *   requires_separate_notification:bool
+ * }
+ */
+function estab_dv_messenger_presence_details(array $account): array
+{
+    $state = estab_auth_presence_state($account);
+    return [
+        'presence_state' => $state,
+        'presence_label' => estab_dv_messenger_presence_label($state),
+        'requires_separate_notification' => $state !== 'online',
+    ];
+}
+
 /**
  * List mode-authoritative messenger candidates.
  *
@@ -5215,7 +5251,12 @@ function estab_dv_messenger_candidates(
     $statement = $strictMode
         ? $connection->prepare(
             'SELECT u.`benutzer`, u.`kuerzel`, assignment.`funktion`,'
-            . ' assignment.`rolle`, assignment.`dienstbesetzung_id`'
+            . ' assignment.`rolle`, assignment.`dienstbesetzung_id`,'
+            . ' u.`aktiv`, u.`estab_gesperrt`,'
+            . ' u.`estab_letzte_aktivitaet`,'
+            . " CASE WHEN u.`sid` REGEXP BINARY"
+            . " '^[A-Za-z0-9,-]{1,50}$' THEN 1 ELSE 0 END"
+            . ' AS `estab_sitzung_vorhanden`'
             . ' FROM `nv_dienstschichten` AS duty_shift'
             . ' JOIN `nv_dienstbesetzungen` AS assignment'
             . ' ON assignment.`dienstschicht_id` ='
@@ -5228,17 +5269,21 @@ function estab_dv_messenger_candidates(
             . " AND assignment.`status` = 'ANGENOMMEN'"
             . " AND BINARY assignment.`funktion` = BINARY 'A/W'"
             . " AND BINARY assignment.`rolle` = BINARY 'Fernmelder'"
-            . ' AND u.`aktiv` = 1 AND u.`estab_gesperrt` = 0'
+            . ' AND u.`estab_gesperrt` = 0'
             . ' ORDER BY u.`benutzer`, u.`kuerzel`'
         )
         : $connection->prepare(
             'SELECT u.`benutzer`, u.`kuerzel`,'
             . ' u.`funktion` AS `account_funktion`,'
-            . ' u.`rolle` AS `account_rolle`,'
+            . ' u.`rolle` AS `account_rolle`, u.`aktiv`,'
+            . ' u.`estab_gesperrt`, u.`estab_letzte_aktivitaet`,'
+            . " CASE WHEN u.`sid` REGEXP BINARY"
+            . " '^[A-Za-z0-9,-]{1,50}$' THEN 1 ELSE 0 END"
+            . ' AS `estab_sitzung_vorhanden`,'
             . " 'A/W' AS `funktion`, 'Fernmelder' AS `rolle`,"
             . ' NULL AS `dienstbesetzung_id`'
             . ' FROM `nv_benutzer` AS u'
-            . ' WHERE u.`aktiv` = 1 AND u.`estab_gesperrt` = 0'
+            . ' WHERE u.`estab_gesperrt` = 0'
             . ' ORDER BY u.`benutzer`, u.`kuerzel`'
         );
     if (!$statement) {
@@ -5257,39 +5302,46 @@ function estab_dv_messenger_candidates(
     } finally {
         $statement->close();
     }
-    if ($strictMode) {
-        return array_values($rows);
-    }
     $candidates = [];
     foreach ($rows as $row) {
         $userCode = (string) ($row['kuerzel'] ?? '');
-        $hasFunction = hash_equals(
-            'A/W',
-            (string) ($row['account_funktion'] ?? '')
-        ) && hash_equals(
-            'Fernmelder',
-            (string) ($row['account_rolle'] ?? '')
-        );
-        foreach (
-            estab_auth_fetch_additional_functions($connection, $userCode)
-            as $extra
-        ) {
-            if (
-                hash_equals('A/W', $extra['funktion'])
-                && hash_equals('Fernmelder', $extra['rolle'])
+        if (!$strictMode) {
+            $hasFunction = hash_equals(
+                'A/W',
+                (string) ($row['account_funktion'] ?? '')
+            ) && hash_equals(
+                'Fernmelder',
+                (string) ($row['account_rolle'] ?? '')
+            );
+            foreach (
+                estab_auth_fetch_additional_functions($connection, $userCode)
+                as $extra
             ) {
-                $hasFunction = true;
-                break;
+                if (
+                    hash_equals('A/W', $extra['funktion'])
+                    && hash_equals('Fernmelder', $extra['rolle'])
+                ) {
+                    $hasFunction = true;
+                    break;
+                }
+            }
+            if (
+                !$hasFunction
+                || !estab_auth_shift_access_allowed($connection, $userCode)
+            ) {
+                continue;
             }
         }
-        if (
-            !$hasFunction
-            || !estab_auth_shift_access_allowed($connection, $userCode)
-        ) {
-            continue;
-        }
-        unset($row['account_funktion'], $row['account_rolle']);
-        $candidates[] = $row;
+        $presence = estab_dv_messenger_presence_details($row);
+        unset(
+            $row['account_funktion'],
+            $row['account_rolle'],
+            $row['aktiv'],
+            $row['estab_gesperrt'],
+            $row['estab_letzte_aktivitaet'],
+            $row['estab_sitzung_vorhanden']
+        );
+        $candidates[] = $row + $presence;
     }
     return $candidates;
 }
@@ -5440,7 +5492,10 @@ function estab_dv_require_no_open_messenger_for_redispatch(
  *   funktion:string,
  *   rolle:string,
  *   permission_mode:string,
- *   dienstbesetzung_id:?int
+ *   dienstbesetzung_id:?int,
+ *   presence_state:string,
+ *   presence_label:string,
+ *   requires_separate_notification:bool
  * }
  */
 function estab_dv_require_messenger_target(
@@ -5459,6 +5514,10 @@ function estab_dv_require_messenger_target(
     if (estab_incident_duty_shift_required($incident)) {
         $statement = $connection->prepare(
             'SELECT account.`estab_gesperrt`, account.`aktiv`,'
+            . ' account.`estab_letzte_aktivitaet`,'
+            . " CASE WHEN account.`sid` REGEXP BINARY"
+            . " '^[A-Za-z0-9,-]{1,50}$' THEN 1 ELSE 0 END"
+            . ' AS `estab_sitzung_vorhanden`,'
             . ' assignment.`dienstbesetzung_id`'
             . ' FROM `nv_benutzer` AS account'
             . ' JOIN `nv_dienstbesetzungen` AS assignment'
@@ -5490,13 +5549,12 @@ function estab_dv_require_messenger_target(
         if (
             !is_array($row)
             || (int) ($row['estab_gesperrt'] ?? 1) === 1
-            || (int) ($row['aktiv'] ?? 0) !== 1
             || (int) ($row['dienstbesetzung_id'] ?? 0) < 1
         ) {
             throw new EstabDvConflictException(
                 'Der Melder muss die Fernmelder-Funktion der aktiven '
-                . 'Dienstschicht persönlich angenommen haben und mit einem '
-                . 'aktiven, ungesperrten Konto angemeldet sein.'
+                . 'Dienstschicht persönlich angenommen haben und das Konto '
+                . 'muss ungesperrt sein.'
             );
         }
         return [
@@ -5505,11 +5563,15 @@ function estab_dv_require_messenger_target(
             'permission_mode' => ESTAB_PERMISSION_MODE_STRICT,
             'dienstbesetzung_id' =>
                 (int) $row['dienstbesetzung_id'],
-        ];
+        ] + estab_dv_messenger_presence_details($row);
     }
 
     $statement = $connection->prepare(
-        'SELECT `funktion`, `rolle`, `estab_gesperrt`, `aktiv`'
+        'SELECT `funktion`, `rolle`, `estab_gesperrt`, `aktiv`,'
+        . ' `estab_letzte_aktivitaet`,'
+        . " CASE WHEN `sid` REGEXP BINARY"
+        . " '^[A-Za-z0-9,-]{1,50}$' THEN 1 ELSE 0 END"
+        . ' AS `estab_sitzung_vorhanden`'
         . ' FROM `nv_benutzer`'
         . ' WHERE BINARY `kuerzel` = BINARY ? LIMIT 1 FOR UPDATE'
     );
@@ -5546,7 +5608,6 @@ function estab_dv_require_messenger_target(
     if (
         !is_array($row)
         || (int) ($row['estab_gesperrt'] ?? 1) === 1
-        || (int) ($row['aktiv'] ?? 0) !== 1
         || !$hasFunction
         || !estab_auth_shift_access_allowed(
             $connection,
@@ -5557,7 +5618,7 @@ function estab_dv_require_messenger_target(
         throw new EstabDvConflictException(
             'Der Melder benötigt im lockeren Modus die feste oder '
             . 'ausdrücklich vergebene Zusatzfunktion Fernmelder sowie ein '
-            . 'aktives, ungesperrtes und zugelassenes Konto.'
+            . 'ungesperrtes und über die Zugangsschicht zugelassenes Konto.'
         );
     }
     return [
@@ -5565,9 +5626,18 @@ function estab_dv_require_messenger_target(
         'rolle' => 'Fernmelder',
         'permission_mode' => ESTAB_PERMISSION_MODE_LOOSE,
         'dienstbesetzung_id' => null,
-    ];
+    ] + estab_dv_messenger_presence_details($row);
 }
 
+/**
+ * Assign one messenger while preserving the historic integer return API.
+ *
+ * `$assignmentDetails` is an optional, non-sensitive result channel for web
+ * callers that need to render the server-derived presence warning after PRG.
+ * Existing callers may continue to consume only the returned job id.
+ *
+ * @param array<string, mixed>|null $assignmentDetails
+ */
 function estab_dv_assign_messenger(
     mysqli $connection,
     int $incidentId,
@@ -5575,7 +5645,8 @@ function estab_dv_assign_messenger(
     mixed $messengerCodeValue,
     mixed $destinationValue,
     array $identity,
-    string $protocolTable = 'nv_protokoll'
+    string $protocolTable = 'nv_protokoll',
+    ?array &$assignmentDetails = null
 ): int {
     $incidentId = estab_incident_positive_id($incidentId);
     $messageId = estab_dv_positive_id($messageId, 'Nachricht');
@@ -5590,7 +5661,8 @@ function estab_dv_assign_messenger(
             $messengerCode,
             $destination,
             $identity,
-            $protocolTable
+            $protocolTable,
+            &$assignmentDetails
         ): int {
             if ((int) $incident['active_einsatz_id'] !== $incidentId) {
                 throw new EstabDvConflictException(
@@ -5732,6 +5804,12 @@ function estab_dv_assign_messenger(
                         $messengerAuthority['dienstbesetzung_id'],
                     'permission_mode' =>
                         $messengerAuthority['permission_mode'],
+                    'messenger_presence_state' =>
+                        $messengerAuthority['presence_state'],
+                    'separate_notification_required' =>
+                        $messengerAuthority[
+                            'requires_separate_notification'
+                        ],
                     'destination' => $destination,
                     'actor' => $actorCode,
                     'actor_function' => (string) $selected['funktion'],
@@ -5739,6 +5817,16 @@ function estab_dv_assign_messenger(
                     'snapshot' => $jobSnapshot,
                 ] + estab_dv_authority_audit_details($selected)
             );
+            $assignmentDetails = [
+                'job_id' => $jobId,
+                'messenger' => $messengerCode,
+                'presence_state' =>
+                    $messengerAuthority['presence_state'],
+                'presence_label' =>
+                    $messengerAuthority['presence_label'],
+                'requires_separate_notification' =>
+                    $messengerAuthority['requires_separate_notification'],
+            ];
             return $jobId;
         }
     );

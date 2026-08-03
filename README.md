@@ -580,7 +580,7 @@ entstehen. OCI-Tags – auch `latest` – gibt es absichtlich nicht.
 | `/4fach/activity.php` | meldet echte Interaktion einer angemeldeten Browseroberfläche | ausschließlich POST mit eStab-Sitzung, exakter SID und Session-CSRF; Statuspolling ruft den Endpunkt nicht auf |
 | `/4fach/logout.php` | zentrale Abmeldung aus Sitzungsleiste und Nachrichtenarbeitsbereich | eStab-Sitzung, ausschließlich POST mit Session-CSRF |
 | `/4fach/katgoedt.php` | globale, Funktions- und persönliche Kategorien | nach Einsatzmodus wirksame Funktion und Rollenprüfung – ausgewählte Dienstbesetzung in `STRICT`, feste oder zusätzliche Kontofunktion in `LOOSE`; bei Nachrichtenbezug zusätzlich Objektprüfung, CSRF für Änderungen |
-| `/4fach/fuehrungsstelle.php` | freigegebenen S6-Plan lesen sowie S6- und Melderabläufe bearbeiten | eStab-Sitzung, aktiver Einsatz und unveränderte Ablauf-/Objektregeln; in `STRICT` Fachzuständigkeit der ausgewählten Dienstbesetzung, in `LOOSE` der festen oder zusätzlichen Kontofunktion |
+| `/4fach/fuehrungsstelle.php` | freigegebenen S6-Plan lesen sowie S6- und Melderabläufe bearbeiten | eStab-Sitzung, aktiver Einsatz und unveränderte Ablauf-/Objektregeln; in `STRICT` Fachzuständigkeit der ausgewählten Dienstbesetzung, in `LOOSE` der festen oder zusätzlichen Kontofunktion. Bei einem Melderauftrag darf LdF ein fachlich geeignetes, ungesperrtes Zielkonto auch inaktiv oder abgemeldet auswählen; Statushinweis und separate Information ersetzen nicht dessen spätere authentisierte persönliche Übernahme |
 | `/4fueltg/ue_ltg.php` | einsatzgebundene Meldungsübersicht | ausschließlich wirksame Funktion `S2/Stab` mit `LAGE_DOKUMENTATION`: in `STRICT` aus der ausgewählten Dienstbesetzung, in `LOOSE` aus fester oder zusätzlicher Kontofunktion |
 | `/4fach/nachwea.php` | Nachweisung der aufgenommenen und beförderten Nachrichten | ausschließlich wirksame Funktion `LdF` oder `Fernmelder` gemäß Einsatzmodus |
 | `/4fach/vordrucke.php` | abgeschlossene Vordrucke des aktiven Einsatzes im aktuellen, mit dem Einsatzdossier gemeinsamen PDF-Layout öffnen | nach Einsatzmodus wirksame Funktion; zugrunde liegende Nachricht, Abschluss- und Druckstatus werden erneut geprüft, das persistierte Archiv bleibt unverändert |
@@ -735,6 +735,26 @@ Dieser Wert gilt erst mit gespeichertem Beförderungszeitpunkt als tatsächlich
 befördert; zuvor steht dort eindeutig „Noch nicht befördert“. Leere Werte
 erscheinen als „Nicht dokumentiert“, unbekannte historische Medien sichtbar
 als „Unbekannt (…)“ und niemals als ausführbares HTML.
+
+### Melderauftrag an inaktive Fernmelder
+
+Die momentane Browserpräsenz entscheidet nicht über die fachliche Eignung für
+einen Melderauftrag. Ein wirksam handelndes LdF kann deshalb ein ungesperrtes
+Fernmelderkonto auch auswählen, wenn es seit mindestens 15 Minuten inaktiv
+oder vollständig abgemeldet ist. Die Auswahl kennzeichnet aktive, inaktive,
+abgemeldete und bereits abgelaufene Sitzungen. Bei fehlender Aktivität fordert eStab ausdrücklich
+dazu auf, die Person separat über den Auftrag zu informieren; eine automatische
+Benachrichtigung findet nicht statt.
+
+Die übrigen Rechte werden nicht gelockert. In `STRICT` benötigt das Zielkonto
+eine persönlich angenommene Fernmelder-Besetzung der aktiven formalen
+Dienstschicht, während LdF selbst mit seiner ausgewählten Besetzung handelt.
+In `LOOSE` benötigt das Zielkonto die feste oder eine explizite zusätzliche
+Fernmelderfunktion; ist es einer Zugangsschicht zugeordnet, muss mindestens
+eine dieser Gruppen aktiv sein. Sperre, Einsatz-, Nachrichten- und
+Workflowgrenzen bleiben in beiden Modi bestehen. Übernahme, Zustellung,
+Rückweg und Rückkehr dokumentiert später ausschließlich die mit dem eigenen
+Konto angemeldete beauftragte Person.
 
 Der Anmeldeeinstieg trennt zwei Vorgänge ausdrücklich: „Mit bestehendem Konto
 anmelden“ verlangt das bereits gespeicherte Kennwort und legt niemals ein Konto

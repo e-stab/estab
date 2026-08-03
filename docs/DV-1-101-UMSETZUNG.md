@@ -75,8 +75,8 @@ Softwareeinstellung nicht.
 | S. 4-63 | Der Sichter analysiert Eingänge inhaltlich und leitet sie an zuständige Bearbeiter weiter. | Eingänge laufen zwingend `Fernmelder → LdF → Si`; Si setzt Empfänger und Abschluss. Der Fernmelder darf den Absender nicht schreiben, LdF übersetzt den aufgenommenen Rufnamen und bestätigt den vom Fernmelder erfassten Eingangsweg. Eine Änderung verlangt eine Begründung und wird mit Alt-/Neuwert und LdF-Identität nachgewiesen; Aufnahmezeit und -zeichen des Fernmelders bleiben unverändert. | `tests/php/workflow_security.php`, `tests/php/ldf_validation_security.php`, `tests/php/ldf_ui_flow_security.php`, `tests/integration/message_workflow_http.sh` |
 | S. 4-63 | Bei Ausgängen prüft Si nur Anschrift, Unterschrift/Zeichen und Funktion, nicht den Inhalt. | Ausgänge laufen zwingend `Verfasser → Si → LdF → Fernmelder`. Si kann formal freigeben oder mit Pflichtgrund zurückgeben, aber keine Inhaltsfelder verändern. Auch LdF kann einen fachlich nicht disponierbaren Vordruck nur begründet an den Verfasser zurückgeben. Nach jeder Korrektur folgen Si und LdF erneut. | `tests/php/message_security.php`, `tests/php/ldf_return_security.php`, `tests/php/message_timeline_security.php`, `tests/integration/message_concurrency.php`, `tests/integration/message_workflow_http.sh` |
 | Nachrichtenvordruck-Unterlagen sowie S. 4-63/4-64 | Eine Gesprächsnotiz dokumentiert die ursprüngliche Gesprächsart, bleibt aber als Ausgang im geordneten Informations- und Fernmeldeweg. | Von den fernmeldespezifischen Angaben erfasst der Verfasser ausschließlich die ursprüngliche Gesprächsart. Si prüft formal; danach setzt LdF den Rufnamen der Gegenstelle und disponiert einen aktiven, veröffentlichten S6-Beförderungsweg. Der Fernmelder weist die Beförderung nach. Erst dieser Abschluss erzeugt TBB-Nachweis und PDF-Vordruck. | `tests/integration/message_workflow_http.sh`, `tests/integration/http_smoke.sh` |
-| S. 4-64 | Der Melder darf den Inhalt nicht ändern, muss schnell zustellen, Rücknachrichten feststellen, zurückkehren, sich zurückmelden und den tatsächlichen Empfänger nennen. | Das Medium `Me` verlangt einen LdF-Auftrag und die Zustandskette Beauftragung, persönliche Übernahme, Übergabe mit Empfänger, Rückweg mit explizitem Rücknachrichtenvermerk und Rückkehr. Danach bestätigt in `STRICT` eine ausgewählte LdF-Besetzung, in `LOOSE` ein Konto mit fester oder zusätzlicher Funktion LdF die Rückmeldung an die FmZt. Der Nachrichtenabschluss wartet auf die vollständige Kette. | `tests/integration/dv_operations.php`, `tests/integration/message_workflow_http.sh` |
-| S. 4-64 | Bis zur Rückkehr darf der Melder keine anderen Aufträge annehmen; in einer FüSt mit Stab gehört er zur FmZt und wird durch LdF eingesetzt. | In `STRICT` sind ausgewählte LdF- und Fernmelder-Besetzungen der aktiven Dienstschicht erforderlich. In `LOOSE` müssen disponierendes und beauftragtes Konto LdF beziehungsweise Fernmelder als feste oder zusätzliche Funktion besitzen. Während Übernahme, Übergabe und Rückweg sperrt eine zentrale Request-Grenze alle fremden operativen Schreibvorgänge dieses Kontos. | `tests/php/dv_operations_security.php`, `tests/integration/dv_operations.php` |
+| S. 4-64 | Der Melder darf den Inhalt nicht ändern, muss schnell zustellen, Rücknachrichten feststellen, zurückkehren, sich zurückmelden und den tatsächlichen Empfänger nennen. | Das Medium `Me` verlangt einen LdF-Auftrag und die Zustandskette Beauftragung, persönliche Übernahme, Übergabe mit Empfänger, Rückweg mit explizitem Rücknachrichtenvermerk und Rückkehr. Fachlich geeignete, ungesperrte Fernmelder bleiben für LdF auch ohne laufende Sitzung oder bei inaktiver Präsenz disponierbar; die Oberfläche kennzeichnet den Zustand und verlangt dann eine separate Information außerhalb von eStab. Die spätere Übernahme bestätigt ausschließlich die authentisierte beauftragte Person. Danach bestätigt in `STRICT` eine ausgewählte LdF-Besetzung, in `LOOSE` ein Konto mit fester oder zusätzlicher Funktion LdF die Rückmeldung an die FmZt. Der Nachrichtenabschluss wartet auf die vollständige Kette. | `tests/php/dv_operations_security.php`, `tests/integration/dv_operations.php`, `tests/integration/message_workflow_http.sh` |
+| S. 4-64 | Bis zur Rückkehr darf der Melder keine anderen Aufträge annehmen; in einer FüSt mit Stab gehört er zur FmZt und wird durch LdF eingesetzt. | In `STRICT` braucht das handelnde LdF weiterhin eine ausgewählte LdF-Besetzung; das Zielkonto benötigt eine persönlich angenommene Fernmelder-Besetzung der aktiven Dienstschicht. In `LOOSE` müssen disponierendes und beauftragtes Konto LdF beziehungsweise Fernmelder als feste oder zusätzliche Funktion besitzen; ein für das Ziel wirksames Zugangsschicht-Gate bleibt verbindlich. Nur die Live-Sitzung des Ziel-Fernmelders ist keine Voraussetzung der Beauftragung. Während Übernahme, Übergabe und Rückweg sperrt eine zentrale Request-Grenze alle fremden operativen Schreibvorgänge dieses Kontos. | `tests/php/dv_operations_security.php`, `tests/integration/dv_operations.php`, `tests/integration/schema_migrator.sh` |
 | S. 4-64 | LdF verantwortet den Fernmeldebetrieb und unterweist, unterstützt und überwacht das Betriebspersonal. | Die LdF-Funktion ist technisch exklusiv für Rufnamenübersetzung, Planwegentscheidung, Melderbeauftragung und Bestätigung der Rückkehr gebunden. Sie stammt in `STRICT` aus der ausgewählten Dienstbesetzung und in `LOOSE` aus fester oder zusätzlicher Kontofunktion. | `tests/integration/message_workflow_http.sh`, `tests/integration/dv_operations.php` |
 | S. 4-70 bis 4-73 | Die Führungsstelle besitzt benannte Funktionen; Kombinationen S1/S4, S2/S3 sowie ETB/Si sind organisatorisch möglich. | Im strengen Modus kann eine Person mehrere persönliche Besetzungen annehmen und genau die aktuell ausgeübte Funktion auswählen. Im lockeren Modus bildet die Administration Kombinationen gezielt durch Zusatzfunktionen desselben persönlichen Kontos ab, beispielsweise LdF plus S6. Optionale Zugangsschichten gruppieren nur lockere Zugänge und verändern keine Fachrechte. | Authentifizierungs-, Autorisierungs-, Berechtigungsmodus- und Schema-Verifikation |
 | S. 4-73 | Die Arbeitsfähigkeit hängt von zweckmäßiger Organisation und raschem Informationsfluss ab. | Führungsstellenname, aktiver Einsatz, wirksame Funktion, Warteschlangen und Zuständigkeit sind sichtbar. Der Führungsstellenname ist die einsatzbezogene lokale Nachrichtenanschrift/-absendereinheit und von Einsatzname, Bedarfsträger sowie Einsatzleitung getrennt. Ohne aktiven Einsatz oder bestätigten Führungsstellennamen wird serverseitig keine operative Eingabe angenommen; im strengen Modus gilt das zusätzlich ohne ausgewählte aktive Dienstbesetzung. | Schema-, Einsatzdomänen-, HTTP- und Browser-Abnahme sowie `tests/integration/message_workflow_http.sh` |
@@ -617,6 +617,19 @@ gesetzte Zeit-, Empfänger- oder Rücknachrichtenbeleg sind bei allen späteren
 Statusübergängen unveränderlich. Ein bereits vollständig gemeldeter Lauf
 bleibt endgültig und kann nicht erneut disponiert werden.
 
+Die Disponierbarkeit für einen neuen Auftrag ist von der momentanen
+Browserpräsenz getrennt. LdF kann ein ungesperrtes und fachlich
+geeignetes Fernmelderkonto deshalb auch auswählen, wenn es seit mindestens 15
+Minuten inaktiv oder vollständig abgemeldet ist. In `STRICT` bleibt eine
+persönlich angenommene Fernmelder-Besetzung der aktiven formalen
+Dienstschicht Pflicht; in `LOOSE` bleiben feste beziehungsweise zusätzliche
+Fernmelderfunktion und ein gegebenenfalls zugeordnetes Zugangsschicht-Gate
+Pflicht. Die Oberfläche zeigt den Präsenzzustand und fordert bei inaktiver
+oder abgemeldeter Person ausdrücklich dazu auf, den Auftrag separat
+mitzuteilen. Dieser Hinweis ersetzt keine automatische Benachrichtigung.
+Übernahme und alle persönlichen Folgeschritte verlangen weiterhin die
+authentisierte Sitzung genau des beauftragten Kontos.
+
 ## Export und Nachweisführung
 
 Der PDF-Einsatzexport verwendet für jede Nachricht denselben
@@ -736,7 +749,16 @@ sein:
    menschliche Schreiberbesetzung bleibt leer; in `LOOSE` dürfen beide Werte
    `NULL` sein. Alte belegte Schichtwerte müssen unverändert exportierbar
    bleiben.
-9. Veröffentlichung einer S6-Planfolge und vollständiger Melderlauf.
+9. Veröffentlichung einer S6-Planfolge und vollständiger Melderlauf. Dabei je
+   einen aktiven und einen inaktiven beziehungsweise abgemeldeten, aber
+   fachlich geeigneten Fernmelder disponieren; Statuskennzeichnung und Hinweis
+   zur separaten Information prüfen. In `STRICT` muss das Ziel eine
+   angenommene Fernmelder-Besetzung der aktiven Dienstschicht besitzen, in
+   `LOOSE` feste oder zusätzliche Fernmelderfunktion und wirksamen
+   Zugangsschicht-Zugang. Ein gesperrtes, fachfremdes oder durch eine
+   deaktivierte Zugangsschicht ausgeschlossenes Konto muss fehlen
+   beziehungsweise abgewiesen werden. Die persönliche Übernahme darf erst nach
+   eigener Anmeldung des beauftragten Kontos gelingen.
 10. Abschluss-Preflight, automatische ETB-/TTB-Abschlusszeilen, in `STRICT`
     die blockierende fehlende Bucheröffnung beziehungsweise offene
     Dienstorganisation und in `LOOSE` den erfolgreichen Abschluss ohne frühere
@@ -758,7 +780,9 @@ sein:
     strengen Modus ohne aktive, angenommene und ausgewählte fachlich passende
     Dienstbesetzung. Im lockeren Modus müssen dieselben Vorgänge ohne formale
     Schicht, aber nur mit passender fester oder zusätzlicher Funktion zulässig
-    sein. Während eines übernommenen Melderlaufs
+    sein. Die fehlende Live-Sitzung eines fachlich geeigneten Ziel-Fernmelders
+    darf nur die Melderbeauftragung nicht sperren; die persönliche Übernahme
+    bleibt authentisiert. Während eines übernommenen Melderlaufs
     zusätzlich alle fremden operativen Schreibpfade abweisen.
 14. Nicht verfügbarer Beförderungsweg mit begründeter Rückgabe an LdF,
     Neudisposition und unverändertem historischen Nachweis.

@@ -20,6 +20,11 @@ werden nur in `LOOSE` getrennt mit unzugeordnetem
 Konto, OR-Semantik bei Mehrfachzuordnung, Aktivierung ohne Anmeldung,
 Deaktivierung mit Sitzungswiderruf und Vorrang der manuellen Kontosperre
 geprüft. Nach ihrem Ende bleiben formale Schichtdaten Export-/Evidenzdaten.
+„Aktives Konto“ bezeichnet dabei stets die schreibende Person. Beim
+Melderauftrag bleibt LdF aktiv und authentisiert; ausschließlich der fachlich
+geeignete und ungesperrte Ziel-Fernmelder darf bei der Beauftragung inaktiv
+oder abgemeldet sein. Seine spätere persönliche Übernahme bleibt
+authentisierungspflichtig.
 Der PDF-Abschnitt Dienstorganisation muss formale Dienstschichten samt
 Besetzungen und Übergaben als aktuelle oder historische Evidenz sowie getrennt
 die Zugangsschichten einschließlich aktueller und entfernter Zuordnungen
@@ -59,7 +64,7 @@ Anmelde-Audit erzeugt, während Bestandslogin und Sitzungen unberührt bleiben.
 | Image-Build | benötigte PHP-Erweiterungen und Apache-Konfiguration |
 | Datenbank | echtes MariaDB-Schema, Einsatz-Singleton/Trigger, Kontosperre, revisionsgesicherte Kennwort- und Selbstregistrierungs-Singletonzeilen, Indizes, aktive und persistente Standardmatrix, Engines, Collations und Zero-Date-Freiheit |
 | HTTP | Header, direkte Endpunktfläche, 303-Weiterleitung anonymer geschützter Aufrufe zum allowlist-gebundenen Bestandslogin samt sichtbarem Rückweg, 403-/400-/405-Grenzen, dauerhafte und befristete Selbstregistrierungssteuerung, sichtbare Sitzungsidentität, Präsenz/Leerlaufende, feste Funktions-/Rollenbindung, optionaler Gruppenzugang, Kennwortrichtlinien-Vorschau/-Bestätigung, verbindlicher Nachrichtenlauf, E-Mail-Anhang mit passiver Ansicht und bytegleichem Originaldownload, S6-Plan, Melderlauf, Kategorien- und ETB-/TBB-Rollengrenzen, Vordruckerzeugung sowie Admin-Export |
-| Echter Browser | öffentliche Übersicht, getrennte Konto-Flows, direkte ETB-/Nachrichten-/Anhang-/Kategorie-Anmeldung ohne Sackgasse oder verschachtelten Arbeitsbereich, sicherer Login-Abbruch, neun stabile Navigationsbereiche, aktive Markierung, reale Karten- und Bereichswechsel im selben Tab, überlappungsfreie Karten-Klickflächen und echter Hover bei sechs Breiten, genau zwei Anwendungs-`iframe`-Elemente, vollhohe Sidebar ohne verschachtelte Scrollflächen bei 1440 × 1000, 1280 × 720 und 700 × 760 CSS-Pixeln, fokuserhaltender Statusfragment-Refresh samt sichtbarem Fehler- und Erholungspfad, dauerhafte Warnstufe bei offenen Meldungen, gleich-originiges PCM-WAV, ausdrücklicher Hinweiston-Schalter samt Blockade-/Reload-/Synchronisations-/Race-Pfad und automatischem Signal, langlebiges Audioelement, passive E-Mail-Anlagenkarte ohne aktive Mail-DOM-/Remote-Inhalte, Rufnamen-Auswahlliste des Fernmelders mit echtem Fokus, Filterung und Tastaturauswahl, Matrixstandard- und Kennwortrichtlinien-Bestätigungen, responsive Adminübersicht mit elf Karten und acht Selbstregistrierungszeitfenstern, BOS-Disclosure, Logout, eine mobil nicht über dem Arbeitsbereich klebende vollständige Status-/Navigationsleiste sowie Erstellen, Download und zweistufiges Löschen eines Exports ohne horizontalen Seitenüberlauf bei exakt 390 × 844 CSS-Pixeln |
+| Echter Browser | öffentliche Übersicht, getrennte Konto-Flows, direkte ETB-/Nachrichten-/Anhang-/Kategorie-Anmeldung ohne Sackgasse oder verschachtelten Arbeitsbereich, sicherer Login-Abbruch, neun stabile Navigationsbereiche, aktive Markierung, reale Karten- und Bereichswechsel im selben Tab, überlappungsfreie Karten-Klickflächen und echter Hover bei sechs Breiten, genau zwei Anwendungs-`iframe`-Elemente, vollhohe Sidebar ohne verschachtelte Scrollflächen bei 1440 × 1000, 1280 × 720 und 700 × 760 CSS-Pixeln, fokuserhaltender Statusfragment-Refresh samt sichtbarem Fehler- und Erholungspfad, dauerhafte Warnstufe bei offenen Meldungen, gleich-originiges PCM-WAV, ausdrücklicher Hinweiston-Schalter samt Blockade-/Reload-/Synchronisations-/Race-Pfad und automatischem Signal, langlebiges Audioelement, passive E-Mail-Anlagenkarte ohne aktive Mail-DOM-/Remote-Inhalte, Rufnamen-Auswahlliste des Fernmelders mit echtem Fokus, Filterung und Tastaturauswahl, inaktiver Melderauftrag mit abgemeldetem fachlich berechtigtem Ziel in der LdF-Auswahl, sichtbarer Status-/Informationswarnung und echtem POST/PRG-Erfolg, Matrixstandard- und Kennwortrichtlinien-Bestätigungen, responsive Adminübersicht mit elf Karten und acht Selbstregistrierungszeitfenstern, BOS-Disclosure, Logout, eine mobil nicht über dem Arbeitsbereich klebende vollständige Status-/Navigationsleiste sowie Erstellen, Download und zweistufiges Löschen eines Exports ohne horizontalen Seitenüberlauf bei exakt 390 × 844 CSS-Pixeln |
 | Fachabnahme | kompletter Nachrichten-, Anhang-, PDF-, ETB-/TBB- und Restore-Ablauf |
 | Betrieb | kontinuierliche Readiness, Logs, Restarts, Kapazität und Backup-Alter |
 
@@ -124,7 +129,7 @@ administrativen Synology-/Docker-Aufruf vorgesehene Rootpfad
 `/var/lib/estab-deploy` bleibt zusätzlich im statischen Vertrag gebunden; die
 Tests schreiben dafür nicht in das `/var/lib` des Testcontainers.
 
-Die Suite lintet derzeit 277 aktive PHP-Dateien und führt die Prüfungen unter
+Die Suite lintet 278 aktive PHP-Dateien und führt die Prüfungen unter
 `tests/php/` aus. Dazu gehören unter anderem:
 
 - die versiegelten, deterministischen Provenienzmanifeste für 13
@@ -301,8 +306,8 @@ tests/integration/ci.sh
 ```
 
 Der am 3. August 2026 vollständig beendete Podman-Abschlusslauf führte
-`bash tests/integration/ci.sh` mit allen 24 Migrationen bis einschließlich
-Migration 118 aus und endete nach dem vollständigen Backup-/Restore-Roundtrip
+`bash tests/integration/ci.sh` mit allen 25 Migrationen bis einschließlich
+Migration 119 aus und endete nach dem vollständigen Backup-/Restore-Roundtrip
 mit Exitcode 0 und `CI integration: OK`. Sein protokollierter Kernstand lautet:
 
 | Teilnachweis | Ergebnis |
@@ -310,7 +315,7 @@ mit Exitcode 0 und `CI integration: OK`. Sein protokollierter Kernstand lautet:
 | Schema | 42 Prüfungen |
 | Einsatzdomäne | 69 Assertions |
 | DV-Evidenz | 52 Assertions |
-| DV-Operations einschließlich `STRICT`/`LOOSE` und Fernmeldeplan | 236 Assertions, 95 Ereignisse |
+| DV-Operations einschließlich `STRICT`/`LOOSE`, Fernmeldeplan und inaktiver Melderziele | 243 Assertions, 95 Ereignisse |
 | Optionale Zugangsschichten | 29 Assertions |
 | Benutzerverwaltung | 98 Assertions |
 | Kennwortrichtlinie gegen MariaDB | 66 Assertions |
@@ -320,11 +325,18 @@ mit Exitcode 0 und `CI integration: OK`. Sein protokollierter Kernstand lautet:
 | Sichtbare Anhangdarstellung | 11 Assertions |
 | Einsatzbezogene Nachrichtenvorschläge | 32 Assertions |
 | Nachrichtensuche mit 10.000 Zielzeilen | 145 Assertions |
-| Echter Browser | Chrome 150: öffentliche BOS- und Handbuchläufe, allgemeiner zwölfstufiger UI-Lauf, S6-Fernmeldeplan-Versionierung, Meldungsüberschrift und Nachrichtenvorschläge erfolgreich; mobile Exportverwaltung einschließlich nichtklebender Vollleiste und Löschung bei `390 × 844` CSS-Pixeln geprüft |
+| Echter Browser | Chrome 150: öffentliche BOS- und Handbuchläufe, allgemeiner zwölfstufiger UI-Lauf, Auswahl eines abgemeldeten fachlich berechtigten Fernmelders mit Status und sichtbarem Informationshinweis, S6-Fernmeldeplan-Versionierung, Meldungsüberschrift und Nachrichtenvorschläge erfolgreich; mobile Exportverwaltung einschließlich nichtklebender Vollleiste und Löschung bei `390 × 844` CSS-Pixeln geprüft |
 
 HTTP-Surface, Selbstregistrierung, Auth-Smoke, Logbücher, Kategorien,
 Nachrichtenworkflow, Administrationsworkflow sowie Backup und Restore endeten
 ebenfalls erfolgreich. Das verpflichtende Browser-Gate lief in Chrome 150.
+
+Migration `119-inactive-messenger-dispatch.sql`, ihre Schema-/DV-Assertions
+und die sichtbare Auswahl eines abgemeldeten Fernmelders sind Teil dieses
+grünen Abschlussstands. Der Modus
+`tests/browser/headless_ui.py --inactive-messenger` bestätigte im echten
+Chrome einen fachlich berechtigten Fernmelder mit Status im LdF-Auswahlfeld
+und nach Auswahl den sichtbaren Hinweis zur separaten Information.
 Sein allgemeines authentifiziertes Fixture verwendet einen `LOOSE`-Einsatz
 und genau eine fest zugewiesene S1-Kontofunktion; die getrennten S2-, S6- und
 Fernmelder-Läufe verwenden ebenfalls jeweils genau eine feste Funktion. Damit
@@ -337,12 +349,9 @@ Lauf noch nicht. Diese Bedienpfade bleiben manuell beziehungsweise als eigene
 Browserautomatisierung offen; Domänen-, Datenbank- und HTTP-Gates prüfen ihre
 Autorisierungsgrenzen bereits automatisiert.
 
-Die anschließend separat mit der festgelegten unprivilegierten
-Containeridentität ausgeführte statische Suite endete mit Exitcode 0, lintete
-277 aktive PHP-Dateien und bestätigte insbesondere 99 Assertions zum
-Berechtigungsmodus, 30 Assertions zum exakten LOOSE-Anhang-Scope und 249
-Assertions zum Single-Dispatch-Vertrag. Dieser lokale Podman-Lauf fand nicht
-auf einem
+Die separate statische PHP-8.5-Suite endete mit Exitcode 0, lintete 278 aktive
+PHP-Dateien und bleibt ein eigenständiger Abschlussnachweis. Der lokale
+Podman-Integrationslauf fand nicht auf einem
 nachgewiesenen SELinux-Enforcing-System statt und gilt daher ausdrücklich nicht
 als SELinux-Relabel-Nachweis.
 
@@ -404,7 +413,7 @@ Schreibgrenzen sowie die amtlichen Nachrichtenvordruckfelder aus Migration 98.
 Der Schema-Test startet Migration 98 zweimal, prüft die exakt markierten
 Spalten `11_rufnummer` und `12_betreff`, deren leere Bestandswerte und den
 unveränderten historischen Nachrichteninhalt. Readiness und `verify.sql`
-verlangen alle vierundzwanzig Ledgerzeilen einschließlich Version 118, die
+verlangen alle fünfundzwanzig Ledgerzeilen einschließlich Version 119, die
 kanonische Berechtigungsmodusspalte samt Guard-/Fachtriggern, die
 Zusatzfunktionstabelle sowie die exakten drei Such-/Listenindizes. Migration 99 wird vollständig, nach einem
 simulierten phasenweisen Abbruch und nach einer fremden Indexkollision
@@ -531,7 +540,7 @@ kombinierte Mutation ab und prüft, dass die vorhandenen Eintragstrigger die
 archivierten Wege anschließend weder ändern noch löschen lassen. Zweitlauf,
 Readiness und `verify.sql` müssen denselben Trigger- und Ledgerstand bestätigen.
 
-Migration 118 ergänzt als vierundzwanzigste Ledgerzeile den aktuellen
+Migration 118 ergänzt als vierundzwanzigste Ledgerzeile den modeabhängigen
 Autorisierungsvertrag. Der Schematest muss die
 kollisionsgeprüfte Tabelle `nv_benutzer_zusatzfunktionen`, ihren eindeutigen
 Kontofunktionsschlüssel und den ersetzten ETB-/TTB-, Fernmeldeplan- und
@@ -545,6 +554,21 @@ Fähigkeit müssen scheitern. Systembuchzeilen dürfen weiterhin ohne
 persönlichen Schreiber entstehen. Fremde Tabellen-/Triggerkollisionen,
 unterbrochener Wiederanlauf und Zweitlauf sind fail-closed beziehungsweise
 idempotent zu prüfen.
+
+Migration 119 ergänzt als fünfundzwanzigste Ledgerzeile die gezielte
+Entkopplung von fachlicher Melder-Eignung und Live-Sitzung des Zielkontos. Der
+Schematest muss den eindeutig erkannten Trigger aus Migration 118 und den
+kanonischen Zieltrigger akzeptieren, einen fehlenden oder fremden
+gleichnamigen Trigger aber ohne Ledgerabschluss blockieren. `STRICT` muss
+weiter eine persönlich angenommene Fernmelder-Besetzung der aktiven
+Dienstschicht für das Ziel verlangen; `LOOSE` weiterhin feste beziehungsweise
+zusätzliche Fernmelderfunktion und ein gegebenenfalls aktives
+Zugangsschicht-Gate. In beiden Modi muss die Beauftragung eines ungesperrten,
+fachlich geeigneten Zielkontos auch mit inaktiver Präsenz oder ohne Sitzung
+gelingen. Gesperrte, fachfremde und modefremde Ziele bleiben negativ. Die
+persönliche Übernahme ohne eigene Sitzung muss weiterhin scheitern. Zweitlauf,
+unterbrochener Wiederanlauf, `verify.sql` und Laufzeit-Readiness müssen den
+25-zeiligen Ledger und exakt den neuen Triggerstand bestätigen.
 
 Anschließend migriert der Hauptlauf ein leeres Schema,
 führt PHP-, Datenbank-, Rollen-, HTTP- und Administrationsnachweise aus, prüft
@@ -847,10 +871,12 @@ Integrationstests verwenden getrennte, unveränderliche `STRICT`- und
 `LOOSE`-Einsätze; kein bereits betriebener Fixture wird für den nächsten Test
 zurückgesetzt.
 
-Im finalen Lauf bis Migration 118 stand Chrome 150 zur Verfügung. Der
+Im finalen Lauf bis Migration 119 stand Chrome 150 zur Verfügung. Der
 allgemeine UI-Lauf verwendete einen `LOOSE`-Einsatz mit genau einer festen
 S1-Kontofunktion; auch die getrennten S2-, S6- und Fernmelder-Fixtures besaßen
-jeweils nur eine feste Funktion. Dieser Lauf enthält deshalb keinen
+jeweils nur eine feste Funktion. Der zusätzliche Melder-Fixture belegte einen
+abgemeldeten, fachlich berechtigten Fernmelder mit Statusanzeige und sichtbarem
+Informationshinweis. Dieser Lauf enthält weiterhin keinen
 dedizierten Browsernachweis für eine ausgewählte `STRICT`-Dienstbesetzung, die
 Umschaltung zwischen `STRICT` und `LOOSE` samt sichtbarer Moduswarnung oder die
 explizite Auswahl einer festen beziehungsweise zusätzlichen Funktion bei
@@ -1957,7 +1983,21 @@ Quelle. Zulässige große UTF-8-Vermerke bleiben vollständig im verketteten
 Betriebsereignis; das Legacy-Protokoll enthält bei Überschreitung seiner
 TEXT-Grenze einen prüfbaren kompakten Verweis. Im Modus `LOOSE` wird die
 tatsächlich wirksame feste oder zusätzliche Funktion auditiert. Der erfolgreiche
-Lauf umfasst 236 Assertions und 95 verkettete Betriebsereignisse.
+Lauf umfasst 243 Assertions und 95 verkettete Betriebsereignisse.
+
+Migration 119 erweitert diesen DV-Lauf um getrennte Zielzustände. Aktive, seit
+mindestens 15 Minuten inaktive und vollständig abgemeldete Fernmelder bleiben
+bei unveränderter fachlicher Eignung auswählbar. In `STRICT` bleibt die
+angenommene Ziel-Besetzung der aktiven Dienstschicht, in `LOOSE` die feste
+beziehungsweise zusätzliche Fernmelderfunktion samt Zugangsschicht-Gate
+Pflicht. Kontosperre, fremde Funktion, deaktivierte einzige Zugangsschicht und
+fehlende Ziel-Besetzung bleiben Negativfälle. Der Test bestätigt außerdem,
+dass nur die Beauftragung keine Ziel-Sitzung benötigt: Übernahme und
+Folgeschritte ohne authentisierte Sitzung des beauftragten Kontos werden
+weiter abgewiesen. Die dedizierte Chrome-Abnahme bestätigt Statusbeschriftung
+und den Hinweis, dass LdF eine inaktive oder abgemeldete Person separat
+informieren muss.
+
 `tests/integration/message_workflow_http.sh`
 belegt denselben Ablauf über echte CSRF-geschützte HTTP-Formulare einschließlich
 Vorbelegung, 409-Konfliktseite und Erhalt der nicht gespeicherten Eingabe.
@@ -2174,6 +2214,16 @@ Mindestens zu prüfen:
   die vorgesehene angenommene Dienstbesetzung auswählen, in `LOOSE` feste und
   zusätzliche Funktionen prüfen; abweichende Funktion/Rolle und fehlenden
   aktiven Einsatz abweisen,
+- mit LdF nacheinander einen aktiven, einen mindestens 15 Minuten inaktiven und
+  einen abgemeldeten, aber fachlich geeigneten Fernmelder für einen
+  Melderauftrag auswählen; Statusbeschriftung und den Hinweis auf die separate
+  Information außerhalb von eStab prüfen. In `STRICT` muss das Ziel eine
+  angenommene Fernmelder-Besetzung der aktiven Dienstschicht besitzen, in
+  `LOOSE` feste oder zusätzliche Fernmelderfunktion und wirksamen
+  Zugangsschicht-Zugang. Gesperrte und fachfremde Konten dürfen nicht
+  disponiert werden. Anschließend muss ausschließlich das erneut selbst
+  angemeldete Zielkonto die persönliche Übernahme und den weiteren Lauf
+  quittieren können,
 - eingehende und ausgehende Nachricht mit Richtung, Gegenstelle,
   Prioritätsstufe, Empfängern und Inhalt erfassen,
 - den Bildschirmvordruck bei Desktopbreite und bei 390 Pixeln direkt mit den
@@ -2349,7 +2399,9 @@ sind:
   sechs aktuelle modebewusste Fachtrigger mit Dienstbesetzungsautorität in
   `STRICT` sowie Fest-/Zusatzfunktionsautorität in `LOOSE`, append-only Ereignisketten, formaler
   Abschluss/Aufbewahrung sowie die dauerhafte Kontosperr-Spalte kanonisch
-  vorhanden sind,
+  vorhanden sind; der Melderauftrag-Insert muss dabei die Live-Sitzung nur für
+  das disponierende LdF, nicht für das weiterhin fachlich gebundene und
+  ungesperrte Zielkonto verlangen,
 - pro Einsatz exakt zwei Buchkopfstände samt kanonischem Einsatz-Insert-
   Trigger, lokale ETB-/TBB-Nummern, strukturierte TBB-Felder,
   Nachrichten-/Korrekturbezüge, der eindeutige ETB-Anhangsindex, die übrigen

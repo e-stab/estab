@@ -2987,6 +2987,372 @@ class BrowserAcceptance:
             "S6 nach dem Fernmeldeplantest abmelden",
         )
 
+    def run_inactive_messenger(self) -> None:
+        """Prove inactive dispatch in the rendered UI and after real POST/PRG."""
+        if self.config.login_function != "LdF":
+            raise TestFailure(
+                "--inactive-messenger benötigt ein fest provisioniertes "
+                "LdF-Konto."
+            )
+        inactive_code = os.environ.get(
+            "ESTAB_TEST_INACTIVE_MESSENGER_CODE", ""
+        ).strip().lower()
+        online_code = os.environ.get(
+            "ESTAB_TEST_ONLINE_MESSENGER_CODE", ""
+        ).strip().lower()
+        message_marker = os.environ.get(
+            "ESTAB_TEST_INACTIVE_MESSENGER_MESSAGE_MARKER", ""
+        ).strip()
+        destination = os.environ.get(
+            "ESTAB_TEST_INACTIVE_MESSENGER_DESTINATION", ""
+        ).strip()
+        if not re.fullmatch(r"[a-z0-9_]{1,6}", inactive_code):
+            raise TestFailure(
+                "ESTAB_TEST_INACTIVE_MESSENGER_CODE fehlt oder ist ungültig."
+            )
+        if not re.fullmatch(r"[a-z0-9_]{1,6}", online_code):
+            raise TestFailure(
+                "ESTAB_TEST_ONLINE_MESSENGER_CODE fehlt oder ist ungültig."
+            )
+        if inactive_code == online_code:
+            raise TestFailure("Aktiver und inaktiver Fernmelder sind identisch.")
+        if not re.fullmatch(r"BROWSER-MELDER-[a-f0-9]{16}", message_marker):
+            raise TestFailure(
+                "ESTAB_TEST_INACTIVE_MESSENGER_MESSAGE_MARKER ist ungültig."
+            )
+        if not re.fullmatch(
+            r"BROWSER-MELDERZIEL-[a-f0-9]{16}", destination
+        ):
+            raise TestFailure(
+                "ESTAB_TEST_INACTIVE_MESSENGER_DESTINATION ist ungültig."
+            )
+
+        self.cdp.call("Page.enable")
+        self.cdp.call("Runtime.enable")
+        self.cdp.call("Network.enable")
+        self.cdp.navigate(
+            self.config.base_url + "/4fach/index.php?next=command-post"
+        )
+        self._wait_for_frame("mainframe")
+        self.cdp.wait_for(
+            _frame_expression(
+                "mainframe",
+                """
+                return Boolean(doc.querySelector(
+                    'button[name="login_flow"][value="existing"]'
+                ));
+                """,
+            ),
+            "Bestandskonto-Auswahl für den Melderauftragstest fehlt",
+        )
+        self.cdp.click(
+            "mainframe",
+            'button[name="login_flow"][value="existing"]',
+            "LdF-Bestandskonto anmelden",
+        )
+        self.cdp.wait_for(
+            _frame_expression(
+                "mainframe",
+                """
+                return Boolean(
+                    doc.querySelector('input[name="benutzer"]')
+                    && doc.querySelector('input[name="kuerzel"]')
+                    && doc.querySelector('select[name="funktion"]')
+                    && doc.querySelector('input[name="kennwort1"]')
+                );
+                """,
+            ),
+            "Bestandskonto-Formular für den Melderauftragstest fehlt",
+        )
+        for selector, value, label, select in (
+            (
+                'input[name="benutzer"]',
+                self.config.login_name,
+                "LdF-Name",
+                False,
+            ),
+            (
+                'input[name="kuerzel"]',
+                self.config.login_code,
+                "LdF-Kürzel",
+                False,
+            ),
+            (
+                'select[name="funktion"]',
+                self.config.login_function,
+                "LdF-Funktion",
+                True,
+            ),
+            (
+                'input[name="kennwort1"]',
+                self.config.login_password,
+                "LdF-Kennwort",
+                False,
+            ),
+        ):
+            self.cdp.set_value(
+                "mainframe", selector, value, label, select=select
+            )
+        self.cdp.click(
+            "mainframe",
+            'button.estab-button-primary[type="submit"]',
+            "LdF-Bestandskonto absenden",
+        )
+
+        operations_path = "/4fach/fuehrungsstelle.php"
+        inactive_literal = json.dumps(inactive_code)
+        online_literal = json.dumps(online_code)
+        marker_literal = json.dumps(message_marker)
+        destination_literal = json.dumps(destination)
+        self.cdp.wait_for(
+            f"""
+            document.readyState === "complete" && window === window.top &&
+            location.pathname === {json.dumps(operations_path)} &&
+            Boolean(document.querySelector(
+                '[data-estab-messenger-assignment]'
+            )) && Array.from(document.querySelectorAll(
+                '[data-estab-messenger-select] option'
+            )).some(option => option.value === {inactive_literal}) &&
+            Array.from(document.querySelectorAll(
+                '[data-estab-messenger-select] option'
+            )).some(option => option.value === {online_literal}) &&
+            Array.from(document.querySelectorAll(
+                'select[name="nachricht_id"] option'
+            )).some(option => option.textContent.includes({marker_literal}))
+            """,
+            "Browser-Fixture für den Melderauftrag wurde nicht vollständig gerendert",
+        )
+
+        initial_state = self.cdp.evaluate(
+            """
+            (() => {
+                const select = document.querySelector(
+                    '[data-estab-messenger-select]'
+                );
+                const option = select?.options[select.selectedIndex] || null;
+                const warning = document.querySelector(
+                    '[data-estab-messenger-presence-warning]'
+                );
+                return select && option && warning ? {
+                    value: select.value,
+                    text: option.textContent.replace(/\\s+/g, " ").trim(),
+                    warningHidden: warning.hidden
+                } : null;
+            })()
+            """
+        )
+        self._truth(
+            isinstance(initial_state, dict)
+            and initial_state.get("value") == ""
+            and initial_state.get("text") == "Bitte Fernmelder auswählen"
+            and initial_state.get("warningHidden") is True,
+            "Die leere Fernmelder-Auswahl ist nicht sicher vorausgewählt.",
+        )
+
+        option_states = self.cdp.evaluate(
+            f"""
+            (() => {{
+                const options = Array.from(document.querySelectorAll(
+                    '[data-estab-messenger-select] option'
+                ));
+                const state = (code) => {{
+                    const option = options.find(candidate =>
+                        candidate.value === code
+                    );
+                    return option ? {{
+                        text: option.textContent.replace(/\\s+/g, " ").trim(),
+                        presence: option.dataset.estabPresenceState || "",
+                        label: option.dataset.estabPresenceLabel || "",
+                        notification:
+                            option.dataset.estabNotificationRequired || ""
+                    }} : null;
+                }};
+                return {{
+                    inactive: state({inactive_literal}),
+                    online: state({online_literal})
+                }};
+            }})()
+            """
+        )
+        inactive_state = (
+            option_states.get("inactive")
+            if isinstance(option_states, dict)
+            else None
+        )
+        online_state = (
+            option_states.get("online")
+            if isinstance(option_states, dict)
+            else None
+        )
+        self._truth(
+            isinstance(inactive_state, dict)
+            and inactive_state.get("presence") == "signed_out"
+            and inactive_state.get("label") == "abgemeldet"
+            and inactive_state.get("notification") == "1"
+            and "abgemeldet" in str(inactive_state.get("text", "")),
+            "inaktiver Fernmelder ist nicht verständlich gekennzeichnet.",
+        )
+        self._truth(
+            isinstance(online_state, dict)
+            and online_state.get("presence") == "online"
+            and online_state.get("label") == "aktiv"
+            and online_state.get("notification") == "0"
+            and "aktiv" in str(online_state.get("text", "")),
+            "aktiver Fernmelder ist nicht verständlich gekennzeichnet.",
+        )
+
+        self.cdp.set_value(
+            None,
+            "[data-estab-messenger-select]",
+            online_code,
+            "aktiven Fernmelder auswählen",
+            select=True,
+        )
+        self.cdp.wait_for(
+            """
+            (() => {
+                const warning = document.querySelector(
+                    '[data-estab-messenger-presence-warning]'
+                );
+                return Boolean(warning && warning.hidden);
+            })()
+            """,
+            "bei aktivem Fernmelder blieb der Warnhinweis sichtbar",
+        )
+
+        self.cdp.set_value(
+            None,
+            "[data-estab-messenger-select]",
+            inactive_code,
+            "inaktiven Fernmelder auswählen",
+            select=True,
+        )
+        self.cdp.wait_for(
+            """
+            (() => {
+                const warning = document.querySelector(
+                    '[data-estab-messenger-presence-warning]'
+                );
+                const rect = warning?.getBoundingClientRect();
+                const style = warning && getComputedStyle(warning);
+                return Boolean(warning && !warning.hidden && rect &&
+                    rect.width > 0 && rect.height > 0 &&
+                    style.display !== "none" &&
+                    style.visibility !== "hidden" &&
+                    warning.textContent.includes("abgemeldet") &&
+                    warning.textContent.includes("separat über den Auftrag"));
+            })()
+            """,
+            "Hinweis zur separaten Information wurde nicht sichtbar",
+        )
+
+        message_option = self.cdp.evaluate(
+            f"""
+            (() => {{
+                const option = Array.from(document.querySelectorAll(
+                    'select[name="nachricht_id"] option'
+                )).find(candidate =>
+                    candidate.textContent.includes({marker_literal})
+                );
+                return option ? {{
+                    value: option.value,
+                    text: option.textContent.replace(/\\s+/g, " ").trim()
+                }} : null;
+            }})()
+            """
+        )
+        self._truth(
+            isinstance(message_option, dict)
+            and str(message_option.get("value", "")).isdigit()
+            and message_marker in str(message_option.get("text", "")),
+            "Die eindeutig markierte Ausgangsnachricht ist nicht auswählbar.",
+        )
+        self.cdp.set_value(
+            None,
+            'select[name="nachricht_id"]',
+            str(message_option["value"]),
+            "markierte Ausgangsnachricht auswählen",
+            select=True,
+        )
+        self.cdp.set_value(
+            None,
+            '[data-estab-messenger-assignment] input[name="ziel"]',
+            destination,
+            "eindeutiges Melderziel eintragen",
+        )
+        self.cdp.click(
+            None,
+            '[data-estab-messenger-assignment] button[type="submit"]',
+            "Melderauftrag verbindlich absenden",
+        )
+        self.cdp.wait_for(
+            f"""
+            document.readyState === "complete" &&
+            location.pathname === {json.dumps(operations_path)} &&
+            new URLSearchParams(location.search).get("result") ===
+                "messenger_assigned_notification_required" &&
+            new URLSearchParams(location.search).get("presence") ===
+                "signed_out" &&
+            location.hash === "#melderauftraege" &&
+            Boolean(document.querySelector(
+                '.estab-tool-feedback-success'
+            )) && Boolean(document.querySelector(
+                '.estab-tool-feedback-warning'
+            ))
+            """,
+            "PRG-Rückmeldung für den inaktiven Fernmelder fehlt",
+        )
+        prg_state = self.cdp.evaluate(
+            f"""
+            (() => {{
+                const success = document.querySelector(
+                    '.estab-tool-feedback-success'
+                );
+                const warning = document.querySelector(
+                    '.estab-tool-feedback-warning'
+                );
+                const job = Array.from(document.querySelectorAll(
+                    '#melderauftraege article.estab-tool-panel'
+                )).find(candidate =>
+                    candidate.textContent.includes({destination_literal}) &&
+                    candidate.textContent.includes({inactive_literal})
+                );
+                return {{
+                    success: success?.textContent.replace(/\\s+/g, " ")
+                        .trim() || "",
+                    warning: warning?.textContent.replace(/\\s+/g, " ")
+                        .trim() || "",
+                    distinct: Boolean(success && warning && success !== warning),
+                    job: job?.textContent.replace(/\\s+/g, " ").trim() || ""
+                }};
+            }})()
+            """
+        )
+        self._truth(
+            isinstance(prg_state, dict)
+            and prg_state.get("distinct") is True
+            and "verbindlich erteilt" in str(prg_state.get("success", ""))
+            and "Status des Fernmelders: abgemeldet" in str(
+                prg_state.get("warning", "")
+            )
+            and "separat über den Auftrag informieren" in str(
+                prg_state.get("warning", "")
+            ),
+            "Erfolg und serverseitiger Inaktivitätshinweis sind nicht getrennt.",
+        )
+        self._truth(
+            "Auftrag #" in str(prg_state.get("job", ""))
+            and "BEAUFTRAGT" in str(prg_state.get("job", ""))
+            and destination in str(prg_state.get("job", ""))
+            and inactive_code in str(prg_state.get("job", "")),
+            "Der gespeicherte Auftrag mit Ziel ist nach PRG nicht sichtbar.",
+        )
+        self.cdp.click(
+            None,
+            "[data-estab-logout-form] button",
+            "LdF nach dem Melderauftragstest abmelden",
+        )
+
     def run(self, auth_recovery_only: bool = False) -> None:
         self.cdp.call("Page.enable")
         self.cdp.call("Runtime.enable")
@@ -10674,6 +11040,14 @@ def parse_arguments() -> argparse.Namespace:
             "Medienfeldern und Veröffentlichung testen"
         ),
     )
+    parser.add_argument(
+        "--inactive-messenger",
+        action="store_true",
+        help=(
+            "nur die auswählbare inaktive Fernmelder-Funktion und den "
+            "sichtbaren Hinweis zur separaten Information testen"
+        ),
+    )
     return parser.parse_args()
 
 
@@ -10699,13 +11073,14 @@ def main() -> int:
                 arguments.message_suggestions,
                 arguments.message_overview,
                 arguments.telecom_plan,
+                arguments.inactive_messenger,
             )
         ) > 1:
             raise TestFailure(
                 "--overview-only, --auth-recovery-only, --export-only, "
                 "--bos-only, --handbook-only und "
                 "--message-suggestions, --message-overview sowie "
-                "--telecom-plan "
+                "--telecom-plan und --inactive-messenger "
                 "können nicht kombiniert werden."
             )
         config = TestConfig.from_environment(
@@ -10738,6 +11113,8 @@ def main() -> int:
             acceptance.run_message_overview()
         elif arguments.telecom_plan:
             acceptance.run_telecom_plan()
+        elif arguments.inactive_messenger:
+            acceptance.run_inactive_messenger()
         elif arguments.export_only:
             if not config.admin_user or not config.admin_password:
                 raise TestFailure(

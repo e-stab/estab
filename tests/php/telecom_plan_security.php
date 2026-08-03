@@ -533,7 +533,11 @@ $assert(
 );
 $historyStart = strpos($controller, 'data-estab-telecom-history>');
 $historyEnd = is_int($historyStart)
-    ? strpos($controller, '<section class="estab-tool-panel">', $historyStart)
+    ? strpos(
+        $controller,
+        '<section class="estab-tool-panel" id="melderauftraege">',
+        $historyStart
+    )
     : false;
 $historyMarkup = is_int($historyStart) && is_int($historyEnd)
     ? substr($controller, $historyStart, $historyEnd - $historyStart)

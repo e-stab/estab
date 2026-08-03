@@ -51,7 +51,7 @@ $routes = [
 ];
 $href = static fn (string $key): string => estab_auth_html($routes[$key]);
 $handbookVersion = '2026.08';
-$handbookUpdated = '2. August 2026';
+$handbookUpdated = '3. August 2026';
 
 ?><!doctype html>
 <html lang="de">
@@ -753,15 +753,30 @@ $handbookUpdated = '2. August 2026';
           data-handbook-keywords="Melder Auftrag Fernmelder LdF Empfänger Zustellung Rücknachricht Rückweg Rückkehr">
           <header><span>13</span><div><p>Persönlich nachvollziehbare Botengänge</p><h2>Melderaufträge</h2></div></header>
           <p>Ein Melder ist keine zusätzliche globale Rolle. Im Modus „Streng“
-            beauftragt eine ausgewählte LdF-Besetzung ein konkret angemeldetes,
-            ungesperrtes Konto mit einer aktiven Fernmelder-Besetzung; im Modus
-            „Locker“ muss das disponierende Konto LdF und die ausgewählte
-            Melderperson Fernmelder als feste oder zusätzliche Funktion
-            besitzen. Die ausgewählte
-            Melderperson bleibt ein Fernmelderkonto. Die
-            beauftragte Person übernimmt den Lauf persönlich und dokumentiert
-            tatsächlichen Empfänger, Zustellung, eine mögliche Rücknachricht,
-            Rückweg und Rückkehr.</p>
+            beauftragt eine ausgewählte LdF-Besetzung ein ungesperrtes Konto
+            mit einer persönlich angenommenen Fernmelder-Besetzung der
+            aktiven Dienstschicht. Im Modus „Locker“ muss das disponierende
+            Konto LdF und die ausgewählte Melderperson Fernmelder als feste
+            oder zusätzliche Funktion besitzen; eine zugeordnete
+            Zugangsschicht muss den Zugang erlauben. Die ausgewählte
+            Melderperson bleibt ein Fernmelderkonto. Eine laufende Sitzung oder
+            der Präsenzstatus „aktiv“ ist bei der Beauftragung in beiden Modi
+            nicht erforderlich.</p>
+          <div class="estab-handbook-callout estab-handbook-callout-important">
+            <strong>Inaktive Melderperson separat informieren</strong>
+            <p>Die Auswahl zeigt, ob ein fachlich geeigneter Fernmelder gerade
+              aktiv, seit mindestens 15 Minuten inaktiv, abgemeldet oder dessen
+              Sitzung bereits abgelaufen ist. Bei fehlender Aktivität weist
+              eStab LdF sichtbar darauf hin, dass der Auftrag außerhalb der
+              Anwendung separat mitgeteilt werden muss. eStab versendet diese
+              Benachrichtigung nicht selbst.</p>
+          </div>
+          <p>Die beauftragte Person übernimmt den Lauf persönlich und
+            dokumentiert tatsächlichen Empfänger, Zustellung, eine mögliche
+            Rücknachricht, Rückweg und Rückkehr. Dafür meldet sie sich mit ihrem
+            eigenen Konto an; die spätere persönliche Übernahme bleibt
+            vollständig authentisiert und kann nicht von LdF stellvertretend
+            quittiert werden.</p>
           <p>Während eines offenen Auftrags bleibt die Verantwortung an diese
             Person gebunden. Im Modus „Streng“ quittiert eine ausgewählte
             LdF-Besetzung den vollständigen Abschluss; im Modus „Locker“ darf
