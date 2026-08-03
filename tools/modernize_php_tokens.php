@@ -15,7 +15,7 @@ if ($root === false) {
     exit(2);
 }
 
-$excludedTopLevels = ['.git', 'app', 'docs', 'migration', 'tmp', 'tools'];
+$excludedTopLevels = ['.git', 'app', 'docs', 'migration', 'tmp', 'tools', 'var'];
 $constantKeys = ['MYSQL_ASSOC', 'MYSQL_NUM', 'MYSQL_BOTH'];
 $changedFiles = [];
 $changedKeys = [];
