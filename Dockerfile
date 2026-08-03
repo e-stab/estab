@@ -16,6 +16,7 @@ RUN set -eux; \
     apt-get install -y --no-install-recommends \
         acl \
         apache2-utils \
+        libexpat1 \
         libfreetype6 \
         libfreetype6-dev \
         libjpeg62-turbo \
@@ -25,6 +26,9 @@ RUN set -eux; \
         libzip5 \
         libzip-dev \
         poppler-utils; \
+    dpkg --compare-versions \
+        "$(dpkg-query --showformat='${Version}' --show libexpat1)" \
+        ge '2.8.2-1~deb13u1'; \
     docker-php-ext-configure gd --with-freetype --with-jpeg; \
     docker-php-ext-install -j1 gd mysqli zip; \
     php -r 'foreach (["fileinfo", "gd", "mbstring", "mysqli", "Zend OPcache", "zip"] as $extension) { if (!extension_loaded($extension)) { fwrite(STDERR, "Missing PHP extension: $extension\n"); exit(1); } } $gd = gd_info(); foreach (["JPEG Support", "PNG Support", "GIF Read Support", "BMP Support"] as $feature) { if (!($gd[$feature] ?? false)) { fwrite(STDERR, "Missing GD feature: $feature\n"); exit(1); } }'; \
