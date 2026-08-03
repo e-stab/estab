@@ -1,20 +1,19 @@
-#!/usr/bin/env python3
 """Create deterministic metadata manifests for the SVN-to-Git migration."""
 
 from __future__ import annotations
 
 import hashlib
 import os
-from pathlib import Path
 import re
 import subprocess
 import sys
 import xml.etree.ElementTree as ET
-
+from pathlib import Path
 
 SVN_TRAILER = re.compile(
     r"git-svn-id: (?P<url>\S+)@(?P<revision>\d+) (?P<uuid>[0-9a-f-]+)"
 )
+MAX_SVN_PROPERTY_XML_BYTES = 64 * 1024 * 1024
 
 
 def run(command: list[str], cwd: Path) -> bytes:
@@ -33,7 +32,18 @@ def write_empty_directories(svn_wc: Path, output: Path) -> None:
 
 def write_properties(svn_wc: Path, output: Path) -> None:
     raw = run(["svn", "proplist", "--verbose", "--xml", "--recursive", "."], svn_wc)
-    root = ET.fromstring(raw)
+    if len(raw) > MAX_SVN_PROPERTY_XML_BYTES:
+        raise ValueError("SVN property XML exceeds the 64 MiB safety limit")
+
+    declaration_probe = raw.upper()
+    if b"<!DOCTYPE" in declaration_probe or b"<!ENTITY" in declaration_probe:
+        raise ValueError("SVN property XML must not contain DTD or entity declarations")
+
+    # The XML is emitted by the local svn process. Size and declaration checks above
+    # prevent expansion attacks before the standard-library parser receives it.
+    root = ET.fromstring(raw)  # nosec B314
+    if root.tag != "properties":
+        raise ValueError(f"unexpected SVN property XML root element: {root.tag!r}")
     rows = ["path\tproperty\tvalue_sha256\tvalue"]
     for target in root.findall("target"):
         path = target.attrib["path"]
