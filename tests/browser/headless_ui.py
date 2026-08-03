@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import base64
+import contextlib
 import dataclasses
 import hashlib
 import json
@@ -25,7 +26,7 @@ import urllib.parse
 import urllib.request
 import zlib
 from types import TracebackType
-from typing import Any, Self
+from typing import Any, BinaryIO, Self
 
 
 class TestFailure(RuntimeError):
@@ -404,14 +405,26 @@ class ChromeProcess:
         self.binary = binary
         self.startup_timeout = startup_timeout
         self._profile: tempfile.TemporaryDirectory[str] | None = None
-        self._log: Any = None
+        self._resources: contextlib.ExitStack | None = None
+        self._log: BinaryIO | None = None
         self.process: subprocess.Popen[bytes] | None = None
         self.websocket_url: str | None = None
 
     def start(self) -> None:
-        self._profile = tempfile.TemporaryDirectory(prefix="estab-chrome-profile-")
+        try:
+            self._profile = tempfile.TemporaryDirectory(
+                prefix="estab-chrome-profile-"
+            )
+            self._resources = contextlib.ExitStack()
+            self._log = self._resources.enter_context(
+                tempfile.TemporaryFile(mode="w+b")  # noqa: SIM115
+            )
+        except OSError as exc:
+            self.close()
+            raise TestFailure(
+                "Chrome-Ressourcen konnten nicht angelegt werden."
+            ) from exc
         profile_path = pathlib.Path(self._profile.name)
-        self._log = tempfile.TemporaryFile(mode="w+b")
         command = [
             str(self.binary),
             "--headless=new",
@@ -511,9 +524,11 @@ class ChromeProcess:
                     os.killpg(process.pid, signal.SIGKILL)
                 except (ProcessLookupError, PermissionError):
                     pass
-        if self._log is not None:
-            self._log.close()
-            self._log = None
+        resources = self._resources
+        self._resources = None
+        self._log = None
+        if resources is not None:
+            resources.close()
         if self._profile is not None:
             profile = self._profile
             self._profile = None
