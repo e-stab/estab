@@ -2816,12 +2816,20 @@ ul#topmenu li.active {
         ? (string) ($lockedMessage ["x03_sperruser"] ?? "")
         : "";
       echo "<big><big><big>Datensatz ist im Zugriff von <b>".
-           estab_message_html ($lockOwner)."!</b><br></big></big></big>";
+           htmlspecialchars (
+             $lockOwner,
+             ENT_QUOTES | ENT_SUBSTITUTE,
+             "UTF-8"
+           )."!</b><br></big></big></big>";
       echo "<p>Freigabe nur nach Prüfung durch die Leitung.</p>";
       echo "<form method=\"post\" action=\"./mainindex.php\" target=\"_self\">";
       echo estab_csrf_field ();
       echo "<input type=\"hidden\" name=\"reset_record\" value=\"".
-           estab_auth_html ($returnValue ["00_lfd"])."\">";
+           htmlspecialchars (
+             (string) $returnValue ["00_lfd"],
+             ENT_QUOTES | ENT_SUBSTITUTE,
+             "UTF-8"
+           )."\">";
       echo "<button type=\"submit\">Datensatz freigeben</button></form>";
     }
   }
@@ -2939,14 +2947,22 @@ if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b>  ### FM Aus
       if ($_SESSION ["vStab_kuerzel"] !== $lockOwner) {
         // Kruezel sind gleich
         echo "<big><big><big>Datensatz ist im Zugriff von <b>".
-             estab_message_html ($lockOwner)."!</b><br></big></big></big>";
+             htmlspecialchars (
+               $lockOwner,
+               ENT_QUOTES | ENT_SUBSTITUTE,
+               "UTF-8"
+             )."!</b><br></big></big></big>";
         echo "<br><br><br><br><br><br>";
         echo "!!!Achtung!!!<br>";
         echo "Datensatzfreischaltung nur auf Anordnung des Betriebsstellenleiters.<br>";
         echo "<form method=\"post\" action=\"./mainindex.php\" target=\"_self\">";
         echo estab_csrf_field ();
         echo "<input type=\"hidden\" name=\"reset_record\" value=\"".
-             estab_auth_html ($returnValue ["00_lfd"])."\">";
+             htmlspecialchars (
+               (string) $returnValue ["00_lfd"],
+               ENT_QUOTES | ENT_SUBSTITUTE,
+               "UTF-8"
+             )."\">";
         echo "<button type=\"submit\" style=\"border:0;background:transparent;padding:0\">".
              "<img src=\"./createbutton.php?icontext=Datensatz%20freigeben&amp;color=red\" ".
              "alt=\"Datensatz freigeben\"></button></form>";
@@ -3143,9 +3159,14 @@ Nachricht als Sichtung anzeigen
       }
     }
     $loginAction = estab_auth_html ($conf_4f ["MainURL"]);
-    $loginDestinationField = estab_navigation_login_destination_field (
-      $loginDestination
-    );
+    $loginDestinationField = $loginDestination === null
+      ? ""
+      : "<input type=\"hidden\" name=\"next\" value=\"".
+        htmlspecialchars (
+          $loginDestination,
+          ENT_QUOTES | ENT_SUBSTITUTE,
+          "UTF-8"
+        )."\">";
     echo "<!doctype html>\n";
     echo "<html lang=\"de\">\n";
     echo "<head>\n";
@@ -3181,7 +3202,11 @@ Nachricht als Sichtung anzeigen
       if (is_array ($loginDestinationItem)) {
         echo "<p class=\"estab-auth-note\" data-estab-login-destination>".
              "Nach erfolgreicher Anmeldung öffnen wir: <strong>".
-             estab_auth_html ($loginDestinationItem ["label"]).
+             htmlspecialchars (
+               (string) $loginDestinationItem ["label"],
+               ENT_QUOTES | ENT_SUBSTITUTE,
+               "UTF-8"
+             ).
              "</strong>.</p>\n";
       }
     }
@@ -3276,7 +3301,12 @@ Nachricht als Sichtung anzeigen
       }
       echo estab_csrf_field ()."\n";
       echo $loginDestinationField."\n";
-      echo "<input type=\"hidden\" name=\"login_flow\" value=\"".$loginFlow."\">\n";
+      echo "<input type=\"hidden\" name=\"login_flow\" value=\"".
+           htmlspecialchars (
+             (string) $loginFlow,
+             ENT_QUOTES | ENT_SUBSTITUTE,
+             "UTF-8"
+           )."\">\n";
       echo "<input type=\"hidden\" name=\"2teskennwort\" value=\"".$legacyConfirmation."\">\n";
       echo "<table class=\"estab-auth-fields\"><tbody>\n";
       echo "<tr><th><label for=\"estab-login-name\">Name, Vorname</label></th>\n";
