@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Verify a cleaned SourceForge release tree against a Git ref or worktree."""
 
 from __future__ import annotations
@@ -7,11 +6,10 @@ import argparse
 import hashlib
 import io
 import os
-from pathlib import Path
 import subprocess
 import tarfile
 import unicodedata
-
+from pathlib import Path
 
 INFRASTRUCTURE = {".git", ".gitignore", ".mailmap", "migration"}
 
