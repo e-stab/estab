@@ -707,7 +707,14 @@ function estab_user_admin_require_expected_primary_assignment(
     }
 }
 
-/** Lock and read one exact extra-function row. */
+/**
+ * Lock and read one exact extra-function row.
+ *
+ * The result can change within one transaction after a write; PHPStan must not
+ * treat repeated calls with the same arguments as a pure expression.
+ *
+ * @phpstan-impure
+ */
 function estab_user_admin_fetch_extra_function_for_update(
     mysqli $connection,
     string $code,
