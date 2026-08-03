@@ -24,7 +24,8 @@ import time
 import urllib.parse
 import urllib.request
 import zlib
-from typing import Any
+from types import TracebackType
+from typing import Any, Self
 
 
 class TestFailure(RuntimeError):
@@ -186,7 +187,7 @@ class TestConfig:
     def from_environment(
         cls,
         require_login_password: bool = True,
-    ) -> "TestConfig":
+    ) -> TestConfig:
         base_url = os.environ.get("ESTAB_TEST_BASE_URL", "http://127.0.0.1:8080").rstrip("/")
         parsed = urllib.parse.urlsplit(base_url)
         if (
@@ -525,11 +526,16 @@ class ChromeProcess:
                         raise
                     time.sleep(0.05 * (attempt + 1))
 
-    def __enter__(self) -> "ChromeProcess":
+    def __enter__(self) -> Self:
         self.start()
         return self
 
-    def __exit__(self, _exc_type: Any, _exc: Any, _traceback: Any) -> None:
+    def __exit__(
+        self,
+        _exc_type: type[BaseException] | None,
+        _exc: BaseException | None,
+        _traceback: TracebackType | None,
+    ) -> None:
         self.close()
 
 
@@ -689,10 +695,15 @@ class WebSocket:
         except OSError:
             pass
 
-    def __enter__(self) -> "WebSocket":
+    def __enter__(self) -> Self:
         return self
 
-    def __exit__(self, _exc_type: Any, _exc: Any, _traceback: Any) -> None:
+    def __exit__(
+        self,
+        _exc_type: type[BaseException] | None,
+        _exc: BaseException | None,
+        _traceback: TracebackType | None,
+    ) -> None:
         self.close()
 
 
