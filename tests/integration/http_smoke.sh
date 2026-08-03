@@ -4982,7 +4982,7 @@ if [ -n "${ESTAB_TEST_ADMIN_USER:-}" ] && [ -n "$admin_password" ]; then
         "$base_url/4fadm/export.php?action=download&export_id=$first_export_id"
     for header_pattern in \
         '^Content-Type: application/zip' \
-        "^Content-Disposition: attachment; filename=\"$first_export_id[.]zip\"" \
+        "^Content-Disposition: attachment; filename=\"${first_export_id}[.]zip\"" \
         '^Cache-Control: private, no-store, max-age=0' \
         '^X-Content-Type-Options: nosniff'
     do
