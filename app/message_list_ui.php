@@ -200,7 +200,7 @@ function estab_message_list_select_options(
  * Render the shared, always-visible search and filter surface.
  *
  * @param list<string> $recipients
- * @param array<string,string> $hidden
+ * @param array<string,mixed> $options
  */
 function estab_message_list_render_controls(
     array $filters,
@@ -357,7 +357,7 @@ function estab_message_list_render_controls(
     echo '</form></section>';
 }
 
-/** @param array<string,string> $hidden */
+/** @param array<string,mixed> $options */
 function estab_message_list_render_resultbar(
     array $filters,
     array $pageWindow,
@@ -404,7 +404,7 @@ function estab_message_list_filter_hidden_fields(array $filters): array
 }
 
 /**
- * @param array<string,string> $hidden
+ * @param array<string,mixed> $options
  */
 function estab_message_list_render_pager(
     array $filters,
