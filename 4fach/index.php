@@ -99,13 +99,21 @@ $navigationFrameUrl = './vorgaben.php'
       class="estab-message-sidebar-frame"
       name="vorgaben"
       title="eStab Navigation und Einsatzstatus"
-      src="<?= estab_auth_html($navigationFrameUrl) ?>"
+      src="<?= htmlspecialchars(
+          $navigationFrameUrl,
+          ENT_QUOTES | ENT_SUBSTITUTE,
+          'UTF-8'
+      ) ?>"
     ></iframe>
     <iframe
       class="estab-message-content-frame"
       name="mainframe"
       title="eStab Arbeitsbereich"
-      src="<?= estab_auth_html($mainFrameUrl) ?>"
+      src="<?= htmlspecialchars(
+          $mainFrameUrl,
+          ENT_QUOTES | ENT_SUBSTITUTE,
+          'UTF-8'
+      ) ?>"
     ></iframe>
   </main>
   <button
