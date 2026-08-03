@@ -450,7 +450,8 @@ function estab_navigation_login_destination_field(
  *     path: string,
  *     access: 'public'|'protected',
  *     root: bool,
- *     hint: string
+ *     hint: string,
+ *     duty_access: ''|'LAGE_DOKUMENTATION'|'FERNMELDE_NACHWEIS'
  * }
  */
 function estab_navigation_validated_item(array $item): array
