@@ -81,8 +81,6 @@ if (debug){
        echo "</tr>";
       } // foreach result row
       echo "</tbody></table>";
-    } else {// if isset $result
-//      echo "<big><big><big>LOGOFF - nothing to do</big></big></big>";
     }
   }
 
