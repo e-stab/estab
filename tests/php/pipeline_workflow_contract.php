@@ -21,14 +21,18 @@ $read = static function (string $path): string {
 $ci = $read($root . '/.github/workflows/ci.yml');
 $audit = $read($root . '/.github/workflows/audit.yml');
 $dependencyReview = $read($root . '/.github/workflows/dependency-review.yml');
+$staticSuite = $read($root . '/tests/static/run.sh');
 
 $assert(
-    str_contains($ci, 'id: provenance')
-    && str_contains($ci, 'PROVENANCE_OUTCOME: ${{ steps.provenance.outcome }}')
-    && str_contains($ci, 'name: Enforce static and provenance results')
+    !str_contains($ci, 'id: provenance')
+    && !str_contains($ci, 'migration/verify_provenance.py')
+    && !str_contains($ci, 'PROVENANCE_OUTCOME')
+    && !str_contains($ci, 'fetch-tags: true')
+    && !str_contains($staticSuite, 'tests/php/provenance_security.php')
+    && str_contains($ci, 'name: Enforce static results')
     && str_contains($ci, 'if: ${{ !cancelled() }}')
-    && substr_count($ci, 'continue-on-error: true') >= 5,
-    'CI does not preserve strict gates while allowing independent checks to finish'
+    && substr_count($ci, 'continue-on-error: true') >= 4,
+    'CI still enforces retired SVN provenance or does not aggregate current checks'
 );
 $assert(
     str_contains($audit, 'git grep -nI -E')

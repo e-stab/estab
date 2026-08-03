@@ -756,7 +756,6 @@ for marker in \
     'Terminalbindungen' \
     'Dienstorganisation' \
     'Optionale Zugangsschichten' \
-    'Historischer Dienstbetrieb (Legacy-Nachweis)' \
     'Übergabeanforderungen' \
     'INITIIERT' \
     'STORNIERT' \

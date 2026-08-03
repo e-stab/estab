@@ -23,8 +23,6 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
-          fetch-depth: 0
-          fetch-tags: true
           persist-credentials: false
 
       - name: Validate GitHub Actions workflows
@@ -35,11 +33,6 @@ jobs:
           --volume "$GITHUB_WORKSPACE:/repo:ro"
           --workdir /repo
           docker.io/rhysd/actionlint@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667
-
-      - name: Verify complete historical source provenance
-        id: provenance
-        continue-on-error: true
-        run: python3 migration/verify_provenance.py --self-test
 
       - name: Run PHP 8.5 suite
         id: php_static
@@ -86,12 +79,11 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
-      - name: Enforce static and provenance results
+      - name: Enforce static results
         if: always()
         shell: bash
         env:
           ACTIONLINT_OUTCOME: ${{ steps.actionlint.outcome }}
-          PROVENANCE_OUTCOME: ${{ steps.provenance.outcome }}
           PHP_STATIC_OUTCOME: ${{ steps.php_static.outcome }}
           PDF_TOOLS_OUTCOME: ${{ steps.pdf_tools.outcome }}
           PDF_RENDER_OUTCOME: ${{ steps.pdf_render.outcome }}
@@ -109,7 +101,6 @@ jobs:
           }
 
           require_success actionlint "$ACTIONLINT_OUTCOME"
-          require_success provenance "$PROVENANCE_OUTCOME"
           require_success php-static "$PHP_STATIC_OUTCOME"
           require_success pdf-tools "$PDF_TOOLS_OUTCOME"
           require_success pdf-render "$PDF_RENDER_OUTCOME"
