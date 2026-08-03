@@ -1,9 +1,12 @@
 # eStab
 
-Dieses Repository bewahrt den vollständigen historischen
-eStab-Anwendungsverlauf bis zum belegten SVN-Ende r85 und den separat
-versionierten Dokument-Endbestand von r85. Es stellt den letzten
-veröffentlichten Stand als überprüfbaren PHP-/MariaDB-Container bereit. Die
+Dieses Repository führt den gepflegten eStab-Quellbestand und stellt ihn als
+überprüfbaren PHP-/MariaDB-Container bereit. Frühere Anwendungs- und
+Dokumentstände bleiben über die Git-Historie, historische Branches und Tags
+nachvollziehbar, werden aber nicht als unbenutzte Kopien im aktuellen
+Arbeitsbaum mitgeführt. Wenige nach konservativer Prüfung zurückgestellte
+Quellbaumartefakte sind in den Retention-Entscheidungen ausdrücklich benannt
+und gelangen nicht in das Containerimage. Die
 fachlichen Module für Nachrichtenvordruck, Sichtung, Anhänge, Kategorien,
 Einsatztagebuch, technisches Betriebsbuch und PDF-Vordrucke bleiben erhalten;
 die Laufzeit wurde für PHP 8.5 und MariaDB 11.8 kompatibel gemacht.
@@ -1056,17 +1059,15 @@ PDF-Export keinen Ersatz, sondern kennzeichnet ihn ausdrücklich als
 - [Echter Browser-Akzeptanztest](tests/browser/README.md)
 - [Funktionsmatrix und Freigabeprotokoll](docs/FUNKTIONSNACHWEIS.md)
 - [Architektur und Sicherheitsentscheidungen](docs/ARCHITEKTUR-UND-SICHERHEIT.md)
-- [Nachweis der SVN- und Release-Migration](migration/README.md)
+- [Gepflegter Quellbestand und Retention-Entscheidungen](docs/QUELLBESTAND.md)
+- [Manueller Nachweis der SVN- und Release-Migration](migration/README.md)
 - [Aktuelles Web-Handbuch](handbuch/)
-- [Historisches Anwendungshandbuch Version 1.1 von 2011](doku/Handbuch_eStab.pdf)
 
 Das unter `/handbuch/` ausgelieferte Web-Handbuch ist die aktuelle
-Bedienreferenz und wird gemeinsam mit der Anwendung versioniert. Das PDF von
-2011 bleibt ausschließlich als historische Quelle im Git-Bestand erhalten;
-es beschreibt unter anderem veraltete XAMPP-, MySQL- und
-Web-Installer-Verfahren und wird nicht mehr in das Laufzeitimage übernommen.
-Für Installation, Sicherheit, Backup und Upgrade gelten das Web-Handbuch und
-die heutigen Runbooks unter `docs/`.
+Bedienreferenz und wird gemeinsam mit der Anwendung versioniert. Frühere
+Handbuchstände sind ausschließlich über die Git-Historie und die historischen
+Tags verfügbar. Für Installation, Sicherheit, Backup und Upgrade gelten das
+Web-Handbuch und die heutigen Runbooks unter `docs/`.
 
 ## Lizenzhinweis
 
@@ -1098,21 +1099,18 @@ Snapshot-Commits und annotierte Git-Tags dokumentiert.
 Die separat versionierten 95 Originaldokumente waren nie Teil des Trunks. Ihr
 vollständiger r85-Endbestand bleibt unverändert im fest gebundenen Git-Commit
 `9cd6fc0779ed72181d71aa9042f85c971c92f0c1` unter
-`docs/legacy/svn-r85/` erhalten, wird aber wegen seiner Größe nicht mehr im
-aktuellen Arbeitsbaum ausgeliefert; eine nicht belegte
+`docs/legacy/svn-r85/` nachvollziehbar, wird aber nicht im aktuellen
+Arbeitsbaum ausgeliefert; eine nicht belegte
 Dokument-Einzelcommithistorie wird nicht erfunden. Prüfsummen,
 Ref-/Tree-Identitäten, deterministische
 Unicode-sichere Dateimanifeste und SVN-Properties liegen unter `migration/`.
 Historische `svn:ignore`-Werte bleiben dort dokumentarisch vollständig
 erhalten; nur heute passende Regeln wurden selektiv und Git-gerecht in
-`.gitignore` übernommen. Die netzlose CI-Prüfung
-`python3 migration/verify_provenance.py --self-test` vergleicht Trunk, vier
+`.gitignore` übernommen. Die bewusst manuell gestartete Prüfung
+`python3 migration/verify_provenance.py --self-test` kann Trunk, vier
 Branches, sechs SVN-Tags, beide SourceForge-Release-Tags und den
-Dokument-Endbestand. Das sind 13 Git-Ref-Snapshots und ein Dokumentbaum. Die
-Prüfung beweist zusätzlich, dass neu versiegelte Inhaltsmanipulationen am
-SVN-Trunk und an einem späteren Release erkannt werden. Für 0.9.26b/c bindet
-sie die beim ursprünglichen Download aufgezeichnete Archiv-SHA-256 aus
-`sourceforge-releases.tsv` an annotierten Tag, Snapshot-Commit und Git-Inhalt.
-CI lädt die externen Archive nicht erneut herunter und weist daher die
-gebundene aufgezeichnete Archividentität, nicht die gegenwärtige
-SourceForge-Auslieferung nach.
+Dokument-Endbestand gegen die aufgezeichneten Manifeste vergleichen. Sie ist
+kein reguläres CI- oder Release-Gate. Der heutige Produktnachweis wird durch
+die statischen, Container-, Datenbank-, HTTP-, Browser-, Backup- und
+Restore-Prüfungen erbracht. Einzelheiten zur Trennung stehen unter
+[Gepflegter Quellbestand](docs/QUELLBESTAND.md).

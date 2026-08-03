@@ -339,7 +339,7 @@ $loginSource = file_get_contents($root . '/4fach/data_hndl.php');
 $loginPage = file_get_contents($root . '/4fach/mainindex.php');
 $userPage = file_get_contents($root . '/4fadm/users.php');
 $policyPage = file_get_contents($root . '/4fadm/password_policy.php');
-$adminMenu = file_get_contents($root . '/4fadm/admmenue.inc.php');
+$adminPage = file_get_contents($root . '/4fadm/admin.php');
 $dockerfile = file_get_contents($root . '/Dockerfile');
 $runtimeVerifier = file_get_contents(
     $root . '/docker/app/verify-runtime-surface.sh'
@@ -352,7 +352,7 @@ foreach ([
     $loginPage,
     $userPage,
     $policyPage,
-    $adminMenu,
+    $adminPage,
     $dockerfile,
     $runtimeVerifier,
     $clientValidator,
@@ -515,7 +515,7 @@ $assert(
         )
         && !str_contains((string) $policyPage, 'type="password"')
         && !str_contains((string) $policyPage, '$_GET')
-        && str_contains((string) $adminMenu, 'password_policy.php'),
+        && str_contains((string) $adminPage, "'href' => 'password_policy.php'"),
     'policy administration is not Basic-Auth, POST, CSRF, revision and PRG bound'
 );
 $assert(

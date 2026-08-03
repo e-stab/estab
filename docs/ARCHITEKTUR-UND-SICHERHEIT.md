@@ -42,14 +42,15 @@ an `127.0.0.1:8080` gebunden.
 | --- | --- |
 | `4fach/` | Nachrichtenvordruck, Anmeldung, Sichtung, Kategorien, Anhänge, passive E-Mail-Ansicht und Fachoberfläche |
 | `4fadm/` | Basic-Auth-geschützte Administration, Systemstatus und Einsatzexport |
-| `4fbak/` | aktive dateisysteminterne PDF-Erzeugung, historische FPDF-Komponente und der bereits im letzten Upstream-Release deaktivierte Bildgenerator |
-| `stabetb/`, `fmtbb/`, `ubltg/`, `sammlung/` | Einsatztagebuch, technisches Betriebsbuch und Zusatzmodule |
+| `4fbak/` | aktive dateisysteminterne PDF-Erzeugung mit der dafür benötigten FPDF-Komponente, Schriftmetrik, Schrift und Kopfmarke |
+| `stabetb/`, `fmtbb/` | Einsatztagebuch und technisches Betriebsbuch |
 | `app/` | Bootstrap, PHP-/MySQL-Kompatibilität, Authentisierung, modeabhängige Dienstbesetzungs- beziehungsweise Fest-/Zusatzfunktionsautorität, optionale Zugangsschichten, objektbezogene Leseberechtigung, Navigation, Sitzung, CSRF, Datum, Nachrichten-/Kategoriezugriff, Anhang einschließlich begrenztem RFC-822-Parser, Export und transaktionale Admin-Operationen |
 | `4fcfg/` | historische Konfigurationsschnittstelle, heute aus validierten Umgebungswerten gespeist |
 | `docker/` | Apache-/PHP-Härtung, Entrypoint, Datenbankschema und Migrationen |
 | `tests/` | statische, sicherheitsbezogene, Datenbank- und HTTP-Nachweise |
-| `migration/` | unveränderlicher SVN-/Release-Provenienznachweis |
-| Git-Historie (`9cd6fc0…:docs/legacy/`) und `doku/` | historische Fach- und Entwicklungsdokumentation; der große r85-Dokumentbaum bleibt im gebundenen Commit statt im aktuellen Arbeitsbaum |
+| `migration/` | bewusst erhaltener manueller SVN-/Release-Herkunftsnachweis; kein Laufzeitbestand und kein reguläres CI-Gate |
+| `docs/`, `handbuch/` | aktuelle Betriebs-, Architektur- und Bedienreferenz einschließlich der dokumentierten Retention-Entscheidungen |
+| Git-Historie, historische Branches und Tags | frühere Anwendungs- und Dokumentstände; der große r85-Dokumentbaum bleibt im gebundenen Commit `9cd6fc0…` statt im aktuellen Arbeitsbaum |
 
 Der Anwendungscode liegt unveränderlich im Image. Ausschließlich
 `/var/www/html/4fdata`, `/var/lib/estab/export`, `/var/lib/mysql` und die
@@ -324,8 +325,9 @@ Alle Ziele passieren `estab_application_url()`, interne Links verwenden
 Administration und Handbuch bleiben als zwei Dienste getrennt von den neun
 operativen Bereichen. Das Handbuchziel ist die öffentliche, rein lesende
 Weboberfläche `/handbuch/`, die über dieselben URL- und Ausgabebegrenzungen
-wie die übrige Anwendung ausgeliefert wird. Das historische PDF von 2011 ist
-nur eine im Git-Bestand bewahrte Quelle und kein Laufzeitdienst. Anonym
+wie die übrige Anwendung ausgeliefert wird. Frühere Handbuchstände gehören
+nicht zum aktuellen Arbeitsbaum oder Laufzeitimage und bleiben über die
+Git-Historie und Tags nachvollziehbar. Anonym
 erscheinen alle elf Einstiege mit
 Anmeldehinweis. Nach der Anmeldung zeigt die Navigation anhand der
 modeabhängig wirksamen Funktionsmenge unmittelbar neun bis elf Links:
@@ -1363,14 +1365,20 @@ HTTP 400. Der Vertrag umfasst:
 
 ETB und TBB verwenden zusätzlich den gemeinsamen Logbuch-Wrapper; dessen
 Delegation an dieselbe CSRF-Grenze und die HTTP-403-Antwort sind im
-Logbuch-Sicherheitsvertrag geprüft. Nicht paketierte historische
-Formularartefakte sind im unterstützten Containerbetrieb keine
-Laufzeitoberfläche: Das Dockerfile kopiert ausschließlich die positive
-Runtime-Allowlist, der Runtime-Surface-Vertrag weist verbotene Altpfade zurück,
-und notwendige interne Include-Dateien sind über Apache nicht direkt
-erreichbar. Die positive Allowlist enthält `/4fach/email.php` als
+Logbuch-Sicherheitsvertrag geprüft. Nicht benötigte historische
+Formularartefakte gehören weder zum gepflegten Arbeitsbaum noch zur
+unterstützten Laufzeitoberfläche. Das Dockerfile kopiert ausschließlich die
+positive Runtime-Allowlist, der Runtime-Surface-Vertrag weist verbotene
+Altpfade zurück, und notwendige interne Include-Dateien sind über Apache nicht
+direkt erreichbar. Die positive Allowlist enthält `/4fach/email.php` als
 authentifizierten Darstellungscontroller und `app/email_attachment.php` nur als
 per HTTP gesperrte Parserbibliothek.
+
+Die Quellbaum-Allowlist ist bewusst größer als der Containerbestand: Sie
+enthält zusätzlich aktuelle Dokumentation, Tests, Betriebswerkzeuge und den
+manuellen Herkunftsnachweis. Ihre Retention-Regeln sowie die kanonischen
+maschinellen Runtime-Listen sind unter
+[Gepflegter Quellbestand](QUELLBESTAND.md) beschrieben.
 
 ## Verbleibende Risiken
 
@@ -1430,6 +1438,8 @@ Das aktuelle Basisschema verwendet:
   historischen Löschpfade ohne zusätzliche Cascade-Beziehungen.
 
 Die detaillierte Gegenüberstellung zum Legacy-Schema steht in
-[`docker/db/README.md`](../docker/db/README.md). Provenienz und die im
-festgeschriebenen Git-Commit archivierte unveränderte Originaldokumentation
-sind unter [`migration/README.md`](../migration/README.md) nachgewiesen.
+[`docker/db/README.md`](../docker/db/README.md). Der bewusst manuelle
+Herkunftsnachweis und der Verweis auf die im festgeschriebenen Git-Commit
+archivierte Originaldokumentation stehen unter
+[`migration/README.md`](../migration/README.md); sie sind kein reguläres
+CI- oder Release-Gate.

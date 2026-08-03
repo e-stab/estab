@@ -1,10 +1,11 @@
 # Laufzeitbestand des App-Images
 
-Das Git-Repository bewahrt den vollständigen historischen Quell- und
-Dokumentationsbestand. Das ausgelieferte App-Image ist dagegen bewusst eine
-kleinere, überprüfte Laufzeitsicht. Der `Dockerfile` kopiert deshalb keine
-kompletten historischen Verzeichnisse, sondern nur aktive PHP-Module,
-benötigte statische Assets und das aktuelle öffentliche Web-Handbuch.
+Das Git-Repository führt den gepflegten Quell- und Dokumentationsbestand.
+Frühere Stände bleiben über die Git-Historie und Tags nachvollziehbar;
+wenige ausdrücklich zurückgestellte Prüfobjekte sind unten benannt. Das
+ausgelieferte App-Image ist eine nochmals kleinere, überprüfte Laufzeitsicht:
+Der `Dockerfile` kopiert nur aktive PHP-Module, benötigte statische Assets und
+das aktuelle öffentliche Web-Handbuch.
 
 ## Enthaltene Laufzeitgruppen
 
@@ -12,10 +13,16 @@ benötigte statische Assets und das aktuelle öffentliche Web-Handbuch.
   Administrationscontroller;
 - die zentralen PHP-Module aus `app/` und die tatsächlich eingebundenen
   Konfigurationsdateien aus `4fcfg/`;
-- das konfigurierte Design `4fach/design/HS`, die drei aktiven Hinweistöne und
-  das einzelne auf der Startseite verwendete Symbol aus
+- das vollständige konfigurierte Design `4fach/design/HS`, weil
+  Design-/Kompatibilitätspfade Dateien daraus dynamisch auflösen, die
+  browserfähigen Hinweistöne unter `4fach/audio/` und das einzelne auf der
+  Startseite verwendete Symbol
   `4fach/design/mr/folder_global.gif`;
-- Bildsymbole aus `4fsym/`, die BOS-Informationsseiten und
+- aus `4fsym/` genau `4fach_aktiv.png`, `adm_aktiv.png`, `all_msg.png`,
+  `el80.gif`, `etb_aktiv.png`, `icon_handbuch.gif`, `iuk_80.jpg`,
+  `iuk_hs80.png`, `merke32.gif`, `null.gif`, `nw.png` und `tbb_aktiv.png`;
+  außerdem die
+  BOS-Informationsseiten und
   `handbuch/index.php`, `handbuch/handbuch.css` sowie
   `handbuch/handbuch.js` für die öffentliche Bedienreferenz unter
   `/handbuch/`;
@@ -31,16 +38,24 @@ benötigte statische Assets und das aktuelle öffentliche Web-Handbuch.
 
 Nicht zur Laufzeit gehören insbesondere alte Web-Installer,
 Konfigurationsschreiber, `phpinfo()`, Upload-/Druckbeispiele, nicht verlinkte
-Controllerkopien, bearbeitbare ODT-/OTT-/NSD-/Mindmap-/Designquellen,
-zusätzliche Designvarianten, FPDF-Beispiele, das eingebettete
-`fpdf181.zip`-Archiv und `doku/Handbuch_eStab.pdf`. Das PDF von 2011 bleibt
-ausschließlich als historische Quelle für Provenienz und Nachvollziehbarkeit
-in Git erhalten; es ist keine aktuelle Bedienreferenz.
+Controllerkopien, bearbeitbare Dokument- und Designquellen, zusätzliche
+Designvarianten, FPDF-Beispiele, eingebettete Drittanbieterarchive und
+überholte Handbuchkopien. Der bereinigte Arbeitsbaum führt entfernte
+historische Kopien nicht bloß für den Imagebau weiter; bei Bedarf sind sie
+über die Git-Historie und Tags nachvollziehbar.
 
-Auch `4fadm/00.htpasswd` wird niemals in das Image kopiert. Vor dem App-Start
-erzeugt der netzlose One-shot-Dienst `admin-auth-init` aus dem separaten
-Admin-Secret atomar eine bcrypt-Datei in einem eigenen Compose-Volume. Der
-Webcontainer bindet ausschließlich diese abgeleitete Datei über
+FPDF-Beispiele und alte Schriften sowie `4fsym/br.jpg` und das dortige
+Icon-Archiv bleiben nach konservativer Prüfung vorerst nur im
+Quellbaum. Ihre fachliche beziehungsweise lizenzrechtliche Einordnung ist
+noch offen; der positive `Dockerfile`-Vertrag hält sie zuverlässig aus dem
+Image heraus. `migration/` bleibt als manueller Herkunftsnachweis erhalten,
+ist aber ebenfalls aus Buildkontext und Image ausgeschlossen.
+
+Eine statische `htpasswd`-Datei gehört weder zum aktuellen Quellbestand noch
+zum Image. Vor dem App-Start erzeugt der netzlose One-shot-Dienst
+`admin-auth-init` aus dem separaten Admin-Secret atomar eine bcrypt-Datei in
+einem eigenen Compose-Volume. Der Webcontainer bindet ausschließlich diese
+abgeleitete Datei über
 `/run/estab-auth/admin.htpasswd` schreibgeschützt ein. Das Klartext-Secret und
 sein `/run/secrets`-Mount sind im laufenden Webcontainer weder vorhanden noch
 lesbar; zugleich liegt kein historischer Passwort-Hash in einer OCI-Schicht.
@@ -70,6 +85,12 @@ führt diesen Prüfer nach dem Kopieren aus und bricht bei einer Abweichung ab.
 `htpasswd`, eine verbotene Dokumentquelle und eine nicht freigegebene
 TTF-Datei tatsächlich erkannt werden. Persistente Benutzerdaten unter
 `4fdata/` sind von der Endungsprüfung ausgenommen.
+
+Die verbindliche positive Kopierliste steht im `Dockerfile`; die
+verpflichtenden und verbotenen Zielpfade stehen im Runtime-Prüfer. Die
+Retention-Entscheidungen und die gegenüber dem Container bewusst größere
+Allowlist des Quellbaums sind unter
+[Gepflegter Quellbestand](../../docs/QUELLBESTAND.md) dokumentiert.
 
 Lokal:
 

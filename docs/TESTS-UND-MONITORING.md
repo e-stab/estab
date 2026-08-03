@@ -60,13 +60,14 @@ Anmelde-Audit erzeugt, während Bestandslogin und Sitzungen unberührt bleiben.
 
 | Ebene | Nachweis |
 | --- | --- |
-| Quellprüfung | netzloser Herkunftsnachweis für 13 Git-Ref-Snapshots (Trunk, vier Branches, sechs SVN-Tags, zwei SourceForge-Release-Tags) und einen separaten Dokument-r85-Baum, GitHub-Workflow-Prüfung mit festgelegtem Actionlint 1.7.12, PHP-8.5-Lint, Kompatibilitäts-, Sicherheits-, Einsatz-, Benutzerverwaltungs-, amtlicher Nachrichtenvordruck-, Upload-, Export- und PDF-Regressionen |
+| Quellprüfung | GitHub-Workflow-Prüfung mit festgelegtem Actionlint 1.7.12, PHP-8.5-Lint, Container-Allowlist sowie Kompatibilitäts-, Sicherheits-, Einsatz-, Benutzerverwaltungs-, amtlicher Nachrichtenvordruck-, Upload-, Export- und PDF-Regressionen |
 | Image-Build | benötigte PHP-Erweiterungen und Apache-Konfiguration |
 | Datenbank | echtes MariaDB-Schema, Einsatz-Singleton/Trigger, Kontosperre, revisionsgesicherte Kennwort- und Selbstregistrierungs-Singletonzeilen, Indizes, aktive und persistente Standardmatrix, Engines, Collations und Zero-Date-Freiheit |
 | HTTP | Header, direkte Endpunktfläche, 303-Weiterleitung anonymer geschützter Aufrufe zum allowlist-gebundenen Bestandslogin samt sichtbarem Rückweg, 403-/400-/405-Grenzen, dauerhafte und befristete Selbstregistrierungssteuerung, sichtbare Sitzungsidentität, Präsenz/Leerlaufende, feste Funktions-/Rollenbindung, optionaler Gruppenzugang, Kennwortrichtlinien-Vorschau/-Bestätigung, verbindlicher Nachrichtenlauf, E-Mail-Anhang mit passiver Ansicht und bytegleichem Originaldownload, S6-Plan, Melderlauf, Kategorien- und ETB-/TBB-Rollengrenzen, Vordruckerzeugung sowie Admin-Export |
 | Echter Browser | öffentliche Übersicht, getrennte Konto-Flows, direkte ETB-/Nachrichten-/Anhang-/Kategorie-Anmeldung ohne Sackgasse oder verschachtelten Arbeitsbereich, sicherer Login-Abbruch, neun stabile Navigationsbereiche, aktive Markierung, reale Karten- und Bereichswechsel im selben Tab, überlappungsfreie Karten-Klickflächen und echter Hover bei sechs Breiten, genau zwei Anwendungs-`iframe`-Elemente, vollhohe Sidebar ohne verschachtelte Scrollflächen bei 1440 × 1000, 1280 × 720 und 700 × 760 CSS-Pixeln, fokuserhaltender Statusfragment-Refresh samt sichtbarem Fehler- und Erholungspfad, dauerhafte Warnstufe bei offenen Meldungen, gleich-originiges PCM-WAV, ausdrücklicher Hinweiston-Schalter samt Blockade-/Reload-/Synchronisations-/Race-Pfad und automatischem Signal, langlebiges Audioelement, passive E-Mail-Anlagenkarte ohne aktive Mail-DOM-/Remote-Inhalte, Rufnamen-Auswahlliste des Fernmelders mit echtem Fokus, Filterung und Tastaturauswahl, inaktiver Melderauftrag mit abgemeldetem fachlich berechtigtem Ziel in der LdF-Auswahl, sichtbarer Status-/Informationswarnung und echtem POST/PRG-Erfolg, Matrixstandard- und Kennwortrichtlinien-Bestätigungen, responsive Adminübersicht mit elf Karten und acht Selbstregistrierungszeitfenstern, BOS-Disclosure, Logout, eine mobil nicht über dem Arbeitsbereich klebende vollständige Status-/Navigationsleiste sowie Erstellen, Download und zweistufiges Löschen eines Exports ohne horizontalen Seitenüberlauf bei exakt 390 × 844 CSS-Pixeln |
 | Fachabnahme | kompletter Nachrichten-, Anhang-, PDF-, ETB-/TBB- und Restore-Ablauf |
 | Betrieb | kontinuierliche Readiness, Logs, Restarts, Kapazität und Backup-Alter |
+| Manuelle Herkunft | bei Bedarf bewusst gestarteter SVN-/Release-Manifestsabgleich unter `migration/`; kein CI- oder Produktfreigabegate |
 
 Der HTTP- und Browsernachweis unterscheidet ausdrücklich drei Zustände:
 Anonyme Fachaufrufe führen per 303 zum Bestandslogin, ein authentifiziertes
@@ -129,18 +130,17 @@ administrativen Synology-/Docker-Aufruf vorgesehene Rootpfad
 `/var/lib/estab-deploy` bleibt zusätzlich im statischen Vertrag gebunden; die
 Tests schreiben dafür nicht in das `/var/lib` des Testcontainers.
 
-Die Suite lintet 278 aktive PHP-Dateien und führt die Prüfungen unter
+Die Suite lintet den aktiven PHP-Bestand und führt die Prüfungen unter
 `tests/php/` aus. Dazu gehören unter anderem:
 
-- die versiegelten, deterministischen Provenienzmanifeste für 13
-  Git-Ref-Snapshots – Trunk, vier historische Branches, sechs SVN-Tags und
-  zwei SourceForge-Release-Tags – sowie alle 95 Dateien des einen separaten
-  Dokument-r85-Baums einschließlich UTF-8-/Rohpfad-, Größen-, Modus- und
-  SHA-256-Prüfung; bei 0.9.26b/c müssen aufgezeichnete Archividentität,
-  annotierter Tag und Snapshot-Commit übereinstimmen, während negative
-  Ref-, Manifest-, Releaseidentitäts- und Dokumentmanipulationen erkannt
-  werden,
 - PHP-8.5-Laufzeit- und Legacy-Konstruktor-Kompatibilität,
+- den positiven Containerbestand aus `Dockerfile` und
+  `docker/app/verify-runtime-surface.sh`: Das vollständige dynamisch
+  verwendete HS-Design, aus `design/mr` ausschließlich `folder_global.gif`,
+  genau zwölf freigegebene `4fsym`-Assets sowie die enge aktive
+  PDF-/Schrift-Teilmenge; `tests/static/runtime_image_surface.sh` beweist
+  zusätzlich negative Altpfad-, Archiv-, Dokumentquell-, Passwortdatei- und
+  Schriftfälle,
 - `NULL`-/Zero-Date-Behandlung,
 - Anmelde-, administrative Kontoanlage-, unveränderliche Funktionsbindungs-,
   Session- und Passwortregeln einschließlich exakter Aktivitätsgrenzen bei
@@ -290,6 +290,21 @@ Originals auf eine Downloadantwort.
 
 Ein Prozess-Exitcode ungleich null sperrt die Freigabe.
 
+## Manueller Herkunftsnachweis
+
+Die SVN-/Release-Manifeste unter `migration/` gehören bewusst nicht zur
+statischen Suite und nicht zum regulären CI- oder Release-Gate. Bei einer
+Herkunftsprüfung können sie ausdrücklich manuell geprüft werden:
+
+```console
+python3 migration/verify_provenance.py --self-test
+```
+
+Der heutige Produktnachweis entsteht aus statischer Suite,
+Runtime-Surface-, Container-, Datenbank-, HTTP-, Browser-, Backup- und
+Restore-Prüfung. Die Trennung und die Retention-Entscheidungen stehen unter
+[Gepflegter Quellbestand](QUELLBESTAND.md).
+
 ## Vollständiges lokales CI-Gate
 
 Der gleiche Orchestrator wie in GitHub Actions lässt sich mit Docker oder
@@ -349,7 +364,7 @@ Lauf noch nicht. Diese Bedienpfade bleiben manuell beziehungsweise als eigene
 Browserautomatisierung offen; Domänen-, Datenbank- und HTTP-Gates prüfen ihre
 Autorisierungsgrenzen bereits automatisiert.
 
-Die separate statische PHP-8.5-Suite endete mit Exitcode 0, lintete 278 aktive
+Die separate statische PHP-8.5-Suite endete mit Exitcode 0, lintete 229 aktive
 PHP-Dateien und bleibt ein eigenständiger Abschlussnachweis. Der lokale
 Podman-Integrationslauf fand nicht auf einem
 nachgewiesenen SELinux-Enforcing-System statt und gilt daher ausdrücklich nicht
@@ -2164,9 +2179,8 @@ von Menü, Zwei-`iframe`-Arbeitsbereich, Sidebar, Sitzung und Logout. Er ersetzt
 nicht die nachfolgende fachliche Abnahme mit der organisationsspezifischen
 Empfängermatrix. Als aktuelle Bedienreferenz dient das gemeinsam mit der
 Anwendung ausgelieferte [Web-Handbuch](../handbuch/) unter `/handbuch/`.
-Das [Anwendungshandbuch von 2011](../doku/Handbuch_eStab.pdf) bleibt nur eine
-historische Quelle; seine Bedienbilder sowie Installations- und
-Sicherheitskapitel sind kein Sollzustand der heutigen Laufzeit.
+Frühere Handbuchstände sind ausschließlich über die Git-Historie und Tags
+nachvollziehbar; sie sind kein Sollzustand der heutigen Laufzeit.
 
 Insbesondere beweist die Automation keine physische Hörbarkeit. Sie bindet
 alle drei Dateien per SHA-256, parst RIFF/WAVE und PCM-16, prüft Kanäle,

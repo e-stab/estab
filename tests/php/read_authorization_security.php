@@ -431,15 +431,6 @@ $sources = [
     'dv-operations' => (string) file_get_contents(
         $root . '/app/dv_operations.php'
     ),
-    'retired-overview' => (string) file_get_contents(
-        $root . '/4fach/all_msg.php'
-    ),
-    'retired-counter' => (string) file_get_contents(
-        $root . '/4fach/counter.php'
-    ),
-    'retired-status' => (string) file_get_contents(
-        $root . '/4fach/status.php'
-    ),
 ];
 $assert(
     str_contains($sources['overview'], '"message-overview"')
@@ -792,18 +783,5 @@ $assert(
     ),
     'live sidebar status is exposed without an operational identity scope'
 );
-$assert(
-    str_contains($sources['retired-overview'], 'http_response_code(410)')
-        && strpos($sources['retired-overview'], 'exit;')
-            < strpos($sources['retired-overview'], 'include (')
-        && str_contains($sources['retired-counter'], 'http_response_code(410)')
-        && strpos($sources['retired-counter'], 'exit;')
-            < strpos($sources['retired-counter'], 'session_start')
-        && str_contains($sources['retired-status'], 'http_response_code(410)')
-        && strpos($sources['retired-status'], 'exit;')
-            < strpos($sources['retired-status'], 'session_start'),
-    'retired global read endpoints do not fail closed before legacy execution'
-);
-
 echo 'read authorization security: OK (' . $assertions
     . " assertions)\n";

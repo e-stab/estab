@@ -6,6 +6,15 @@ php_bin=${PHP_BIN:-php}
 failed=0
 checked=0
 
+if command -v git >/dev/null 2>&1; then
+    sh "$repo_root/tests/static/source_tree_hygiene.sh"
+elif [ "${ESTAB_SOURCE_TREE_HYGIENE_VERIFIED:-}" != 1 ]; then
+    printf '%s\n' \
+        'PHP static suite: source hygiene was not verified before entering the Git-free runtime' \
+        >&2
+    exit 1
+fi
+
 while IFS= read -r file; do
     checked=$((checked + 1))
     if ! output=$($php_bin -l "$file" 2>&1); then

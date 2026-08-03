@@ -4,7 +4,9 @@ Bei eStab sind drei unterschiedliche Vorgänge auseinanderzuhalten:
 
 1. Die bereits abgeschlossene Überführung der Quellhistorie von SVN nach Git
    ist unter [`migration/README.md`](../migration/README.md) mit Prüfsummen,
-   Ref-Vergleichen und SVN-Metadaten belegt.
+   Ref-Vergleichen und SVN-Metadaten belegt. Dieser Herkunftsnachweis wird bei
+   Bedarf bewusst manuell gestartet; er ist kein reguläres CI- oder
+   Release-Gate.
 2. Eine frische Containerinstallation legt ein neues MariaDB-Schema an und
    übernimmt keine Altdaten.
 3. Die Übernahme einer vorhandenen Einsatzdatenbank und ihres `4fdata`-Baums
@@ -746,17 +748,17 @@ Schemaänderungen nachweislich rückwärtskompatibel sind. Andernfalls besteht d
 Rollback aus altem Image **und** vollständiger Wiederherstellung des unmittelbar
 vor dem Upgrade erzeugten Datenbank-/Dateibackups.
 
-## Historische Nachweise
+## Herkunft und aktuelle Referenz
 
 Die Originalquellen werden nicht dupliziert:
 
-- [SVN-/Git-Migrationsnachweis](../migration/README.md)
-- [Index der 95 unverändert erhaltenen Dokumente](legacy/README.md)
-- [historisches Anwendungshandbuch von 2011](../doku/Handbuch_eStab.pdf)
+- [manueller SVN-/Git-Migrationsnachweis](../migration/README.md)
+- Index der 95 unverändert erhaltenen Dokumente im gebundenen Git-Stand:
+  `git show 9cd6fc0779ed72181d71aa9042f85c971c92f0c1:docs/legacy/README.md`
+- [Retention-Entscheidungen des aktuellen Quellbestands](QUELLBESTAND.md)
 
-Das PDF bleibt ausschließlich eine historische Quelle. Die dort beschriebenen
-Web-Installer, XAMPP-Konfigurationen und leeren MySQL-Root-Kennwörter sind nur
-historischer Kontext und kein zulässiger Containerbetrieb. Die aktuelle,
+Frühere Anwendungshandbücher sind bei Bedarf über die Git-Historie und Tags
+nachvollziehbar, gehören aber nicht zum aktuellen Arbeitsbaum. Die aktuelle,
 gemeinsam mit der Anwendung ausgelieferte Bedienreferenz ist das öffentliche
 [Web-Handbuch](../handbuch/) unter `/handbuch/`; für Upgrade und Rollback
 bleiben die Vorgaben dieses Runbooks verbindlich.

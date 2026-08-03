@@ -2,10 +2,10 @@
 
 Das öffentliche Handbuch wird unter `/handbuch/` gemeinsam mit der Anwendung
 ausgeliefert. Es beschreibt den aktuellen Bedienstand und ist damit die
-maßgebliche Nutzerreferenz. Das frühere PDF unter
-`doku/Handbuch_eStab.pdf` bleibt ausschließlich als historische Quelle im
-Git-Bestand; seine XAMPP-, MySQL- und Web-Installer-Anweisungen dürfen nicht in
-den heutigen Betrieb übernommen werden.
+maßgebliche Nutzerreferenz. Frühere Handbuchstände gehören nicht zum aktuellen
+Arbeitsbaum oder Laufzeitimage; sie bleiben bei Bedarf über die Git-Historie
+und die historischen Tags nachvollziehbar. Für den heutigen Betrieb gelten
+ausschließlich dieses Web-Handbuch und die aktuellen Runbooks unter `docs/`.
 
 Die Laufzeitoberfläche besteht aus:
 
@@ -35,8 +35,10 @@ konfigurierten Base-Path funktionieren.
 
 Änderungen am Handbuch gehören in den statischen PHP-Nachweis, den
 HTTP-Oberflächentest, den echten Browser-Akzeptanztest und die Prüfung des
-Laufzeitimage-Inhalts. Die historische PDF-Datei wird dabei weder geändert
-noch wieder in das App-Image aufgenommen.
+Laufzeitimage-Inhalts. Überholte Handbuchkopien werden dabei nicht wieder in
+den aktuellen Quellbestand oder das App-Image aufgenommen. Die
+Aufbewahrungsentscheidung ist unter
+[Gepflegter Quellbestand](../docs/QUELLBESTAND.md) dokumentiert.
 
 Für die Melderauswahl muss der dedizierte Browsermodus
 `tests/browser/headless_ui.py --inactive-messenger` einen abgemeldeten,

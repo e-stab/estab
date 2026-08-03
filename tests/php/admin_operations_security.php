@@ -121,7 +121,6 @@ $counterPage = file_get_contents($root . '/4fadm/set_number_after_crash.php');
 $resetPage = file_get_contents($root . '/4fach/resetpic.php');
 $databaseConfig = file_get_contents($root . '/4fcfg/dbcfg.inc.php');
 $messageTools = file_get_contents($root . '/4fach/tools.php');
-$messageDummy = file_get_contents($root . '/4fach/dummy.php');
 $apache = file_get_contents($root . '/docker/apache/estab.conf');
 $adminHttp = file_get_contents($root . '/tests/integration/admin_workflows_http.sh');
 $initialSchema = file_get_contents($root . '/docker/db/init/10-schema.sql');
@@ -131,7 +130,7 @@ $dvMigration = file_get_contents(
 foreach (
     [
         $helper, $assignmentPolicy, $matrixPage, $counterPage, $resetPage, $databaseConfig,
-        $messageTools, $messageDummy, $apache, $adminHttp,
+        $messageTools, $apache, $adminHttp,
     ]
     as $source
 ) {
@@ -304,9 +303,7 @@ $assert(
 );
 $assert(
     !str_contains($messageTools, 'sichter_online')
-        && !str_contains($messageDummy, 'sichter_online')
-        && !str_contains($messageTools, '`mtx_auto`')
-        && !str_contains($messageDummy, '`mtx_auto`'),
+        && !str_contains($messageTools, '`mtx_auto`'),
     'runtime still contains an automatic-sighting bypass'
 );
 $assert(

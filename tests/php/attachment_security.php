@@ -3354,9 +3354,12 @@ $assert(
 foreach (['../../4fach/upload.php', '../../4fach/upload/upload.php'] as $legacyPath) {
     $legacySource = file_get_contents(__DIR__ . '/' . $legacyPath);
     $classPosition = is_string($legacySource) ? strpos($legacySource, 'class fileupload') : false;
-    $disabledPrefix = $classPosition === false ? '' : substr($legacySource, 0, $classPosition);
+    $disabledPrefix = $classPosition === false
+        ? (string) $legacySource
+        : substr((string) $legacySource, 0, $classPosition);
     $assert(
-        str_contains($disabledPrefix, 'http_response_code (410)') && str_contains($disabledPrefix, 'exit;'),
+        preg_match('/http_response_code\s*\(\s*410\s*\)/', $disabledPrefix) === 1
+            && str_contains($disabledPrefix, 'exit;'),
         basename($legacyPath) . ' is disabled before legacy SQL can execute'
     );
 }

@@ -44,8 +44,6 @@ foreach (['2023-02-29 12:00:00', '2024-13-01 00:00:00', '2024-01-01 24:00:00', '
 $root = dirname(__DIR__, 2);
 $queueFiles = [
     $root . '/4fach/tools.php',
-    $root . '/4fach/tools_neu.php',
-    $root . '/4fach/dummy.php',
     $root . '/4fach/liste.php',
     $root . '/4fach/logoff.php',
 ];
@@ -94,16 +92,15 @@ $assert(
 );
 $assert(preg_match('/`03_datum`\s+IS\s+NULL/', $toolsSource) === 1, 'Outgoing queue lost NULL semantics');
 
-foreach (['backup_pdf.php', 'backup_img.php'] as $backupFile) {
-    $source = (string) file_get_contents($root . '/4fbak/' . $backupFile);
-    $assert(str_contains($source, 'estab_datetime_is_unset'), $backupFile . ' does not guard nullable dates');
-    $assert(!str_contains($source, '0000-00-00 00:00:00'), $backupFile . ' still special-cases only zero dates');
-}
-
-foreach (['4fadm/create_db.php', '4fach/create_db.php'] as $legacySchema) {
-    $source = (string) file_get_contents($root . '/' . $legacySchema);
-    $assert(!str_contains($source, "default '0000-00-00 00:00:00'"), $legacySchema . ' is not Strict-Mode compatible');
-}
+$backupSource = (string) file_get_contents($root . '/4fbak/backup_pdf.php');
+$assert(
+    str_contains($backupSource, 'estab_datetime_is_unset'),
+    'backup_pdf.php does not guard nullable dates'
+);
+$assert(
+    !str_contains($backupSource, '0000-00-00 00:00:00'),
+    'backup_pdf.php still special-cases only zero dates'
+);
 
 $migration = (string) file_get_contents($root . '/docker/db/migrations/20-nullable-dates.sql');
 foreach (['01_datum', '02_zeit', '03_datum', '12_abfzeit', '15_quitdatum', 'x05_druck_d', '99_lstacc', 'date', 'sich1_zeit', 'sich2_zeit', 'sich3_zeit', 'sich4_zeit', 'trans_start'] as $column) {

@@ -4,8 +4,7 @@ LABEL org.opencontainers.image.title="eStab" \
     org.opencontainers.image.description="Containerized eStab application" \
     org.opencontainers.image.source="https://github.com/e-stab/estab"
 
-ENV APACHE_DOCUMENT_ROOT=/var/www/html \
-    ESTAB_DB_HOST=db \
+ENV ESTAB_DB_HOST=db \
     ESTAB_DB_PORT=3306 \
     ESTAB_DB_USER=estab \
     ESTAB_DB_NAME=estab \
@@ -50,10 +49,10 @@ RUN set -eux; \
 
 WORKDIR /var/www/html
 
-COPY index.php health.php config.inc.php dbcfg.inc.php e_cfg.inc.php favicon.ico menue.inc.php estab-ui.css estab-password-policy.js ./
+COPY index.php health.php favicon.ico menue.inc.php estab-ui.css estab-password-policy.js ./
 
-# The repository preserves the complete upstream history, but the runtime
-# image contains only exercised application code and assets. In particular,
+# Git history and the migration evidence preserve the upstream lineage, while
+# the runtime image contains only maintained code and assets. In particular,
 # the historical 4fadm/00.htpasswd is never copied; the separate, networkless
 # admin-auth initializer generates the effective bcrypt file at runtime.
 COPY 4fach/4fachform.php \
@@ -76,7 +75,6 @@ COPY 4fach/4fachform.php \
     4fach/logoff.php \
     4fach/logout.php \
     4fach/mainindex.php \
-    4fach/menue.php \
     4fach/nachwea.php \
     4fach/protokoll.php \
     4fach/resetpic.php \
@@ -129,10 +127,18 @@ COPY 4fcfg/color.inc.php \
     4fcfg/fkt_rolle.inc.php \
     4fcfg/para.inc.php \
     ./4fcfg/
-COPY 4fsym/*.bmp \
-    4fsym/*.gif \
-    4fsym/*.jpg \
-    4fsym/*.png \
+COPY 4fsym/4fach_aktiv.png \
+    4fsym/adm_aktiv.png \
+    4fsym/all_msg.png \
+    4fsym/el80.gif \
+    4fsym/etb_aktiv.png \
+    4fsym/icon_handbuch.gif \
+    4fsym/iuk_80.jpg \
+    4fsym/iuk_hs80.png \
+    4fsym/merke32.gif \
+    4fsym/null.gif \
+    4fsym/nw.png \
+    4fsym/tbb_aktiv.png \
     ./4fsym/
 COPY 4fueltg/ue_ltg.php 4fueltg/null.gif ./4fueltg/
 COPY app/*.php ./app/

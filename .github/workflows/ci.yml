@@ -34,13 +34,19 @@ jobs:
           --workdir /repo
           docker.io/rhysd/actionlint@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667
 
+      - name: Verify source tree hygiene
+        id: source_tree_hygiene
+        continue-on-error: true
+        run: sh tests/static/source_tree_hygiene.sh
+
       - name: Run PHP 8.5 suite
         id: php_static
-        if: always()
+        if: ${{ always() && steps.source_tree_hygiene.outcome == 'success' }}
         continue-on-error: true
         run: >-
           docker run --rm --pull=always
           --user 65534:65534
+          --env ESTAB_SOURCE_TREE_HYGIENE_VERIFIED=1
           --volume "$GITHUB_WORKSPACE:/workspace:ro"
           --workdir /workspace
           php:8.5.8-cli-trixie@sha256:58b996c35ce0511cdbaa1fc0476a194fd0221097d721ff7df5af0b6f1a3d0202
@@ -84,6 +90,7 @@ jobs:
         shell: bash
         env:
           ACTIONLINT_OUTCOME: ${{ steps.actionlint.outcome }}
+          SOURCE_TREE_HYGIENE_OUTCOME: ${{ steps.source_tree_hygiene.outcome }}
           PHP_STATIC_OUTCOME: ${{ steps.php_static.outcome }}
           PDF_TOOLS_OUTCOME: ${{ steps.pdf_tools.outcome }}
           PDF_RENDER_OUTCOME: ${{ steps.pdf_render.outcome }}
@@ -101,6 +108,7 @@ jobs:
           }
 
           require_success actionlint "$ACTIONLINT_OUTCOME"
+          require_success source-tree-hygiene "$SOURCE_TREE_HYGIENE_OUTCOME"
           require_success php-static "$PHP_STATIC_OUTCOME"
           require_success pdf-tools "$PDF_TOOLS_OUTCOME"
           require_success pdf-render "$PDF_RENDER_OUTCOME"

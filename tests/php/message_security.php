@@ -512,7 +512,6 @@ $dataSource = file_get_contents($root . '/4fach/data_hndl.php');
 $mainSource = file_get_contents($root . '/4fach/mainindex.php');
 $formSource = file_get_contents($root . '/4fach/4fachform.php');
 $listSource = file_get_contents($root . '/4fach/liste.php');
-$allMessagesSource = file_get_contents($root . '/4fach/all_msg.php');
 $overviewSource = file_get_contents($root . '/4fueltg/ue_ltg.php');
 $pdfSource = file_get_contents($root . '/4fbak/backup_pdf.php');
 $concurrencySource = file_get_contents($root . '/tests/integration/message_concurrency.php');
@@ -528,7 +527,7 @@ $registryComposeSource = file_get_contents(
 );
 foreach ([
     $repositorySource, $dataSource, $mainSource, $formSource,
-    $listSource, $allMessagesSource, $overviewSource, $pdfSource, $concurrencySource,
+    $listSource, $overviewSource, $pdfSource, $concurrencySource,
     $incidentSource, $incidentConfigSource, $environmentSource, $composeSource,
     $registryEnvironmentSource, $registryComposeSource,
 ] as $source) {
@@ -578,12 +577,6 @@ $assert(
         && str_contains($listSource, 'switch ( $row["x00_status"] )')
         && !str_contains($listSource, '$row["X00_status"]'),
     'message lists do not handle missing/multicolour recipients or timestamp/status keys safely'
-);
-$assert(
-    str_contains($allMessagesSource, 'http_response_code(410)')
-        && strpos($allMessagesSource, 'exit;')
-            < strpos($allMessagesSource, 'include ('),
-    'retired unrestricted all-message renderer can still execute'
 );
 $assert(
     substr_count($listSource, 'data-estab-list-filter') === 2

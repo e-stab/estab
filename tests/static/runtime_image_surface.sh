@@ -122,6 +122,18 @@ for required_runtime_path in \
     4fadm/fuehrungsstelle.php \
     4fadm/self_registration.php \
     4fbak/thw.png \
+    4fsym/4fach_aktiv.png \
+    4fsym/adm_aktiv.png \
+    4fsym/all_msg.png \
+    4fsym/el80.gif \
+    4fsym/etb_aktiv.png \
+    4fsym/icon_handbuch.gif \
+    4fsym/iuk_80.jpg \
+    4fsym/iuk_hs80.png \
+    4fsym/merke32.gif \
+    4fsym/null.gif \
+    4fsym/nw.png \
+    4fsym/tbb_aktiv.png \
     app/attachment_integrity.php \
     app/dv_operations.php \
     app/dynamic_schema.php \

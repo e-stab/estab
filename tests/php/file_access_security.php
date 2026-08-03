@@ -468,12 +468,5 @@ foreach (['4fach/4fachform.php', '4fueltg/ue_ltg.php'] as $legacyView) {
     $assert(str_contains($source, 'estab_file_download_url'), $legacyView . ' lacks secure download links');
     $assert(!str_contains($source, '$conf_4f ["ablage_uri"]'), $legacyView . ' still exposes 4fdata');
 }
-$retiredAllMessages = (string) file_get_contents($root . '/4fach/all_msg.php');
-$assert(
-    str_contains($retiredAllMessages, 'http_response_code(410)')
-        && strpos($retiredAllMessages, 'exit;')
-            < strpos($retiredAllMessages, 'include ('),
-    'retired unrestricted all-message renderer does not fail closed'
-);
 
 echo "file access security: OK ({$assertions} assertions)\n";
