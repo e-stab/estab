@@ -100,7 +100,7 @@ if (
     throw new RuntimeException('Could not write render-proof attachment');
 }
 $imageAttachmentPath = $outputDirectory . '/original-attachment.jpg';
-$imageAttachmentPayload = file_get_contents($root . '/4fsym/iuk_80.jpg');
+$imageAttachmentPayload = file_get_contents($root . '/4fsym/br.jpg');
 if (
     !is_string($imageAttachmentPayload)
     || $imageAttachmentPayload === ''
