@@ -1293,10 +1293,10 @@ verify_no_extended_acl()
             return
             ;;
         Linux)
-            if ! LC_ALL=C ls --version 2>/dev/null |
-                grep -Fq 'GNU coreutils'; then
-                die "no trusted ACL probe is available for $acl_label"
-            fi
+            case "$(LC_ALL=C ls --version 2>/dev/null || :)" in
+                *'GNU coreutils'*) ;;
+                *) die "no trusted ACL probe is available for $acl_label" ;;
+            esac
             acl_listing=$(LC_ALL=C ls -ld -- "$acl_path" 2>/dev/null) ||
                 die "cannot inspect GNU ACL metadata for $acl_label"
             acl_mode=$(printf '%s\n' "$acl_listing" |

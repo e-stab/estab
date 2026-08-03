@@ -299,9 +299,10 @@ verify_private_directory_acl()
                 die "$acl_label has an extended or unsafe BSD ACL marker"
             ;;
         Linux)
-            LC_ALL=C ls --version 2>/dev/null |
-                grep -Fq 'GNU coreutils' ||
-                die "no trusted Linux ACL probe is available for $acl_label"
+            case "$(LC_ALL=C ls --version 2>/dev/null || :)" in
+                *'GNU coreutils'*) ;;
+                *) die "no trusted Linux ACL probe is available for $acl_label" ;;
+            esac
             acl_mode=$(LC_ALL=C ls -ld -- "$acl_path" 2>/dev/null |
                 LC_ALL=C awk 'NR == 1 { print $1 }') ||
                 die "cannot inspect Linux ACL metadata for $acl_label"
