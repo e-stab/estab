@@ -13,6 +13,7 @@ import pathlib
 import re
 import secrets
 import shutil
+import signal
 import socket
 import ssl
 import struct
@@ -430,6 +431,7 @@ class ChromeProcess:
                 stdin=subprocess.DEVNULL,
                 stdout=self._log,
                 stderr=self._log,
+                start_new_session=os.name == "posix",
             )
         except OSError as exc:
             self.close()
@@ -477,19 +479,51 @@ class ChromeProcess:
     def close(self) -> None:
         process = self.process
         self.process = None
-        if process is not None and process.poll() is None:
-            process.terminate()
-            try:
-                process.wait(timeout=3)
-            except subprocess.TimeoutExpired:
-                process.kill()
-                process.wait(timeout=3)
+        if process is not None:
+            # Chromium helpers may outlive the browser parent and continue to
+            # write into its profile. The isolated group makes cleanup atomic.
+            group_signalled = False
+            if os.name == "posix":
+                try:
+                    os.killpg(process.pid, signal.SIGTERM)
+                    group_signalled = True
+                except ProcessLookupError:
+                    pass
+                except PermissionError:
+                    pass
+            if not group_signalled and process.poll() is None:
+                process.terminate()
+            if process.poll() is None:
+                try:
+                    process.wait(timeout=3)
+                except subprocess.TimeoutExpired:
+                    if os.name == "posix":
+                        try:
+                            os.killpg(process.pid, signal.SIGKILL)
+                        except (ProcessLookupError, PermissionError):
+                            process.kill()
+                    else:
+                        process.kill()
+                    process.wait(timeout=3)
+            if os.name == "posix":
+                try:
+                    os.killpg(process.pid, signal.SIGKILL)
+                except (ProcessLookupError, PermissionError):
+                    pass
         if self._log is not None:
             self._log.close()
             self._log = None
         if self._profile is not None:
-            self._profile.cleanup()
+            profile = self._profile
             self._profile = None
+            for attempt in range(5):
+                try:
+                    profile.cleanup()
+                    break
+                except OSError:
+                    if attempt == 4:
+                        raise
+                    time.sleep(0.05 * (attempt + 1))
 
     def __enter__(self) -> "ChromeProcess":
         self.start()
