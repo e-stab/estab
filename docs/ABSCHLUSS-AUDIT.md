@@ -5,7 +5,7 @@
 > von `tests/integration/ci.sh` einschließlich Migration 119 mit Exitcode 0
 > und `CI integration: OK`. Die separat mit einer unprivilegierten
 > Containeridentität ausgeführte statische PHP-8.5-Suite endete ebenfalls mit
-> Exitcode 0 und lintete 278 aktive PHP-Dateien.
+> Exitcode 0 und lintete 229 aktive PHP-Dateien.
 
 > Browser-Geltungsgrenze: Chrome 150 bestand den allgemeinen UI-Lauf und die
 > S6-Fernmeldeplan-Versionierung einschließlich mobiler Darstellung sowie die
@@ -120,7 +120,7 @@ tatsächliche Relabeling unter SELinux; die dafür im Testhandbuch beschriebene
 Abnahme bleibt offen.
 
 Die getrennt ausgeführte statische PHP-8.5-Suite endete mit Exitcode 0 und
-lintete 278 aktive PHP-Dateien. Sie bleibt ein eigenständiger Nachweis neben
+lintete 229 aktive PHP-Dateien. Sie bleibt ein eigenständiger Nachweis neben
 dem Integrations-Transcript.
 
 ## Git- und Remote-Geltungsgrenze

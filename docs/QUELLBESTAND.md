@@ -117,6 +117,29 @@ Diese Trennung verhindert, dass historische Beweisdateien in die
 Produktionsoberfläche oder das Containerimage gelangen, ohne den
 nachvollziehbaren Ursprung des Projekts zu verwerfen.
 
+## Bereinigungsnachweis vom 3. August 2026
+
+Gegenüber dem vorherigen `main`-Stand wurden 331 versionierte Dateien
+entfernt und zwei neue Dateien für Quellbaumprüfung und Dokumentation
+aufgenommen. Damit sank der aktuelle Snapshot netto von 915 auf 586 Dateien;
+sein versionierter Inhalt wurde um rund 3,88 MB kleiner. Die Git-Historie und
+ihre Tags wurden nicht umgeschrieben,
+sodass jeder entfernte Stand weiterhin wiederherstellbar bleibt.
+
+Für den bereinigten Endstand waren anschließend folgende Nachweise grün:
+
+- `tests/static/source_tree_hygiene.sh`,
+- `tests/static/runtime_image_surface.sh`,
+- die unprivilegierte PHP-8.5-Suite mit 229 gelinteten aktiven PHP-Dateien,
+- den vollständigen Container-, MariaDB-, HTTP- und Chrome-Lauf mit
+  `CI integration: OK`,
+- den darin enthaltenen destruktiven Backup-/Restore-Roundtrip.
+
+Der vollständige Lauf deckt insbesondere Neuinstallation, wiederholbare
+Migrationen, Einsatz- und Berechtigungslogik, Nachrichtenworkflow, ETB/TBB,
+Anhänge und E-Mail-Ansicht, PDF-Gesamtexport, 10.000 Meldungen, administrative
+Abläufe sowie Desktop- und Mobildarstellung ab.
+
 ## Prüfung bei künftigen Bereinigungen
 
 Vor dem Entfernen einer weiteren Datei sind mindestens diese Punkte zu
