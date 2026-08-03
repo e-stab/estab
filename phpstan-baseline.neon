@@ -1,0 +1,2269 @@
+parameters:
+	ignoreErrors:
+		-
+			message: '#^Call to function is_array\(\) with array\<mixed\> will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 1
+			path: '4fach/4fachform.php'
+
+		-
+			message: '#^If condition is always false\.$#'
+			identifier: if.alwaysFalse
+			count: 2
+			path: '4fach/4fachform.php'
+
+		-
+			message: '#^If condition is always true\.$#'
+			identifier: if.alwaysTrue
+			count: 2
+			path: '4fach/4fachform.php'
+
+		-
+			message: '#^Offset ''context'' on array\{value\: string, source\: string, context\: string, match\: string, matched_context\: string\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: '4fach/4fachform.php'
+
+		-
+			message: '#^Offset ''match'' on array\{value\: string, source\: string, context\: string, match\: string, matched_context\: string\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: '4fach/4fachform.php'
+
+		-
+			message: '#^Offset ''matched_context'' on array\{value\: string, source\: string, context\: string, match\: string, matched_context\: string\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: '4fach/4fachform.php'
+
+		-
+			message: '#^Offset ''source'' on array\{value\: string, source\: string, context\: string, match\: string, matched_context\: string\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: '4fach/4fachform.php'
+
+		-
+			message: '#^Offset ''value'' on array\{value\: string, source\: string, context\: string, match\: string, matched_context\: string\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: '4fach/4fachform.php'
+
+		-
+			message: '#^Right side of && is always false\.$#'
+			identifier: booleanAnd.rightAlwaysFalse
+			count: 1
+			path: '4fach/4fachform.php'
+
+		-
+			message: '#^Strict comparison using \!\=\= between ''master'' and ''master'' will always evaluate to false\.$#'
+			identifier: notIdentical.alwaysFalse
+			count: 1
+			path: '4fach/4fachform.php'
+
+		-
+			message: '#^Variable \$cfg might not be defined\.$#'
+			identifier: variable.undefined
+			count: 10
+			path: '4fach/4fachform.php'
+
+		-
+			message: '#^Variable \$conf_4f might not be defined\.$#'
+			identifier: variable.undefined
+			count: 10
+			path: '4fach/4fachform.php'
+
+		-
+			message: '#^Variable \$conf_design_path might not be defined\.$#'
+			identifier: variable.undefined
+			count: 6
+			path: '4fach/4fachform.php'
+
+		-
+			message: '#^Variable \$empf_matrix might not be defined\.$#'
+			identifier: variable.undefined
+			count: 6
+			path: '4fach/4fachform.php'
+
+		-
+			message: '#^Variable \$redcopy2 might not be defined\.$#'
+			identifier: variable.undefined
+			count: 2
+			path: '4fach/4fachform.php'
+
+		-
+			message: '#^Variable \$conf_4f_db might not be defined\.$#'
+			identifier: variable.undefined
+			count: 1
+			path: '4fach/activity.php'
+
+		-
+			message: '#^Variable \$conf_4f_tbl might not be defined\.$#'
+			identifier: variable.undefined
+			count: 1
+			path: '4fach/activity.php'
+
+		-
+			message: '#^Call to function is_array\(\) with array\<mixed\> will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 2
+			path: '4fach/anhang.php'
+
+		-
+			message: '#^If condition is always false\.$#'
+			identifier: if.alwaysFalse
+			count: 3
+			path: '4fach/anhang.php'
+
+		-
+			message: '#^Loose comparison using \=\= between false and true will always evaluate to false\.$#'
+			identifier: equal.alwaysFalse
+			count: 5
+			path: '4fach/anhang.php'
+
+		-
+			message: '#^Variable \$attachmentCommandPostName might not be defined\.$#'
+			identifier: variable.undefined
+			count: 2
+			path: '4fach/anhang.php'
+
+		-
+			message: '#^Variable \$color_button might not be defined\.$#'
+			identifier: variable.undefined
+			count: 1
+			path: '4fach/anhang.php'
+
+		-
+			message: '#^Variable \$color_button_nok might not be defined\.$#'
+			identifier: variable.undefined
+			count: 2
+			path: '4fach/anhang.php'
+
+		-
+			message: '#^Variable \$color_button_ok might not be defined\.$#'
+			identifier: variable.undefined
+			count: 2
+			path: '4fach/anhang.php'
+
+		-
+			message: '#^Variable \$conf_4f might not be defined\.$#'
+			identifier: variable.undefined
+			count: 8
+			path: '4fach/anhang.php'
+
+		-
+			message: '#^Variable \$conf_4f_db might not be defined\.$#'
+			identifier: variable.undefined
+			count: 13
+			path: '4fach/anhang.php'
+
+		-
+			message: '#^Variable \$conf_4f_tbl might not be defined\.$#'
+			identifier: variable.undefined
+			count: 15
+			path: '4fach/anhang.php'
+
+		-
+			message: '#^Variable \$conf_design_path might not be defined\.$#'
+			identifier: variable.undefined
+			count: 5
+			path: '4fach/anhang.php'
+
+		-
+			message: '#^Variable \$conf_urlroot might not be defined\.$#'
+			identifier: variable.undefined
+			count: 1
+			path: '4fach/anhang.php'
+
+		-
+			message: '#^Variable \$conf_web might not be defined\.$#'
+			identifier: variable.undefined
+			count: 1
+			path: '4fach/anhang.php'
+
+		-
+			message: '#^Variable \$empf_matrix might not be defined\.$#'
+			identifier: variable.undefined
+			count: 2
+			path: '4fach/anhang.php'
+
+		-
+			message: '#^Variable \$redcopy2 might not be defined\.$#'
+			identifier: variable.undefined
+			count: 2
+			path: '4fach/anhang.php'
+
+		-
+			message: '#^Variable \$rew_tak_monate might not be defined\.$#'
+			identifier: variable.undefined
+			count: 1
+			path: '4fach/anhang.php'
+
+		-
+			message: '#^Variable \$tak_monate might not be defined\.$#'
+			identifier: variable.undefined
+			count: 1
+			path: '4fach/anhang.php'
+
+		-
+			message: '#^Call to function is_string\(\) with string will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 1
+			path: '4fach/data_hndl.php'
+
+		-
+			message: '#^If condition is always false\.$#'
+			identifier: if.alwaysFalse
+			count: 24
+			path: '4fach/data_hndl.php'
+
+		-
+			message: '#^If condition is always true\.$#'
+			identifier: if.alwaysTrue
+			count: 7
+			path: '4fach/data_hndl.php'
+
+		-
+			message: '#^Right side of && is always false\.$#'
+			identifier: booleanAnd.rightAlwaysFalse
+			count: 1
+			path: '4fach/data_hndl.php'
+
+		-
+			message: '#^Strict comparison using \=\=\= between ''gemeinsam'' and ''getrennt'' will always evaluate to false\.$#'
+			identifier: identical.alwaysFalse
+			count: 3
+			path: '4fach/data_hndl.php'
+
+		-
+			message: '#^Variable \$conf_4f_db might not be defined\.$#'
+			identifier: variable.undefined
+			count: 30
+			path: '4fach/data_hndl.php'
+
+		-
+			message: '#^Variable \$conf_4f_tbl might not be defined\.$#'
+			identifier: variable.undefined
+			count: 65
+			path: '4fach/data_hndl.php'
+
+		-
+			message: '#^Variable \$empf_matrix might not be defined\.$#'
+			identifier: variable.undefined
+			count: 5
+			path: '4fach/data_hndl.php'
+
+		-
+			message: '#^Variable \$redcopy2 might not be defined\.$#'
+			identifier: variable.undefined
+			count: 8
+			path: '4fach/data_hndl.php'
+
+		-
+			message: '#^Negated boolean expression is always false\.$#'
+			identifier: booleanNot.alwaysFalse
+			count: 1
+			path: '4fach/download.php'
+
+		-
+			message: '#^Offset ''size'' on array\{0\: int, 1\: int, 2\: int, 3\: int, 4\: int, 5\: int, 6\: int, 7\: int, \.\.\.\} in isset\(\) always exists and is not nullable\.$#'
+			identifier: isset.offset
+			count: 1
+			path: '4fach/download.php'
+
+		-
+			message: '#^Variable \$conf_4f might not be defined\.$#'
+			identifier: variable.undefined
+			count: 2
+			path: '4fach/download.php'
+
+		-
+			message: '#^Variable \$conf_4f_db might not be defined\.$#'
+			identifier: variable.undefined
+			count: 2
+			path: '4fach/download.php'
+
+		-
+			message: '#^Variable \$conf_4f_tbl might not be defined\.$#'
+			identifier: variable.undefined
+			count: 8
+			path: '4fach/download.php'
+
+		-
+			message: '#^Call to function is_string\(\) with string will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 1
+			path: '4fach/email.php'
+
+		-
+			message: '#^Negated boolean expression is always false\.$#'
+			identifier: booleanNot.alwaysFalse
+			count: 2
+			path: '4fach/email.php'
+
+		-
+			message: '#^Offset ''state'' on array\{stream\: resource, content_size\: int, state\: ''legacy_unverifiable''\|''verified'', statement\: string, sha256\: string\|null\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: '4fach/email.php'
+
+		-
+			message: '#^Variable \$conf_4f might not be defined\.$#'
+			identifier: variable.undefined
+			count: 2
+			path: '4fach/email.php'
+
+		-
+			message: '#^Variable \$conf_4f_db might not be defined\.$#'
+			identifier: variable.undefined
+			count: 1
+			path: '4fach/email.php'
+
+		-
+			message: '#^Variable \$conf_4f_tbl might not be defined\.$#'
+			identifier: variable.undefined
+			count: 6
+			path: '4fach/email.php'
+
+		-
+			message: '#^Variable \$conf_4f_db might not be defined\.$#'
+			identifier: variable.undefined
+			count: 2
+			path: '4fach/fuehrungsstelle.php'
+
+		-
+			message: '#^Variable \$conf_4f_tbl might not be defined\.$#'
+			identifier: variable.undefined
+			count: 17
+			path: '4fach/fuehrungsstelle.php'
+
+		-
+			message: '#^If condition is always false\.$#'
+			identifier: if.alwaysFalse
+			count: 15
+			path: '4fach/liste.php'
+
+		-
+			message: '#^Right side of && is always false\.$#'
+			identifier: booleanAnd.rightAlwaysFalse
+			count: 2
+			path: '4fach/liste.php'
+
+		-
+			message: '#^Variable \$cfg might not be defined\.$#'
+			identifier: variable.undefined
+			count: 2
+			path: '4fach/liste.php'
+
+		-
+			message: '#^Variable \$conf_4f might not be defined\.$#'
+			identifier: variable.undefined
+			count: 13
+			path: '4fach/liste.php'
+
+		-
+			message: '#^Variable \$conf_4f_db might not be defined\.$#'
+			identifier: variable.undefined
+			count: 13
+			path: '4fach/liste.php'
+
+		-
+			message: '#^Variable \$conf_4f_tbl might not be defined\.$#'
+			identifier: variable.undefined
+			count: 12
+			path: '4fach/liste.php'
+
+		-
+			message: '#^Variable \$conf_design_path might not be defined\.$#'
+			identifier: variable.undefined
+			count: 19
+			path: '4fach/liste.php'
+
+		-
+			message: '#^Variable \$redcopy2 might not be defined\.$#'
+			identifier: variable.undefined
+			count: 1
+			path: '4fach/liste.php'
+
+		-
+			message: '#^If condition is always false\.$#'
+			identifier: if.alwaysFalse
+			count: 2
+			path: '4fach/logoff.php'
+
+		-
+			message: '#^Loose comparison using \=\= between false and true will always evaluate to false\.$#'
+			identifier: equal.alwaysFalse
+			count: 1
+			path: '4fach/logoff.php'
+
+		-
+			message: '#^Right side of && is always false\.$#'
+			identifier: booleanAnd.rightAlwaysFalse
+			count: 2
+			path: '4fach/logoff.php'
+
+		-
+			message: '#^Variable \$conf_4f_db might not be defined\.$#'
+			identifier: variable.undefined
+			count: 4
+			path: '4fach/logoff.php'
+
+		-
+			message: '#^Variable \$conf_4f_tbl might not be defined\.$#'
+			identifier: variable.undefined
+			count: 2
+			path: '4fach/logoff.php'
+
+		-
+			message: '#^Variable \$conf_4f_db might not be defined\.$#'
+			identifier: variable.undefined
+			count: 1
+			path: '4fach/logout.php'
+
+		-
+			message: '#^Variable \$conf_4f_tbl might not be defined\.$#'
+			identifier: variable.undefined
+			count: 2
+			path: '4fach/logout.php'
+
+		-
+			message: '#^Call to function is_array\(\) with array will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 1
+			path: '4fach/mainindex.php'
+
+		-
+			message: '#^Call to function is_array\(\) with array\<mixed\> will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 1
+			path: '4fach/mainindex.php'
+
+		-
+			message: '#^Call to function is_array\(\) with array\{version\: int, flow_token\: string, incident_id\: int, benutzer\: string, kuerzel\: string, funktion\: string, rolle\: string, task\: string, \.\.\.\} will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 2
+			path: '4fach/mainindex.php'
+
+		-
+			message: '#^Call to function is_array\(\) with non\-empty\-array will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 1
+			path: '4fach/mainindex.php'
+
+		-
+			message: '#^Class Listen referenced with incorrect case\: listen\.$#'
+			identifier: class.nameCase
+			count: 7
+			path: '4fach/mainindex.php'
+
+		-
+			message: '#^If condition is always false\.$#'
+			identifier: if.alwaysFalse
+			count: 31
+			path: '4fach/mainindex.php'
+
+		-
+			message: '#^If condition is always true\.$#'
+			identifier: if.alwaysTrue
+			count: 1
+			path: '4fach/mainindex.php'
+
+		-
+			message: '#^Loose comparison using \=\= between false and true will always evaluate to false\.$#'
+			identifier: equal.alwaysFalse
+			count: 3
+			path: '4fach/mainindex.php'
+
+		-
+			message: '#^Offset ''mode'' on array\{reference\: string\|null, mode\: string\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 9
+			path: '4fach/mainindex.php'
+
+		-
+			message: '#^Offset ''task'' on array\{version\: int, flow_token\: string, incident_id\: int, benutzer\: string, kuerzel\: string, funktion\: string, rolle\: string, task\: string, \.\.\.\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 2
+			path: '4fach/mainindex.php'
+
+		-
+			message: '#^Offset ''token'' on array\{token\: string, reference\: string\|null\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: '4fach/mainindex.php'
+
+		-
+			message: '#^Variable \$conf_4f might not be defined\.$#'
+			identifier: variable.undefined
+			count: 26
+			path: '4fach/mainindex.php'
+
+		-
+			message: '#^Variable \$conf_4f_db might not be defined\.$#'
+			identifier: variable.undefined
+			count: 20
+			path: '4fach/mainindex.php'
+
+		-
+			message: '#^Variable \$conf_4f_tbl might not be defined\.$#'
+			identifier: variable.undefined
+			count: 20
+			path: '4fach/mainindex.php'
+
+		-
+			message: '#^Variable \$conf_empf might not be defined\.$#'
+			identifier: variable.undefined
+			count: 7
+			path: '4fach/mainindex.php'
+
+		-
+			message: '#^Variable \$db in isset\(\) always exists and is not nullable\.$#'
+			identifier: isset.variable
+			count: 1
+			path: '4fach/mainindex.php'
+
+		-
+			message: '#^Variable \$empf_matrix might not be defined\.$#'
+			identifier: variable.undefined
+			count: 13
+			path: '4fach/mainindex.php'
+
+		-
+			message: '#^Variable \$fm might not be defined\.$#'
+			identifier: variable.undefined
+			count: 1
+			path: '4fach/mainindex.php'
+
+		-
+			message: '#^Variable \$incident might not be defined\.$#'
+			identifier: variable.undefined
+			count: 1
+			path: '4fach/mainindex.php'
+
+		-
+			message: '#^Variable \$redcopy2 might not be defined\.$#'
+			identifier: variable.undefined
+			count: 15
+			path: '4fach/mainindex.php'
+
+		-
+			message: '#^Class Listen referenced with incorrect case\: listen\.$#'
+			identifier: class.nameCase
+			count: 5
+			path: '4fach/nachwea.php'
+
+		-
+			message: '#^Loose comparison using \=\= between ''gemeinsam'' and ''gemeinsam'' will always evaluate to true\.$#'
+			identifier: equal.alwaysTrue
+			count: 1
+			path: '4fach/nachwea.php'
+
+		-
+			message: '#^Variable \$_GET in isset\(\) always exists and is not nullable\.$#'
+			identifier: isset.variable
+			count: 1
+			path: '4fach/nachwea.php'
+
+		-
+			message: '#^Variable \$conf_4f_db might not be defined\.$#'
+			identifier: variable.undefined
+			count: 1
+			path: '4fach/nachwea.php'
+
+		-
+			message: '#^Variable \$trackingIncidentId might not be defined\.$#'
+			identifier: variable.undefined
+			count: 5
+			path: '4fach/nachwea.php'
+
+		-
+			message: '#^Right side of && is always false\.$#'
+			identifier: booleanAnd.rightAlwaysFalse
+			count: 1
+			path: '4fach/protokoll.php'
+
+		-
+			message: '#^Variable \$conf_4f_db might not be defined\.$#'
+			identifier: variable.undefined
+			count: 1
+			path: '4fach/protokoll.php'
+
+		-
+			message: '#^Variable \$conf_4f_tbl might not be defined\.$#'
+			identifier: variable.undefined
+			count: 2
+			path: '4fach/protokoll.php'
+
+		-
+			message: '#^Variable \$conf_4f_db might not be defined\.$#'
+			identifier: variable.undefined
+			count: 1
+			path: '4fach/resetpic.php'
+
+		-
+			message: '#^Variable \$conf_4f_tbl might not be defined\.$#'
+			identifier: variable.undefined
+			count: 2
+			path: '4fach/resetpic.php'
+
+		-
+			message: '#^Call to function is_string\(\) with string will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 1
+			path: '4fach/showpic.php'
+
+		-
+			message: '#^Negated boolean expression is always false\.$#'
+			identifier: booleanNot.alwaysFalse
+			count: 2
+			path: '4fach/showpic.php'
+
+		-
+			message: '#^Offset ''content_size'' on array\{stream\: resource, content_size\: int, state\: ''legacy_unverifiable''\|''verified'', statement\: string, sha256\: string\|null\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: '4fach/showpic.php'
+
+		-
+			message: '#^Variable \$conf_4f might not be defined\.$#'
+			identifier: variable.undefined
+			count: 1
+			path: '4fach/showpic.php'
+
+		-
+			message: '#^Variable \$conf_4f_db might not be defined\.$#'
+			identifier: variable.undefined
+			count: 1
+			path: '4fach/showpic.php'
+
+		-
+			message: '#^Variable \$conf_4f_tbl might not be defined\.$#'
+			identifier: variable.undefined
+			count: 6
+			path: '4fach/showpic.php'
+
+		-
+			message: '#^Comparison operation "\<\=" between ''01''\|''02''\|''03''\|''04''\|''05''\|''06''\|''07''\|''08''\|''09''\|''10''\|''11''\|''12'' and 12 is always true\.$#'
+			identifier: smallerOrEqual.alwaysTrue
+			count: 1
+			path: '4fach/tools.php'
+
+		-
+			message: '#^Comparison operation "\>\=" between ''01''\|''02''\|''03''\|''04''\|''05''\|''06''\|''07''\|''08''\|''09''\|''10''\|''11''\|''12'' and 1 is always true\.$#'
+			identifier: greaterOrEqual.alwaysTrue
+			count: 1
+			path: '4fach/tools.php'
+
+		-
+			message: '#^If condition is always false\.$#'
+			identifier: if.alwaysFalse
+			count: 8
+			path: '4fach/tools.php'
+
+		-
+			message: '#^Loose comparison using \=\= between ''gemeinsam'' and ''gemeinsam'' will always evaluate to true\.$#'
+			identifier: equal.alwaysTrue
+			count: 1
+			path: '4fach/tools.php'
+
+		-
+			message: '#^Loose comparison using \=\= between ''gemeinsam'' and ''getrennt'' will always evaluate to false\.$#'
+			identifier: equal.alwaysFalse
+			count: 1
+			path: '4fach/tools.php'
+
+		-
+			message: '#^Result of and is always true\.$#'
+			identifier: logicalAnd.alwaysTrue
+			count: 1
+			path: '4fach/tools.php'
+
+		-
+			message: '#^Right side of and is always true\.$#'
+			identifier: logicalAnd.rightAlwaysTrue
+			count: 1
+			path: '4fach/tools.php'
+
+		-
+			message: '#^Variable \$cfg might not be defined\.$#'
+			identifier: variable.undefined
+			count: 5
+			path: '4fach/tools.php'
+
+		-
+			message: '#^Variable \$conf_4f might not be defined\.$#'
+			identifier: variable.undefined
+			count: 4
+			path: '4fach/tools.php'
+
+		-
+			message: '#^Variable \$conf_4f_db might not be defined\.$#'
+			identifier: variable.undefined
+			count: 26
+			path: '4fach/tools.php'
+
+		-
+			message: '#^Variable \$conf_4f_tbl might not be defined\.$#'
+			identifier: variable.undefined
+			count: 19
+			path: '4fach/tools.php'
+
+		-
+			message: '#^Variable \$conf_empf might not be defined\.$#'
+			identifier: variable.undefined
+			count: 25
+			path: '4fach/tools.php'
+
+		-
+			message: '#^Variable \$rew_tak_monate might not be defined\.$#'
+			identifier: variable.undefined
+			count: 1
+			path: '4fach/tools.php'
+
+		-
+			message: '#^Variable \$tableisset might not be defined\.$#'
+			identifier: variable.undefined
+			count: 1
+			path: '4fach/tools.php'
+
+		-
+			message: '#^Variable \$tak_monate might not be defined\.$#'
+			identifier: variable.undefined
+			count: 1
+			path: '4fach/tools.php'
+
+		-
+			message: '#^Variable \$userstatus might not be defined\.$#'
+			identifier: variable.undefined
+			count: 23
+			path: '4fach/tools.php'
+
+		-
+			message: '#^Variable \$conf_4f might not be defined\.$#'
+			identifier: variable.undefined
+			count: 2
+			path: '4fach/vordrucke.php'
+
+		-
+			message: '#^Variable \$conf_4f_db might not be defined\.$#'
+			identifier: variable.undefined
+			count: 2
+			path: '4fach/vordrucke.php'
+
+		-
+			message: '#^Variable \$conf_4f_tbl might not be defined\.$#'
+			identifier: variable.undefined
+			count: 1
+			path: '4fach/vordrucke.php'
+
+		-
+			message: '#^Strict comparison using \!\=\= between ''GET'' and ''HEAD'' will always evaluate to true\.$#'
+			identifier: notIdentical.alwaysTrue
+			count: 1
+			path: '4fach/vorgaben.php'
+
+		-
+			message: '#^Variable \$conf_4f might not be defined\.$#'
+			identifier: variable.undefined
+			count: 1
+			path: '4fach/vorgaben.php'
+
+		-
+			message: '#^Variable \$conf_4f_db might not be defined\.$#'
+			identifier: variable.undefined
+			count: 2
+			path: '4fach/vorgaben.php'
+
+		-
+			message: '#^Variable \$conf_4f_tbl might not be defined\.$#'
+			identifier: variable.undefined
+			count: 4
+			path: '4fach/vorgaben.php'
+
+		-
+			message: '#^Strict comparison using \=\=\= between int and false will always evaluate to false\.$#'
+			identifier: identical.alwaysFalse
+			count: 1
+			path: '4fadm/export.php'
+
+		-
+			message: '#^Variable \$conf_4f might not be defined\.$#'
+			identifier: variable.undefined
+			count: 1
+			path: '4fadm/export.php'
+
+		-
+			message: '#^Variable \$conf_4f_db might not be defined\.$#'
+			identifier: variable.undefined
+			count: 1
+			path: '4fadm/export.php'
+
+		-
+			message: '#^Variable \$conf_4f might not be defined\.$#'
+			identifier: variable.undefined
+			count: 2
+			path: '4fadm/fuehrungsstelle.php'
+
+		-
+			message: '#^Variable \$conf_4f_db might not be defined\.$#'
+			identifier: variable.undefined
+			count: 7
+			path: '4fadm/fuehrungsstelle.php'
+
+		-
+			message: '#^Variable \$conf_4f_tbl might not be defined\.$#'
+			identifier: variable.undefined
+			count: 13
+			path: '4fadm/fuehrungsstelle.php'
+
+		-
+			message: '#^If condition is always true\.$#'
+			identifier: if.alwaysTrue
+			count: 1
+			path: '4fadm/incident_export.php'
+
+		-
+			message: '#^Variable \$conf_4f might not be defined\.$#'
+			identifier: variable.undefined
+			count: 1
+			path: '4fadm/incident_export.php'
+
+		-
+			message: '#^Variable \$conf_4f_db might not be defined\.$#'
+			identifier: variable.undefined
+			count: 2
+			path: '4fadm/incident_export.php'
+
+		-
+			message: '#^Offset ''strict_mode'' on array\{open_messages\: int, locked_messages\: int, incomplete_attachments\: int, attachment_integrity_errors\: int, legacy_attachments_unverifiable\: int, permission_mode\: string, strict_mode\: bool, logbuecher_eroeffnet\: bool, \.\.\.\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: '4fadm/incidents.php'
+
+		-
+			message: '#^Variable \$conf_4f might not be defined\.$#'
+			identifier: variable.undefined
+			count: 2
+			path: '4fadm/incidents.php'
+
+		-
+			message: '#^Variable \$conf_4f_db might not be defined\.$#'
+			identifier: variable.undefined
+			count: 2
+			path: '4fadm/incidents.php'
+
+		-
+			message: '#^Variable \$conf_4f_db might not be defined\.$#'
+			identifier: variable.undefined
+			count: 5
+			path: '4fadm/make_fkt.php'
+
+		-
+			message: '#^Variable \$conf_4f_tbl might not be defined\.$#'
+			identifier: variable.undefined
+			count: 8
+			path: '4fadm/make_fkt.php'
+
+		-
+			message: '#^Variable \$conf_4f_db might not be defined\.$#'
+			identifier: variable.undefined
+			count: 3
+			path: '4fadm/password_policy.php'
+
+		-
+			message: '#^Variable \$conf_4f_tbl might not be defined\.$#'
+			identifier: variable.undefined
+			count: 1
+			path: '4fadm/password_policy.php'
+
+		-
+			message: '#^Call to function is_array\(\) with array\<string, int\|string\|null\> will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 1
+			path: '4fadm/self_registration.php'
+
+		-
+			message: '#^Offset ''policy'' on array\{changed\: bool, policy\: array\<string, int\|string\|null\>\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: '4fadm/self_registration.php'
+
+		-
+			message: '#^Offset 15\|30\|60\|120\|240\|480\|720\|1440 on array\{15\: ''15 Minuten'', 30\: ''30 Minuten'', 60\: ''1 Stunde'', 120\: ''2 Stunden'', 240\: ''4 Stunden'', 480\: ''8 Stunden'', 720\: ''12 Stunden'', 1440\: ''24 Stunden''\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: '4fadm/self_registration.php'
+
+		-
+			message: '#^Variable \$conf_4f_db might not be defined\.$#'
+			identifier: variable.undefined
+			count: 3
+			path: '4fadm/self_registration.php'
+
+		-
+			message: '#^Variable \$conf_4f_tbl might not be defined\.$#'
+			identifier: variable.undefined
+			count: 1
+			path: '4fadm/self_registration.php'
+
+		-
+			message: '#^Variable \$conf_4f_db might not be defined\.$#'
+			identifier: variable.undefined
+			count: 2
+			path: '4fadm/set_number_after_crash.php'
+
+		-
+			message: '#^Variable \$conf_4f_tbl might not be defined\.$#'
+			identifier: variable.undefined
+			count: 3
+			path: '4fadm/set_number_after_crash.php'
+
+		-
+			message: '#^Call to function is_array\(\) with array\{funktion\: string, rolle\: string, vergeben_am\: string, vergeben_von\: string, ist_gueltig\: bool\} will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 1
+			path: '4fadm/users.php'
+
+		-
+			message: '#^Call to function is_array\(\) with list\<array\{funktion\: string, rolle\: string, vergeben_am\: string, vergeben_von\: string, ist_gueltig\: bool\}\> will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 1
+			path: '4fadm/users.php'
+
+		-
+			message: '#^Call to function is_string\(\) with string will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 2
+			path: '4fadm/users.php'
+
+		-
+			message: '#^Offset ''active_session…'' on array\{benutzer\: string, kuerzel\: string, funktion\: string, rolle\: string, active_session_revoked\: bool\}\|array\{changed\?\: bool, active_session_revoked\: bool, funktion\: string, rolle\: string\}\|array\{changed\?\: bool, active_session_revoked\: bool\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: '4fadm/users.php'
+
+		-
+			message: '#^Offset ''benutzer'' on array\{benutzer\: string, kuerzel\: string, funktion\: string, rolle\: string, aktiv\: int\|string, estab_sitzung_vorhanden\: int\|string, estab_letzte_aktivitaet\: string\|null, estab_gesperrt\: int\|string, \.\.\.\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: '4fadm/users.php'
+
+		-
+			message: '#^Offset ''changed'' on array\{changed\: bool, active_session_revoked\: bool, funktion\: string, rolle\: string\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: '4fadm/users.php'
+
+		-
+			message: '#^Offset ''changed'' on array\{changed\: bool, active_session_revoked\: bool\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: '4fadm/users.php'
+
+		-
+			message: '#^Offset ''estab_gesperrt'' on array\{benutzer\: string, kuerzel\: string, funktion\: string, rolle\: string, aktiv\: int\|string, estab_sitzung_vorhanden\: int\|string, estab_letzte_aktivitaet\: string\|null, estab_gesperrt\: int\|string, \.\.\.\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: '4fadm/users.php'
+
+		-
+			message: '#^Offset ''funktion'' on array\{benutzer\: string, kuerzel\: string, funktion\: string, rolle\: string, aktiv\: int\|string, estab_sitzung_vorhanden\: int\|string, estab_letzte_aktivitaet\: string\|null, estab_gesperrt\: int\|string, \.\.\.\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 3
+			path: '4fadm/users.php'
+
+		-
+			message: '#^Offset ''funktion'' on array\{funktion\: string, rolle\: string, vergeben_am\: string, vergeben_von\: string, ist_gueltig\: bool\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 3
+			path: '4fadm/users.php'
+
+		-
+			message: '#^Offset ''ist_gueltig'' on array\{funktion\: string, rolle\: string, vergeben_am\: string, vergeben_von\: string, ist_gueltig\: bool\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 2
+			path: '4fadm/users.php'
+
+		-
+			message: '#^Offset ''kuerzel'' on array\{benutzer\: string, kuerzel\: string, funktion\: string, rolle\: string, aktiv\: int\|string, estab_sitzung_vorhanden\: int\|string, estab_letzte_aktivitaet\: string\|null, estab_gesperrt\: int\|string, \.\.\.\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: '4fadm/users.php'
+
+		-
+			message: '#^Offset ''rolle'' on array\{benutzer\: string, kuerzel\: string, funktion\: string, rolle\: string, aktiv\: int\|string, estab_sitzung_vorhanden\: int\|string, estab_letzte_aktivitaet\: string\|null, estab_gesperrt\: int\|string, \.\.\.\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 2
+			path: '4fadm/users.php'
+
+		-
+			message: '#^Offset ''rolle'' on array\{funktion\: string, rolle\: string, vergeben_am\: string, vergeben_von\: string, ist_gueltig\: bool\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 2
+			path: '4fadm/users.php'
+
+		-
+			message: '#^Offset ''vergeben_am'' on array\{funktion\: string, rolle\: string, vergeben_am\: string, vergeben_von\: string, ist_gueltig\: bool\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 2
+			path: '4fadm/users.php'
+
+		-
+			message: '#^Offset ''vergeben_von'' on array\{funktion\: string, rolle\: string, vergeben_am\: string, vergeben_von\: string, ist_gueltig\: bool\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 2
+			path: '4fadm/users.php'
+
+		-
+			message: '#^Offset ''zusatzfunktionen'' on array\{benutzer\: string, kuerzel\: string, funktion\: string, rolle\: string, aktiv\: int\|string, estab_sitzung_vorhanden\: int\|string, estab_letzte_aktivitaet\: string\|null, estab_gesperrt\: int\|string, \.\.\.\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: '4fadm/users.php'
+
+		-
+			message: '#^Offset ''zusatzfunktionen…'' on array\{benutzer\: string, kuerzel\: string, funktion\: string, rolle\: string, aktiv\: int\|string, estab_sitzung_vorhanden\: int\|string, estab_letzte_aktivitaet\: string\|null, estab_gesperrt\: int\|string, \.\.\.\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: '4fadm/users.php'
+
+		-
+			message: '#^Variable \$conf_4f_db might not be defined\.$#'
+			identifier: variable.undefined
+			count: 9
+			path: '4fadm/users.php'
+
+		-
+			message: '#^Variable \$conf_4f_tbl might not be defined\.$#'
+			identifier: variable.undefined
+			count: 21
+			path: '4fadm/users.php'
+
+		-
+			message: '#^Variable \$_GET in isset\(\) always exists and is not nullable\.$#'
+			identifier: isset.variable
+			count: 1
+			path: '4fbak/backup.php'
+
+		-
+			message: '#^Variable \$color_button_ok might not be defined\.$#'
+			identifier: variable.undefined
+			count: 1
+			path: '4fbak/backup.php'
+
+		-
+			message: '#^Variable \$color_data_table might not be defined\.$#'
+			identifier: variable.undefined
+			count: 1
+			path: '4fbak/backup.php'
+
+		-
+			message: '#^Variable \$conf_4f_db might not be defined\.$#'
+			identifier: variable.undefined
+			count: 1
+			path: '4fbak/backup.php'
+
+		-
+			message: '#^Variable \$conf_4f_tbl might not be defined\.$#'
+			identifier: variable.undefined
+			count: 2
+			path: '4fbak/backup.php'
+
+		-
+			message: '#^Variable \$conf_design_path might not be defined\.$#'
+			identifier: variable.undefined
+			count: 1
+			path: '4fbak/backup.php'
+
+		-
+			message: '#^Undefined variable\: \$conf_4f$#'
+			identifier: variable.undefined
+			count: 1
+			path: '4fbak/backup_pdf.php'
+
+		-
+			message: '#^Variable \$az might not be defined\.$#'
+			identifier: variable.undefined
+			count: 2
+			path: '4fbak/backup_pdf.php'
+
+		-
+			message: '#^Variable \$conf_4f might not be defined\.$#'
+			identifier: variable.undefined
+			count: 3
+			path: '4fbak/backup_pdf.php'
+
+		-
+			message: '#^Variable \$conf_4f_db might not be defined\.$#'
+			identifier: variable.undefined
+			count: 1
+			path: '4fbak/backup_pdf.php'
+
+		-
+			message: '#^Variable \$empf_matrix might not be defined\.$#'
+			identifier: variable.undefined
+			count: 1
+			path: '4fbak/backup_pdf.php'
+
+		-
+			message: '#^Variable \$this might not be defined\.$#'
+			identifier: variable.undefined
+			count: 36
+			path: '4fcfg/color.inc.php'
+
+		-
+			message: '#^Variable \$conf_4f_db might not be defined\.$#'
+			identifier: variable.undefined
+			count: 4
+			path: '4fcfg/config.inc.php'
+
+		-
+			message: '#^Call to function is_array\(\) with array\<mixed\> will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 1
+			path: '4fcfg/dbcfg.inc.php'
+
+		-
+			message: '#^Variable \$conf_4f_db might not be defined\.$#'
+			identifier: variable.undefined
+			count: 4
+			path: '4fcfg/fkt_rolle.inc.php'
+
+		-
+			message: '#^Variable \$conf_4f_tbl might not be defined\.$#'
+			identifier: variable.undefined
+			count: 1
+			path: '4fcfg/fkt_rolle.inc.php'
+
+		-
+			message: '#^Class Listen referenced with incorrect case\: listen\.$#'
+			identifier: class.nameCase
+			count: 1
+			path: '4fueltg/ue_ltg.php'
+
+		-
+			message: '#^If condition is always false\.$#'
+			identifier: if.alwaysFalse
+			count: 1
+			path: '4fueltg/ue_ltg.php'
+
+		-
+			message: '#^If condition is always true\.$#'
+			identifier: if.alwaysTrue
+			count: 2
+			path: '4fueltg/ue_ltg.php'
+
+		-
+			message: '#^Loose comparison using \=\= between false and true will always evaluate to false\.$#'
+			identifier: equal.alwaysFalse
+			count: 4
+			path: '4fueltg/ue_ltg.php'
+
+		-
+			message: '#^Offset int\<0, max\> on non\-empty\-list\<string\> in isset\(\) always exists and is not nullable\.$#'
+			identifier: isset.offset
+			count: 1
+			path: '4fueltg/ue_ltg.php'
+
+		-
+			message: '#^Variable \$cfg might not be defined\.$#'
+			identifier: variable.undefined
+			count: 5
+			path: '4fueltg/ue_ltg.php'
+
+		-
+			message: '#^Variable \$conf_4f might not be defined\.$#'
+			identifier: variable.undefined
+			count: 4
+			path: '4fueltg/ue_ltg.php'
+
+		-
+			message: '#^Variable \$conf_4f_db might not be defined\.$#'
+			identifier: variable.undefined
+			count: 9
+			path: '4fueltg/ue_ltg.php'
+
+		-
+			message: '#^Variable \$conf_4f_tbl might not be defined\.$#'
+			identifier: variable.undefined
+			count: 22
+			path: '4fueltg/ue_ltg.php'
+
+		-
+			message: '#^Variable \$conf_design_path might not be defined\.$#'
+			identifier: variable.undefined
+			count: 8
+			path: '4fueltg/ue_ltg.php'
+
+		-
+			message: '#^Variable \$conf_empf might not be defined\.$#'
+			identifier: variable.undefined
+			count: 2
+			path: '4fueltg/ue_ltg.php'
+
+		-
+			message: '#^Variable \$empf_matrix might not be defined\.$#'
+			identifier: variable.undefined
+			count: 5
+			path: '4fueltg/ue_ltg.php'
+
+		-
+			message: '#^Variable \$overviewFilters might not be defined\.$#'
+			identifier: variable.undefined
+			count: 2
+			path: '4fueltg/ue_ltg.php'
+
+		-
+			message: '#^Variable \$overviewRecordId might not be defined\.$#'
+			identifier: variable.undefined
+			count: 2
+			path: '4fueltg/ue_ltg.php'
+
+		-
+			message: '#^Variable \$redcopy2 might not be defined\.$#'
+			identifier: variable.undefined
+			count: 1
+			path: '4fueltg/ue_ltg.php'
+
+		-
+			message: '#^Offset ''role'' on array\{row\: int\<1, 5\>, column\: int\<1, 4\>, function\: ''S2'', role\: string, auto\: false, redcopy\: bool\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: app/admin_operations.php
+
+		-
+			message: '#^Call to function is_int\(\) with 10 will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 1
+			path: app/assignment.php
+
+		-
+			message: '#^Call to function is_string\(\) with non\-empty\-string will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 2
+			path: app/assignment.php
+
+		-
+			message: '#^Comparison operation "\<" between 10 and 0 is always false\.$#'
+			identifier: smaller.alwaysFalse
+			count: 1
+			path: app/assignment.php
+
+		-
+			message: '#^Comparison operation "\>" between 10 and 30 is always false\.$#'
+			identifier: greater.alwaysFalse
+			count: 1
+			path: app/assignment.php
+
+		-
+			message: '#^Result of \|\| is always false\.$#'
+			identifier: booleanOr.alwaysFalse
+			count: 2
+			path: app/assignment.php
+
+		-
+			message: '#^Call to function is_array\(\) with array\<string, mixed\> will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 1
+			path: app/attachment.php
+
+		-
+			message: '#^Call to function is_string\(\) with string will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 1
+			path: app/attachment.php
+
+		-
+			message: '#^If condition is always true\.$#'
+			identifier: if.alwaysTrue
+			count: 2
+			path: app/attachment.php
+
+		-
+			message: '#^Offset ''incident_id'' on array\{incident_id\: int, mode\: string, revision\: int\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: app/attachment.php
+
+		-
+			message: '#^Offset ''mode'' on array\{incident_id\: int, mode\: string, revision\: int\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: app/attachment.php
+
+		-
+			message: '#^Offset ''revision'' on array\{incident_id\: int, mode\: string, revision\: int\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: app/attachment.php
+
+		-
+			message: '#^Offset ''state'' on non\-empty\-array\<mixed\> on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 2
+			path: app/attachment.php
+
+		-
+			message: '#^Call to function is_int\(\) with int will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 2
+			path: app/attachment_integrity.php
+
+		-
+			message: '#^Offset ''dev'' on array\{0\: int, 1\: int, 2\: int, 3\: int, 4\: int, 5\: int, 6\: int, 7\: int, \.\.\.\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 10
+			path: app/attachment_integrity.php
+
+		-
+			message: '#^Offset ''ino'' on array\{0\: int, 1\: int, 2\: int, 3\: int, 4\: int, 5\: int, 6\: int, 7\: int, \.\.\.\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 10
+			path: app/attachment_integrity.php
+
+		-
+			message: '#^Offset ''mode'' on array\{0\: int, 1\: int, 2\: int, 3\: int, 4\: int, 5\: int, 6\: int, 7\: int, \.\.\.\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 3
+			path: app/attachment_integrity.php
+
+		-
+			message: '#^Offset ''size'' on array\{0\: int, 1\: int, 2\: int, 3\: int, 4\: int, 5\: int, 6\: int, 7\: int, \.\.\.\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 8
+			path: app/attachment_integrity.php
+
+		-
+			message: '#^Call to function is_string\(\) with string will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 1
+			path: app/attachment_upload.php
+
+		-
+			message: '#^Call to function is_array\(\) with array\<mixed\> will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 2
+			path: app/auth.php
+
+		-
+			message: '#^Call to function is_int\(\) with \*NEVER\* will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 1
+			path: app/auth.php
+
+		-
+			message: '#^Call to function is_string\(\) with ''argon2id'' will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 1
+			path: app/auth.php
+
+		-
+			message: '#^Call to function is_string\(\) with non\-empty\-string will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 2
+			path: app/auth.php
+
+		-
+			message: '#^Call to function is_string\(\) with string will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 2
+			path: app/auth.php
+
+		-
+			message: '#^Comparison operation "\<" between 1\|4\|65536 and 1 is always false\.$#'
+			identifier: smaller.alwaysFalse
+			count: 1
+			path: app/auth.php
+
+		-
+			message: '#^Function estab_auth_password_algorithm\(\) never returns int so it can be removed from the return type\.$#'
+			identifier: return.unusedType
+			count: 1
+			path: app/auth.php
+
+		-
+			message: '#^Negated boolean expression is always false\.$#'
+			identifier: booleanNot.alwaysFalse
+			count: 1
+			path: app/auth.php
+
+		-
+			message: '#^Result of && is always false\.$#'
+			identifier: booleanAnd.alwaysFalse
+			count: 1
+			path: app/auth.php
+
+		-
+			message: '#^Result of \|\| is always false\.$#'
+			identifier: booleanOr.alwaysFalse
+			count: 2
+			path: app/auth.php
+
+		-
+			message: '#^Strict comparison using \!\=\= between ''Lax''\|''lax''\|''None''\|''none''\|''Strict''\|''strict'' and '''' will always evaluate to true\.$#'
+			identifier: notIdentical.alwaysTrue
+			count: 1
+			path: app/auth.php
+
+		-
+			message: '#^Strict comparison using \!\=\= between non\-falsy\-string and '''' will always evaluate to true\.$#'
+			identifier: notIdentical.alwaysTrue
+			count: 1
+			path: app/auth.php
+
+		-
+			message: '#^Strict comparison using \=\=\= between non\-empty\-string and '''' will always evaluate to false\.$#'
+			identifier: identical.alwaysFalse
+			count: 1
+			path: app/auth.php
+
+		-
+			message: '#^Anonymous function never returns null so it can be removed from the return type\.$#'
+			identifier: return.unusedType
+			count: 1
+			path: app/category.php
+
+		-
+			message: '#^Call to function is_array\(\) with array\<string, mixed\> will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 1
+			path: app/category.php
+
+		-
+			message: '#^Offset ''estab_permission…'' on array\{benutzer\: string, kuerzel\: string, funktion\: string, rolle\: string, estab_permission_mode\: ''LOOSE''\|''STRICT'', duty_assignment_id\?\: int, estab_additional_functions\?\: list\<array\{funktion\: string, rolle\: string\}\>, authorization_account_function\?\: string, \.\.\.\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: app/category.php
+
+		-
+			message: '#^Call to function is_string\(\) with non\-empty\-string will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 3
+			path: app/dv_operations.php
+
+		-
+			message: '#^Offset ''attachment…''\|''evidence_errors''\|''incomplete…''\|''locked_messages''\|''offene_besetzungen''\|''offene…''\|''offene_schichten''\|''open_messages'' on array\{open_messages\: int, locked_messages\: int, incomplete_attachments\: int, attachment_integrity_errors\: int, legacy_attachments_unverifiable\: int, permission_mode\: string, strict_mode\: bool, logbuecher_eroeffnet\: bool, \.\.\.\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: app/dv_operations.php
+
+		-
+			message: '#^Offset ''estab_permission…'' on array\{benutzer\: string, kuerzel\: string, funktion\: string, rolle\: string, estab_permission_mode\: ''LOOSE''\|''STRICT'', duty_assignment_id\?\: int, estab_additional_functions\?\: list\<array\{funktion\: string, rolle\: string\}\>, authorization_account_function\?\: string, \.\.\.\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 2
+			path: app/dv_operations.php
+
+		-
+			message: '#^Parameter \#1 \$array \(list\<string\>\) of array_values is already a list, call has no effect\.$#'
+			identifier: arrayValues.list
+			count: 1
+			path: app/dv_operations.php
+
+		-
+			message: '#^Result of && is always false\.$#'
+			identifier: booleanAnd.alwaysFalse
+			count: 2
+			path: app/dv_operations.php
+
+		-
+			message: '#^Strict comparison using \!\=\= between ''LOOSE'' and ''LOOSE'' will always evaluate to false\.$#'
+			identifier: notIdentical.alwaysFalse
+			count: 2
+			path: app/dv_operations.php
+
+		-
+			message: '#^Using nullsafe method call on non\-nullable type mysqli_stmt\|false\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 4
+			path: app/dv_operations.php
+
+		-
+			message: '#^Expression on left side of \?\? is not nullable\.$#'
+			identifier: nullCoalesce.expr
+			count: 1
+			path: app/email_attachment.php
+
+		-
+			message: '#^Comparison operation "\<" between int\<0, max\> and 0 is always false\.$#'
+			identifier: smaller.alwaysFalse
+			count: 1
+			path: app/export.php
+
+		-
+			message: '#^Comparison operation "\>" between int\<1, 2097152\> and 2097152 is always false\.$#'
+			identifier: greater.alwaysFalse
+			count: 1
+			path: app/export.php
+
+		-
+			message: '#^Comparison operation "\>\=" between int\<0, max\> and 0 is always true\.$#'
+			identifier: greaterOrEqual.alwaysTrue
+			count: 1
+			path: app/export.php
+
+		-
+			message: '#^Negated boolean expression is always false\.$#'
+			identifier: booleanNot.alwaysFalse
+			count: 3
+			path: app/export.php
+
+		-
+			message: '#^Offset ''dev'' on array\{0\: int, 1\: int, 2\: int, 3\: int, 4\: int, 5\: int, 6\: int, 7\: int, \.\.\.\} in isset\(\) always exists and is not nullable\.$#'
+			identifier: isset.offset
+			count: 2
+			path: app/export.php
+
+		-
+			message: '#^Offset ''ino'' on array\{0\: int, 1\: int, 2\: int, 3\: int, 4\: int, 5\: int, 6\: int, 7\: int, \.\.\.\} in isset\(\) always exists and is not nullable\.$#'
+			identifier: isset.offset
+			count: 2
+			path: app/export.php
+
+		-
+			message: '#^Offset ''mode'' on array\{0\: int, 1\: int, 2\: int, 3\: int, 4\: int, 5\: int, 6\: int, 7\: int, \.\.\.\} in isset\(\) always exists and is not nullable\.$#'
+			identifier: isset.offset
+			count: 5
+			path: app/export.php
+
+		-
+			message: '#^Offset ''size'' on array\{0\: int, 1\: int, 2\: int, 3\: int, 4\: int, 5\: int, 6\: int, 7\: int, \.\.\.\} in isset\(\) always exists and is not nullable\.$#'
+			identifier: isset.offset
+			count: 3
+			path: app/export.php
+
+		-
+			message: '#^Result of \|\| is always false\.$#'
+			identifier: booleanOr.alwaysFalse
+			count: 1
+			path: app/export.php
+
+		-
+			message: '#^Strict comparison using \!\=\= between false and false will always evaluate to false\.$#'
+			identifier: notIdentical.alwaysFalse
+			count: 3
+			path: app/export.php
+
+		-
+			message: '#^Strict comparison using \=\=\= between array and null will always evaluate to false\.$#'
+			identifier: identical.alwaysFalse
+			count: 1
+			path: app/export.php
+
+		-
+			message: '#^Offset ''dev'' on array\{0\: int, 1\: int, 2\: int, 3\: int, 4\: int, 5\: int, 6\: int, 7\: int, \.\.\.\} in isset\(\) always exists and is not nullable\.$#'
+			identifier: isset.offset
+			count: 2
+			path: app/file_access.php
+
+		-
+			message: '#^Offset ''ino'' on array\{0\: int, 1\: int, 2\: int, 3\: int, 4\: int, 5\: int, 6\: int, 7\: int, \.\.\.\} in isset\(\) always exists and is not nullable\.$#'
+			identifier: isset.offset
+			count: 2
+			path: app/file_access.php
+
+		-
+			message: '#^Offset ''mode'' on array\{0\: int, 1\: int, 2\: int, 3\: int, 4\: int, 5\: int, 6\: int, 7\: int, \.\.\.\} in isset\(\) always exists and is not nullable\.$#'
+			identifier: isset.offset
+			count: 1
+			path: app/file_access.php
+
+		-
+			message: '#^Call to function is_array\(\) with list\<array\> will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 1
+			path: app/generated_form.php
+
+		-
+			message: '#^Parameter \#1 \$array \(list\<array\>\) of array_values is already a list, call has no effect\.$#'
+			identifier: arrayValues.list
+			count: 1
+			path: app/generated_form.php
+
+		-
+			message: '#^Strict comparison using \=\=\= between non\-falsy\-string and '''' will always evaluate to false\.$#'
+			identifier: identical.alwaysFalse
+			count: 1
+			path: app/generated_form.php
+
+		-
+			message: '#^Offset ''error_count'' on array\{warning_count\: int\<0, max\>, warnings\: list\<string\>, error_count\: int\<0, max\>, errors\: list\<string\>\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: app/incident.php
+
+		-
+			message: '#^Offset ''head_mismatches'' on array\{valid\: false, event_count\: int, message_count\: int, broken_event_id\: int\|null, head_mismatches\: int, terminal_mismatches\: int, terminal_unverifiable\: int, terminal_binding_complete\: bool\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: app/incident.php
+
+		-
+			message: '#^Offset ''strict_mode'' on array\{open_messages\: int, locked_messages\: int, incomplete_attachments\: int, attachment_integrity_errors\: int, legacy_attachments_unverifiable\: int, permission_mode\: string, strict_mode\: bool, logbuecher_eroeffnet\: bool, \.\.\.\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: app/incident.php
+
+		-
+			message: '#^Offset ''warning_count'' on array\{warning_count\: int\<0, max\>, warnings\: list\<string\>, error_count\: int\<0, max\>, errors\: list\<string\>\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: app/incident.php
+
+		-
+			message: '#^Call to function is_array\(\) with array\<string, mixed\> will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 5
+			path: app/incident_export.php
+
+		-
+			message: '#^Offset ''integrity_state'' on array\{path\: string, stored_name\: string, embedded_name\: string, display_name\: string, description\: non\-empty\-string, mime\: string, integrity_state\: ''legacy_unverifiable''\|''verified'', integrity_statement\: string, \.\.\.\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 2
+			path: app/incident_export.php
+
+		-
+			message: '#^Offset ''mode'' on array\{mode\: ''all''\|''shift'', shift_id\: int\|null\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: app/incident_export.php
+
+		-
+			message: '#^Offset ''previous_event…'' on non\-empty\-array\<string, mixed\> on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: app/incident_export.php
+
+		-
+			message: '#^Right side of && is always true\.$#'
+			identifier: booleanAnd.rightAlwaysTrue
+			count: 1
+			path: app/incident_export.php
+
+		-
+			message: '#^Call to function is_array\(\) with array\<string, mixed\> will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 16
+			path: app/incident_pdf.php
+
+		-
+			message: '#^Call to function is_array\(\) with array\{command\: string, pid\: int, running\: bool, signaled\: bool, stopped\: bool, exitcode\: int, termsig\: int, stopsig\: int\} will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 2
+			path: app/incident_pdf.php
+
+		-
+			message: '#^Call to function is_array\(\) with array\{display_name\: string, stored_name\: string, size\: int, sha256\: string, mime\: string, archive_name\?\: string\} will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 1
+			path: app/incident_pdf.php
+
+		-
+			message: '#^Call to function is_array\(\) with array\{display_name\: string, stored_name\: string, size\: int, sha256\: string, mime\: string, integrity_state\?\: string, integrity_statement\?\: string, archive_name\?\: string, \.\.\.\} will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 1
+			path: app/incident_pdf.php
+
+		-
+			message: '#^Call to function is_array\(\) with list\<int\> will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 1
+			path: app/incident_pdf.php
+
+		-
+			message: '#^Call to function is_array\(\) with list\<string\> will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 3
+			path: app/incident_pdf.php
+
+		-
+			message: '#^Call to function is_int\(\) with int will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 1
+			path: app/incident_pdf.php
+
+		-
+			message: '#^Call to function is_string\(\) with string will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 4
+			path: app/incident_pdf.php
+
+		-
+			message: '#^Negated boolean expression is always false\.$#'
+			identifier: booleanNot.alwaysFalse
+			count: 1
+			path: app/incident_pdf.php
+
+		-
+			message: '#^Offset ''columns'' on array\{columns\: list\<string\>, date\: string\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: app/incident_pdf.php
+
+		-
+			message: '#^Offset ''date'' on array\{columns\: list\<string\>, date\: string\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 4
+			path: app/incident_pdf.php
+
+		-
+			message: '#^Offset ''dev'' on array\{0\: int, 1\: int, 2\: int, 3\: int, 4\: int, 5\: int, 6\: int, 7\: int, \.\.\.\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 3
+			path: app/incident_pdf.php
+
+		-
+			message: '#^Offset ''display_name'' on array\{display_name\: string, stored_name\: string, size\: int, sha256\: string, mime\: string, integrity_state\?\: string, integrity_statement\?\: string, archive_name\?\: string, \.\.\.\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: app/incident_pdf.php
+
+		-
+			message: '#^Offset ''exitcode'' on array\{command\: string, pid\: int, running\: bool, signaled\: bool, stopped\: bool, exitcode\: int, termsig\: int, stopsig\: int\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: app/incident_pdf.php
+
+		-
+			message: '#^Offset ''ino'' on array\{0\: int, 1\: int, 2\: int, 3\: int, 4\: int, 5\: int, 6\: int, 7\: int, \.\.\.\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 3
+			path: app/incident_pdf.php
+
+		-
+			message: '#^Offset ''mime'' on array\{display_name\: string, stored_name\: string, size\: int, sha256\: string, mime\: string, archive_name\?\: string\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: app/incident_pdf.php
+
+		-
+			message: '#^Offset ''mime'' on array\{display_name\: string, stored_name\: string, size\: int, sha256\: string, mime\: string, integrity_state\?\: string, integrity_statement\?\: string, archive_name\?\: string, \.\.\.\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: app/incident_pdf.php
+
+		-
+			message: '#^Offset ''mode'' on array\{0\: int, 1\: int, 2\: int, 3\: int, 4\: int, 5\: int, 6\: int, 7\: int, \.\.\.\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 3
+			path: app/incident_pdf.php
+
+		-
+			message: '#^Offset ''mtime'' on array\{0\: int, 1\: int, 2\: int, 3\: int, 4\: int, 5\: int, 6\: int, 7\: int, \.\.\.\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: app/incident_pdf.php
+
+		-
+			message: '#^Offset ''sha256'' on array\{display_name\: string, stored_name\: string, size\: int, sha256\: string, mime\: string, archive_name\?\: string\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: app/incident_pdf.php
+
+		-
+			message: '#^Offset ''sha256'' on array\{display_name\: string, stored_name\: string, size\: int, sha256\: string, mime\: string, integrity_state\?\: string, integrity_statement\?\: string, archive_name\?\: string, \.\.\.\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: app/incident_pdf.php
+
+		-
+			message: '#^Offset ''size'' on array\{0\: int, 1\: int, 2\: int, 3\: int, 4\: int, 5\: int, 6\: int, 7\: int, \.\.\.\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 4
+			path: app/incident_pdf.php
+
+		-
+			message: '#^Offset ''size'' on array\{display_name\: string, stored_name\: string, size\: int, sha256\: string, mime\: string, archive_name\?\: string\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: app/incident_pdf.php
+
+		-
+			message: '#^Offset ''size'' on array\{display_name\: string, stored_name\: string, size\: int, sha256\: string, mime\: string, integrity_state\?\: string, integrity_statement\?\: string, archive_name\?\: string, \.\.\.\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: app/incident_pdf.php
+
+		-
+			message: '#^Offset ''stored_name'' on array\{display_name\: string, stored_name\: string, size\: int, sha256\: string, mime\: string, archive_name\?\: string\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: app/incident_pdf.php
+
+		-
+			message: '#^Offset ''stored_name'' on array\{display_name\: string, stored_name\: string, size\: int, sha256\: string, mime\: string, integrity_state\?\: string, integrity_statement\?\: string, archive_name\?\: string, \.\.\.\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: app/incident_pdf.php
+
+		-
+			message: '#^Offset 0 on array\{0\: int\<0, max\>, 1\: int\<0, max\>, 2\: int, 3\: string, mime\: string, channels\?\: int, bits\?\: int\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: app/incident_pdf.php
+
+		-
+			message: '#^Offset 1 on array\{0\: int\<0, max\>, 1\: int\<0, max\>, 2\: int, 3\: string, mime\: string, channels\?\: int, bits\?\: int\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: app/incident_pdf.php
+
+		-
+			message: '#^Offset 2 on array\{0\: int\<0, max\>, 1\: int\<0, max\>, 2\: int, 3\: string, mime\: string, channels\?\: int, bits\?\: int\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: app/incident_pdf.php
+
+		-
+			message: '#^Function mysql_fetch_row\(\) never returns false so it can be removed from the return type\.$#'
+			identifier: return.unusedType
+			count: 1
+			path: app/legacy_mysql.php
+
+		-
+			message: '#^Function ereg\(\) never assigns null to &\$matches so it can be removed from the by\-ref type\.$#'
+			identifier: parameterByRef.unusedType
+			count: 1
+			path: app/legacy_php.php
+
+		-
+			message: '#^Function eregi\(\) never assigns null to &\$matches so it can be removed from the by\-ref type\.$#'
+			identifier: parameterByRef.unusedType
+			count: 1
+			path: app/legacy_php.php
+
+		-
+			message: '#^Call to function is_array\(\) with array\<mixed\> will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 1
+			path: app/logbook.php
+
+		-
+			message: '#^Offset ''error_count'' on array\{warning_count\: int\<0, max\>, warnings\: list\<string\>, error_count\: int\<0, max\>, errors\: list\<string\>\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: app/logbook.php
+
+		-
+			message: '#^Offset ''warning_count'' on array\{warning_count\: int\<0, max\>, warnings\: list\<string\>, error_count\: int\<0, max\>, errors\: list\<string\>\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: app/logbook.php
+
+		-
+			message: '#^Result of && is always false\.$#'
+			identifier: booleanAnd.alwaysFalse
+			count: 2
+			path: app/logbook.php
+
+		-
+			message: '#^Strict comparison using \!\=\= between null and null will always evaluate to false\.$#'
+			identifier: notIdentical.alwaysFalse
+			count: 2
+			path: app/logbook.php
+
+		-
+			message: '#^Strict comparison using \=\=\= between null and null will always evaluate to true\.$#'
+			identifier: identical.alwaysTrue
+			count: 1
+			path: app/logbook.php
+
+		-
+			message: '#^Call to function is_int\(\) with int will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 1
+			path: app/message_evidence.php
+
+		-
+			message: '#^Offset ''error_count'' on array\{warning_count\: int\<0, max\>, warnings\: list\<string\>, error_count\: int\<0, max\>, errors\: list\<string\>\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: app/message_evidence.php
+
+		-
+			message: '#^Offset ''warning_count'' on array\{warning_count\: int\<0, max\>, warnings\: list\<string\>, error_count\: int\<0, max\>, errors\: list\<string\>\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: app/message_evidence.php
+
+		-
+			message: '#^Result of && is always false\.$#'
+			identifier: booleanAnd.alwaysFalse
+			count: 1
+			path: app/message_evidence.php
+
+		-
+			message: '#^Offset ''error_count'' on array\{warning_count\: int\<0, max\>, warnings\: list\<string\>, error_count\: int\<0, max\>, errors\: list\<string\>\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: app/message_list.php
+
+		-
+			message: '#^Offset ''warning_count'' on array\{warning_count\: int\<0, max\>, warnings\: list\<string\>, error_count\: int\<0, max\>, errors\: list\<string\>\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: app/message_list.php
+
+		-
+			message: '#^Parameter \#1 \$array \(non\-empty\-list\<non\-empty\-string\>\) of array_values is already a list, call has no effect\.$#'
+			identifier: arrayValues.list
+			count: 1
+			path: app/message_list.php
+
+		-
+			message: '#^Offset ''label'' on array\{value\: string, label\: string, warning\: string\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: app/message_list_ui.php
+
+		-
+			message: '#^Offset ''value'' on array\{value\: string, label\: string, warning\: string\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: app/message_list_ui.php
+
+		-
+			message: '#^Call to function is_array\(\) with array will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 2
+			path: app/message_repository.php
+
+		-
+			message: '#^Call to function is_string\(\) with string will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 1
+			path: app/message_repository.php
+
+		-
+			message: '#^Negated boolean expression is always false\.$#'
+			identifier: booleanNot.alwaysFalse
+			count: 3
+			path: app/message_repository.php
+
+		-
+			message: '#^Offset ''estab_permission…'' on array\{benutzer\: string, kuerzel\: string, funktion\: string, rolle\: string, estab_permission_mode\: ''LOOSE''\|''STRICT'', duty_assignment_id\?\: int, estab_additional_functions\?\: list\<array\{funktion\: string, rolle\: string\}\>, authorization_account_function\?\: string, \.\.\.\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 2
+			path: app/message_repository.php
+
+		-
+			message: '#^Offset ''funktion'' on array\{benutzer\: string, kuerzel\: string, funktion\: string, rolle\: string, estab_permission_mode\: ''LOOSE''\|''STRICT'', duty_assignment_id\?\: int, estab_additional_functions\?\: list\<array\{funktion\: string, rolle\: string\}\>, authorization_account_function\?\: string, \.\.\.\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 2
+			path: app/message_repository.php
+
+		-
+			message: '#^Offset ''rolle'' on array\{benutzer\: string, kuerzel\: string, funktion\: string, rolle\: string, estab_permission_mode\: ''LOOSE''\|''STRICT'', duty_assignment_id\?\: int, estab_additional_functions\?\: list\<array\{funktion\: string, rolle\: string\}\>, authorization_account_function\?\: string, \.\.\.\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 2
+			path: app/message_repository.php
+
+		-
+			message: '#^Offset 1 on array\{string, string\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: app/message_repository.php
+
+		-
+			message: '#^Result of && is always false\.$#'
+			identifier: booleanAnd.alwaysFalse
+			count: 3
+			path: app/message_repository.php
+
+		-
+			message: '#^Result of \|\| is always false\.$#'
+			identifier: booleanOr.alwaysFalse
+			count: 4
+			path: app/message_repository.php
+
+		-
+			message: '#^Call to function is_array\(\) with array\<string, mixed\> will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 1
+			path: app/message_timeline.php
+
+		-
+			message: '#^Comparison operation "\>\=" between int\<0, max\> and 0 is always true\.$#'
+			identifier: greaterOrEqual.alwaysTrue
+			count: 1
+			path: app/message_timeline.php
+
+		-
+			message: '#^Offset ''error_count'' on array\{warning_count\: int\<0, max\>, warnings\: list\<string\>, error_count\: int\<0, max\>, errors\: list\<string\>\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: app/message_timeline.php
+
+		-
+			message: '#^Offset ''previous_event…'' on non\-empty\-array on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: app/message_timeline.php
+
+		-
+			message: '#^Offset ''warning_count'' on array\{warning_count\: int\<0, max\>, warnings\: list\<string\>, error_count\: int\<0, max\>, errors\: list\<string\>\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: app/message_timeline.php
+
+		-
+			message: '#^Variable \$expectedPrevious on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.variable
+			count: 1
+			path: app/message_timeline.php
+
+		-
+			message: '#^Match arm comparison between ''FERNMELDE_NACHWEIS'' and ''FERNMELDE_NACHWEIS'' is always true\.$#'
+			identifier: match.alwaysTrue
+			count: 1
+			path: app/navigation.php
+
+		-
+			message: '#^Offset ''key'' on array\{key\: string, label\: string, short_label\?\: string, path\: string, access\: ''protected''\|''public'', root\?\: bool, hint\?\: string, duty_access\?\: ''FERNMELDE_NACHWEIS''\|''LAGE_DOKUMENTATION''\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: app/navigation.php
+
+		-
+			message: '#^Call to function is_array\(\) with array\<mixed\> will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 1
+			path: app/operational_guard.php
+
+		-
+			message: '#^Call to function is_int\(\) with 10 will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 1
+			path: app/password_policy.php
+
+		-
+			message: '#^Call to function is_string\(\) with non\-empty\-string will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 1
+			path: app/password_policy.php
+
+		-
+			message: '#^Comparison operation "\<" between 10 and 0 is always false\.$#'
+			identifier: smaller.alwaysFalse
+			count: 1
+			path: app/password_policy.php
+
+		-
+			message: '#^Comparison operation "\>" between 10 and 30 is always false\.$#'
+			identifier: greater.alwaysFalse
+			count: 1
+			path: app/password_policy.php
+
+		-
+			message: '#^Result of \|\| is always false\.$#'
+			identifier: booleanOr.alwaysFalse
+			count: 2
+			path: app/password_policy.php
+
+		-
+			message: '#^Call to function is_string\(\) with string will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 1
+			path: app/read_authorization.php
+
+		-
+			message: '#^Call to function is_int\(\) with 10 will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 1
+			path: app/self_registration.php
+
+		-
+			message: '#^Call to function is_string\(\) with non\-empty\-string will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 1
+			path: app/self_registration.php
+
+		-
+			message: '#^Comparison operation "\<" between 10 and 0 is always false\.$#'
+			identifier: smaller.alwaysFalse
+			count: 1
+			path: app/self_registration.php
+
+		-
+			message: '#^Comparison operation "\>" between 10 and 30 is always false\.$#'
+			identifier: greater.alwaysFalse
+			count: 1
+			path: app/self_registration.php
+
+		-
+			message: '#^Offset ''error_count'' on array\{warning_count\: int\<0, max\>, warnings\: list\<string\>, error_count\: int\<0, max\>, errors\: list\<string\>\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: app/self_registration.php
+
+		-
+			message: '#^Offset ''warning_count'' on array\{warning_count\: int\<0, max\>, warnings\: list\<string\>, error_count\: int\<0, max\>, errors\: list\<string\>\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: app/self_registration.php
+
+		-
+			message: '#^Result of \|\| is always false\.$#'
+			identifier: booleanOr.alwaysFalse
+			count: 2
+			path: app/self_registration.php
+
+		-
+			message: '#^Call to function is_array\(\) with list\<array\> will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 1
+			path: app/shift_access.php
+
+		-
+			message: '#^Parameter \#1 \$array \(list\<array\>\) of array_values is already a list, call has no effect\.$#'
+			identifier: arrayValues.list
+			count: 1
+			path: app/shift_access.php
+
+		-
+			message: '#^Offset ''estab_permission…'' on non\-empty\-array on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: app/sidebar.php
+
+		-
+			message: '#^Call to function is_array\(\) with array\<string, mixed\> will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 1
+			path: app/user_admin.php
+
+		-
+			message: '#^Call to function is_array\(\) with list\<array\> will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 2
+			path: app/user_admin.php
+
+		-
+			message: '#^Call to function is_string\(\) with non\-empty\-string will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 2
+			path: app/user_admin.php
+
+		-
+			message: '#^Call to function is_string\(\) with string will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 2
+			path: app/user_admin.php
+
+		-
+			message: '#^Parameter \#1 \$array \(list\<array\>\) of array_values is already a list, call has no effect\.$#'
+			identifier: arrayValues.list
+			count: 2
+			path: app/user_admin.php
+
+		-
+			message: '#^Call to function is_array\(\) with array\<mixed\> will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 1
+			path: app/workflow.php
+
+		-
+			message: '#^Strict comparison using \!\=\= between ''POST'' and ''POST'' will always evaluate to false\.$#'
+			identifier: notIdentical.alwaysFalse
+			count: 1
+			path: app/workflow.php
+
+		-
+			message: '#^Instanceof between mysqli and mysqli will always evaluate to true\.$#'
+			identifier: instanceof.alwaysTrue
+			count: 1
+			path: fmtbb/tbb.php
+
+		-
+			message: '#^Loose comparison using \=\= between false and true will always evaluate to false\.$#'
+			identifier: equal.alwaysFalse
+			count: 4
+			path: fmtbb/tbb.php
+
+		-
+			message: '#^Variable \$conf_4f_db might not be defined\.$#'
+			identifier: variable.undefined
+			count: 4
+			path: fmtbb/tbb.php
+
+		-
+			message: '#^Variable \$conf_tbl might not be defined\.$#'
+			identifier: variable.undefined
+			count: 2
+			path: fmtbb/tbb.php
+
+		-
+			message: '#^Variable \$tak_monate might not be defined\.$#'
+			identifier: variable.undefined
+			count: 1
+			path: fmtbb/tbb.php
+
+		-
+			message: '#^If condition is always true\.$#'
+			identifier: if.alwaysTrue
+			count: 1
+			path: index.php
+
+		-
+			message: '#^Variable \$conf_menue might not be defined\.$#'
+			identifier: variable.undefined
+			count: 6
+			path: index.php
+
+		-
+			message: '#^Variable \$menue might not be defined\.$#'
+			identifier: variable.undefined
+			count: 1
+			path: index.php
+
+		-
+			message: '#^Variable \$zusatz_menue might not be defined\.$#'
+			identifier: variable.undefined
+			count: 1
+			path: index.php
+
+		-
+			message: '#^Variable \$Infotext might not be defined\.$#'
+			identifier: variable.undefined
+			count: 2
+			path: language/german/helptext.php
+
+		-
+			message: '#^Instanceof between mysqli and mysqli will always evaluate to true\.$#'
+			identifier: instanceof.alwaysTrue
+			count: 1
+			path: stabetb/etb.php
+
+		-
+			message: '#^Loose comparison using \=\= between false and true will always evaluate to false\.$#'
+			identifier: equal.alwaysFalse
+			count: 4
+			path: stabetb/etb.php
+
+		-
+			message: '#^Strict comparison using \!\=\= between mixed and null will always evaluate to true\.$#'
+			identifier: notIdentical.alwaysTrue
+			count: 1
+			path: stabetb/etb.php
+
+		-
+			message: '#^Variable \$conf_4f_db might not be defined\.$#'
+			identifier: variable.undefined
+			count: 7
+			path: stabetb/etb.php
+
+		-
+			message: '#^Variable \$conf_4f_tbl might not be defined\.$#'
+			identifier: variable.undefined
+			count: 1
+			path: stabetb/etb.php
+
+		-
+			message: '#^Variable \$conf_tbl might not be defined\.$#'
+			identifier: variable.undefined
+			count: 4
+			path: stabetb/etb.php
+
+		-
+			message: '#^Variable \$tak_monate might not be defined\.$#'
+			identifier: variable.undefined
+			count: 1
+			path: stabetb/etb.php

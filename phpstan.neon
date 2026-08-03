@@ -1,8 +1,39 @@
+includes:
+    # Exact path/message/count baseline for the imported procedural runtime.
+    # reportUnmatchedIgnoredErrors below makes stale entries fail as well, so
+    # this is an incremental gate rather than a blanket identifier exclusion.
+    - phpstan-baseline.neon
+
 parameters:
     level: 5
 
     paths:
-        - .
+        # Keep production analysis isolated from test doubles. Several tests
+        # intentionally declare minimal replacements for PHP internals such as
+        # mysqli; loading those declarations into the application analysis
+        # makes real runtime calls appear undefined.
+        - index.php
+        - health.php
+        - menue.inc.php
+        - 4fach
+        - 4fadm
+        - 4fbak/backup.php
+        - 4fbak/backup_pdf.php
+        - 4fcfg
+        - 4fueltg/ue_ltg.php
+        - app
+        - fmtbb/tbb.php
+        - handbuch/index.php
+        - language/german/helptext.php
+        - language/german/hilfetext.php
+        - stabinfo
+        - stabetb/etb.php
+
+    # FPDF 1.6 is a bundled third-party compatibility dependency. Its symbols
+    # are required to analyse the maintained PDF integration, but the upstream
+    # library itself is not part of the project's static-analysis baseline.
+    scanFiles:
+        - 4fbak/fpdf.php
 
     excludePaths:
         analyse:
@@ -11,7 +42,12 @@ parameters:
             - cache/*
             - var/cache/*
             - storage/*
-            - tests/fixtures/*
+
+    parallel:
+        # Bound peak memory on both amd64 and arm64 CI runners. Large message
+        # and PDF modules otherwise allow PHPStan to spawn more workers than a
+        # small runner can sustain.
+        maximumNumberOfProcesses: 2
 
     tmpDir: var/phpstan
 
