@@ -393,9 +393,8 @@ echo "Ist es die letzte Seite  ="; if ($is_last_page){echo "Ja";} else {echo "Ne
                       $_SESSION['ueb_flt_start'] = 0; 
                     } else {
                        // Schon auf der letzten Seite?
-                      if ($is_last_page){
-                      } else {
- 
+                      if (!$is_last_page){
+
                         $_SESSION["ueb_flt_start"] += $_SESSION['ueb_flt_anzahl']; // eine Seite weiter
                         if ($_SESSION["ueb_flt_start"] >= $anzahl){
                           $_SESSION["ueb_flt_start"] = $anzahl-1;}
