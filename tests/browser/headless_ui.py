@@ -2161,12 +2161,12 @@ class BrowserAcceptance:
         free_state = self.cdp.evaluate(
             _frame_expression(
                 "mainframe",
-                f"""
+                """
                 const input = doc.querySelector("#f_05_gegenstelle");
-                return {{
+                return {
                     value: input.value,
                     expanded: input.getAttribute("aria-expanded")
-                }};
+                };
                 """,
             )
         )
@@ -7162,8 +7162,8 @@ class BrowserAcceptance:
         location: str,
     ) -> None:
         state = self.cdp.evaluate(
-            f"""
-            (async () => {{
+            """
+            (async () => {
                 const frame = document.querySelector(
                     'iframe[name="mainframe"]'
                 );
@@ -7176,9 +7176,9 @@ class BrowserAcceptance:
                     || !frame.contentWindow
                     || !sidebar
                     || !sidebar.contentDocument
-                ) {{
+                ) {
                     return null;
-                }}
+                }
                 const doc = frame.contentDocument;
                 const shell = doc.querySelector(
                     '[data-estab-bos-document-shell]'
@@ -7201,13 +7201,13 @@ class BrowserAcceptance:
                     || !description
                     || !content
                     || !selected
-                ) {{
+                ) {
                     return null;
-                }}
+                }
 
                 const response = await fetch(
                     frame.contentWindow.location.href,
-                    {{cache: 'no-store'}}
+                    {cache: 'no-store'}
                 );
                 if (!response.ok) return null;
                 const source = await response.text();
@@ -7235,11 +7235,11 @@ class BrowserAcceptance:
                 );
                 const selectedTitle = selected.querySelector('strong');
                 const selectedDescription = selected.querySelector('span');
-                const contrastRatio = (foreground, background) => {{
-                    const channels = colour => {{
+                const contrastRatio = (foreground, background) => {
+                    const channels = colour => {
                         const values = colour.match(/[\\d.]+/g);
                         if (!values || values.length < 3) return null;
-                        return values.slice(0, 3).map(value => {{
+                        return values.slice(0, 3).map(value => {
                             const channel = Number(value) / 255;
                             return channel <= 0.04045
                                 ? channel / 12.92
@@ -7247,8 +7247,8 @@ class BrowserAcceptance:
                                     (channel + 0.055) / 1.055,
                                     2.4
                                 );
-                        }});
-                    }};
+                        });
+                    };
                     const first = channels(foreground);
                     const second = channels(background);
                     if (!first || !second) return 0;
@@ -7265,10 +7265,10 @@ class BrowserAcceptance:
                         luminance(second)
                     );
                     return (lighter + 0.05) / (darker + 0.05);
-                }};
+                };
                 const semanticColoursReadable = Array.from(
                     content.querySelectorAll('font[color="#ffffff" i]')
-                ).every(label => {{
+                ).every(label => {
                     const labelStyle =
                         frame.contentWindow.getComputedStyle(label);
                     const cell = label.closest('td');
@@ -7286,8 +7286,8 @@ class BrowserAcceptance:
                         labelStyle.color,
                         background
                     ) >= 4.5;
-                }});
-                const scrollRegionsReady = wrappers.every(wrapper => {{
+                });
+                const scrollRegionsReady = wrappers.every(wrapper => {
                     const scrollable =
                         wrapper.scrollWidth > wrapper.clientWidth + 1;
                     return scrollable
@@ -7295,8 +7295,8 @@ class BrowserAcceptance:
                             && wrapper.tabIndex === 0
                         : !wrapper.hasAttribute('role')
                             && !wrapper.hasAttribute('tabindex');
-                }});
-                return {{
+                });
+                return {
                     shellCount: doc.querySelectorAll(
                         '[data-estab-bos-document-shell]'
                     ).length,
@@ -7337,8 +7337,8 @@ class BrowserAcceptance:
                         ),
                     semanticColoursReadable,
                     scrollRegionsReady
-                }};
-            }})()
+                };
+            })()
             """
         )
         self._truth(
