@@ -2061,7 +2061,7 @@ HTML;
                 $this->formbgcolor = $cfg['vbg']['default'];
         }
         $this->feldbgcolor();
-        $this->get_access_by_task($this->task);
+        $this->get_access_by_task();
 
         $officialStylesheet = file_get_contents(
             __DIR__ . '/../estab-ui.css'

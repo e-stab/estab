@@ -1125,7 +1125,7 @@ var_dump ($this->formdata); echo "<br>";
       default  : $this->formbgcolor =  $cfg ["vbg"]  ["default"] ;
     }
     $this->feldbgcolor ();
-    $this->get_access_by_task ($this->task);
+    $this->get_access_by_task ();
 
     pre_html (
       "N",

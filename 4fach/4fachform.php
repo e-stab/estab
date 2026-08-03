@@ -1417,7 +1417,7 @@ HTML;
         default: $this->formbgcolor =  $cfg ["vbg"]  ["default"] ;
     }
     $this->feldbgcolor ();
-    $this->get_access_by_task ($this->task);
+    $this->get_access_by_task ();
 
     if (debug){
       echo "<big><big>TASK TASK TASK===".$this->task."</big></big><br><b>";
