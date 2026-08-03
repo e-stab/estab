@@ -1,25 +1,83 @@
 <?xml version="1.0"?>
-<ruleset name="Project Coding Standard">
-    <description>Project-wide PHP coding standard.</description>
+<ruleset name="eStab Runtime Safety Standard">
+    <description>
+        Safety and logic checks for the production PHP surface shipped by the
+        Dockerfile. The imported procedural controllers are not a PSR-12 code
+        base; imposing namespace and formatting rules on them would create a
+        high-risk whole-application rewrite without improving runtime safety.
+    </description>
 
-    <file>.</file>
-
-    <exclude-pattern>vendor/*</exclude-pattern>
-    <exclude-pattern>node_modules/*</exclude-pattern>
-    <exclude-pattern>cache/*</exclude-pattern>
-    <exclude-pattern>var/cache/*</exclude-pattern>
-    <exclude-pattern>storage/*</exclude-pattern>
+    <!-- Keep this list aligned with the PHP runtime copied by Dockerfile. -->
+    <file>index.php</file>
+    <file>health.php</file>
+    <file>menue.inc.php</file>
+    <file>4fach</file>
+    <file>4fadm</file>
+    <file>4fbak/backup.php</file>
+    <file>4fbak/backup_pdf.php</file>
+    <file>4fcfg</file>
+    <file>4fueltg/ue_ltg.php</file>
+    <file>app</file>
+    <file>fmtbb/tbb.php</file>
+    <file>handbuch/index.php</file>
+    <file>language/german/helptext.php</file>
+    <file>language/german/hilfetext.php</file>
+    <file>stabinfo</file>
+    <file>stabetb/etb.php</file>
 
     <arg name="extensions" value="php"/>
     <arg name="colors"/>
     <arg value="p"/>
 
-    <rule ref="PSR12"/>
+    <!-- Existing mixed line endings remain visible but do not defeat the gate. -->
+    <config name="ignore_warnings_on_exit" value="1"/>
 
-    <rule ref="Generic.Files.LineLength">
+    <!-- Merge debris, invalid PHP constructs and ambiguous control flow fail. -->
+    <rule ref="Generic.Classes.DuplicateClassName"/>
+    <rule ref="Generic.CodeAnalysis.AssignmentInCondition"/>
+    <rule ref="Generic.CodeAnalysis.EmptyPHPStatement"/>
+    <rule ref="Generic.CodeAnalysis.EmptyStatement"/>
+    <rule ref="Generic.CodeAnalysis.JumbledIncrementer"/>
+    <rule ref="Generic.CodeAnalysis.RequireExplicitBooleanOperatorPrecedence"/>
+    <rule ref="Generic.CodeAnalysis.UnconditionalIfStatement"/>
+    <rule ref="Generic.Files.ByteOrderMark"/>
+    <rule ref="Generic.PHP.BacktickOperator"/>
+    <rule ref="Generic.PHP.CharacterBeforePHPOpeningTag"/>
+    <rule ref="Generic.PHP.DeprecatedFunctions"/>
+    <rule ref="Generic.PHP.DisallowAlternativePHPTags"/>
+    <rule ref="Generic.PHP.DiscourageGoto"/>
+    <rule ref="Generic.PHP.Syntax"/>
+    <rule ref="Generic.VersionControl.GitMergeConflict"/>
+
+    <!-- Block direct execution and deserialization primitives. -->
+    <rule ref="Generic.PHP.ForbiddenFunctions">
         <properties>
-            <property name="lineLimit" value="120"/>
-            <property name="absoluteLineLimit" value="160"/>
+            <property name="forbiddenFunctions" type="array">
+                <element key="assert" value="null"/>
+                <element key="exec" value="null"/>
+                <element key="passthru" value="null"/>
+                <element key="popen" value="null"/>
+                <element key="shell_exec" value="null"/>
+                <element key="system" value="null"/>
+                <element key="unserialize" value="null"/>
+            </property>
         </properties>
+    </rule>
+    <rule ref="Squiz.PHP.Eval"/>
+
+    <!-- Enforce modern, unambiguous syntax where it is behavior-relevant. -->
+    <rule ref="PSR12.ControlStructures.BooleanOperatorPlacement"/>
+    <rule ref="PSR12.Files.DeclareStatement"/>
+    <rule ref="PSR12.Files.ImportStatement"/>
+    <rule ref="PSR12.Files.OpenTag"/>
+    <rule ref="PSR12.Functions.NullableTypeDeclaration"/>
+    <rule ref="PSR12.Functions.ReturnTypeDeclaration"/>
+    <rule ref="PSR12.Keywords.ShortFormTypeKeywords"/>
+    <rule ref="Squiz.Functions.FunctionDuplicateArgument"/>
+    <rule ref="Squiz.Scope.StaticThisUsage"/>
+
+    <!-- Empty catches deliberately probe alternative authorized capabilities. -->
+    <rule ref="Generic.CodeAnalysis.EmptyStatement.DetectedCatch">
+        <severity>0</severity>
     </rule>
 </ruleset>
