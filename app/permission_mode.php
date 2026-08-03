@@ -14,7 +14,11 @@ const ESTAB_PERMISSION_MODE_STRICT = 'STRICT';
 const ESTAB_PERMISSION_MODE_LOOSE = 'LOOSE';
 const ESTAB_PERMISSION_CONTEXT_KEY = 'estab.permission_mode.context';
 
-/** Parse one canonical database value, optionally defaulting old callers. */
+/**
+ * Parse one canonical database value, optionally defaulting old callers.
+ *
+ * @return 'STRICT'|'LOOSE'
+ */
 function estab_permission_mode(mixed $value, bool $defaultStrict = false): string
 {
     if (($value === null || $value === '') && $defaultStrict) {
