@@ -2,7 +2,7 @@
 
 set -eu
 
-repo_root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
+repo_root=$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd)
 dockerfile=$repo_root/Dockerfile
 verifier=$repo_root/docker/app/verify-runtime-surface.sh
 admin_initializer=$repo_root/docker/app/init-admin-auth.sh

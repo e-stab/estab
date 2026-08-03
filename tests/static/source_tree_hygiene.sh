@@ -2,7 +2,7 @@
 
 set -eu
 
-repo_root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd -P)
+repo_root=$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd -P)
 verifier=$repo_root/docker/app/verify-runtime-surface.sh
 
 git -C "$repo_root" rev-parse --is-inside-work-tree >/dev/null

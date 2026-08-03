@@ -2,7 +2,7 @@
 
 set -eu
 
-repo_root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
+repo_root=$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd)
 janitor=$repo_root/docker/app/cleanup-pdf-render-tmp.sh
 fixture=$(mktemp -d "${TMPDIR:-/tmp}/estab-pdf-cleanup-test.XXXXXX")
 trap 'rm -rf -- "$fixture"' EXIT HUP INT TERM

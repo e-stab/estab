@@ -9,7 +9,7 @@ set -eu
 : "${ESTAB_MIGRATIONS_DIR:=/opt/estab/migrations}"
 export ESTAB_SCHEMA_VERIFY_FILE=
 
-script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+script_dir=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
 fixture="$script_dir/../fixtures/legacy-runtime-schema.sql"
 standard_matrix_fixture="$script_dir/../fixtures/recipient-matrix-standard.txt"
 test_database="estab_migration_test_$$"

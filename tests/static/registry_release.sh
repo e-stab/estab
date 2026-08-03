@@ -2,7 +2,7 @@
 
 set -eu
 
-repo_root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd -P)
+repo_root=$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd -P)
 verifier=$repo_root/deploy/registry/verify-release.sh
 deployer=$repo_root/deploy/registry/deploy.sh
 offline_helper=$repo_root/deploy/registry/offline-images.sh
@@ -1246,7 +1246,7 @@ run_upgrade_success()
     ' "$upgrade_state/events")
     [ "$(printf '%s\n' "$snapshot_environment" |
         LC_ALL=C awk 'NF { count++ } END { print count + 0 }')" -eq 1 ]
-    xdg_state_canonical=$(CDPATH= cd -- "$XDG_STATE_HOME" && pwd -P)
+    xdg_state_canonical=$(CDPATH='' cd -- "$XDG_STATE_HOME" && pwd -P)
     case "$snapshot_environment" in
         "$xdg_state_canonical"/estab-deploy/estab/snapshots/snapshot-*/.env) ;;
         *)
@@ -1437,7 +1437,7 @@ sed \
     -e 's#ESTAB_APP_DATA_SOURCE=estab_data#ESTAB_APP_DATA_SOURCE=./data/4fdata#' \
     -e 's#ESTAB_EXPORT_DATA_SOURCE=estab_export#ESTAB_EXPORT_DATA_SOURCE=./data/export#' \
     "$good/.env" >"$upgrade_bind_fixture/.env"
-upgrade_bind_root=$(CDPATH= cd -- "$upgrade_bind_fixture/data" && pwd -P)
+upgrade_bind_root=$(CDPATH='' cd -- "$upgrade_bind_fixture/data" && pwd -P)
 
 # Docker Desktop reports both private snapshot files and productive host binds
 # through either of these two VM aliases. Both are accepted only for Docker

@@ -183,13 +183,13 @@ if [ ! -d "$backup_request_without_slash" ] ||
     [ -L "$backup_request_without_slash" ]; then
     die "backup directory is missing, unreadable, or a symbolic link: $requested_backup"
 fi
-backup_dir=$(CDPATH= cd -- "$backup_request_without_slash" && pwd -P) ||
+backup_dir=$(CDPATH='' cd -- "$backup_request_without_slash" && pwd -P) ||
     die "cannot resolve backup directory: $requested_backup"
 [ "$backup_dir" != / ] ||
     die "refusing the filesystem root as backup directory"
 requested_backup_dir=$backup_dir
 
-script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)
+script_dir=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd -P)
 backup_verifier=$script_dir/verify-backup.sh
 [ -f "$backup_verifier" ] && [ ! -L "$backup_verifier" ] &&
     [ -r "$backup_verifier" ] ||
@@ -1366,7 +1366,7 @@ prepare_snapshot_parent()
         die "restore snapshot parent must be an existing writable, non-symlink directory: $requested_snapshot_parent"
     fi
     snapshot_parent=$(
-        CDPATH= cd -- "$requested_snapshot_parent" && pwd -P
+        CDPATH='' cd -- "$requested_snapshot_parent" && pwd -P
     ) || die "cannot resolve restore snapshot parent: $requested_snapshot_parent"
     [ "$snapshot_parent" != / ] ||
         die "filesystem root is forbidden as restore snapshot parent"
@@ -1481,7 +1481,7 @@ remove_restore_snapshot()
     if [ ! -d "$snapshot_dir" ] || [ -L "$snapshot_dir" ]; then
         return 1
     fi
-    snapshot_canonical=$(CDPATH= cd -- "$snapshot_dir" && pwd -P) ||
+    snapshot_canonical=$(CDPATH='' cd -- "$snapshot_dir" && pwd -P) ||
         return 1
     case "$snapshot_canonical" in
         "$snapshot_parent"/.estab-restore-snapshot.*) ;;

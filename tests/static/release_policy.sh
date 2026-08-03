@@ -2,7 +2,7 @@
 
 set -eu
 
-repo_root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd -P)
+repo_root=$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd -P)
 policy_verifier=$repo_root/tools/verify-github-release-policy.sh
 fixture=$(mktemp -d "${TMPDIR:-/tmp}/estab-release-policy.XXXXXX")
 trap 'rm -rf -- "$fixture"' EXIT HUP INT TERM

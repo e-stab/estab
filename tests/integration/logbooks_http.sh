@@ -3,7 +3,7 @@ set -eu
 
 base_url=${ESTAB_TEST_BASE_URL:-http://127.0.0.1:8080}
 base_url=${base_url%/}
-repo_root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
+repo_root=$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd)
 s2_name=${ESTAB_TEST_ETB_NAME:-Logbook Integration S2}
 s2_code=${ESTAB_TEST_ETB_CODE:-e2s200}
 s2_password=${ESTAB_TEST_ETB_PASSWORD:-Logbook-Test-S2-20260723}

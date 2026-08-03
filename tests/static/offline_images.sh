@@ -2,7 +2,7 @@
 
 set -eu
 
-repo_root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd -P)
+repo_root=$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd -P)
 offline_helper=$repo_root/deploy/registry/offline-images.sh
 
 [ -x "$offline_helper" ] || {
@@ -11,7 +11,7 @@ offline_helper=$repo_root/deploy/registry/offline-images.sh
 }
 
 temporary_root=$(mktemp -d "${TMPDIR:-/tmp}/estab-offline-test.XXXXXX")
-temporary_root=$(CDPATH= cd -- "$temporary_root" && pwd -P)
+temporary_root=$(CDPATH='' cd -- "$temporary_root" && pwd -P)
 cleanup()
 {
     rm -rf -- "$temporary_root"

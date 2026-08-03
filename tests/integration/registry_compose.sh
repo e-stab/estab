@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 
-repo_root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
+repo_root=$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd)
 cd "$repo_root"
 
 container_cli=${ESTAB_CONTAINER_CLI:-docker}
@@ -75,7 +75,7 @@ if [ ! -d "$temporary_parent" ] || [ ! -w "$temporary_parent" ]; then
     echo "Registry compose integration: temporary parent is not writable" >&2
     exit 1
 fi
-temporary_parent=$(CDPATH= cd -- "$temporary_parent" && pwd -P)
+temporary_parent=$(CDPATH='' cd -- "$temporary_parent" && pwd -P)
 if [ "$temporary_parent" = / ]; then
     echo "Registry compose integration: refusing the filesystem root as temporary parent" >&2
     exit 1
@@ -85,7 +85,7 @@ fi
 
 bind_root=$(mktemp -d "${temporary_parent%/}/.estab-registry-bind.XXXXXX")
 chmod 0700 "$bind_root"
-bind_root=$(CDPATH= cd -- "$bind_root" && pwd -P)
+bind_root=$(CDPATH='' cd -- "$bind_root" && pwd -P)
 case "$bind_root" in
     "$temporary_parent"/.estab-registry-bind.*) ;;
     *)
@@ -209,7 +209,7 @@ validate_bind_root()
         echo "Registry compose integration: bind root is not a real directory" >&2
         return 1
     fi
-    canonical_bind_root=$(CDPATH= cd -- "$bind_root" && pwd -P) || return 1
+    canonical_bind_root=$(CDPATH='' cd -- "$bind_root" && pwd -P) || return 1
     case "$canonical_bind_root" in
         "$temporary_parent"/.estab-registry-bind.*) ;;
         *)

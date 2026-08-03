@@ -27,7 +27,7 @@ case "$action:$#" in
     *) usage ;;
 esac
 
-script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)
+script_dir=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd -P)
 release_verifier=$script_dir/verify-release.sh
 release_file=$script_dir/RELEASE
 compose_file=$script_dir/compose.yaml
@@ -215,7 +215,7 @@ absolute_target()
     esac
     [ -d "$target_parent" ] && [ ! -L "$target_parent" ] ||
         die "$target_role parent must be an existing real directory"
-    target_parent=$(CDPATH= cd -- "$target_parent" && pwd -P) ||
+    target_parent=$(CDPATH='' cd -- "$target_parent" && pwd -P) ||
         die "cannot resolve $target_role parent"
     [ "$target_parent" != / ] ||
         die "$target_role parent must not be the filesystem root"
@@ -397,7 +397,7 @@ verify_archive_set()
     verified_directory=$1
     [ -d "$verified_directory" ] && [ ! -L "$verified_directory" ] ||
         die "archive directory must be a real directory"
-    verified_directory=$(CDPATH= cd -- "$verified_directory" && pwd -P) ||
+    verified_directory=$(CDPATH='' cd -- "$verified_directory" && pwd -P) ||
         die "cannot resolve archive directory"
     archive_entry_count=0
     for archive_entry in \

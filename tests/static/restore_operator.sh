@@ -2,7 +2,7 @@
 
 set -eu
 
-repo_root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
+repo_root=$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd)
 restore_operator=$repo_root/deploy/registry/restore.sh
 backup_verifier=$repo_root/deploy/registry/verify-backup.sh
 work_dir=$(mktemp -d "${TMPDIR:-/tmp}/estab-restore-operator.XXXXXX")
@@ -1226,13 +1226,13 @@ run_named_to_bind_restore()
 
 if FAKE_PROJECT=$portable_project \
     FAKE_DB_MOUNT_TYPE=bind \
-    FAKE_DB_VOLUME_NAME= \
+    FAKE_DB_VOLUME_NAME='' \
     FAKE_DB_SOURCE=$portable_bind_db_source \
     FAKE_APP_MOUNT_TYPE=bind \
-    FAKE_APP_VOLUME_NAME= \
+    FAKE_APP_VOLUME_NAME='' \
     FAKE_APP_SOURCE=$portable_app_source \
     FAKE_EXPORT_MOUNT_TYPE=bind \
-    FAKE_EXPORT_VOLUME_NAME= \
+    FAKE_EXPORT_VOLUME_NAME='' \
     FAKE_EXPORT_SOURCE=$portable_export_source \
     run_named_to_bind_restore \
         >"$work_dir/missing-type.stdout" \
@@ -1245,13 +1245,13 @@ grep -Fq 'do not match the verified backup metadata or explicit role remaps' \
 
 if FAKE_PROJECT=$portable_project \
     FAKE_DB_MOUNT_TYPE=bind \
-    FAKE_DB_VOLUME_NAME= \
+    FAKE_DB_VOLUME_NAME='' \
     FAKE_DB_SOURCE=$portable_bind_db_source \
     FAKE_APP_MOUNT_TYPE=bind \
-    FAKE_APP_VOLUME_NAME= \
+    FAKE_APP_VOLUME_NAME='' \
     FAKE_APP_SOURCE=$portable_app_source \
     FAKE_EXPORT_MOUNT_TYPE=bind \
-    FAKE_EXPORT_VOLUME_NAME= \
+    FAKE_EXPORT_VOLUME_NAME='' \
     FAKE_EXPORT_SOURCE=$portable_export_source \
     run_named_to_bind_restore \
         --remap-mount-type database:bind=volume \
@@ -1267,13 +1267,13 @@ grep -Fq 'do not match the verified backup metadata or explicit role remaps' \
 
 if FAKE_PROJECT=$portable_project \
     FAKE_DB_MOUNT_TYPE=bind \
-    FAKE_DB_VOLUME_NAME= \
+    FAKE_DB_VOLUME_NAME='' \
     FAKE_DB_SOURCE=$portable_bind_db_source \
     FAKE_APP_MOUNT_TYPE=bind \
-    FAKE_APP_VOLUME_NAME= \
+    FAKE_APP_VOLUME_NAME='' \
     FAKE_APP_SOURCE=$portable_app_source \
     FAKE_EXPORT_MOUNT_TYPE=bind \
-    FAKE_EXPORT_VOLUME_NAME= \
+    FAKE_EXPORT_VOLUME_NAME='' \
     FAKE_EXPORT_SOURCE=$portable_export_source \
     run_named_to_bind_restore \
         --remap-mount-type database:volume=bind \
@@ -1674,13 +1674,13 @@ foreign_operations_before=$(operation_count)
 foreign_database_before=$(database_operation_count)
 if FAKE_PROJECT=$portable_project \
     FAKE_DB_MOUNT_TYPE=bind \
-    FAKE_DB_VOLUME_NAME= \
+    FAKE_DB_VOLUME_NAME='' \
     FAKE_DB_SOURCE=$portable_bind_db_source \
     FAKE_APP_MOUNT_TYPE=bind \
-    FAKE_APP_VOLUME_NAME= \
+    FAKE_APP_VOLUME_NAME='' \
     FAKE_APP_SOURCE=$portable_app_source \
     FAKE_EXPORT_MOUNT_TYPE=bind \
-    FAKE_EXPORT_VOLUME_NAME= \
+    FAKE_EXPORT_VOLUME_NAME='' \
     FAKE_EXPORT_SOURCE=$portable_export_source \
     FAKE_APP_IMAGE_ID=$portable_app_id \
     FAKE_MIGRATE_IMAGE_ID=$portable_migrate_id \
@@ -1724,13 +1724,13 @@ same_project_foreign_operations_before=$(operation_count)
 same_project_foreign_database_before=$(database_operation_count)
 if FAKE_PROJECT=restoretest \
     FAKE_DB_MOUNT_TYPE=bind \
-    FAKE_DB_VOLUME_NAME= \
+    FAKE_DB_VOLUME_NAME='' \
     FAKE_DB_SOURCE=$portable_bind_db_source \
     FAKE_APP_MOUNT_TYPE=bind \
-    FAKE_APP_VOLUME_NAME= \
+    FAKE_APP_VOLUME_NAME='' \
     FAKE_APP_SOURCE=$portable_app_source \
     FAKE_EXPORT_MOUNT_TYPE=bind \
-    FAKE_EXPORT_VOLUME_NAME= \
+    FAKE_EXPORT_VOLUME_NAME='' \
     FAKE_EXPORT_SOURCE=$portable_export_source \
     FAKE_FOREIGN_MOUNT_SOURCE=/srv/restoretarget/data \
     run_restore \
@@ -1806,7 +1806,7 @@ grep -Fq 'unsafe or uninspectable productive mount source' \
 [ "$(database_operation_count)" = "$malformed_foreign_database_before" ]
 [ ! -e "$state_dir/maintenance-lock-id" ]
 
-operator_source=$(CDPATH= cd -- "$backup_dir" && pwd -P)
+operator_source=$(CDPATH='' cd -- "$backup_dir" && pwd -P)
 if FAKE_OPERATOR_SOURCE="$operator_source" \
     run_restore --confirm-project restoretest "$backup_dir" \
     >"$work_dir/operator-overlap.stdout" \
@@ -1858,7 +1858,7 @@ grep -Fq 'backup directory overlaps a productive storage source' \
 docker_snapshot_parent=$work_dir/docker-snapshot-parent
 mkdir -p "$docker_snapshot_parent"
 chmod 0700 "$docker_snapshot_parent"
-docker_snapshot_parent=$(CDPATH= cd -- "$docker_snapshot_parent" && pwd -P)
+docker_snapshot_parent=$(CDPATH='' cd -- "$docker_snapshot_parent" && pwd -P)
 if PATH=$darwin_bin:$PATH \
     RESTORE_CONTAINER_CLI=docker \
     ESTAB_RESTORE_SNAPSHOT_PARENT=$docker_snapshot_parent \
@@ -2109,13 +2109,13 @@ run_restore --confirm-project restoretest "$backup_v2" >/dev/null
 
 FAKE_PROJECT=$portable_project \
 FAKE_DB_MOUNT_TYPE=bind \
-FAKE_DB_VOLUME_NAME= \
+FAKE_DB_VOLUME_NAME='' \
 FAKE_DB_SOURCE=$portable_bind_db_source \
 FAKE_APP_MOUNT_TYPE=bind \
-FAKE_APP_VOLUME_NAME= \
+FAKE_APP_VOLUME_NAME='' \
 FAKE_APP_SOURCE=$portable_app_source \
 FAKE_EXPORT_MOUNT_TYPE=bind \
-FAKE_EXPORT_VOLUME_NAME= \
+FAKE_EXPORT_VOLUME_NAME='' \
 FAKE_EXPORT_SOURCE=$portable_export_source \
 FAKE_APP_IMAGE_ID=$portable_app_id \
 FAKE_MIGRATE_IMAGE_ID=$portable_migrate_id \
@@ -2141,13 +2141,13 @@ unset \
 
 FAKE_PROJECT=$portable_project \
 FAKE_DB_MOUNT_TYPE=bind \
-FAKE_DB_VOLUME_NAME= \
+FAKE_DB_VOLUME_NAME='' \
 FAKE_DB_SOURCE=$portable_bind_db_source \
 FAKE_APP_MOUNT_TYPE=bind \
-FAKE_APP_VOLUME_NAME= \
+FAKE_APP_VOLUME_NAME='' \
 FAKE_APP_SOURCE=$portable_app_source \
 FAKE_EXPORT_MOUNT_TYPE=bind \
-FAKE_EXPORT_VOLUME_NAME= \
+FAKE_EXPORT_VOLUME_NAME='' \
 FAKE_EXPORT_SOURCE=$portable_export_source \
 FAKE_APP_IMAGE_ID=$portable_app_id \
 FAKE_MIGRATE_IMAGE_ID=$portable_migrate_id \

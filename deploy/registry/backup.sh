@@ -44,7 +44,7 @@ esac
 
 [ -d "$backup_parent" ] ||
     die "backup parent directory does not exist: $backup_parent"
-canonical_parent=$(CDPATH= cd -- "$backup_parent" && pwd -P) ||
+canonical_parent=$(CDPATH='' cd -- "$backup_parent" && pwd -P) ||
     die "cannot resolve backup parent directory: $backup_parent"
 backup_target="${canonical_parent%/}/$backup_name"
 
@@ -227,7 +227,7 @@ require_private_directory_unchanged()
     verify_no_extended_acl "$private_path" "$private_label"
 }
 
-script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)
+script_dir=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd -P)
 backup_verifier=$script_dir/verify-backup.sh
 [ -f "$backup_verifier" ] && [ ! -L "$backup_verifier" ] &&
     [ -r "$backup_verifier" ] ||

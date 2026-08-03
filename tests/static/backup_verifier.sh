@@ -2,7 +2,7 @@
 
 set -eu
 
-repo_root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
+repo_root=$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd)
 verifier=$repo_root/deploy/registry/verify-backup.sh
 work_dir=$(mktemp -d "${TMPDIR:-/tmp}/estab-backup-verifier.XXXXXX")
 trap 'rm -rf -- "$work_dir"' EXIT HUP INT TERM

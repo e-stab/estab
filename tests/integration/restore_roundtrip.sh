@@ -2,7 +2,7 @@
 
 set -Eeuo pipefail
 
-repo_root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
+repo_root=$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd)
 cd "$repo_root"
 
 : "${COMPOSE_PROJECT_NAME:?COMPOSE_PROJECT_NAME is required}"
@@ -54,7 +54,7 @@ if [[ -n $compose_file ]]; then
         echo "Restore roundtrip: Compose file is not readable" >&2
         exit 1
     fi
-    compose_file=$(CDPATH= cd -- "$(dirname -- "$compose_file")" && pwd -P)/$(basename -- "$compose_file")
+    compose_file=$(CDPATH='' cd -- "$(dirname -- "$compose_file")" && pwd -P)/$(basename -- "$compose_file")
     compose_command+=(-f "$compose_file" -p "$COMPOSE_PROJECT_NAME")
 fi
 
@@ -65,7 +65,7 @@ validate_bind_storage() {
         echo "Restore roundtrip: bind storage root must be a real directory" >&2
         return 1
     fi
-    canonical_root=$(CDPATH= cd -- "$bind_storage_root" && pwd -P)
+    canonical_root=$(CDPATH='' cd -- "$bind_storage_root" && pwd -P)
     case "$(basename -- "$canonical_root")" in
         .estab-registry-bind.*) ;;
         *)

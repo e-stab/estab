@@ -29,10 +29,10 @@ case "${1:-}" in
 esac
 [ "$#" -le 1 ] || usage
 
-script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)
+script_dir=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd -P)
 release_dir=${1:-$script_dir}
 [ -d "$release_dir" ] || die "release directory does not exist: $release_dir"
-release_dir=$(CDPATH= cd -- "$release_dir" && pwd -P) ||
+release_dir=$(CDPATH='' cd -- "$release_dir" && pwd -P) ||
     die "cannot resolve release directory: $release_dir"
 
 release_file=$release_dir/RELEASE

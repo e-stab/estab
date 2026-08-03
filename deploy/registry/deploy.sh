@@ -21,7 +21,7 @@ case "$action" in
     *) usage ;;
 esac
 
-script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)
+script_dir=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd -P)
 cd "$script_dir"
 
 if [ "${ESTAB_APP_IMAGE+x}" = x ] ||
@@ -633,7 +633,7 @@ verify_secret_configuration()
             die "cannot resolve local secret parent: $secret_environment_name"
         secret_basename=$(basename -- "$secret_path") ||
             die "cannot resolve local secret basename: $secret_environment_name"
-        secret_parent=$(CDPATH= cd -- "$secret_parent" && pwd -P) ||
+        secret_parent=$(CDPATH='' cd -- "$secret_parent" && pwd -P) ||
             die "cannot canonicalize local secret parent: $secret_environment_name"
         secret_path=$secret_parent/$secret_basename
         case "$secret_path" in
@@ -718,7 +718,7 @@ canonical_storage_source()
             "$storage_role" "$storage_value" >&2
         return 1
     fi
-    storage_canonical=$(CDPATH= cd -- "$storage_value" && pwd -P) ||
+    storage_canonical=$(CDPATH='' cd -- "$storage_value" && pwd -P) ||
         return 1
     case "$storage_canonical" in
         *' '*|*'	'*|*'
@@ -945,7 +945,7 @@ runtime_state_base()
         fi
         [ -d "$state_parent" ] || mkdir -p -m 0700 "$state_parent" ||
             die "cannot create XDG state parent"
-        state_parent=$(CDPATH= cd -- "$state_parent" && pwd -P) ||
+        state_parent=$(CDPATH='' cd -- "$state_parent" && pwd -P) ||
             die "cannot canonicalize XDG state parent"
         state_base=$state_parent/estab-deploy
     fi
@@ -1496,7 +1496,7 @@ validate_private_snapshot_for_removal()
         die "private deployment state contains an invalid snapshot name"
     [ -d "$removal_snapshot" ] && [ ! -L "$removal_snapshot" ] ||
         die "private deployment state contains an unsafe snapshot entry"
-    removal_parent=$(CDPATH= cd -- "$removal_snapshot/.." && pwd -P) ||
+    removal_parent=$(CDPATH='' cd -- "$removal_snapshot/.." && pwd -P) ||
         die "cannot canonicalize private snapshot parent"
     [ "$removal_parent" = "$snapshot_parent" ] ||
         die "private snapshot escaped its verified parent"
@@ -1736,7 +1736,7 @@ cleanup()
         if [ -n "$snapshot_parent" ] &&
             [ -d "$runtime_snapshot_directory" ] &&
             [ ! -L "$runtime_snapshot_directory" ]; then
-            runtime_snapshot_parent=$(CDPATH= cd -- \
+            runtime_snapshot_parent=$(CDPATH='' cd -- \
                 "$runtime_snapshot_directory/.." && pwd -P 2>/dev/null || :)
             case "$runtime_snapshot_directory" in
                 "$runtime_snapshot_parent"/snapshot-[0-9a-f][0-9a-f]*) ;;

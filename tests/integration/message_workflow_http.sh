@@ -17,7 +17,7 @@ case "$project_name" in
         ;;
 esac
 
-repo_root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
+repo_root=$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd)
 cd "$repo_root"
 
 base_url=${ESTAB_TEST_BASE_URL:-http://127.0.0.1:8080}

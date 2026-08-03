@@ -2,7 +2,7 @@
 
 set -eu
 
-repo_root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
+repo_root=$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd)
 backup_operator=$repo_root/deploy/registry/backup.sh
 backup_verifier=$repo_root/deploy/registry/verify-backup.sh
 work_dir=$(mktemp -d "${TMPDIR:-/tmp}/estab-backup-operator.XXXXXX")
@@ -22,9 +22,9 @@ mkdir -p \
     "$project_dir" \
     "$project_dir_two"
 chmod 0700 "$output_parent"
-output_parent=$(CDPATH= cd -- "$output_parent" && pwd -P)
-project_dir=$(CDPATH= cd -- "$project_dir" && pwd -P)
-project_dir_two=$(CDPATH= cd -- "$project_dir_two" && pwd -P)
+output_parent=$(CDPATH='' cd -- "$output_parent" && pwd -P)
+project_dir=$(CDPATH='' cd -- "$project_dir" && pwd -P)
+project_dir_two=$(CDPATH='' cd -- "$project_dir_two" && pwd -P)
 printf 'attachment fixture\n' >"$fixture_data/nested/attachment.txt"
 printf 'export fixture\n' >"$fixture_export/export.txt"
 cd "$project_dir"
