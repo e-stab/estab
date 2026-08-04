@@ -287,8 +287,25 @@ jobs:
         with:
           php-version: "8.5"
           coverage: none
-          tools: phpstan, phpcs
+          tools: composer:v2, phpstan, phpcs
           extensions: mbstring, json
+
+      - name: Validate Composer configuration
+        id: composer_validate
+        if: always() && steps.php.outputs.present == 'true' && hashFiles('**/composer.json') != ''
+        continue-on-error: true
+        run: composer validate --strict
+
+      - name: Install Composer dependencies safely
+        id: composer_install
+        if: always() && steps.php.outputs.present == 'true' && hashFiles('composer.lock') != ''
+        continue-on-error: true
+        run: |
+          composer install \
+            --no-interaction \
+            --no-progress \
+            --prefer-dist \
+            --no-scripts
 
       - name: Check PHP syntax
         id: php_syntax
@@ -333,14 +350,23 @@ jobs:
             echo "::notice::No phpcs.xml found; PHPCS is not enforced yet."
           fi
 
+      - name: Composer security audit
+        id: composer_audit
+        if: always() && steps.php.outputs.present == 'true' && hashFiles('composer.lock') != ''
+        continue-on-error: true
+        run: composer audit --locked --no-interaction
+
       - name: Enforce PHP audit results
         if: always() && steps.php.outputs.present == 'true'
         shell: bash
         env:
           PHP_SETUP_OUTCOME: ${{ steps.php_setup.outcome }}
+          COMPOSER_VALIDATE_OUTCOME: ${{ steps.composer_validate.outcome }}
+          COMPOSER_INSTALL_OUTCOME: ${{ steps.composer_install.outcome }}
           PHP_SYNTAX_OUTCOME: ${{ steps.php_syntax.outcome }}
           PHPSTAN_OUTCOME: ${{ steps.phpstan.outcome }}
           PHPCS_OUTCOME: ${{ steps.phpcs.outcome }}
+          COMPOSER_AUDIT_OUTCOME: ${{ steps.composer_audit.outcome }}
         run: |
           set -euo pipefail
           failed=0
@@ -358,9 +384,12 @@ jobs:
           }
 
           accept_success_or_skip php-setup "$PHP_SETUP_OUTCOME"
+          accept_success_or_skip composer-validate "$COMPOSER_VALIDATE_OUTCOME"
+          accept_success_or_skip composer-install "$COMPOSER_INSTALL_OUTCOME"
           accept_success_or_skip php-syntax "$PHP_SYNTAX_OUTCOME"
           accept_success_or_skip phpstan "$PHPSTAN_OUTCOME"
           accept_success_or_skip phpcs "$PHPCS_OUTCOME"
+          accept_success_or_skip composer-audit "$COMPOSER_AUDIT_OUTCOME"
           exit "$failed"
 
 
@@ -445,7 +474,7 @@ jobs:
         continue-on-error: true
         run: |
           python -m pip install --upgrade pip
-          python -m pip install ruff bandit
+          python -m pip install ruff bandit pip-audit
 
       - name: Compile Python files
         id: python_compile
@@ -470,6 +499,27 @@ jobs:
             --severity-level medium \
             --confidence-level medium
 
+      - name: Audit Python dependencies
+        id: python_dependencies
+        if: always() && steps.python.outputs.present == 'true'
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+
+          files=(requirements*.txt)
+
+          if (( ${#files[@]} == 0 )); then
+            echo "::notice::No requirements files found."
+            exit 0
+          fi
+
+          for file in "${files[@]}"; do
+            echo "Auditing $file"
+            pip-audit --requirement "$file"
+          done
+
       - name: Enforce Python audit results
         if: always() && steps.python.outputs.present == 'true'
         shell: bash
@@ -479,6 +529,7 @@ jobs:
           PYTHON_COMPILE_OUTCOME: ${{ steps.python_compile.outcome }}
           RUFF_OUTCOME: ${{ steps.ruff.outcome }}
           BANDIT_OUTCOME: ${{ steps.bandit.outcome }}
+          PYTHON_DEPENDENCIES_OUTCOME: ${{ steps.python_dependencies.outcome }}
         run: |
           set -euo pipefail
           failed=0
@@ -500,6 +551,7 @@ jobs:
           accept_success_or_skip python-compile "$PYTHON_COMPILE_OUTCOME"
           accept_success_or_skip ruff "$RUFF_OUTCOME"
           accept_success_or_skip bandit "$BANDIT_OUTCOME"
+          accept_success_or_skip python-dependencies "$PYTHON_DEPENDENCIES_OUTCOME"
           exit "$failed"
 
 
@@ -525,9 +577,15 @@ jobs:
             echo "source_present=false" >> "$GITHUB_OUTPUT"
           fi
 
+          if [[ -f package.json ]]; then
+            echo "package_present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "package_present=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Set up Node.js
         id: node_setup
-        if: steps.javascript.outputs.source_present == 'true'
+        if: steps.javascript.outputs.source_present == 'true' || steps.javascript.outputs.package_present == 'true'
         continue-on-error: true
         uses: actions/setup-node@v6
         with:
@@ -548,12 +606,42 @@ jobs:
             -print0 |
           xargs -0 -r -n1 node --check
 
+      - name: Install dependencies without lifecycle scripts
+        id: npm_install
+        if: always() && steps.javascript.outputs.package_present == 'true' && hashFiles('package-lock.json') != ''
+        continue-on-error: true
+        run: npm ci --ignore-scripts
+
+      - name: Audit npm dependencies
+        id: npm_audit
+        if: always() && steps.javascript.outputs.package_present == 'true' && hashFiles('package-lock.json') != ''
+        continue-on-error: true
+        run: npm audit --audit-level=high
+
+      - name: Run lint script
+        id: npm_lint
+        if: always() && steps.javascript.outputs.package_present == 'true'
+        continue-on-error: true
+        shell: bash
+        run: |
+          if node -e '
+            const packageFile = require("./package.json");
+            process.exit(packageFile.scripts?.lint ? 0 : 1);
+          '; then
+            npm run lint
+          else
+            echo "::notice::No npm lint script configured."
+          fi
+
       - name: Enforce JavaScript audit results
-        if: always() && steps.javascript.outputs.source_present == 'true'
+        if: always() && (steps.javascript.outputs.source_present == 'true' || steps.javascript.outputs.package_present == 'true')
         shell: bash
         env:
           NODE_SETUP_OUTCOME: ${{ steps.node_setup.outcome }}
           JAVASCRIPT_SYNTAX_OUTCOME: ${{ steps.javascript_syntax.outcome }}
+          NPM_INSTALL_OUTCOME: ${{ steps.npm_install.outcome }}
+          NPM_AUDIT_OUTCOME: ${{ steps.npm_audit.outcome }}
+          NPM_LINT_OUTCOME: ${{ steps.npm_lint.outcome }}
         run: |
           set -euo pipefail
           failed=0
@@ -572,4 +660,34 @@ jobs:
 
           accept_success_or_skip node-setup "$NODE_SETUP_OUTCOME"
           accept_success_or_skip javascript-syntax "$JAVASCRIPT_SYNTAX_OUTCOME"
+          accept_success_or_skip npm-install "$NPM_INSTALL_OUTCOME"
+          accept_success_or_skip npm-audit "$NPM_AUDIT_OUTCOME"
+          accept_success_or_skip npm-lint "$NPM_LINT_OUTCOME"
           exit "$failed"
+
+
+  workflow-lint:
+    name: GitHub Actions lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Install and run actionlint
+        shell: bash
+        env:
+          ACTIONLINT_VERSION: "1.7.12"
+        run: |
+          set -euo pipefail
+
+          bash <(
+            curl -fsSL \
+              https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash
+          ) "${ACTIONLINT_VERSION}"
+
+          ./actionlint -color
