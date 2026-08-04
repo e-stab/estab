@@ -24,7 +24,7 @@ function estab_readiness_report(): array
     }
 
     $checks = [
-        'php' => PHP_VERSION_ID >= 80500,
+        'php' => version_compare(PHP_VERSION, '8.5.0', '>='),
         'extensions' => !in_array(false, $extensions, true),
         'configuration' => false,
         'database' => false,
