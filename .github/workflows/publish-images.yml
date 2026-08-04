@@ -646,9 +646,9 @@ jobs:
             "$bundle_root/RELEASE-EVIDENCE.md"
           cp LICENSE THIRD_PARTY_NOTICES.md "$bundle_root/"
           sed \
-            -e 's#^backup_verifier=deploy/registry/verify-backup.sh$#backup_verifier=./verify-backup.sh#' \
-            -e 's#sh deploy/registry/restore.sh#sh ./restore.sh#' \
-            -e "s#(TESTS-UND-MONITORING.md)#(https://github.com/e-stab/estab/blob/$GITHUB_SHA/docs/TESTS-UND-MONITORING.md)#" \
+            -e 's#deploy/registry/backup.sh#./backup.sh#g' \
+            -e 's#deploy/registry/verify-backup.sh#./verify-backup.sh#g' \
+            -e 's#deploy/registry/restore.sh#./restore.sh#g' \
             docs/BACKUP-UND-WIEDERHERSTELLUNG.md \
             >"$bundle_root/BACKUP-UND-WIEDERHERSTELLUNG.md"
           awk \

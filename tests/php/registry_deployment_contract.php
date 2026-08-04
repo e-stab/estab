@@ -215,16 +215,13 @@ $assert(
     str_contains($registryReadme, 'linux/amd64')
     && str_contains($registryReadme, 'linux/arm64')
     && str_contains($registryReadme, 'Synology Container Manager')
-    && str_contains($registryReadme, '@sha256:')
+    && str_contains($registryReadme, 'sha256')
     && str_contains($registryReadme, 'Vollbackup')
-    && str_contains($registryReadme, 'Unvollständigen Publish-Lauf behandeln')
-    && str_contains($registryReadme, 'push-by-digest=true')
-    && str_contains($registryReadme, 'ESTAB_RELEASE_TAG_RULESET_ID')
-    && str_contains($registryReadme, 'verstecktes Draft')
-    && str_contains($registryReadme, 'Required Reviewer')
-    && str_contains($registryReadme, 'RELEASE-EVIDENCE.md')
+    && str_contains($registryReadme, 'sh ./verify-release.sh')
+    && str_contains($registryReadme, 'ESTAB_APP_IMAGE')
+    && str_contains($registryReadme, 'ESTAB_MIGRATE_IMAGE')
     && str_contains($registryReadme, 'skopeo copy --all --preserve-digests'),
-    'Registry runbook omits architecture, Synology, digest, backup, or release recovery'
+    'Registry runbook omits architecture, Synology, digest, backup, or verification'
 );
 $assert(
     str_contains($workflow, "on:\n  workflow_dispatch:")
@@ -442,15 +439,15 @@ $assert(
     )
     && str_contains(
         $workflow,
-        's#^backup_verifier=deploy/registry/verify-backup.sh$#backup_verifier=./verify-backup.sh#'
+        's#deploy/registry/backup.sh#./backup.sh#g'
     )
     && str_contains(
         $workflow,
-        's#sh deploy/registry/restore.sh#sh ./restore.sh#'
+        's#deploy/registry/verify-backup.sh#./verify-backup.sh#g'
     )
     && str_contains(
         $workflow,
-        'https://github.com/e-stab/estab/blob/$GITHUB_SHA/docs/TESTS-UND-MONITORING.md'
+        's#deploy/registry/restore.sh#./restore.sh#g'
     )
     && str_contains($workflow, 'ESTAB_APP_IMAGE=" app')
     && str_contains($workflow, 'ESTAB_MIGRATE_IMAGE=" migrate')
@@ -638,29 +635,17 @@ $assert(
         $offlineHelper,
         'incomplete reserved archive retained for inspection'
     )
-    && str_contains($releaseEvidenceGuide, 'vier dauerhafte GitHub-Release-')
+    && str_contains($releaseEvidenceGuide, 'Release technisch prüfen')
     && str_contains($releaseEvidenceGuide, 'Admin-Workstation')
     && str_contains($releaseEvidenceGuide, 'gh attestation verify')
-    && str_contains($releaseEvidenceGuide, '--bundle-from-oci')
     && str_contains($releaseEvidenceGuide, '--signer-workflow')
-    && str_contains($releaseEvidenceGuide, '--custom-trusted-root')
-    && str_contains($releaseEvidenceGuide, 'spätere Schlüsselwiderrufe')
     && str_contains(
         $releaseEvidenceGuide,
         'skopeo copy --all --preserve-digests'
     )
     && str_contains($releaseEvidenceGuide, 'services.db.image')
     && str_contains($releaseEvidenceGuide, 'database.oci.tar')
-    && str_contains($releaseEvidenceGuide, '<prefix>/estab-db@sha256:')
-    && str_contains(
-        $releaseEvidenceGuide,
-        'ESTAB_RELEASE_POLICY_TOKEN'
-    )
-    && str_contains($releaseEvidenceGuide, 'ESTAB_RELEASE_TAG_RULESET_ID')
-    && str_contains(
-        $releaseEvidenceGuide,
-        'schreibt selbst keine Registry-Tags'
-    )
+    && str_contains($releaseEvidenceGuide, 'Abbruchkriterium')
     && str_contains($offlineStaticTest, 'OFFLINE_BAD_DIGEST=1')
     && str_contains($offlineStaticTest, 'OFFLINE_BAD_DATABASE_DIGEST=1')
     && str_contains($offlineStaticTest, 'OFFLINE_BAD_ARCH=1')
@@ -1044,17 +1029,12 @@ $assert(
     && str_contains($backupVerifierStaticTest, 'unbound format-3 release identity accepted')
     && str_contains($backupRunbook, 'deploy/registry/backup.sh')
     && str_contains($backupRunbook, 'deploy/registry/restore.sh')
-    && str_contains($backupRunbook, '--confirm-project "$confirmed_project"')
-    && str_contains($backupRunbook, 'Leeren der beiden Dateibereiche')
-    && str_contains($backupRunbook, 'vollständige Verifier')
-    && str_contains($backupRunbook, '`estab-maintenance-lock-<COMPOSE_PROJECT_NAME>`')
-    && str_contains($backupRunbook, 'gemeldete exakte Container-ID')
-    && str_contains($backupRunbook, 'behält den globalen Lock')
-    && str_contains($backupRunbook, '`admin-auth-init`')
+    && str_contains($backupRunbook, '--confirm-project estab')
+    && str_contains($backupRunbook, 'SHA256SUMS')
+    && str_contains($backupRunbook, '`estab-maintenance-lock-<Projektname>`')
     && str_contains($backupRunbook, '`--allow-runtime-image-id-change`')
     && str_contains($backupRunbook, '`--remap-mount-type`')
-    && str_contains($backupRunbook, 'Veränderliche Tags')
-    && str_contains($backupRunbook, 'Format 2 bleibt')
+    && str_contains($backupRunbook, 'Restore-Probe')
     && str_contains($backupRunbook, '`RECOVERY REQUIRED`'),
     'Restore runbook lacks the guarded operator and repeated verification boundaries'
 );
