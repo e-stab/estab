@@ -20,8 +20,23 @@ $read = static function (string $path): string {
 
 $ci = $read($root . '/.github/workflows/ci.yml');
 $audit = $read($root . '/.github/workflows/audit.yml');
+$osv = $read($root . '/.github/workflows/osv-scanner.yml');
 $dependencyReview = $read($root . '/.github/workflows/dependency-review.yml');
+$dependabot = $read($root . '/.github/dependabot.yml');
 $staticSuite = $read($root . '/tests/static/run.sh');
+$composerLock = json_decode(
+    $read($root . '/composer.lock'),
+    true,
+    512,
+    JSON_THROW_ON_ERROR
+);
+$packageLock = json_decode(
+    $read($root . '/package-lock.json'),
+    true,
+    512,
+    JSON_THROW_ON_ERROR
+);
+$pythonAuditLock = $read($root . '/requirements-audit.txt');
 
 $assert(
     !str_contains($ci, 'id: provenance')
@@ -54,19 +69,70 @@ $assert(
 );
 $assert(
     str_contains($audit, 'name: Enforce PHP audit results')
+    && str_contains($audit, 'name: Validate PHP audit inputs')
+    && str_contains($audit, 'PHP_INPUTS_OUTCOME: ${{ steps.php_inputs.outcome }}')
     && str_contains($audit, 'PHPSTAN_OUTCOME: ${{ steps.phpstan.outcome }}')
     && str_contains($audit, 'COMPOSER_AUDIT_OUTCOME: ${{ steps.composer_audit.outcome }}')
+    && str_contains(
+        $audit,
+        'vendor/bin/phpstan analyse --no-progress --memory-limit=1G'
+    )
+    && str_contains($audit, 'vendor/bin/phpcs')
     && str_contains($audit, 'name: Enforce Python audit results')
+    && str_contains($audit, 'name: Validate Python audit inputs')
+    && str_contains($audit, 'PYTHON_INPUTS_OUTCOME: ${{ steps.python_inputs.outcome }}')
     && str_contains($audit, 'RUFF_OUTCOME: ${{ steps.ruff.outcome }}')
-    && str_contains($audit, 'BANDIT_OUTCOME: ${{ steps.bandit.outcome }}'),
-    'Audit jobs do not aggregate quality and security check outcomes'
+    && str_contains($audit, 'BANDIT_OUTCOME: ${{ steps.bandit.outcome }}')
+    && str_contains($audit, '--require-hashes')
+    && str_contains($audit, '--requirement requirements-audit.txt')
+    && !str_contains($audit, 'accept_success_or_skip')
+    && !str_contains($audit, 'success|skipped'),
+    'PHP or Python audits can skip required source, manifest, or scan outcomes'
 );
 $assert(
-    str_contains($audit, 'source_present=true')
+    str_contains($audit, 'name: Validate JavaScript audit inputs')
+    && str_contains(
+        $audit,
+        'JAVASCRIPT_INPUTS_OUTCOME: ${{ steps.javascript_inputs.outcome }}'
+    )
     && str_contains($audit, 'name: Check JavaScript syntax')
     && str_contains($audit, 'node --check')
+    && str_contains($audit, 'npm ci --ignore-scripts')
+    && str_contains($audit, 'npm audit --audit-level=high')
+    && str_contains($audit, 'run: npm run lint')
     && str_contains($audit, 'name: Enforce JavaScript audit results'),
-    'JavaScript sources without package.json remain unaudited'
+    'JavaScript source, installation, audit, or lint can remain unaudited'
+);
+$assert(
+    is_array($composerLock)
+    && count(array_merge(
+        $composerLock['packages'] ?? [],
+        $composerLock['packages-dev'] ?? []
+    )) > 0
+    && is_array($packageLock)
+    && count($packageLock['packages'] ?? []) > 0
+    && preg_match(
+        '/^[a-zA-Z0-9][a-zA-Z0-9_.-]*==[0-9]/m',
+        $pythonAuditLock
+    ) === 1,
+    'A dependency lock graph is missing or empty'
+);
+$assert(
+    str_contains($osv, 'name: Validate dependency scan inputs')
+    && str_contains($osv, 'needs: dependency-inputs')
+    && str_contains($osv, 'composer.json composer.lock')
+    && str_contains($osv, 'requirements-audit.txt')
+    && str_contains($osv, 'package.json package-lock.json')
+    && str_contains($osv, 'fail-on-vuln: true')
+    && str_contains($osv, 'upload-sarif: true'),
+    'OSV can run without validated nonempty locked dependency graphs'
+);
+$assert(
+    str_contains($dependabot, 'package-ecosystem: composer')
+    && str_contains($dependabot, 'package-ecosystem: pip')
+    && str_contains($dependabot, 'package-ecosystem: npm')
+    && str_contains($dependabot, 'package-ecosystem: github-actions'),
+    'Dependabot does not cover every declared dependency ecosystem'
 );
 $assert(
     str_contains($dependencyReview, 'pull-requests: write')

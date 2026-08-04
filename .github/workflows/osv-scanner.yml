@@ -17,8 +17,48 @@ permissions:
   security-events: write
 
 jobs:
+  dependency-inputs:
+    name: Validate dependency scan inputs
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Require nonempty locked dependency graphs
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          for file in \
+            composer.json composer.lock \
+            requirements.txt requirements-audit.in requirements-audit.txt \
+            package.json package-lock.json; do
+            test -f "$file" || {
+              echo "::error file=$file::Required dependency scan input is missing."
+              exit 1
+            }
+          done
+
+          jq -e '(.packages + .["packages-dev"] | length) > 0' \
+            composer.lock >/dev/null || {
+              echo "::error file=composer.lock::Composer dependency graph is empty."
+              exit 1
+            }
+          grep -Eq '^[[:alnum:]][[:alnum:]_.-]*==' \
+            requirements-audit.txt || {
+              echo "::error file=requirements-audit.txt::Python dependency graph is empty."
+              exit 1
+            }
+          jq -e '.packages | length > 0' package-lock.json >/dev/null || {
+            echo "::error file=package-lock.json::npm dependency graph is empty."
+            exit 1
+          }
+
   osv:
     name: OSV dependency scan
+    needs: dependency-inputs
     uses: google/osv-scanner-action/.github/workflows/osv-scanner-reusable.yml@v2.3.8
     with:
       scan-args: |-

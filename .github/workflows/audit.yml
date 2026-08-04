@@ -266,39 +266,54 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v6
 
-      - name: Detect PHP project
-        id: php
+      - name: Validate PHP audit inputs
+        id: php_inputs
+        continue-on-error: true
         shell: bash
         run: |
-          if find . -type f -name '*.php' \
+          set -euo pipefail
+
+          find . -type f -name '*.php' \
             -not -path './vendor/*' \
             -print -quit |
-            grep -q .; then
-            echo "present=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "present=false" >> "$GITHUB_OUTPUT"
-          fi
+            grep -q . || {
+              echo "::error::No PHP source was found to audit."
+              exit 1
+            }
+
+          test -f composer.json || {
+            echo "::error file=composer.json::Required PHP manifest is missing."
+            exit 1
+          }
+          test -f composer.lock || {
+            echo "::error file=composer.lock::Required PHP lock file is missing."
+            exit 1
+          }
+          jq -e '(.packages + .["packages-dev"] | length) > 0' \
+            composer.lock >/dev/null || {
+              echo "::error file=composer.lock::Composer audit graph is empty or invalid."
+              exit 1
+            }
 
       - name: Set up PHP
-        if: steps.php.outputs.present == 'true'
         id: php_setup
         continue-on-error: true
         uses: shivammathur/setup-php@v2
         with:
           php-version: "8.5"
           coverage: none
-          tools: composer:v2, phpstan, phpcs
-          extensions: mbstring, json
+          tools: composer:v2
+          extensions: fileinfo, gd, json, mbstring, mysqli, zip
 
       - name: Validate Composer configuration
         id: composer_validate
-        if: always() && steps.php.outputs.present == 'true' && hashFiles('**/composer.json') != ''
+        if: always()
         continue-on-error: true
         run: composer validate --strict
 
       - name: Install Composer dependencies safely
         id: composer_install
-        if: always() && steps.php.outputs.present == 'true' && hashFiles('composer.lock') != ''
+        if: always()
         continue-on-error: true
         run: |
           composer install \
@@ -309,7 +324,7 @@ jobs:
 
       - name: Check PHP syntax
         id: php_syntax
-        if: always() && steps.php.outputs.present == 'true'
+        if: always()
         continue-on-error: true
         shell: bash
         run: |
@@ -325,41 +340,27 @@ jobs:
 
       - name: Run PHPStan
         id: phpstan
-        if: always() && steps.php.outputs.present == 'true'
+        if: always()
         continue-on-error: true
-        run: |
-          if [[ -f phpstan.neon || -f phpstan.neon.dist ]]; then
-            phpstan analyse --no-progress
-          else
-            phpstan analyse \
-              --no-progress \
-              --level=5 \
-              --memory-limit=1G \
-              .
-          fi
+        run: vendor/bin/phpstan analyse --no-progress --memory-limit=1G
 
       - name: Run PHP_CodeSniffer
         id: phpcs
-        if: always() && steps.php.outputs.present == 'true'
+        if: always()
         continue-on-error: true
-        shell: bash
-        run: |
-          if [[ -f phpcs.xml || -f phpcs.xml.dist ]]; then
-            phpcs
-          else
-            echo "::notice::No phpcs.xml found; PHPCS is not enforced yet."
-          fi
+        run: vendor/bin/phpcs
 
       - name: Composer security audit
         id: composer_audit
-        if: always() && steps.php.outputs.present == 'true' && hashFiles('composer.lock') != ''
+        if: always()
         continue-on-error: true
         run: composer audit --locked --no-interaction
 
       - name: Enforce PHP audit results
-        if: always() && steps.php.outputs.present == 'true'
+        if: always()
         shell: bash
         env:
+          PHP_INPUTS_OUTCOME: ${{ steps.php_inputs.outcome }}
           PHP_SETUP_OUTCOME: ${{ steps.php_setup.outcome }}
           COMPOSER_VALIDATE_OUTCOME: ${{ steps.composer_validate.outcome }}
           COMPOSER_INSTALL_OUTCOME: ${{ steps.composer_install.outcome }}
@@ -371,25 +372,23 @@ jobs:
           set -euo pipefail
           failed=0
 
-          accept_success_or_skip() {
+          require_success() {
             local name=$1
             local outcome=$2
-            case "$outcome" in
-              success|skipped) ;;
-              *)
-                echo "::error::$name concluded with $outcome."
-                failed=1
-                ;;
-            esac
+            if [[ "$outcome" != success ]]; then
+              echo "::error::$name concluded with $outcome; success is required."
+              failed=1
+            fi
           }
 
-          accept_success_or_skip php-setup "$PHP_SETUP_OUTCOME"
-          accept_success_or_skip composer-validate "$COMPOSER_VALIDATE_OUTCOME"
-          accept_success_or_skip composer-install "$COMPOSER_INSTALL_OUTCOME"
-          accept_success_or_skip php-syntax "$PHP_SYNTAX_OUTCOME"
-          accept_success_or_skip phpstan "$PHPSTAN_OUTCOME"
-          accept_success_or_skip phpcs "$PHPCS_OUTCOME"
-          accept_success_or_skip composer-audit "$COMPOSER_AUDIT_OUTCOME"
+          require_success php-inputs "$PHP_INPUTS_OUTCOME"
+          require_success php-setup "$PHP_SETUP_OUTCOME"
+          require_success composer-validate "$COMPOSER_VALIDATE_OUTCOME"
+          require_success composer-install "$COMPOSER_INSTALL_OUTCOME"
+          require_success php-syntax "$PHP_SYNTAX_OUTCOME"
+          require_success phpstan "$PHPSTAN_OUTCOME"
+          require_success phpcs "$PHPCS_OUTCOME"
+          require_success composer-audit "$COMPOSER_AUDIT_OUTCOME"
           exit "$failed"
 
 
@@ -429,8 +428,8 @@ jobs:
           )
 
           if (( ${#files[@]} == 0 )); then
-            echo "No shell scripts found."
-            exit 0
+            echo "::error::No shell files were found; ShellCheck did not scan code."
+            exit 1
           fi
 
           printf 'Checking %d shell files\n' "${#files[@]}"
@@ -446,22 +445,34 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v6
 
-      - name: Detect Python project
-        id: python
+      - name: Validate Python audit inputs
+        id: python_inputs
+        continue-on-error: true
         shell: bash
         run: |
-          if find . -type f -name '*.py' \
+          set -euo pipefail
+
+          find . -type f -name '*.py' \
             -not -path './vendor/*' \
             -not -path './node_modules/*' \
             -print -quit |
-            grep -q .; then
-            echo "present=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "present=false" >> "$GITHUB_OUTPUT"
-          fi
+            grep -q . || {
+              echo "::error::No Python source was found to audit."
+              exit 1
+            }
+
+          for file in requirements.txt requirements-audit.in requirements-audit.txt; do
+            test -f "$file" || {
+              echo "::error file=$file::Required Python dependency input is missing."
+              exit 1
+            }
+          done
+          grep -Eq '^[[:alnum:]][[:alnum:]_.-]*==' requirements-audit.txt || {
+            echo "::error file=requirements-audit.txt::Python audit graph is empty or not fully resolved."
+            exit 1
+          }
 
       - name: Set up Python
-        if: steps.python.outputs.present == 'true'
         id: python_setup
         continue-on-error: true
         uses: actions/setup-python@v6
@@ -470,27 +481,29 @@ jobs:
 
       - name: Install audit tools
         id: python_tools
-        if: always() && steps.python.outputs.present == 'true'
+        if: always()
         continue-on-error: true
         run: |
-          python -m pip install --upgrade pip
-          python -m pip install ruff bandit pip-audit
+          python -m pip install \
+            --require-hashes \
+            --requirement requirements-audit.txt
+          python -m pip check
 
       - name: Compile Python files
         id: python_compile
-        if: always() && steps.python.outputs.present == 'true'
+        if: always()
         continue-on-error: true
         run: python -m compileall -q .
 
       - name: Run Ruff
         id: ruff
-        if: always() && steps.python.outputs.present == 'true'
+        if: always()
         continue-on-error: true
         run: ruff check .
 
       - name: Run Bandit
         id: bandit
-        if: always() && steps.python.outputs.present == 'true'
+        if: always()
         continue-on-error: true
         run: |
           bandit \
@@ -501,7 +514,7 @@ jobs:
 
       - name: Audit Python dependencies
         id: python_dependencies
-        if: always() && steps.python.outputs.present == 'true'
+        if: always()
         continue-on-error: true
         shell: bash
         run: |
@@ -510,9 +523,9 @@ jobs:
 
           files=(requirements*.txt)
 
-          if (( ${#files[@]} == 0 )); then
-            echo "::notice::No requirements files found."
-            exit 0
+          if (( ${#files[@]} < 2 )); then
+            echo "::error::Expected runtime and audit requirements files."
+            exit 1
           fi
 
           for file in "${files[@]}"; do
@@ -521,9 +534,10 @@ jobs:
           done
 
       - name: Enforce Python audit results
-        if: always() && steps.python.outputs.present == 'true'
+        if: always()
         shell: bash
         env:
+          PYTHON_INPUTS_OUTCOME: ${{ steps.python_inputs.outcome }}
           PYTHON_SETUP_OUTCOME: ${{ steps.python_setup.outcome }}
           PYTHON_TOOLS_OUTCOME: ${{ steps.python_tools.outcome }}
           PYTHON_COMPILE_OUTCOME: ${{ steps.python_compile.outcome }}
@@ -534,24 +548,22 @@ jobs:
           set -euo pipefail
           failed=0
 
-          accept_success_or_skip() {
+          require_success() {
             local name=$1
             local outcome=$2
-            case "$outcome" in
-              success|skipped) ;;
-              *)
-                echo "::error::$name concluded with $outcome."
-                failed=1
-                ;;
-            esac
+            if [[ "$outcome" != success ]]; then
+              echo "::error::$name concluded with $outcome; success is required."
+              failed=1
+            fi
           }
 
-          accept_success_or_skip python-setup "$PYTHON_SETUP_OUTCOME"
-          accept_success_or_skip python-tools "$PYTHON_TOOLS_OUTCOME"
-          accept_success_or_skip python-compile "$PYTHON_COMPILE_OUTCOME"
-          accept_success_or_skip ruff "$RUFF_OUTCOME"
-          accept_success_or_skip bandit "$BANDIT_OUTCOME"
-          accept_success_or_skip python-dependencies "$PYTHON_DEPENDENCIES_OUTCOME"
+          require_success python-inputs "$PYTHON_INPUTS_OUTCOME"
+          require_success python-setup "$PYTHON_SETUP_OUTCOME"
+          require_success python-tools "$PYTHON_TOOLS_OUTCOME"
+          require_success python-compile "$PYTHON_COMPILE_OUTCOME"
+          require_success ruff "$RUFF_OUTCOME"
+          require_success bandit "$BANDIT_OUTCOME"
+          require_success python-dependencies "$PYTHON_DEPENDENCIES_OUTCOME"
           exit "$failed"
 
 
@@ -564,28 +576,41 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v6
 
-      - name: Detect JavaScript project
-        id: javascript
+      - name: Validate JavaScript audit inputs
+        id: javascript_inputs
+        continue-on-error: true
         shell: bash
         run: |
-          if find . -type f -name '*.js' \
+          set -euo pipefail
+
+          find . -type f -name '*.js' \
             -not -path './vendor/*' \
             -not -path './node_modules/*' \
-            -print -quit | grep -q .; then
-            echo "source_present=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "source_present=false" >> "$GITHUB_OUTPUT"
-          fi
+            -print -quit | grep -q . || {
+              echo "::error::No JavaScript source was found to audit."
+              exit 1
+            }
 
-          if [[ -f package.json ]]; then
-            echo "package_present=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "package_present=false" >> "$GITHUB_OUTPUT"
-          fi
+          test -f package.json || {
+            echo "::error file=package.json::Required npm manifest is missing."
+            exit 1
+          }
+          test -f package-lock.json || {
+            echo "::error file=package-lock.json::Required npm lock file is missing."
+            exit 1
+          }
+          jq -e '.packages | length > 0' package-lock.json >/dev/null || {
+            echo "::error file=package-lock.json::npm audit graph is empty or invalid."
+            exit 1
+          }
+          jq -e '.scripts.lint | type == "string" and length > 0' \
+            package.json >/dev/null || {
+              echo "::error file=package.json::Required npm lint script is missing."
+              exit 1
+            }
 
       - name: Set up Node.js
         id: node_setup
-        if: steps.javascript.outputs.source_present == 'true' || steps.javascript.outputs.package_present == 'true'
         continue-on-error: true
         uses: actions/setup-node@v6
         with:
@@ -593,7 +618,7 @@ jobs:
 
       - name: Check JavaScript syntax
         id: javascript_syntax
-        if: always() && steps.javascript.outputs.source_present == 'true'
+        if: always()
         continue-on-error: true
         shell: bash
         run: |
@@ -608,35 +633,27 @@ jobs:
 
       - name: Install dependencies without lifecycle scripts
         id: npm_install
-        if: always() && steps.javascript.outputs.package_present == 'true' && hashFiles('package-lock.json') != ''
+        if: always()
         continue-on-error: true
         run: npm ci --ignore-scripts
 
       - name: Audit npm dependencies
         id: npm_audit
-        if: always() && steps.javascript.outputs.package_present == 'true' && hashFiles('package-lock.json') != ''
+        if: always()
         continue-on-error: true
         run: npm audit --audit-level=high
 
       - name: Run lint script
         id: npm_lint
-        if: always() && steps.javascript.outputs.package_present == 'true'
+        if: always()
         continue-on-error: true
-        shell: bash
-        run: |
-          if node -e '
-            const packageFile = require("./package.json");
-            process.exit(packageFile.scripts?.lint ? 0 : 1);
-          '; then
-            npm run lint
-          else
-            echo "::notice::No npm lint script configured."
-          fi
+        run: npm run lint
 
       - name: Enforce JavaScript audit results
-        if: always() && (steps.javascript.outputs.source_present == 'true' || steps.javascript.outputs.package_present == 'true')
+        if: always()
         shell: bash
         env:
+          JAVASCRIPT_INPUTS_OUTCOME: ${{ steps.javascript_inputs.outcome }}
           NODE_SETUP_OUTCOME: ${{ steps.node_setup.outcome }}
           JAVASCRIPT_SYNTAX_OUTCOME: ${{ steps.javascript_syntax.outcome }}
           NPM_INSTALL_OUTCOME: ${{ steps.npm_install.outcome }}
@@ -646,23 +663,21 @@ jobs:
           set -euo pipefail
           failed=0
 
-          accept_success_or_skip() {
+          require_success() {
             local name=$1
             local outcome=$2
-            case "$outcome" in
-              success|skipped) ;;
-              *)
-                echo "::error::$name concluded with $outcome."
-                failed=1
-                ;;
-            esac
+            if [[ "$outcome" != success ]]; then
+              echo "::error::$name concluded with $outcome; success is required."
+              failed=1
+            fi
           }
 
-          accept_success_or_skip node-setup "$NODE_SETUP_OUTCOME"
-          accept_success_or_skip javascript-syntax "$JAVASCRIPT_SYNTAX_OUTCOME"
-          accept_success_or_skip npm-install "$NPM_INSTALL_OUTCOME"
-          accept_success_or_skip npm-audit "$NPM_AUDIT_OUTCOME"
-          accept_success_or_skip npm-lint "$NPM_LINT_OUTCOME"
+          require_success javascript-inputs "$JAVASCRIPT_INPUTS_OUTCOME"
+          require_success node-setup "$NODE_SETUP_OUTCOME"
+          require_success javascript-syntax "$JAVASCRIPT_SYNTAX_OUTCOME"
+          require_success npm-install "$NPM_INSTALL_OUTCOME"
+          require_success npm-audit "$NPM_AUDIT_OUTCOME"
+          require_success npm-lint "$NPM_LINT_OUTCOME"
           exit "$failed"
 
 
