@@ -1,0 +1,3 @@
+# eStab's Python migration and browser utilities use only the Python standard
+# library. Keep this manifest to make the intentionally empty runtime
+# dependency set explicit and machine-verifiable.
