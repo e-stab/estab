@@ -23,6 +23,7 @@ $audit = $read($root . '/.github/workflows/audit.yml');
 $osv = $read($root . '/.github/workflows/osv-scanner.yml');
 $dependencyReview = $read($root . '/.github/workflows/dependency-review.yml');
 $dependabot = $read($root . '/.github/dependabot.yml');
+$technicalGuide = $read($root . '/docs/TECHNIK.md');
 $staticSuite = $read($root . '/tests/static/run.sh');
 $composerLock = json_decode(
     $read($root . '/composer.lock'),
@@ -133,6 +134,16 @@ $assert(
     && str_contains($dependabot, 'package-ecosystem: npm')
     && str_contains($dependabot, 'package-ecosystem: github-actions'),
     'Dependabot does not cover every declared dependency ecosystem'
+);
+$assert(
+    str_contains($technicalGuide, 'Die Dependency-Prüfungen arbeiten fail-closed')
+    && str_contains($technicalGuide, '`requirements-audit.txt`')
+    && str_contains($technicalGuide, 'composer audit --locked --no-interaction')
+    && str_contains($technicalGuide, 'pip-audit --requirement requirements-audit.txt')
+    && str_contains($technicalGuide, 'npm audit --audit-level=high')
+    && str_contains($technicalGuide, 'osv-scanner scan source --recursive .')
+    && !str_contains($technicalGuide, 'Diese fehlen derzeit noch'),
+    'Technical guide does not document the fail-closed dependency audit contract'
 );
 $assert(
     str_contains($dependencyReview, 'pull-requests: write')

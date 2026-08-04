@@ -70,9 +70,10 @@ Einzelvordruck. Darstellbare Anlagen werden zusätzlich sichtbar gerendert;
 Originale werden als eingebettete Dateien mitgeführt.
 
 Die aktive PDF-Bibliothek ist derzeit als FPDF 1.6 im Quellbaum eingebettet.
-Vor einer öffentlichen Weiterverteilung oder einem scharf geschalteten
-Dependency-Audit muss sie auf eine gepflegte Version aktualisiert und der
-gesamte PDF-Testpfad erneut ausgeführt werden.
+Vor einer öffentlichen Weiterverteilung muss sie auf eine gepflegte Version
+aktualisiert und der gesamte PDF-Testpfad erneut ausgeführt werden. Weil diese
+historische Kopie nicht über Composer bezogen wird, ist sie nicht Bestandteil
+des Composer-Abhängigkeitsgraphen.
 
 ## Lokale Tests
 
@@ -111,10 +112,73 @@ Die Workflows unter `.github/workflows/` prüfen:
 - CodeQL, Dependency Review, OSV und Container-Scans,
 - PDF-Rendering und Releasepakete.
 
-Composer-, pip- und npm-Audits benötigen deklarierte Manifeste und
-Lockdateien. Diese fehlen derzeit noch; bis zu ihrer Ergänzung ist die
-paketspezifische Dependency-Prüfung nicht vollständig scharf. Ein grüner
-Quelltest ersetzt diesen offenen technischen Punkt nicht.
+Die Dependency-Prüfungen arbeiten fail-closed: PHP-, Python- und
+JavaScript-Quellcode, die zugehörigen Manifeste und Lockdateien sowie ein
+nichtleerer Audit-Werkzeuggraph müssen vorhanden sein. Ein erwartetes
+Teilergebnis mit dem Zustand `skipped` lässt den Job ebenso fehlschlagen wie
+ein Scannerfehler oder ein Vulnerability-Fund. ShellCheck schlägt fehl, wenn
+es entgegen dem Repositoryvertrag keine Eingabedatei findet. Vor OSV wird
+zusätzlich geprüft, ob alle deklarierten Ökosysteme und die nichtleeren
+Composer-/Python-Graphen vorhanden sind.
+
+## Abhängigkeiten und Lockdateien
+
+Die Manifeste haben getrennte Aufgaben:
+
+| Ökosystem | Quelldeklaration | Reproduzierbarer Stand | Inhalt |
+| --- | --- | --- | --- |
+| PHP | `composer.json` | `composer.lock` | PHP 8.5, benötigte Extensions, PHPStan und PHPCS |
+| Python | `requirements.txt`, `requirements-audit.in` | `requirements-audit.txt` | Standardbibliothek für eStab-Skripte sowie gehashte Auditwerkzeuge |
+| JavaScript | `package.json` | `package-lock.json` | zwei lokale Browserskripte, Lint-Befehl, keine externen Pakete |
+
+Leere erfundene Laufzeitabhängigkeiten werden nicht angelegt. Die
+eStab-eigenen Python-Werkzeuge verwenden nur die Standardbibliothek; dies ist in
+`requirements.txt` ausdrücklich festgehalten. Der nichtleere, vollständig
+aufgelöste Werkzeuggraph in `requirements-audit.txt` sorgt dafür, dass
+pip-audit trotzdem reale Pakete prüft. Die beiden JavaScript-Dateien haben
+keine Drittanbieterimporte. Deshalb verarbeitet npm ihr Lockfile, ohne dass
+eine unnötige Bibliothek in Browser oder Container gelangt.
+
+Nach einer beabsichtigten Änderung müssen Quelldeklaration und Lockdatei
+gemeinsam aktualisiert und committet werden:
+
+```console
+composer update --no-scripts
+
+uv pip compile --python-version 3.13 --universal --generate-hashes \
+  --output-file requirements-audit.txt requirements-audit.in
+
+npm install --package-lock-only --ignore-scripts
+```
+
+Die wesentlichen lokalen Dependency-Gates sind:
+
+```console
+composer validate --strict
+composer install --no-scripts
+composer audit --locked --no-interaction
+vendor/bin/phpstan analyse --no-progress --memory-limit=1G
+vendor/bin/phpcs
+
+python -m pip install --require-hashes -r requirements-audit.txt
+python -m pip check
+ruff check .
+bandit --recursive . --exclude './vendor,./node_modules,./.git,./tests' \
+  --severity-level medium --confidence-level medium
+pip-audit --requirement requirements.txt
+pip-audit --requirement requirements-audit.txt
+
+npm ci --ignore-scripts
+npm audit --audit-level=high
+npm run lint
+
+osv-scanner scan source --recursive .
+```
+
+Dependabot pflegt Composer, pip, npm und GitHub Actions. Ein Update darf nicht
+nur die Quelldeklaration verändern; die zugehörige reproduzierbare Auflösung
+muss die oben genannten Installations-, Quell- und Vulnerability-Prüfungen
+erneut bestehen.
 
 ## Änderungen
 
