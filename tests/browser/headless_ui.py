@@ -5863,6 +5863,8 @@ class BrowserAcceptance:
                     },
                     innerWidth,
                     innerHeight,
+                    clientWidth: document.documentElement.clientWidth,
+                    clientHeight: document.documentElement.clientHeight,
                     scrollHeight: document.scrollingElement.scrollHeight
                 };
             })()
@@ -5878,6 +5880,15 @@ class BrowserAcceptance:
         content_frame = workspace.get("content")
         inner_width = float(workspace.get("innerWidth", 0))
         inner_height = float(workspace.get("innerHeight", 0))
+        # A classic Linux scrollbar reduces the usable layout viewport while
+        # Chrome deliberately keeps innerWidth at the emulated device width.
+        client_width = float(workspace.get("clientWidth", 0))
+        client_height = float(workspace.get("clientHeight", 0))
+        self._truth(
+            0 < client_width <= inner_width and client_height > 0,
+            f"Nachrichten-Layout-Viewport ist in {location} ungültig: "
+            f"{workspace!r}",
+        )
         if inner_width <= 672:
             self._truth(
                 isinstance(sidebar_frame, dict)
@@ -5885,26 +5896,26 @@ class BrowserAcceptance:
                 and abs(float(sidebar_frame.get("left", -1))) <= 0.5
                 and abs(float(content_frame.get("left", -1))) <= 0.5
                 and abs(float(sidebar_frame.get("top", -1))) <= 0.5
-                and abs(float(sidebar_frame.get("bottom", -1)) - inner_height)
+                and abs(float(sidebar_frame.get("bottom", -1)) - client_height)
                 <= 0.5
-                and abs(float(content_frame.get("top", -1)) - inner_height)
+                and abs(float(content_frame.get("top", -1)) - client_height)
                 <= 0.5
                 and abs(
                     float(content_frame.get("bottom", -1))
-                    - (2 * inner_height)
+                    - (2 * client_height)
                 )
                 <= 0.5
-                and abs(float(sidebar_frame.get("width", 0)) - inner_width)
+                and abs(float(sidebar_frame.get("width", 0)) - client_width)
                 <= 0.5
-                and abs(float(content_frame.get("width", 0)) - inner_width)
+                and abs(float(content_frame.get("width", 0)) - client_width)
                 <= 0.5
                 and abs(
                     float(workspace.get("scrollHeight", 0))
-                    - (2 * inner_height)
+                    - (2 * client_height)
                 )
                 <= 1,
                 f"Sidebar und Inhalt bilden in {location} keine zwei vollen "
-                "Viewport-Zeilen.",
+                f"Viewport-Zeilen: {workspace!r}",
             )
         else:
             self._truth(
@@ -5912,11 +5923,11 @@ class BrowserAcceptance:
                 and isinstance(content_frame, dict)
                 and abs(float(sidebar_frame.get("top", -1))) <= 0.5
                 and abs(
-                    float(sidebar_frame.get("bottom", -1)) - inner_height
+                    float(sidebar_frame.get("bottom", -1)) - client_height
                 )
                 <= 0.5
                 and abs(float(content_frame.get("top", -1))) <= 0.5
-                and abs(float(content_frame.get("bottom", -1)) - inner_height)
+                and abs(float(content_frame.get("bottom", -1)) - client_height)
                 <= 0.5
                 and float(sidebar_frame.get("width", 0)) >= 260
                 and float(sidebar_frame.get("right", 0))
