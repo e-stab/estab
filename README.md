@@ -120,9 +120,17 @@ gesichert werden.
 - Das aktuelle Benutzerhandbuch ist außerdem direkt unter `/handbuch/`
   erreichbar.
 
+## Lizenz
+
+eStab steht unter der [GNU General Public License Version 3](LICENSE),
+SPDX-Kennung `GPL-3.0-only`. Eingebundene Komponenten und Inhalte Dritter
+behalten ihre jeweiligen Lizenz- und Nutzungsbedingungen.
+
 ## Veröffentlichungsstatus
 
-Der lokale Source-Build ist nutzbar. Das vorbereitete Registry-Release ist
-solange nicht zur Weiterverteilung freigegeben, bis `LICENSE`,
-`THIRD_PARTY_NOTICES.md` und ein veröffentlichtes App-/Migrator-Digestpaar
-vorliegen. Keine Image-Referenzen erfinden oder `latest` verwenden.
+Der lokale Source-Build ist nutzbar und die Projektlizenz ist dokumentiert.
+Das vorbereitete Registry-Release ist solange nicht zur Weiterverteilung
+freigegeben, bis die Rechte und Hinweise aller mitgelieferten Inhalte in
+`THIRD_PARTY_NOTICES.md` geprüft sind und ein veröffentlichtes
+App-/Migrator-Digestpaar vorliegt. Keine Image-Referenzen erfinden oder
+`latest` verwenden.
