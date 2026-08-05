@@ -1760,7 +1760,7 @@ function estab_logbook_redirect(string $path): never
         && str_starts_with($path, $publicRoot);
     if ($publicRoot === '/') {
         $valid = $valid
-            && preg_match('~\A/[A-Za-z0-9_./-]+\z/D~', $path) === 1
+            && preg_match('~\A/[A-Za-z0-9_./-]+\z~D', $path) === 1
             && !str_starts_with($path, '//')
             && !str_contains($path, '..');
     }

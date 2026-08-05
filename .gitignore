@@ -3,6 +3,7 @@
 .env.*
 !.env.example
 /.estab-ci-*
+/.estab-e2e-secrets.*/
 /.estab-registry-bind.*
 /secrets/
 
@@ -19,6 +20,9 @@ __pycache__/
 *.py[cod]
 /.phpunit.cache/
 /vendor/
+/node_modules/
+/playwright-report/
+/test-results/
 
 # Operating-system and editor metadata
 .DS_Store

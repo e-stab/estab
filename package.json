@@ -5,7 +5,13 @@
   "description": "Digital support for a THW command post",
   "license": "GPL-3.0-only",
   "scripts": {
-    "lint": "node --check estab-password-policy.js && node --check handbuch/handbuch.js"
+    "lint": "node --check estab-password-policy.js && node --check handbuch/handbuch.js && node --check playwright.config.js && node --check tests/e2e/message-workflow.spec.js",
+    "test:e2e": "bash tests/e2e/run.sh",
+    "test:e2e:prepared": "playwright test",
+    "test:e2e:install": "playwright install chromium"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.62.0"
   },
   "engines": {
     "node": ">=24 <25"

@@ -17,6 +17,10 @@ backups/
 var/
 tmp/
 coverage/
+.estab-e2e-secrets.*/
+node_modules/
+playwright-report/
+test-results/
 vendor/
 .cache/
 .phpunit.cache/

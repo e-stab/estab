@@ -545,6 +545,11 @@ $assert(
     'shared logbook CSRF gate is missing'
 );
 $assert(
+    str_contains($helper, "preg_match('~\\A/[A-Za-z0-9_./-]+\\z~D', \$path) === 1")
+        && preg_match('~\A/[A-Za-z0-9_./-]+\z~D', '/stabetb/etb.php') === 1,
+    'same-origin logbook redirects reject valid application paths'
+);
+$assert(
     str_contains($helper, 'function estab_logbook_validate_references(')
         && str_contains($helper, 'function estab_logbook_etb_reference_target(')
         && str_contains($helper, 'FROM `nv_nachrichten`')

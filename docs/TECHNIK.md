@@ -102,6 +102,24 @@ ESTAB_CONTAINER_CLI=podman ESTAB_BROWSER_TEST=auto \
 Der Integrationslauf verwendet eigene Testprojekte und umfasst Neuinstallation,
 Migration, MariaDB, HTTP, Browser, PDF sowie Backup/Restore.
 
+Vollständiger Playwright-Nachrichtenablauf in einem eigenen, anschließend
+gelöschten Compose-Projekt:
+
+```console
+npm ci --ignore-scripts
+npm run test:e2e:install
+ESTAB_CONTAINER_CLI=podman npm run test:e2e
+```
+
+Der Lauf öffnet die Selbstregistrierung zeitlich begrenzt, registriert die
+persönlichen Konten A/W, LdF, Si, S1, S2, S3 und S6, lässt alle Personen ihre
+strenge Dienstfunktion annehmen, aktiviert die Schicht und veröffentlicht
+einen S6-Fernmeldeweg. Danach prüft er einen Eingang bis S1/S2/S3 samt
+S2-geführtem ETB-Eintrag sowie je einen Ausgang von S1, S2 und S3 bis zum
+Sichter, LdF, Fernmelder und TBB. Screenshots, Videos und Traces fehlgeschlagener
+Schritte liegen unter `test-results/`; der HTML-Bericht unter
+`playwright-report/`.
+
 ## CI
 
 Die Workflows unter `.github/workflows/` prüfen:
@@ -129,15 +147,14 @@ Die Manifeste haben getrennte Aufgaben:
 | --- | --- | --- | --- |
 | PHP | `composer.json` | `composer.lock` | PHP 8.5, benötigte Extensions, PHPStan und PHPCS |
 | Python | `requirements.txt`, `requirements-audit.in` | `requirements-audit.txt` | Standardbibliothek für eStab-Skripte sowie gehashte Auditwerkzeuge |
-| JavaScript | `package.json` | `package-lock.json` | zwei lokale Browserskripte, Lint-Befehl, keine externen Pakete |
+| JavaScript | `package.json` | `package-lock.json` | lokale Browserskripte, Lint und Playwright-E2E-Test |
 
 Leere erfundene Laufzeitabhängigkeiten werden nicht angelegt. Die
 eStab-eigenen Python-Werkzeuge verwenden nur die Standardbibliothek; dies ist in
 `requirements.txt` ausdrücklich festgehalten. Der nichtleere, vollständig
 aufgelöste Werkzeuggraph in `requirements-audit.txt` sorgt dafür, dass
-pip-audit trotzdem reale Pakete prüft. Die beiden JavaScript-Dateien haben
-keine Drittanbieterimporte. Deshalb verarbeitet npm ihr Lockfile, ohne dass
-eine unnötige Bibliothek in Browser oder Container gelangt.
+pip-audit trotzdem reale Pakete prüft. Playwright ist ausschließlich eine
+Entwicklungsabhängigkeit und gelangt nicht in das PHP-Laufzeitimage.
 
 Nach einer beabsichtigten Änderung müssen Quelldeklaration und Lockdatei
 gemeinsam aktualisiert und committet werden:
