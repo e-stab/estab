@@ -2,7 +2,8 @@ FROM php:8.5.8-apache-trixie@sha256:eacc0d98992683cb46e4f8f44b2418a0323855dc8b59
 
 LABEL org.opencontainers.image.title="eStab" \
     org.opencontainers.image.description="Containerized eStab application" \
-    org.opencontainers.image.source="https://github.com/e-stab/estab"
+    org.opencontainers.image.source="https://github.com/e-stab/estab" \
+    org.opencontainers.image.licenses="GPL-3.0-only"
 
 ENV ESTAB_DB_HOST=db \
     ESTAB_DB_PORT=3306 \
@@ -53,6 +54,7 @@ RUN set -eux; \
 
 WORKDIR /var/www/html
 
+COPY --chmod=0444 LICENSE /usr/share/licenses/estab/LICENSE
 COPY index.php health.php favicon.ico menue.inc.php estab-ui.css estab-password-policy.js ./
 
 # Git history and the migration evidence preserve the upstream lineage, while

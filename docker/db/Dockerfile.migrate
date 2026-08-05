@@ -2,8 +2,10 @@ FROM mariadb:11.8.8@sha256:efb4959ef2c835cd735dbc388eb9ad6aab0c78dd64febcd51bc17
 
 LABEL org.opencontainers.image.title="eStab schema migrator" \
     org.opencontainers.image.description="Fresh-schema and versioned migration gate for eStab" \
-    org.opencontainers.image.source="https://github.com/e-stab/estab"
+    org.opencontainers.image.source="https://github.com/e-stab/estab" \
+    org.opencontainers.image.licenses="GPL-3.0-only"
 
+COPY --chmod=0444 LICENSE /usr/share/licenses/estab/LICENSE
 COPY docker/db/migrate.sh /usr/local/bin/estab-migrate
 COPY docker/db/init/10-schema.sql /opt/estab/schema/10-schema.sql
 COPY docker/db/migrations/ /opt/estab/migrations/
