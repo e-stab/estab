@@ -220,8 +220,10 @@ $assert(
     && str_contains($registryReadme, 'sh ./verify-release.sh')
     && str_contains($registryReadme, 'ESTAB_APP_IMAGE')
     && str_contains($registryReadme, 'ESTAB_MIGRATE_IMAGE')
+    && str_contains($registryReadme, 'Die Projektlizenz liegt als `LICENSE` vor')
+    && str_contains($registryReadme, '`THIRD_PARTY_NOTICES.md` geprüft')
     && str_contains($registryReadme, 'skopeo copy --all --preserve-digests'),
-    'Registry runbook omits architecture, Synology, digest, backup, or verification'
+    'Registry runbook omits architecture, licensing, Synology, digest, backup, or verification'
 );
 $assert(
     str_contains($workflow, "on:\n  workflow_dispatch:")
@@ -363,6 +365,11 @@ $assert(
     && str_contains($candidateVerifier, 'local image is not the indexed native config')
     && str_contains($candidateVerifier, '.SBOM')
     && str_contains($candidateVerifier, '.Provenance')
+    && str_contains(
+        $candidateVerifier,
+        'org.opencontainers.image.licenses'
+    )
+    && str_contains($candidateVerifier, 'image_license != GPL-3.0-only')
     && str_contains($candidateVerifier, '--bundle-from-oci')
     && str_contains($candidateVerifier, '--source-digest "$GITHUB_SHA"')
     && str_contains($ci, 'prebuilt_app_image=${ESTAB_PREBUILT_APP_IMAGE:-}')
@@ -392,8 +399,11 @@ $assert(
     str_contains($workflow, 'APP_IMAGE: ghcr.io/e-stab/estab')
     && str_contains($workflow, 'MIGRATE_IMAGE: ghcr.io/e-stab/estab-migrate')
     && str_contains($workflow, 'org.opencontainers.image.version=')
-    && !str_contains($workflow, 'org.opencontainers.image.licenses'),
-    'Publish workflow omits an image or asserts an unverified license'
+    && substr_count(
+        $workflow,
+        'org.opencontainers.image.licenses=GPL-3.0-only'
+    ) === 2,
+    'Publish workflow omits an image or its verified GPL license label'
 );
 $releaseDraftPosition = strpos(
     $workflow,
@@ -664,8 +674,16 @@ $assert(
 );
 foreach ([$appDockerfile, $migrateDockerfile] as $dockerfile) {
     $assert(
-        str_contains($dockerfile, 'org.opencontainers.image.source="https://github.com/e-stab/estab"'),
-        'Published image lacks its OCI source label'
+        str_contains($dockerfile, 'org.opencontainers.image.source="https://github.com/e-stab/estab"')
+        && str_contains(
+            $dockerfile,
+            'org.opencontainers.image.licenses="GPL-3.0-only"'
+        )
+        && str_contains(
+            $dockerfile,
+            'COPY --chmod=0444 LICENSE /usr/share/licenses/estab/LICENSE'
+        ),
+        'Published image lacks its OCI source/license metadata or license text'
     );
 }
 $assert(
@@ -829,6 +847,8 @@ $assert(
     && str_contains($releaseVerifier, 'Compose-canonical lowercase')
     && str_contains($releaseVerifier, 'org.opencontainers.image.version')
     && str_contains($releaseVerifier, 'org.opencontainers.image.revision')
+    && str_contains($releaseVerifier, 'org.opencontainers.image.licenses')
+    && str_contains($releaseVerifier, 'image_license" = GPL-3.0-only')
     && str_contains($releaseVerifier, 'THIRD_PARTY_NOTICES.md')
     && str_contains($releaseVerifier, 'restore.sh')
     && str_contains($releaseVerifier, 'RELEASE-EVIDENCE.md')

@@ -338,10 +338,16 @@ if [ "$inspect_images" -eq 1 ]; then
             "$inspected_image" org.opencontainers.image.revision); then
             die "cannot inspect pulled release image revision: $inspected_image"
         fi
+        if ! image_license=$(inspect_label \
+            "$inspected_image" org.opencontainers.image.licenses); then
+            die "cannot inspect pulled release image license: $inspected_image"
+        fi
         [ "$image_version" = "$release_tag" ] ||
             die "image version label does not match Git-Tag: $inspected_image"
         [ "$image_revision" = "$release_commit" ] ||
             die "image revision label does not match Git-Commit: $inspected_image"
+        [ "$image_license" = GPL-3.0-only ] ||
+            die "image license label is not GPL-3.0-only: $inspected_image"
     done
 fi
 

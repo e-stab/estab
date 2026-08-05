@@ -78,6 +78,7 @@ verify_index_and_native_image() {
     local native_manifest_file="$evidence_dir/${label}-native-manifest.json"
     local native_manifest_digest
     local native_config_digest
+    local image_license
     local sbom
     local provenance
 
@@ -168,6 +169,13 @@ verify_index_and_native_image() {
         echo "Candidate verification: ${label} local image is not the indexed native config" >&2
         exit 1
     fi
+    image_license=$(docker image inspect --format \
+        '{{ index .Config.Labels "org.opencontainers.image.licenses" }}' \
+        "$image_reference")
+    if [[ $image_license != GPL-3.0-only ]]; then
+        echo "Candidate verification: ${label} image license is not GPL-3.0-only" >&2
+        exit 1
+    fi
 
     gh attestation verify "oci://$image_reference" \
         --repo "$GITHUB_REPOSITORY" \
@@ -184,6 +192,7 @@ verify_index_and_native_image() {
         printf 'native_config_digest=%s\n' "$native_config_digest"
         printf 'native_platform=%s\n' "$native_platform"
         printf 'local_image_id=%s\n' "$image_id"
+        printf 'image_license=%s\n' "$image_license"
     } >"$evidence_dir/${label}-image.env"
 }
 

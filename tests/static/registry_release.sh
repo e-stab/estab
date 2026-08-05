@@ -302,6 +302,9 @@ case "$1" in
             *org.opencontainers.image.revision*)
                 printf '%s\n' aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
                 ;;
+            *org.opencontainers.image.licenses*)
+                printf '%s\n' "${TEST_IMAGE_LICENSE:-GPL-3.0-only}"
+                ;;
             *) exit 1 ;;
         esac
         ;;
@@ -318,6 +321,16 @@ chmod 0755 "$fake_bin/docker" "$fake_bin/getfacl" "$fake_bin/uname"
 
 PATH="$fake_bin:$PATH" ESTAB_CONTAINER_CLI=docker \
     "$verifier" --inspect-images "$good" >/dev/null
+if PATH="$fake_bin:$PATH" ESTAB_CONTAINER_CLI=docker \
+    TEST_IMAGE_LICENSE=MIT \
+    "$verifier" --inspect-images "$good" \
+    >"$temporary_root/license-label.stdout" \
+    2>"$temporary_root/license-label.stderr"; then
+    echo "Registry release test: incorrect image license passed" >&2
+    exit 1
+fi
+grep -Fq 'image license label is not GPL-3.0-only' \
+    "$temporary_root/license-label.stderr"
 
 expect_deploy_check_failure()
 {
@@ -746,6 +759,7 @@ case "$1" in
       *org.opencontainers.image.revision*)
         printf '%s\n' aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
         ;;
+      *org.opencontainers.image.licenses*) printf '%s\n' GPL-3.0-only ;;
       *'{{.Id}}'*)
         printf 'sha256:1111111111111111111111111111111111111111111111111111111111111111\n'
         ;;
@@ -915,6 +929,9 @@ case "$1" in
                 ;;
             *org.opencontainers.image.revision*)
                 printf '%s\n' aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+                ;;
+            *org.opencontainers.image.licenses*)
+                printf '%s\n' GPL-3.0-only
                 ;;
             *'{{.Id}}'*)
                 printf 'sha256:%s\n' "$image_id"
