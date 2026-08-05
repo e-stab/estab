@@ -2,7 +2,7 @@
     "name": "e-stab/estab",
     "description": "Digital support for a THW command post",
     "type": "project",
-    "license": "proprietary",
+    "license": "GPL-3.0-only",
     "require": {
         "php": "~8.5.0",
         "ext-fileinfo": "*",

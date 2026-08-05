@@ -25,8 +25,20 @@ $dependencyReview = $read($root . '/.github/workflows/dependency-review.yml');
 $dependabot = $read($root . '/.github/dependabot.yml');
 $technicalGuide = $read($root . '/docs/TECHNIK.md');
 $staticSuite = $read($root . '/tests/static/run.sh');
+$composerManifest = json_decode(
+    $read($root . '/composer.json'),
+    true,
+    512,
+    JSON_THROW_ON_ERROR
+);
 $composerLock = json_decode(
     $read($root . '/composer.lock'),
+    true,
+    512,
+    JSON_THROW_ON_ERROR
+);
+$packageManifest = json_decode(
+    $read($root . '/package.json'),
     true,
     512,
     JSON_THROW_ON_ERROR
@@ -103,6 +115,12 @@ $assert(
     && str_contains($audit, 'run: npm run lint')
     && str_contains($audit, 'name: Enforce JavaScript audit results'),
     'JavaScript source, installation, audit, or lint can remain unaudited'
+);
+$assert(
+    ($composerManifest['license'] ?? null) === 'GPL-3.0-only'
+    && ($packageManifest['license'] ?? null) === 'GPL-3.0-only'
+    && ($packageLock['packages']['']['license'] ?? null) === 'GPL-3.0-only',
+    'Dependency manifests do not declare the project GPL-3.0-only license'
 );
 $assert(
     is_array($composerLock)

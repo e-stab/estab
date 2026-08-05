@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "description": "Digital support for a THW command post",
-  "license": "UNLICENSED",
+  "license": "GPL-3.0-only",
   "scripts": {
     "lint": "node --check estab-password-policy.js && node --check handbuch/handbuch.js"
   },
