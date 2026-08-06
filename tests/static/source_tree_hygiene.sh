@@ -32,8 +32,7 @@ is_deferred_source_only_path()
         4fbak/fpdf/ex.php | \
         4fbak/fpdf/fpdf.php | \
         4fbak/fpdf/tutorial | \
-        4fbak/fpdf181.zip | \
-        4fsym/famfamfam_silk_icons_v013.zip)
+        4fbak/fpdf181.zip)
             return 0
             ;;
     esac
@@ -110,8 +109,7 @@ is_allowed_menu_asset()
         4fsym/nw.png | \
         4fsym/tbb_aktiv.png | \
         4fsym/br.jpg | \
-        4fsym/null.gif | \
-        4fsym/famfamfam_silk_icons_v013.zip)
+        4fsym/null.gif)
             return 0
             ;;
     esac
