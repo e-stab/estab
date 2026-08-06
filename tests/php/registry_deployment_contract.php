@@ -221,7 +221,10 @@ $assert(
     && str_contains($registryReadme, 'ESTAB_APP_IMAGE')
     && str_contains($registryReadme, 'ESTAB_MIGRATE_IMAGE')
     && str_contains($registryReadme, 'Die Projektlizenz liegt als `LICENSE` vor')
-    && str_contains($registryReadme, '`THIRD_PARTY_NOTICES.md` geprüft')
+    && str_contains(
+        $registryReadme,
+        'Komponenten Dritter sind in `THIRD_PARTY_NOTICES.md` dokumentiert'
+    )
     && str_contains($registryReadme, 'skopeo copy --all --preserve-digests'),
     'Registry runbook omits architecture, licensing, Synology, digest, backup, or verification'
 );
@@ -686,6 +689,17 @@ foreach ([$appDockerfile, $migrateDockerfile] as $dockerfile) {
         'Published image lacks its OCI source/license metadata or license text'
     );
 }
+$assert(
+    str_contains(
+        $appDockerfile,
+        'COPY --chmod=0444 THIRD_PARTY_NOTICES.md /usr/share/licenses/estab/THIRD_PARTY_NOTICES.md'
+    )
+    && str_contains(
+        $appDockerfile,
+        'third_party/Noto-OFL-1.1.txt /usr/share/licenses/estab/Noto-OFL-1.1.txt'
+    ),
+    'Application image does not contain its third-party notices and font license'
+);
 $assert(
     str_contains($integration, 'compose up --detach --pull never')
     && str_contains($integration, 'migrate_status')

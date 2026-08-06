@@ -124,13 +124,14 @@ gesichert werden.
 
 eStab steht unter der [GNU General Public License Version 3](LICENSE),
 SPDX-Kennung `GPL-3.0-only`. Eingebundene Komponenten und Inhalte Dritter
-behalten ihre jeweiligen Lizenz- und Nutzungsbedingungen.
+behalten ihre jeweiligen Lizenz- und Nutzungsbedingungen; die ausgelieferten
+Komponenten sind in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)
+dokumentiert.
 
 ## Veröffentlichungsstatus
 
-Der lokale Source-Build ist nutzbar und die Projektlizenz ist dokumentiert.
-Das vorbereitete Registry-Release ist solange nicht zur Weiterverteilung
-freigegeben, bis die Rechte und Hinweise aller mitgelieferten Inhalte in
-`THIRD_PARTY_NOTICES.md` geprüft sind und ein veröffentlichtes
-App-/Migrator-Digestpaar vorliegt. Keine Image-Referenzen erfinden oder
+Der lokale Source-Build ist nutzbar. Projektlizenz und Hinweise zu den
+ausgelieferten Komponenten Dritter sind dokumentiert. Das vorbereitete
+Registry-Release bleibt ohne veröffentlichtes App-/Migrator-Digestpaar und
+vollständiges Releasepaket gesperrt. Keine Image-Referenzen erfinden oder
 `latest` verwenden.

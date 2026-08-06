@@ -7,12 +7,11 @@ Zielgerät keine Images und verwendet ausschließlich fest an einen
 ## Aktueller Status
 
 Im Repository ist derzeit kein freigegebenes App-/Migrator-Digestpaar
-veröffentlicht. Die Projektlizenz liegt als `LICENSE` vor. Bis zusätzlich
-die Rechte und Hinweise aller mitgelieferten Inhalte in
-`THIRD_PARTY_NOTICES.md` geprüft und ein vollständiges Releasepaket mit
-`RELEASE` und `SHA256SUMS` verfügbar ist, wird für Tests die Installation
-aus dem Checkout verwendet. Keine leeren Imagewerte ergänzen und kein
-`latest` einsetzen.
+veröffentlicht. Die Projektlizenz liegt als `LICENSE` vor; die ausgelieferten
+Komponenten Dritter sind in `THIRD_PARTY_NOTICES.md` dokumentiert. Bis ein
+vollständiges Releasepaket mit `RELEASE` und `SHA256SUMS` verfügbar ist, wird
+für Tests die Installation aus dem Checkout verwendet. Keine leeren
+Imagewerte ergänzen und kein `latest` einsetzen.
 
 Ein Release unterstützt `linux/amd64` und `linux/arm64`.
 

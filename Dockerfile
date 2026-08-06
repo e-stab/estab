@@ -55,6 +55,7 @@ RUN set -eux; \
 WORKDIR /var/www/html
 
 COPY --chmod=0444 LICENSE /usr/share/licenses/estab/LICENSE
+COPY --chmod=0444 THIRD_PARTY_NOTICES.md /usr/share/licenses/estab/THIRD_PARTY_NOTICES.md
 COPY --chmod=0444 third_party/Noto-OFL-1.1.txt /usr/share/licenses/estab/Noto-OFL-1.1.txt
 COPY index.php health.php favicon.ico menue.inc.php estab-ui.css estab-password-policy.js ./
 
