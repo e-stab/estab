@@ -134,6 +134,8 @@ $info = (string) file_get_contents($root . '/4fach/info.php');
 $help = (string) file_get_contents($root . '/language/german/helptext.php');
 $tools = (string) file_get_contents($root . '/4fach/tools.php');
 $imageRenderer = (string) file_get_contents($root . '/app/image_button.php');
+$buttonFont = $root . '/4fbak/fonts/NotoSerif-BoldItalic.ttf';
+$buttonFontLicense = $root . '/third_party/Noto-OFL-1.1.txt';
 $rootMenu = (string) file_get_contents($root . '/menue.inc.php');
 $httpSmoke = (string) file_get_contents($root . '/tests/integration/http_smoke.sh');
 $httpSurface = (string) file_get_contents($root . '/tests/integration/http_surface_http.sh');
@@ -245,6 +247,20 @@ $assert(
             $imageRenderer
         ),
     'image renderer still calls a PHP 8.5-deprecated GD signature'
+);
+$assert(
+    is_file($buttonFont)
+        && hash_file('sha256', $buttonFont)
+            === '4fb8737145b4a503d548af4b517afdfc532e44a96ac15378257e825741334eec'
+        && str_contains($imageRenderer, '/4fbak/fonts/NotoSerif-BoldItalic.ttf')
+        && !str_contains(strtolower($imageRenderer), 'georgiaz.ttf'),
+    'image renderer does not use the pinned Noto Serif Bold Italic font'
+);
+$assert(
+    is_file($buttonFontLicense)
+        && hash_file('sha256', $buttonFontLicense)
+            === '0dab92d0544f7b233403f14b84a663bdbfa746982eda629e7f4f9ffe1b036feb',
+    'bundled Noto font license is missing or changed'
 );
 
 $integrationCoverage = $httpSurface . $httpSmoke . $logbookHttp;

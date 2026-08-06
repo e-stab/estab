@@ -142,6 +142,26 @@ done <<EOF
 $active_menu_assets
 EOF
 
+active_font_asset=4fbak/fonts/NotoSerif-BoldItalic.ttf
+while IFS= read -r tracked_path; do
+    case "$tracked_path" in
+        4fbak/fonts/*)
+            if [ "$tracked_path" != "$active_font_asset" ]; then
+                report_tracked_path non-allowlisted-font "$tracked_path"
+            fi
+            ;;
+    esac
+done <<EOF
+$tracked_paths
+EOF
+
+if ! git -C "$repo_root" ls-files --error-unmatch -- "$active_font_asset" \
+    >/dev/null 2>&1; then
+    printf 'Source tree hygiene: active font is not tracked: %s\n' \
+        "$active_font_asset" >&2
+    failed=1
+fi
+
 while IFS= read -r tracked_path; do
     case "$tracked_path" in
         4fach/design/mr/folder_global.gif)

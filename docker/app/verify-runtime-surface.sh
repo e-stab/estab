@@ -77,7 +77,7 @@ menue.inc.php
 4fbak/fpdf/font/timesbi.php
 4fbak/fpdf/font/timesi.php
 4fbak/fpdf/font/zapfdingbats.php
-4fbak/fonts/georgiaz.ttf
+4fbak/fonts/NotoSerif-BoldItalic.ttf
 4fcfg/color.inc.php
 4fcfg/config.inc.php
 4fcfg/d_cfg.inc.php
@@ -326,7 +326,7 @@ unexpected_fonts=$(
     find "$runtime_root" -xdev \
         -path "$runtime_root/4fdata" -prune -o \
         -type f -iname '*.ttf' \
-        ! -path "$runtime_root/4fbak/fonts/georgiaz.ttf" \
+        ! -path "$runtime_root/4fbak/fonts/NotoSerif-BoldItalic.ttf" \
         -print
 )
 if [ -n "$unexpected_fonts" ]; then

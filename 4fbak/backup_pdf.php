@@ -236,18 +236,6 @@ class vordruckaspdf extends PDF_Ellipse {
     $this->fright  = $this->right  - $this->border['right'] ;
     $this->ftop    = $this->top    + $this->border['top'] ;
     $this->fbottom = $this->bottom - $this->border['bottom'] ;
-/*
-    $this->font ["n"] = "georgia.ttf";
-    $this->font ["b"] = "georgiab.ttf";
-    $this->font ["i"] = "georgiai.ttf";
-    $this->font ["z"] = "georgiaz.ttf";
-*/
-/*
-    $this->font ["n"] = $conf_web ["srvroot"].$conf_web ["pre_path"]."/4fbak/fonts/Garrison Sans.ttf";
-    $this->font ["b"] = $conf_web ["srvroot"].$conf_web ["pre_path"]."/4fbak/fonts/Garrison Sans BOLD.ttf";
-    $this->font ["i"] = $conf_web ["srvroot"].$conf_web ["pre_path"]."/4fbak/fonts/Garrison Sans ITALIC.ttf";
-    $this->font ["z"] = $conf_web ["srvroot"].$conf_web ["pre_path"]."/4fbak/fonts/georgiaz.ttf";
-*/
     $this->color_sw = array ( "r" =>   0, "g" =>   0, "b" =>   0 );
     $this->color_rd = array ( "r" => 255, "g" =>   0, "b" =>   0 );
     $this->color_bl = array ( "r" =>   0, "g" =>   0, "b" => 255 );

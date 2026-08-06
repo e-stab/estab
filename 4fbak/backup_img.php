@@ -75,17 +75,10 @@ class vordruckasimg {
     $this->fright  = $this->right  - 10 ;
     $this->ftop    = $this->top    + 10 ;
     $this->fbottom = $this->bottom - 10 ;
-/*
-    $this->font ["n"] = "georgia.ttf";
-    $this->font ["b"] = "georgiab.ttf";
-    $this->font ["i"] = "georgiai.ttf";
-    $this->font ["z"] = "georgiaz.ttf";
-*/
-
-    $this->font ["n"] = $conf_web ["srvroot"].$conf_web ["pre_path"]."/4fbak/fonts/Garrison Sans.ttf";
-    $this->font ["b"] = $conf_web ["srvroot"].$conf_web ["pre_path"]."/4fbak/fonts/Garrison Sans BOLD.ttf";
-    $this->font ["i"] = $conf_web ["srvroot"].$conf_web ["pre_path"]."/4fbak/fonts/Garrison Sans ITALIC.ttf";
-    $this->font ["z"] = $conf_web ["srvroot"].$conf_web ["pre_path"]."/4fbak/fonts/georgiaz.ttf";
+    $this->font ["n"] = $conf_web ["srvroot"].$conf_web ["pre_path"]."/4fbak/fonts/NotoSerif-BoldItalic.ttf";
+    $this->font ["b"] = $this->font ["n"];
+    $this->font ["i"] = $this->font ["n"];
+    $this->font ["z"] = $this->font ["n"];
 
 
     $this->db_dataset ["00_lfd"]          = $data ["00_lfd"] ;

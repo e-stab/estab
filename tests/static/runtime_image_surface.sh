@@ -83,6 +83,8 @@ assert_dockerfile_contains 'COPY 4fbak/backup.php'
 assert_dockerfile_contains '4fbak/thw.png'
 assert_dockerfile_contains 'COPY app/*.php ./app/'
 assert_dockerfile_contains 'COPY 4fbak/fpdf/font/*.php ./4fbak/fpdf/font/'
+assert_dockerfile_contains 'COPY 4fbak/fonts/NotoSerif-BoldItalic.ttf ./4fbak/fonts/'
+assert_dockerfile_contains 'third_party/Noto-OFL-1.1.txt /usr/share/licenses/estab/Noto-OFL-1.1.txt'
 assert_dockerfile_contains 'COPY handbuch/index.php'
 assert_dockerfile_contains 'handbuch/handbuch.css'
 assert_dockerfile_contains 'handbuch/handbuch.js'
@@ -122,6 +124,7 @@ for required_runtime_path in \
     4fadm/fuehrungsstelle.php \
     4fadm/self_registration.php \
     4fbak/thw.png \
+    4fbak/fonts/NotoSerif-BoldItalic.ttf \
     4fsym/4fach_aktiv.png \
     4fsym/adm_aktiv.png \
     4fsym/all_msg.png \

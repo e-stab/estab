@@ -55,6 +55,7 @@ RUN set -eux; \
 WORKDIR /var/www/html
 
 COPY --chmod=0444 LICENSE /usr/share/licenses/estab/LICENSE
+COPY --chmod=0444 third_party/Noto-OFL-1.1.txt /usr/share/licenses/estab/Noto-OFL-1.1.txt
 COPY index.php health.php favicon.ico menue.inc.php estab-ui.css estab-password-policy.js ./
 
 # Git history and the migration evidence preserve the upstream lineage, while
@@ -114,16 +115,16 @@ COPY 4fadm/admin.php \
     4fadm/users.php \
     ./4fadm/
 
-# Only the active PDF generator is shipped. The old bitmap generator, bundled
-# FPDF examples/documentation/archive and unused font collection stay in Git.
+# Only the active PDF generator is shipped. The old bitmap generator and
+# bundled FPDF examples/documentation/archive stay in Git.
 COPY 4fbak/backup.php \
     4fbak/backup_pdf.php \
     4fbak/fpdf.php \
     4fbak/thw.png \
     ./4fbak/
 COPY 4fbak/fpdf/font/*.php ./4fbak/fpdf/font/
-# Dynamic button rendering uses this one historical font when FreeType exists.
-COPY 4fbak/fonts/georgiaz.ttf ./4fbak/fonts/
+# Dynamic button rendering uses the bundled OFL-licensed font when FreeType exists.
+COPY 4fbak/fonts/NotoSerif-BoldItalic.ttf ./4fbak/fonts/
 
 COPY 4fcfg/color.inc.php \
     4fcfg/config.inc.php \

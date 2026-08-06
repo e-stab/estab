@@ -257,7 +257,7 @@ function estab_image_canvas(int $width, int $height): mixed
 /** @return array{width: int, height: int, min_x: int, min_y: int}|null */
 function estab_image_ttf_metrics(string $text, int $size): ?array
 {
-    $font = dirname(__DIR__) . '/4fbak/fonts/georgiaz.ttf';
+    $font = dirname(__DIR__) . '/4fbak/fonts/NotoSerif-BoldItalic.ttf';
     if (!function_exists('imagettfbbox') || !is_readable($font)) {
         return null;
     }
@@ -287,7 +287,7 @@ function estab_image_draw_centred_text(
     int $colour,
     ?array $metrics = null
 ): void {
-    $font = dirname(__DIR__) . '/4fbak/fonts/georgiaz.ttf';
+    $font = dirname(__DIR__) . '/4fbak/fonts/NotoSerif-BoldItalic.ttf';
     if ($metrics !== null && function_exists('imagettftext')) {
         $x = (int) floor(($width - $metrics['width']) / 2) - $metrics['min_x'];
         $y = (int) floor(($height - $metrics['height']) / 2) - $metrics['min_y'];
