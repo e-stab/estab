@@ -51,6 +51,13 @@ $packageLock = json_decode(
 );
 $pythonAuditLock = $read($root . '/requirements-audit.txt');
 
+$ciActionRefs = [];
+preg_match_all(
+    '/^\s*uses:\s+\S+@([^\s#]+)/m',
+    $ci,
+    $ciActionRefs
+);
+
 $assert(
     !str_contains($ci, 'id: provenance')
     && !str_contains($ci, 'migration/verify_provenance.py')
@@ -61,6 +68,15 @@ $assert(
     && str_contains($ci, 'if: ${{ !cancelled() }}')
     && substr_count($ci, 'continue-on-error: true') >= 4,
     'CI still enforces retired SVN provenance or does not aggregate current checks'
+);
+$assert(
+    count($ciActionRefs[1] ?? []) > 0
+        && count(array_filter(
+            $ciActionRefs[1],
+            static fn (string $ref): bool =>
+                preg_match('~\A[0-9a-f]{40}\z~D', $ref) !== 1
+        )) === 0,
+    'CI actions are not pinned to complete 40-character commit SHAs'
 );
 $assert(
     str_contains($audit, 'git grep -nI -E')
