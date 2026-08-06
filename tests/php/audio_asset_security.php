@@ -151,22 +151,22 @@ $readPcmWave = static function (string $path) use ($assert): array {
 
 $expectedSounds = [
     'notify_aw.wav' => [
-        'sha256' => '23c2f0b708ef3d1091442c53008327a6c24681fab7d61e2515d1bf4cbbdb50d4',
-        'channels' => 2,
-        'sample_rate' => 22050,
-        'frames' => 104270,
-    ],
-    'notify_si.wav' => [
-        'sha256' => 'd0278a49c94f92ac3c63d2b8e840af5ce2303d6048f834dff4182d1a60217b66',
-        'channels' => 2,
-        'sample_rate' => 44100,
-        'frames' => 64935,
-    ],
-    'notify_stab.wav' => [
-        'sha256' => 'f264a2c67b05ff59f5df8f96cfe34fa92f917056c551af1d42118d8fc31e2cc5',
+        'sha256' => '448b4d0ac84265363194ca4ea77e093549da6536625d14ed778136d2c863a7b7',
         'channels' => 1,
         'sample_rate' => 22050,
-        'frames' => 52593,
+        'frames' => 22932,
+    ],
+    'notify_si.wav' => [
+        'sha256' => 'ca5a29a14e425f464513c47cac98ac2bfc7b019050f34b4ee32da12020b0019f',
+        'channels' => 1,
+        'sample_rate' => 22050,
+        'frames' => 22932,
+    ],
+    'notify_stab.wav' => [
+        'sha256' => 'beac1b45c2fe2dd2ad239e728b08312ad152454f007750a4da2b4d8c98ce90d3',
+        'channels' => 1,
+        'sample_rate' => 22050,
+        'frames' => 24033,
     ],
 ];
 

@@ -45,9 +45,6 @@ menue.inc.php
 4fach/design/HS/000.gif
 4fach/design/HS/attachment.gif
 4fach/design/HS/cancel.gif
-4fach/design/HS/notify_aw.wav
-4fach/design/HS/notify_si.wav
-4fach/design/HS/notify_stab.wav
 4fach/design/HS/ok.gif
 4fach/design/HS/send.gif
 4fach/design/mr/folder_global.gif
@@ -180,6 +177,9 @@ e_cfg.inc.php
 4fach/design/2010preview
 4fach/design/HL0001
 4fach/design/HS/second.bs
+4fach/design/HS/notify_aw.wav
+4fach/design/HS/notify_si.wav
+4fach/design/HS/notify_stab.wav
 4fach/design/second
 4fach/design/simple
 4fach/design/Symboldesign.odt

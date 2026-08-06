@@ -53,6 +53,7 @@ $php_bin "$repo_root/tests/php/user_admin_security.php"
 $php_bin "$repo_root/tests/php/navigation_security.php"
 $php_bin "$repo_root/tests/php/session_ui_security.php"
 $php_bin "$repo_root/tests/php/sidebar_ui_security.php"
+$php_bin "$repo_root/tools/generate_notification_tones.php" --verify
 $php_bin "$repo_root/tests/php/audio_asset_security.php"
 $php_bin "$repo_root/tests/php/tool_ui_security.php"
 $php_bin "$repo_root/tests/php/root_menu_security.php"

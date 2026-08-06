@@ -1,9 +1,10 @@
 # Browserfähige Hinweistöne
 
-Die drei WAV-Dateien sind PCM-16-Kopien der bestehenden Töne aus
-`4fach/design/HS/`. Die Originaldateien bleiben unverändert. Die Kopien
-vermeiden das von Browsern nicht zuverlässig unterstützte Microsoft-ADPCM der
-Fernmelder- und Sichtertöne.
+Die drei WAV-Dateien werden vollständig und reproduzierbar im Projekt erzeugt.
+Der Generator synthetisiert mit reiner Ganzzahlarithmetik unterscheidbare
+Dreieckswellen und schreibt browserfähige Mono-WAV-Dateien mit PCM-16 und
+22.050 Hz. Es werden keine externen Tonaufnahmen oder Audiobibliotheken
+verwendet.
 
 - `notify_aw.wav`: Fernmelder, Warteschlange `old_que_aw`
 - `notify_si.wav`: Sichter, Warteschlange `old_que_si`
@@ -15,14 +16,14 @@ aktivieren“. Die automatischen Tests prüfen RIFF/WAVE-Struktur, PCM-Format,
 Auslösezustände und den angeforderten Wiedergabeaufruf. Ob ein Zielgerät den
 Ton physisch hörbar ausgibt, bleibt Teil der manuellen Abnahme.
 
-Reproduzierbare Neukodierung mit FFmpeg:
+Töne neu erzeugen:
 
 ```console
-ffmpeg -hide_banner -loglevel error -y -fflags +bitexact \
-  -i 4fach/design/HS/notify_aw.wav -map_metadata -1 \
-  -c:a pcm_s16le -flags:a +bitexact 4fach/audio/notify_aw.wav
+php tools/generate_notification_tones.php --write
 ```
 
-Für `notify_si.wav` und `notify_stab.wav` werden Ein- und Ausgabename
-entsprechend ersetzt. Abtastrate und Kanalzahl übernimmt FFmpeg dabei aus der
-jeweiligen Quelle.
+Prüfen, dass die eingecheckten Dateien exakt aus dem Generator stammen:
+
+```console
+php tools/generate_notification_tones.php --verify
+```

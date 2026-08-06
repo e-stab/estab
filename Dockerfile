@@ -97,7 +97,6 @@ COPY 4fach/upload/upload.php ./4fach/upload/
 COPY 4fach/audio/*.wav ./4fach/audio/
 COPY 4fach/design/HS/*.gif \
     4fach/design/HS/*.jpg \
-    4fach/design/HS/*.wav \
     ./4fach/design/HS/
 COPY 4fach/design/mr/folder_global.gif ./4fach/design/mr/
 COPY 4fach/null.gif ./4fach/
