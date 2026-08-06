@@ -1,8 +1,9 @@
 # Hinweise zu Komponenten Dritter
 
-Dieses Dokument erfasst die Komponenten Dritter, die eStab unmittelbar in
-seinen Anwendungsquellen oder im Anwendungscontainer ausliefert. Die
-Projektlizenz steht separat in `LICENSE`.
+Dieses Dokument erfasst die Komponenten Dritter, die eStab unmittelbar im
+Anwendungscontainer und im Pull-only-Registry-Releasepaket ausliefert. Die
+Projektlizenz steht separat in `LICENSE`. Reine Entwicklungs- und Testwerkzeuge
+aus den Lockdateien werden nicht in diese Laufzeitartefakte kopiert.
 
 Die Container bauen außerdem auf den in den Dockerfiles digest-fixierten
 offiziellen PHP- und MariaDB-Images auf. Deren Betriebssystem-, Laufzeit- und

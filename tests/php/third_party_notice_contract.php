@@ -19,6 +19,7 @@ if (!is_string($notice)) {
 }
 
 foreach ([
+    'Anwendungscontainer und im Pull-only-Registry-Releasepaket',
     'FPDF 1.6',
     'Olivier Plathey',
     'LicenseRef-FPDF',
