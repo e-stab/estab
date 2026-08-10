@@ -202,7 +202,7 @@ jobs:
           cache-to: type=gha,mode=max,scope=estab-migrate
 
       - name: Attest application image
-        uses: actions/attest@f7c74d28b9d84cb8768d0b8ca14a4bac6ef463e6 # v4
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
         with:
           subject-name: ${{ env.APP_IMAGE }}
           subject-digest: ${{ steps.push_app.outputs.digest }}
@@ -210,7 +210,7 @@ jobs:
           create-storage-record: false
 
       - name: Attest migration image
-        uses: actions/attest@f7c74d28b9d84cb8768d0b8ca14a4bac6ef463e6 # v4
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
         with:
           subject-name: ${{ env.MIGRATE_IMAGE }}
           subject-digest: ${{ steps.push_migrate.outputs.digest }}
