@@ -529,10 +529,22 @@
 
 .estab-message-sidebar {
     box-sizing: border-box;
-    display: grid;
+    display: flex;
+    flex-direction: column;
     gap: 0.75rem;
     min-height: 100dvh;
     padding: 0.75rem;
+}
+
+/* Die Bereichsnavigation ist der einzige Weg aus dem aktuellen Arbeitsschritt
+   heraus und stand bisher am Ende einer rund 1500 px hohen Spalte. Als
+   letztes Element einer Flex-Spalte bleibt sie am unteren Rand sichtbar,
+   ohne die Seitenleiste bis zum Ende scrollen zu muessen. */
+.estab-message-sidebar > .estab-navigation {
+    background: #102641;
+    bottom: 0;
+    margin-top: auto;
+    position: sticky;
 }
 
 .estab-sidebar-status,
@@ -7538,4 +7550,76 @@ a.estab-message-list-chip:hover {
 
 .estab-password-policy-confirm {
     margin-top: 1rem;
+}
+
+/* ---------------------------------------------------------------------------
+   Dichte auf flachen Bildschirmen
+
+   Auf den Geraeten, auf denen eine Fuehrungsstelle arbeitet, ist nicht die
+   Breite knapp, sondern die Hoehe: von 768 px bleiben nach dem Browser-Chrome
+   rund 600 px. Das Stylesheet kannte bisher ausschliesslich breitenbezogene
+   Abfragen, so dass die Anwendung auf einem flachen Bildschirm dieselben
+   Abstaende belegte wie auf einem hohen.
+   --------------------------------------------------------------------------- */
+@media (max-height: 56rem) {
+    .estab-message-sidebar {
+        gap: 0.5rem;
+        padding: 0.5rem;
+    }
+
+    .estab-sidebar-status,
+    .estab-sidebar-workflow {
+        padding: 0.55rem;
+    }
+
+    .estab-sidebar-action {
+        min-height: 2.9rem;
+        padding: 0.42rem 0.55rem;
+    }
+
+    .estab-tool-shell {
+        padding: 0.7rem 1rem 1.5rem;
+    }
+
+    .estab-tool-panel {
+        padding: clamp(0.7rem, 1.6vw, 1rem);
+    }
+}
+
+@media (max-height: 46rem) {
+    .estab-message-sidebar {
+        gap: 0.35rem;
+        padding: 0.35rem;
+    }
+
+    .estab-sidebar-status,
+    .estab-sidebar-workflow {
+        padding: 0.45rem;
+    }
+
+    .estab-sidebar-action {
+        min-height: 2.4rem;
+        padding: 0.32rem 0.5rem;
+    }
+
+    .estab-sidebar-action-description {
+        font-size: 0.72rem;
+        line-height: 1.2;
+    }
+
+    .estab-sidebar-section-heading p {
+        display: none;
+    }
+
+    .estab-tool-shell {
+        padding: 0.5rem 0.85rem 1.25rem;
+    }
+
+    .estab-tool-panel {
+        padding: 0.6rem 0.75rem;
+    }
+
+    .estab-tool-page h1 {
+        font-size: 1.2rem;
+    }
 }
