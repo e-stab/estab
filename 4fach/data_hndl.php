@@ -537,6 +537,7 @@ function estab_rehydrate_authoritative_message_form (
 ): array {
   $editableFields = match ($task) {
     "Stab_korrigieren" => array (
+      "06_befwegausw",
       "07_durchspruch",
       "09_vorrangstufe",
       "10_anschrift",
@@ -1106,6 +1107,11 @@ function check_and_save ($data, $activeCommandPostName, $expectedIncidentId){
            // The acceptance mark belongs to LdF, not to the author.
            "02_zeit" => null,
            "02_zeichen" => "",
+           // Feld 7 is the author's wish. LdF replaces it with the medium of
+           // the disposed S6 route; the actually used way stays in Feld 1.
+           "06_befwegausw" => estab_message_medium_storage_value (
+             $data ["06_befwegausw"]
+           ) ?? "",
            "07_durchspruch" => $data ["07_durchspruch"],
            "09_vorrangstufe" => $data ["09_vorrangstufe"],
            "10_anschrift" => $data ["10_anschrift"],
@@ -1192,6 +1198,9 @@ function check_and_save ($data, $activeCommandPostName, $expectedIncidentId){
           $sessionCode,
           $sessionFunction,
           array (
+          "06_befwegausw" => estab_message_medium_storage_value (
+            $data ["06_befwegausw"]
+          ) ?? "",
           "07_durchspruch" => $data ["07_durchspruch"],
           "09_vorrangstufe" => $data ["09_vorrangstufe"],
           "10_anschrift" => $data ["10_anschrift"],

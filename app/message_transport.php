@@ -98,6 +98,28 @@ function estab_message_medium_storage_value(mixed $medium): ?string
 }
 
 /**
+ * Name the workflow steps that may write Feld 7, the desired transport medium.
+ *
+ * Feld 7 carries a wish, not evidence: whoever writes an outgoing message says
+ * over which telecommunication means it should travel. LdF later disposes the
+ * actual way from the active S6 telecommunication plan, and the actually used
+ * way is documented in Feld 1, so no later step may rewrite the wish.
+ *
+ * @return list<string>
+ */
+function estab_message_desired_medium_tasks(): array
+{
+    return ['Stab_schreiben', 'Stab_korrigieren'];
+}
+
+/** Decide whether one workflow step may write Feld 7. */
+function estab_message_desired_medium_editable(mixed $task): bool
+{
+    return is_string($task)
+        && in_array($task, estab_message_desired_medium_tasks(), true);
+}
+
+/**
  * Combine the selected medium with the operational free-text route.
  *
  * Repeating "Fu" and "Funk" would make the tracking table harder to scan, so

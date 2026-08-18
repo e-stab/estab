@@ -229,11 +229,17 @@ class vali_data_form {
         && preg_match ('//u', $value) === 1
         && preg_match ('/[\p{C}]/u', $value) !== 1;
     }
-    if (isset ($this->i_data ["06_befwegausw"])) {
+    if (array_key_exists ("06_befwegausw", $this->i_data)) {
+      // Feld 7 states a wish, so leaving it empty stays valid. An invented
+      // medium never reaches the SET column or the re-rendered form.
+      $desiredMedium = $this->i_data ["06_befwegausw"];
+      $desiredMediumValue = estab_message_medium_storage_value (
+        $desiredMedium
+      );
       $this->validate ["06_befwegausw"] =
-        estab_message_medium_storage_value (
-          $this->i_data ["06_befwegausw"]
-        ) !== null;
+        $desiredMediumValue !== null
+        || (is_string ($desiredMedium) && trim ($desiredMedium) === "");
+      $this->i_data ["06_befwegausw"] = $desiredMediumValue ?? "";
     }
     if (isset ($this->i_data ["fernmeldeplan_eintrag_id"])) {
       $routeId = $this->i_data ["fernmeldeplan_eintrag_id"];

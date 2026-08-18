@@ -2311,7 +2311,7 @@ HTML;
         $this->official_message_radio_group(
             '06_befwegausw',
             $this->official_message_medium_options('06_befwegausw'),
-            (bool)$this->feld[6] && $this->task !== 'LdF-Ausgang',
+            estab_message_desired_medium_editable($this->task),
             'Gewünschtes Übermittlungsmittel',
             $this->task !== 'LdF-Ausgang'
         );
