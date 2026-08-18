@@ -73,6 +73,35 @@ preg_match_all(
     $ciActionRefs
 );
 
+// Every workflow that spends runner minutes must limit `push` to the shared
+// branches. Without that limit a pull request from a branch in this repository
+// triggers the same jobs twice: once for the push and once for the pull
+// request. `merge_group` keeps the queue covered.
+$triggerScoped = static function (string $workflow): bool {
+    if (preg_match('~^on:\n(?<body>(?: {2}.*\n|\n)*)~m', $workflow, $match) !== 1) {
+        return false;
+    }
+    $body = $match['body'];
+    return preg_match(
+        '~^  push:\n    branches:\n(?:      - (?:main|master|develop)\n)+~m',
+        $body
+    ) === 1
+        && str_contains($body, '  merge_group:');
+};
+foreach (
+    [
+        'ci.yml' => $ci,
+        'audit.yml' => $audit,
+        'osv-scanner.yml' => $osv,
+    ] as $workflowName => $workflowSource
+) {
+    $assert(
+        $triggerScoped($workflowSource),
+        $workflowName . ' runs on every push and therefore duplicates every'
+            . ' pull-request run, or it does not cover the merge queue'
+    );
+}
+
 $assert(
     !str_contains($ci, 'id: provenance')
     && !str_contains($ci, 'migration/verify_provenance.py')
