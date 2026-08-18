@@ -1927,6 +1927,35 @@ function check_and_save ($data, $activeCommandPostName, $expectedIncidentId){
            $empf_matrix,
            array ($redcopy2."_rt")
          );
+         if (!estab_workflow_distribution_has_processor ($data ["16_empf"])) {
+           // Feld 19, Laufweg Eingang: Die Sichtung schliesst den Nachweis
+           // ab. Die rote Lage-/Dokumentationsdurchschrift steht hier immer,
+           // sie ist kein Empfaenger im Sinne des Laufwegs. Ohne blaue
+           // Durchschrift bliebe die Nachricht ohne Bearbeiter liegen.
+           $validationErrors = array_fill_keys (array (
+             "01_medium", "01_datum", "01_zeichen", "02_zeit", "02_zeichen",
+             "03_datum", "03_zeichen", "05_gegenstelle", "06_befweg",
+             "06_befwegausw", "07_durchspruch", "08_befhinweis",
+             "08_befhinwausw", "10_anschrift", "11_rufnummer",
+             "12_betreff", "12_inhalt", "12_abfzeit",
+             "13_abseinheit", "14_zeichen", "14_funktion", "15_quitdatum",
+             "15_quitzeichen", "17_vermerke"
+           ), true);
+           $validationErrors ["16_empf"] = false;
+           $form = new nachrichten4fach (
+             array_replace ($reviewMessage, array (
+               "15_quitdatum" => $data ["15_quitdatum"],
+               "15_quitzeichen" => $sessionCode,
+               "16_empf" => $data ["16_empf"],
+               "17_vermerke" => $data ["17_vermerke"],
+               "estab_route_error" =>
+                 estab_workflow_missing_processor_message (),
+             )),
+             "Stab_sichten",
+             $validationErrors
+           );
+           exit;
+         }
          $reviewFields ["16_empf"] = $data ["16_empf"];
          $reviewFields ["x00_status"] = 8;
          $reviewFields ["x01_abschluss"] = "t";

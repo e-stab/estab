@@ -138,6 +138,7 @@ for test_name in \
     message_suggestion_security \
     message_transport_security \
     ldf_validation_security \
+    message_review_recipient_security \
     ldf_return_security \
     ldf_ui_flow_security \
     exercise_leadership_view_security \

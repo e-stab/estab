@@ -2,6 +2,7 @@
 
 require_once __DIR__ . "/../app/message_transport.php";
 require_once __DIR__ . "/../app/message_priority.php";
+require_once __DIR__ . "/../app/workflow.php";
 
 class vali_data_form {
 
@@ -56,6 +57,7 @@ class vali_data_form {
      $this->validate ["14_funktion"]   = false ;
      $this->validate ["15_quitdatum"]   = false ;
      $this->validate ["15_quitzeichen"]   = false ;
+     $this->validate ["16_empf"]   = false ;
      $this->validate ["17_vermerke"]   = false ;
    }
 
@@ -351,6 +353,16 @@ class vali_data_form {
       $result = $this->datatest ( "kuerzel", $this->i_data ["15_quitzeichen"] ) ;
       $this->validate["15_quitzeichen"]  =  $result ["l_data"] ;
     }
+    if (array_key_exists ("16_empf", $this->i_data)) {
+      // Feld 19: Die rote Lage-/Dokumentationsdurchschrift setzt der Server
+      // bei jedem Eingang selbst. Als benannter Empfaenger zaehlt daher nur
+      // eine blaue Durchschrift, also ein Bearbeiter.
+      $this->validate ["16_empf"] =
+        is_string ($this->i_data ["16_empf"])
+        && estab_workflow_distribution_has_processor (
+          $this->i_data ["16_empf"]
+        );
+    }
     if (isset ( $this->i_data ["17_vermerke"] ))      {
       $this->validate["17_vermerke"]  = $this->datatest ( "text", $this->i_data ["17_vermerke"] ) ;
     }
@@ -431,6 +443,12 @@ class vali_data_form {
       case "Stab_sichten":
          $zw = ($this->validate["15_quitzeichen"] &&
                 $this->validate["15_quitdatum"] );
+         if (($this->i_data ["04_richtung"] ?? "") === "E") {
+           // Die Sichtung schliesst den Eingang ab. Ohne benannten
+           // Bearbeiter im Verteiler erreicht die Nachricht danach niemanden
+           // mehr, deshalb ist Feld 19 hier Pflicht.
+           $zw = $zw && $this->validate ["16_empf"];
+         }
       break ;
       case "FM-Admin": break ;
       case "SI-Admin": break ;

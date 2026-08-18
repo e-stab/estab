@@ -1477,6 +1477,40 @@ function estab_workflow_distribution_tokens(
     return $tokens === [] ? '' : implode(',', array_keys($tokens)) . ',';
 }
 
+/**
+ * Does a distribution list name at least one processing recipient?
+ *
+ * Feld 19 distinguishes the copies by their colour suffix. The red copy
+ * (`_rt`) goes to Lage/Dokumentation and the server adds it to every incoming
+ * message on its own, so its presence says nothing about who works on the
+ * message. Only a blue copy (`_bl`) names a recipient who has to act on it.
+ * Tokens are produced by estab_workflow_distribution_tokens() and therefore
+ * carry the exact lower-case form `<funktion>_bl`.
+ */
+function estab_workflow_distribution_has_processor(string $distribution): bool
+{
+    foreach (explode(',', $distribution) as $token) {
+        if (preg_match('/\A[A-Za-z0-9_]{1,6}_bl\z/D', trim($token)) === 1) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+/**
+ * What the Sichter is told when Feld 19 names nobody who works the message.
+ */
+function estab_workflow_missing_processor_message(): string
+{
+    return 'Feld 19 benennt keinen Bearbeiter: Bitte kreuzen Sie im '
+        . 'Verteiler mindestens eine Funktion an, welche die Nachricht '
+        . 'bearbeitet (blaue Durchschrift). Die rote Durchschrift für Lage '
+        . 'und Dokumentation trägt jeder Eingang bereits, sie ersetzt den '
+        . 'Bearbeiter nicht. Ohne Bearbeiter erreicht die abgeschlossene '
+        . 'Nachricht niemanden.';
+}
+
 /** Return the object-level permission required by this request, if any. */
 function estab_workflow_message_operation(array $request): ?string
 {
