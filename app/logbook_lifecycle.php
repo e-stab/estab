@@ -675,7 +675,7 @@ function estab_logbook_lifecycle_message_transport(
         . ' `03_datum`, `03_zeichen`,'
         . ' `05_gegenstelle`, `06_befweg`, `06_befwegausw`,'
         . ' `10_anschrift`, `12_betreff`, `13_abseinheit`,'
-        . ' `15_quitzeichen`, `16_empf` FROM `nv_nachrichten`'
+        . ' `15_quitzeichen` FROM `nv_nachrichten`'
         . ' WHERE `00_lfd` = ? AND `einsatz_id` = ?'
         . ' AND `04_richtung` = ? FOR UPDATE'
     );
@@ -726,10 +726,12 @@ function estab_logbook_lifecycle_message_transport(
             ? ($message['01_zeichen'] ?? '')
             : ($message['03_zeichen'] ?? '')
     ));
+    // Field 16 holds internal distribution tokens ("S2_rt,"). Column 7 of
+    // Fb Fü 44 is an official record: it receives the translated recipients
+    // with the separate handover entry, never the raw token list.
     $receipt = trim(implode(' / ', array_filter([
         $mark === '' ? '' : 'bearbeitet durch ' . $mark,
         (string) ($message['15_quitzeichen'] ?? ''),
-        (string) ($message['16_empf'] ?? ''),
     ], static fn (string $part): bool => trim($part) !== '')));
     return estab_logbook_lifecycle_insert_ttb_record(
         $connection,
@@ -752,6 +754,134 @@ function estab_logbook_lifecycle_message_transport(
         ],
         'Automatisch mit dem verbindlichen Nachrichtenworkflow erzeugt.',
         $messageId
+    );
+}
+
+/**
+ * Append the handover of one sighted incoming message to the TBB.
+ *
+ * Column 7 of Fb Fü 44 asks who received the message and who handed it over.
+ * That is unknown while the message is being taken in, and the TBB is
+ * append-only: the row written at intake stays exactly as it was booked. The
+ * Handbuch ETB/TBB keeps its own entry kind for this event — "Quittung,
+ * Empfänger oder Aushändigung" — so the completed sighting appends one. It
+ * carries its own TBB number, names the entry it completes and therefore
+ * documents the handover without touching the immutable original. The
+ * database enforces the same reading: a second row may neither reuse the
+ * unique message link nor reference the original unless it declares itself a
+ * correction, and this event corrects nothing.
+ *
+ * Recipients arrive as readable text. Field 16 stores internal matrix tokens
+ * such as "S2_rt,"; they name an application feature, not a person, and are
+ * translated by the caller before they reach an official column.
+ */
+function estab_logbook_lifecycle_message_handover(
+    mysqli $connection,
+    int $incidentId,
+    int $messageId,
+    string $eventTime,
+    string $reviewer,
+    string $recipients
+): int {
+    $reviewer = trim($reviewer);
+    $recipients = trim($recipients);
+    if ($recipients === '') {
+        throw new InvalidArgumentException(
+            'Die Aushändigung der Nachricht nennt keinen Empfänger.'
+        );
+    }
+    if (
+        preg_match(
+            '~(?:\A|[\s,;])[^\s,;]{1,10}_(?:bl|gn|rt|ge|gb)(?:\z|[\s,;])~Di',
+            $recipients
+        ) === 1
+    ) {
+        throw new InvalidArgumentException(
+            'Die Quittungsspalte nimmt keine anwendungsinternen '
+            . 'Verteilerkennungen auf.'
+        );
+    }
+    $statement = $connection->prepare(
+        'SELECT `04_nummer`, `05_gegenstelle`, `12_betreff`, `13_abseinheit`'
+        . ' FROM `nv_nachrichten`'
+        . ' WHERE `00_lfd` = ? AND `einsatz_id` = ?'
+        . " AND `04_richtung` = 'E' FOR UPDATE"
+    );
+    if (!$statement) {
+        throw new RuntimeException(
+            'Nachricht konnte für die TBB-Quittung nicht gelesen werden.'
+        );
+    }
+    try {
+        $statement->bind_param('ii', $messageId, $incidentId);
+        $statement->execute();
+        $result = $statement->get_result();
+        $message = $result->fetch_assoc();
+        $result->free();
+    } finally {
+        $statement->close();
+    }
+    if (!is_array($message)) {
+        throw new RuntimeException(
+            'Die ausgehändigte Nachricht gehört nicht zum aktiven Einsatz.'
+        );
+    }
+    $number = (int) ($message['04_nummer'] ?? 0);
+    $senderUnit = trim((string) ($message['13_abseinheit'] ?? ''));
+    $sender = $senderUnit !== ''
+        ? $senderUnit
+        : trim((string) ($message['05_gegenstelle'] ?? ''));
+
+    // The original intake row keeps the TBB number that is printed on the
+    // message. Naming it makes the pair readable on paper; historic incidents
+    // without that row still get their receipt.
+    $originalStatement = $connection->prepare(
+        'SELECT `estab_book_lfd` FROM `nv_tbb`'
+        . ' WHERE `einsatz_id` = ? AND `estab_message_id` = ?'
+        . " AND BINARY `estab_entry_type` = BINARY 'nachricht'"
+        . ' ORDER BY `estab_book_lfd` LIMIT 1 FOR UPDATE'
+    );
+    if (!$originalStatement) {
+        throw new RuntimeException(
+            'Ursprünglicher TBB-Nachrichtennachweis konnte nicht gelesen werden.'
+        );
+    }
+    try {
+        $originalStatement->bind_param('ii', $incidentId, $messageId);
+        $originalStatement->execute();
+        $originalResult = $originalStatement->get_result();
+        $original = $originalResult->fetch_assoc();
+        $originalResult->free();
+    } finally {
+        $originalStatement->close();
+    }
+    $originalLocal = is_array($original)
+        ? (int) ($original['estab_book_lfd'] ?? 0)
+        : 0;
+    $comment = 'Automatisch mit dem verbindlichen Nachrichtenworkflow erzeugt.';
+    if ($originalLocal > 0) {
+        $comment = 'Ergänzung zu TBB-Nr. ' . $originalLocal
+            . ' nach abgeschlossener Sichtung. ' . $comment;
+    }
+
+    return estab_logbook_lifecycle_insert_ttb_record(
+        $connection,
+        $incidentId,
+        $eventTime,
+        'quittung',
+        [
+            'message_route' => 'von '
+                . ($sender === '' ? 'nicht angegeben' : $sender)
+                . ' an ' . $recipients,
+            'operations' => 'Nachricht nach Sichtung ausgehändigt'
+                . ($number > 0 ? ' (Meldungsnummer ' . $number . ')' : '')
+                . '. Betreff: ' . trim((string) ($message['12_betreff'] ?? '')),
+            'receipt' => 'Ausgehändigt an ' . $recipients
+                . ($reviewer === ''
+                    ? '.'
+                    : '. Quittiert durch ' . $reviewer . '.'),
+        ],
+        $comment
     );
 }
 

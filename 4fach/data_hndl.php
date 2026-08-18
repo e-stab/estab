@@ -23,6 +23,7 @@ require_once __DIR__ . "/tools.php";
 require_once __DIR__ . "/../app/auth.php";
 require_once __DIR__ . "/../app/assignment.php";
 require_once __DIR__ . "/../app/dynamic_schema.php";
+require_once __DIR__ . "/../app/message_list_ui.php";
 require_once __DIR__ . "/../app/message_repository.php";
 require_once __DIR__ . "/../app/message_transport.php";
 require_once __DIR__ . "/../app/password_policy.php";
@@ -1920,6 +1921,7 @@ function check_and_save ($data, $activeCommandPostName, $expectedIncidentId){
          "x02_sperre" => "f",
          "x03_sperruser" => "",
        );
+       $reviewRecipients = "";
        if ($reviewDirection === "E") {
          try {
            estab_workflow_require_recipient_matrix_revision (
@@ -1966,6 +1968,12 @@ function check_and_save ($data, $activeCommandPostName, $expectedIncidentId){
            exit;
          }
          $reviewFields ["16_empf"] = $data ["16_empf"];
+         // Field 16 keeps internal matrix tokens. The official TBB quittance
+         // column receives the readable recipient names instead, through the
+         // translation the message list already uses.
+         $reviewRecipients = implode (", ", estab_message_list_recipient_labels (
+           $data ["16_empf"]
+         ));
          $reviewFields ["x00_status"] = 8;
          $reviewFields ["x01_abschluss"] = "t";
        } else {
@@ -2006,7 +2014,8 @@ function check_and_save ($data, $activeCommandPostName, $expectedIncidentId){
              ),
            "occurred_at" => $reviewFields ["15_quitdatum"],
          ),
-         $expectedIncidentId
+         $expectedIncidentId,
+         $reviewRecipients
        );
        if (!$reviewSaved) {
          throw new RuntimeException ("Message review status changed");

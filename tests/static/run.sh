@@ -148,6 +148,7 @@ for test_name in \
     admin_operations_security \
     category_security \
     logbook_security \
+    tbb_receipt_handover_security \
     dv_evidence_security \
     dv_operations_security \
     dv_rule_registry \

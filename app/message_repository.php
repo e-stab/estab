@@ -2335,7 +2335,8 @@ function estab_message_update_pending_review(
     mixed $recordId,
     array $fields,
     array $event,
-    mixed $expectedIncidentId = null
+    mixed $expectedIncidentId = null,
+    string $handedOverTo = ''
 ): bool {
     $recordId = estab_message_positive_id($recordId);
     $fields = estab_message_fields($fields);
@@ -2347,7 +2348,8 @@ function estab_message_update_pending_review(
             $recordId,
             $fields,
             $event,
-            $expectedIncidentId
+            $expectedIncidentId,
+            $handedOverTo
         ): bool {
             $incidentId = estab_message_transaction_incident_id(
                 $incident,
@@ -2384,6 +2386,23 @@ function estab_message_update_pending_review(
                     $recordId,
                     $event
                 );
+                // A completed incoming sighting is the moment the message is
+                // handed out. The TBB is append-only, so the receipt column of
+                // the intake row can never be filled in afterwards: the
+                // handover receives its own entry inside this transaction.
+                if ((int) ($fields['x00_status'] ?? 0) === 8) {
+                    $occurredAt = is_string($event['occurred_at'] ?? null)
+                        ? (string) $event['occurred_at']
+                        : date('Y-m-d H:i:s');
+                    estab_logbook_lifecycle_message_handover(
+                        $connection,
+                        $incidentId,
+                        $recordId,
+                        $occurredAt,
+                        (string) ($fields['15_quitzeichen'] ?? ''),
+                        $handedOverTo
+                    );
+                }
                 return true;
             } finally {
                 $statement->close();
