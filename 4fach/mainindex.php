@@ -1542,7 +1542,6 @@ if (
 }
 
   $db = mysql_connect($conf_4f_db   ["server"],$conf_4f_db   ["user"], $conf_4f_db   ["password"] );
-  mysql_query('SET NAMES utf8');
   $result = mysql_ping  ($db);
 
   if ($result == false){

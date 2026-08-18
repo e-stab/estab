@@ -126,6 +126,7 @@ for test_name in \
     list_contrast_security \
     list_style_coverage_security \
     viewport_density_security \
+    legacy_database_disclosure_security \
     message_timeline_security \
     message_timeline_integration_security \
     workflow_form_rehydration_security \

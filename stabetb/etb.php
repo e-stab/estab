@@ -1,5 +1,7 @@
 <?php
 
+require_once __DIR__ . "/../app/legacy_mysql.php";
+
 if (!defined ("debug")) { define ("debug", false); }
 if (ob_get_level () === 0) { ob_start (); }
 /******************************************************************************\
@@ -115,12 +117,11 @@ class etb_liste {
 
     $db = mysql_connect($this->db_server,$this->db_user, $this->db_pw)
        or die ("[query_table] Konnte keine Verbindung zur Datenbank herstellen");
-    mysql_query('SET NAMES utf8mb4');
     $db_check = mysql_select_db ($this->db_name)
        or die ("[query_table] Auswahl der Datenbank fehlgeschlagen");
 
     $query_result = mysql_query ($this->sqlquery, $db) or
-       die("[query_table] 103-".mysql_error()." ".mysql_errno());
+       estab_legacy_database_failure ("etb_query_table", $query);
 
     $this->resultcount = mysql_num_rows($query_result);
 
