@@ -977,7 +977,11 @@ class Listen extends kategorien {
             $prefix."_fkt_".strtolower ($identity ["funktion"]);
           $userBase = $prefix.strtolower ($identity ["funktion"]).
             "_".$identity ["kuerzel"];
-          $searchActive = isset ($_SESSION["flt_search"]);
+          // An empty search term is no search. Treating it as one turned the
+          // pattern into "%%", matched every message and silently disabled the
+          // read/done/category filters below.
+          $searchTerm = trim ((string) ($_SESSION["flt_search"] ?? ""));
+          $searchActive = $searchTerm !== "";
           if ($displayFilters && !$searchActive) {
             if ((int) ($_SESSION["filter_gelesen"] ?? 0) === 1) {
               $where[] =
@@ -1016,12 +1020,16 @@ class Listen extends kategorien {
           }
 
           if ($searchActive) {
-            $searchPattern = "%".(string) $_SESSION["flt_search"]."%";
+            // A percent sign or underscore in the search term is a character
+            // the operator typed, not a wildcard.
+            $searchPattern = estab_message_list_like_pattern ($searchTerm);
             $where[] =
               "(CAST(".estab_message_list_tbb_number_sql ("m").
-              " AS CHAR) LIKE ? OR m.`10_anschrift` LIKE ? OR ".
-              "m.`12_abfzeit` LIKE ? OR m.`12_inhalt` LIKE ? OR ".
-              "m.`13_abseinheit` LIKE ?)";
+              " AS CHAR) LIKE ? ESCAPE '!' OR ".
+              "m.`10_anschrift` LIKE ? ESCAPE '!' OR ".
+              "m.`12_abfzeit` LIKE ? ESCAPE '!' OR ".
+              "m.`12_inhalt` LIKE ? ESCAPE '!' OR ".
+              "m.`13_abseinheit` LIKE ? ESCAPE '!')";
             for ($i = 0; $i < 5; $i++) {
               $parameters[] = $searchPattern;
             }

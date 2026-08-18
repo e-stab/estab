@@ -432,8 +432,14 @@ function estab_session_ui_dirty_guard_script(bool $popup = false): string
         . '+"aktive Fernmeldeplan bleibt unverändert.";}'
         . 'if(confirmMessage&&!window.confirm(confirmMessage)){'
         . 'event.preventDefault();return;}'
-        . 'if(!form.matches(".estab-session-logout")){return;}'
+        // The area buttons of the sidebar are the usual way out of a half
+        // filled form. Guarding only the logout meant every one of them
+        // discarded the entries without asking.
+        . 'var isLogout=form.matches(".estab-session-logout");'
+        . 'var isAreaSwitch=form.matches(".estab-sidebar-action-form");'
+        . 'if(!isLogout&&!isAreaSwitch){return;}'
         . 'if(!approve()){event.preventDefault();return;}'
+        . 'if(!isLogout){return;}'
         . 'var app=applicationWindow();'
         . 'if(app){var targetName="estab-application-"'
         . '+Date.now()+"-"+Math.random().toString(36).slice(2);'

@@ -111,6 +111,7 @@ for test_name in \
     user_admin_security \
     navigation_security \
     session_ui_security \
+    dirty_guard_security \
     sidebar_ui_security \
     audio_asset_security \
     tool_ui_security \
@@ -122,6 +123,7 @@ for test_name in \
     workflow_single_dispatch_security \
     message_security \
     message_list_filter_security \
+    legacy_search_security \
     message_list_ui_security \
     list_contrast_security \
     list_style_coverage_security \
