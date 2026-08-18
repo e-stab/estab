@@ -59,22 +59,22 @@ require_once __DIR__ . "/../app/session_ui.php";
      case "ldfliste":
        echo "<meta http-equiv=\"pragma\" content=\"no cache\">\n";
        echo "<meta http-equiv=\"expires\" content=\"0\">\n";
-       echo "<meta http-equiv=\"refresh\" content=\"".$cfg ["itv"] ["fmdliste"]."\">\n";
+       echo estab_list_refresh_script ($cfg ["itv"] ["fmdliste"]);
      break;
      case "stabliste":
        echo "<meta http-equiv=\"pragma\" content=\"no cache\">\n";
        echo "<meta http-equiv=\"expires\" content=\"0\">\n";
-       echo "<meta http-equiv=\"refresh\" content=\"".$cfg ["itv"] ["stabliste"]."\">\n";
+       echo estab_list_refresh_script ($cfg ["itv"] ["stabliste"]);
      break;
      case "siliste":
        echo "<meta http-equiv=\"pragma\" content=\"no cache\">\n";
        echo "<meta http-equiv=\"expires\" content=\"0\">\n";
-       echo "<meta http-equiv=\"refresh\" content=\"".$cfg ["itv"] ["siliste"]."\">\n";
+       echo estab_list_refresh_script ($cfg ["itv"] ["siliste"]);
      break;
      case "si2liste":
        echo "<meta http-equiv=\"pragma\" content=\"no cache\">\n";
        echo "<meta http-equiv=\"expires\" content=\"0\">\n";
-       echo "<meta http-equiv=\"refresh\" content=\"".$cfg ["itv"] ["si2liste"]."\">\n";
+       echo estab_list_refresh_script ($cfg ["itv"] ["si2liste"]);
      break;
      case "reset":
        echo "<meta http-equiv=\"pragma\" content=\"no cache\">\n";
@@ -853,6 +853,52 @@ bersichtlich dargestellt werden.
       $coloursByFunction [$function] = implode (",", $existing);
     }
     return $coloursByFunction;
+  }
+
+  /****************************************************************************\
+  | Selbsttaetige Aktualisierung einer Liste.
+  |
+  | Bisher stand hier ein <meta http-equiv="refresh">. Der laedt die Seite
+  | unbedingt neu und ist nicht aufzuhalten: alle zehn Sekunden verlor die
+  | Sichter- und Fernmelderliste die Sucheingabe und die Scrollposition, und
+  | wer gerade tippte, tippte ins Leere. Der Ersatz verschiebt die
+  | Aktualisierung, solange jemand in einem Eingabefeld steht oder Text
+  | markiert hat, und stellt die Scrollposition danach wieder her.
+  \****************************************************************************/
+  function estab_list_refresh_script ($seconds){
+    $interval = filter_var (
+      $seconds,
+      FILTER_VALIDATE_INT,
+      array ("options" => array ("min_range" => 5, "max_range" => 3600))
+    );
+    if ($interval === false) {
+      return "";
+    }
+    $milliseconds = $interval * 1000;
+    return "<script data-estab-list-refresh=\"".$interval."\">\n".
+      "(function(){\n".
+      "var key='estab-list-scroll:'+window.location.pathname".
+      "+window.location.search;\n".
+      "try{var stored=window.sessionStorage.getItem(key);\n".
+      "if(stored!==null){window.addEventListener('load',function(){\n".
+      "window.scrollTo(0,parseInt(stored,10)||0);});}}catch(ignore){}\n".
+      "function remember(){try{window.sessionStorage.setItem(\n".
+      "key,String(window.scrollY||window.pageYOffset||0));}catch(ignore){}}\n".
+      "window.addEventListener('beforeunload',remember);\n".
+      "function busy(){\n".
+      "var active=document.activeElement;\n".
+      "if(active){var tag=String(active.tagName||'').toLowerCase();\n".
+      "if(tag==='input'||tag==='textarea'||tag==='select'){return true;}\n".
+      "if(active.isContentEditable){return true;}}\n".
+      "var selection=window.getSelection&&window.getSelection();\n".
+      "if(selection&&String(selection).length>0){return true;}\n".
+      "return false;}\n".
+      "function schedule(delay){window.setTimeout(function(){\n".
+      "if(busy()){schedule(5000);return;}\n".
+      "remember();window.location.reload();},delay);}\n".
+      "schedule(".$milliseconds.");\n".
+      "})();\n".
+      "</script>\n";
   }
 
   function estab_recipient_copy_colours ($copyColours){
