@@ -901,8 +901,7 @@ HTML;
 
     function official_message_timestamp_block(
         string $title,
-        int $printedNumber,
-        int $helpNumber,
+        int $number,
         string $timeField,
         string $markField,
         bool $editable,
@@ -912,7 +911,7 @@ HTML;
         echo '<section class="estab-official-stamp">'
             . '<div class="estab-official-cell-heading">'
             . estab_message_html($title);
-        $this->official_message_help($helpNumber);
+        $this->official_message_help($number);
         echo '</div><div class="estab-official-stamp-entry">';
         $markBound = in_array(
             $this->task,
@@ -988,7 +987,7 @@ HTML;
             . '<div class="estab-official-stamp-labels" aria-hidden="true">'
             . '<span>Datum</span><span>Uhrzeit</span><span>Hdz.</span>'
             . '</div><span class="estab-official-print-number">'
-            . $printedNumber . '</span></section>';
+            . $number . '</span></section>';
     }
 
     function official_message_priority(): void
@@ -2202,7 +2201,7 @@ HTML;
                 ? 'estab-conversation-medium-status'
                 : ''
         );
-        echo '</div>';
+        echo '<span class="estab-official-print-number">1</span></div>';
 
         echo '<section class="estab-official-ttb">'
             . '<div class="estab-official-cell-heading">'
@@ -2223,14 +2222,13 @@ HTML;
             false,
             'Richtung im Technischen Betriebsbuch'
         );
-        echo '<span class="estab-official-print-number">4</span></section>';
+        echo '<span class="estab-official-print-number">5</span></section>';
 
         echo '<div class="estab-official-direction-headings" aria-hidden="true">'
             . '<strong>Eingang</strong><strong>Ausgang</strong></div>';
         echo '<div class="estab-official-stamps">';
         $this->official_message_timestamp_block(
             'Aufnahmevermerk',
-            1,
             2,
             '01_datum',
             '01_zeichen',
@@ -2240,7 +2238,6 @@ HTML;
         );
         $this->official_message_timestamp_block(
             'Annahmevermerk',
-            2,
             3,
             '02_zeit',
             '02_zeichen',
@@ -2250,7 +2247,6 @@ HTML;
         );
         $this->official_message_timestamp_block(
             'Beförderungsvermerk',
-            3,
             4,
             '03_datum',
             '03_zeichen',
@@ -2284,7 +2280,7 @@ HTML;
                 'Rufname der Gegenstelle'
             );
         }
-        echo '</div><span class="estab-official-print-number">5</span></section>';
+        echo '</div><span class="estab-official-print-number">6</span></section>';
         echo '</div></section>';
 
         echo '<div class="estab-official-section-rule" aria-hidden="true"></div>';
@@ -2319,7 +2315,7 @@ HTML;
             'Gewünschtes Übermittlungsmittel',
             $this->task !== 'LdF-Ausgang'
         );
-        echo '<span class="estab-official-print-number">6</span></section>';
+        echo '<span class="estab-official-print-number">7</span></section>';
 
         echo '<section class="estab-official-type-priority">'
             . '<div class="estab-official-type">';
@@ -2333,17 +2329,17 @@ HTML;
             (bool)$this->feld[7],
             'Nachrichtenform'
         );
-        echo '<span class="estab-official-print-number">7</span></div>'
+        echo '<span class="estab-official-print-number">8</span></div>'
             . '<div class="estab-official-priority">';
         $this->official_message_help(9);
         $this->official_message_priority();
-        echo '<span class="estab-official-print-number">8</span></div></section>';
+        echo '<span class="estab-official-print-number">9</span></div></section>';
 
         echo '<section class="estab-official-address-block">'
             . '<div class="estab-official-address-label">'
             . '<div class="estab-official-cell-heading">Anschrift:';
         $this->official_message_help(10);
-        echo '</div><span class="estab-official-print-number">9</span></div>'
+        echo '</div><span class="estab-official-print-number">10</span></div>'
             . '<div class="estab-official-address-value">';
         $this->official_message_textarea(
             '10_anschrift',
@@ -2354,7 +2350,8 @@ HTML;
         echo '</div><div class="estab-official-phone-label">'
             . '<div class="estab-official-cell-heading">Ruf Nr.';
         $this->official_message_help(11);
-        echo '</div></div><div class="estab-official-phone-value">';
+        echo '</div><span class="estab-official-print-number">11</span>'
+            . '</div><div class="estab-official-phone-value">';
         $this->official_message_text_input(
             '11_rufnummer',
             (bool)$this->feld[10],
@@ -2385,7 +2382,7 @@ HTML;
                             . 'DFÜ oder Kurier/Melder.'))
                 . '</span>';
         }
-        echo '</div><span class="estab-official-print-number">10</span>'
+        echo '</div><span class="estab-official-print-number">12</span>'
             . '</div></section>';
 
         echo '<section class="estab-official-subject">'
@@ -2398,7 +2395,7 @@ HTML;
             255,
             'Betreff der Nachricht'
         );
-        echo '</div><span class="estab-official-print-number">11</span></section>';
+        echo '</div><span class="estab-official-print-number">13</span></section>';
 
         echo '<section class="estab-official-message-text">';
         $this->official_message_help(14);
@@ -2407,7 +2404,7 @@ HTML;
             (bool)$this->feld[12],
             'Nachrichtentext'
         );
-        echo '</section>';
+        echo '<span class="estab-official-print-number">14</span></section>';
 
         $senderAssignedByLead = in_array(
             $this->task,
@@ -2442,7 +2439,7 @@ HTML;
                 'Absender'
             );
         }
-        echo '</div><span class="estab-official-print-number">12</span></section>';
+        echo '</div><span class="estab-official-print-number">15</span></section>';
 
         echo '<section class="estab-official-composition">'
             . '<div class="estab-official-composition-label">'
@@ -2456,14 +2453,14 @@ HTML;
             'Abfassungszeit',
             ' inputmode="numeric" autocomplete="off"'
         );
-        echo '</div></section>';
+        echo '</div>'
+            . '<span class="estab-official-print-number">16</span></section>';
 
         echo '<section class="estab-official-author">'
             . '<div class="estab-official-author-unit">'
-            . '<span class="estab-official-print-number">13</span>'
             . '<span>Einheit/Einrichtung/Stelle</span></div>'
             . '<div class="estab-official-author-mark">'
-            . '<span class="estab-official-print-number">14</span>';
+            . '<span class="estab-official-print-number">17</span>';
         $this->official_message_help(17);
         if ((bool)$this->feld[14]) {
             $this->official_message_text_input(
@@ -2538,14 +2535,14 @@ HTML;
         }
         echo '</div><div class="estab-official-receipt-labels" '
             . 'aria-hidden="true"><span>Uhrzeit</span><span>Zeichen</span></div>'
-            . '<span class="estab-official-print-number">15</span></section>';
+            . '<span class="estab-official-print-number">18</span></section>';
 
         echo '<section class="estab-official-distribution">'
             . '<div class="estab-official-cell-heading">';
         $this->official_message_help(19);
         echo '</div>';
         $this->official_message_distribution();
-        echo '<span class="estab-official-print-number">16</span></section>';
+        echo '<span class="estab-official-print-number">19</span></section>';
 
         echo '<section class="estab-official-notes">'
             . '<div class="estab-official-cell-heading">Vermerke:';
@@ -2558,7 +2555,7 @@ HTML;
             0,
             false
         );
-        echo '<span class="estab-official-print-number">17</span></section>';
+        echo '<span class="estab-official-print-number">20</span></section>';
         echo '</div></section></article></div>';
         $this->official_message_extra_distribution();
 

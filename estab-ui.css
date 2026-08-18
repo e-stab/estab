@@ -4949,6 +4949,7 @@ section.estab-message-timeline[data-estab-message-timeline] * {
     display: grid;
     grid-template-columns: 19.8% 40.9% 39.3%;
     min-height: 3.2rem;
+    position: relative;
 }
 
 .estab-official-composition-value {

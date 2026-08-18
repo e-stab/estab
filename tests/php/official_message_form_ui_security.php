@@ -402,14 +402,13 @@ $fixture->formdata = [
 ];
 ob_start();
 foreach ([
-    ['Aufnahmevermerk', 1, 2, '01_datum', '01_zeichen'],
-    ['Annahmevermerk', 2, 3, '02_zeit', '02_zeichen'],
-    ['Beförderungsvermerk', 3, 4, '03_datum', '03_zeichen'],
-] as [$title, $printedNumber, $helpNumber, $timeField, $markField]) {
+    ['Aufnahmevermerk', 2, '01_datum', '01_zeichen'],
+    ['Annahmevermerk', 3, '02_zeit', '02_zeichen'],
+    ['Beförderungsvermerk', 4, '03_datum', '03_zeichen'],
+] as [$title, $number, $timeField, $markField]) {
     $fixture->official_message_timestamp_block(
         $title,
-        $printedNumber,
-        $helpNumber,
+        $number,
         $timeField,
         $markField,
         true,
