@@ -2008,6 +2008,83 @@ function estab_message_update_locked_operator_stage(
 }
 
 /**
+ * Upper bound for the collected notes of one message in field 20.
+ *
+ * The column is LONGTEXT, so the database itself needs no bound. The limit
+ * keeps one merged note inside the packet of a prepared statement. It is
+ * Once the bound is reached the oldest entries give way, because the newest
+ * entry is the one the next stage has to act on. The unabridged wording of
+ * every entry stays in the immutable event chain.
+ */
+const ESTAB_MESSAGE_NOTE_MAX_LENGTH = 60000;
+
+/**
+ * Append one processing note to field 20 without losing the earlier entries.
+ *
+ * Field 20 carries the notes of the whole message route, so a later stage
+ * adds its entry below the existing text instead of replacing it. Every entry
+ * names the moment and the stage that wrote it, which keeps the Sichter's
+ * note distinguishable from the reason of a later return. Stored text is
+ * taken over verbatim. Once the bound is reached the oldest entries give way
+ * so the newest note is always recorded; the full history stays in the
+ * immutable event chain.
+ */
+function estab_message_note_with_entry(
+    mixed $existingNote,
+    string $marker,
+    string $text,
+    ?string $occurredAt = null
+): string {
+    $existing = rtrim((string) $existingNote);
+    $marker = trim($marker);
+    $text = trim($text);
+    if ($text === '') {
+        return $existing;
+    }
+    $entry = '[' . ($occurredAt ?? date('d.m.Y H:i')) . ']'
+        . ($marker === '' ? '' : ' ' . $marker . ':')
+        . ' ' . $text;
+    $elision = '[…] frühere Vermerke siehe Nachweis';
+    $available = ESTAB_MESSAGE_NOTE_MAX_LENGTH
+        - estab_auth_text_length($existing)
+        - 1;
+    if ($available < 40) {
+        // Field 20 is full. The newest entry is the one the next stage has to
+        // act on, so earlier entries give way instead of the new one being
+        // dropped. Their unabridged wording stays in the immutable evidence.
+        $lines = explode("\n", $existing);
+        while (
+            $lines !== []
+            && ESTAB_MESSAGE_NOTE_MAX_LENGTH
+                - estab_auth_text_length(implode("\n", $lines))
+                - estab_auth_text_length($elision) - 2
+                < estab_auth_text_length($entry)
+        ) {
+            array_shift($lines);
+        }
+        $existing = $lines === []
+            ? $elision
+            : $elision . "\n" . implode("\n", $lines);
+        $available = ESTAB_MESSAGE_NOTE_MAX_LENGTH
+            - estab_auth_text_length($existing) - 1;
+    }
+    $separator = $existing === '' ? '' : "\n";
+    if (estab_auth_text_length($entry) > $available) {
+        $keep = $available - 6;
+        if (function_exists('mb_substr')) {
+            $entry = mb_substr($entry, 0, $keep, 'UTF-8');
+        } else {
+            $characters = preg_split('//u', $entry, -1, PREG_SPLIT_NO_EMPTY);
+            $entry = is_array($characters)
+                ? implode('', array_slice($characters, 0, $keep))
+                : '';
+        }
+        $entry .= ' [...]';
+    }
+    return $existing . $separator . $entry;
+}
+
+/**
  * Return one formally reviewed outgoing message from LdF to its author.
  *
  * The message remains inside the established status-10 correction path. Its
@@ -2097,6 +2174,16 @@ function estab_message_ldf_return_outgoing(
                 return false;
             }
 
+            // Field 20 collects the notes of the whole route: the note of the
+            // formal review stays and the return reason is added below it.
+            // The row was read with FOR UPDATE inside this transaction, so no
+            // concurrent write can slip between reading and merging the note.
+            $mergedNote = estab_message_note_with_entry(
+                $message['17_vermerke'] ?? '',
+                'Rückgabe an den Verfasser durch LdF ' . $operatorCode,
+                $reason
+            );
+
             $updateStatement = estab_message_execute(
                 $connection,
                 'UPDATE ' . estab_message_table($table)
@@ -2108,7 +2195,7 @@ function estab_message_ldf_return_outgoing(
                     . " AND `x02_sperre` = 't'"
                     . ' AND BINARY `x03_sperruser` = BINARY ?',
                 array_merge(
-                    [$reason, $recordId, $incidentId],
+                    [$mergedNote, $recordId, $incidentId],
                     $stageParameters,
                     [$operatorCode]
                 )

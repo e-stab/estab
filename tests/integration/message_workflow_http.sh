@@ -3653,9 +3653,12 @@ assert_db_equals \
     "SELECT CONCAT(\`from_status\`, '|', \`to_status\`, '|', \`actor_code\`, '|', JSON_UNQUOTE(JSON_EXTRACT(\`field_snapshot\`, '$.return_reason'))) FROM \`nv_nachrichten_ereignisse\` WHERE \`message_id\`=${outgoing_id} AND \`event_type\`='ldf_returned' ORDER BY \`event_id\` DESC LIMIT 1;"
 assert_db_equals 1 'LdF return appended exactly one transition event' \
     "SELECT COUNT(*) FROM \`nv_nachrichten_ereignisse\` WHERE \`message_id\`=${outgoing_id} AND \`event_type\`='ldf_returned';"
-assert_db_equals "$ldf_return_reason" \
-    'LdF return reason became the authoritative correction note' \
-    "SELECT \`17_vermerke\` FROM \`nv_nachrichten\` WHERE \`00_lfd\`=${outgoing_id};"
+assert_db_equals 'Formal vollständig' \
+    'LdF return kept the earlier Si note as the first line of field 20' \
+    "SELECT SUBSTRING_INDEX(\`17_vermerke\`, '\n', 1) FROM \`nv_nachrichten\` WHERE \`00_lfd\`=${outgoing_id};"
+assert_db_equals 1 \
+    'LdF return appended its reason below the retained Si note' \
+    "SELECT \`17_vermerke\` LIKE '%Rückgabe an den Verfasser durch LdF ${ldf_code}: ${ldf_return_reason}' FROM \`nv_nachrichten\` WHERE \`00_lfd\`=${outgoing_id};"
 
 load_dashboard "$s1_cookies" 'author queue after LdF return'
 assert_body "$outgoing_marker" 'LdF-returned outgoing in author queue'
