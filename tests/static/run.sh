@@ -164,6 +164,7 @@ for test_name in \
     incident_ui_security \
     incident_pdf_security \
     incident_export_security \
+    etb_message_reference \
     schema_migration_contract \
     admin_secret_isolation_contract \
     registry_deployment_contract

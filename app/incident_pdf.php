@@ -1799,6 +1799,24 @@ final class EstabIncidentPdf extends vordruckaspdf
             ['etb_bemerk', 'comment']
         );
 
+        // Fb Fü 2 names the linked message form in its remarks column. The
+        // number printed on that form is the incident-local TBB evidence
+        // number of field 4, never the global message key, so an entry
+        // whose message has no TBB proof yet states exactly that.
+        if ($this->logbookRowValue($row, 'estab_message_id') !== '') {
+            $messageNumber = $this->logbookRowValue(
+                $row,
+                'estab_message_ttb_lfd'
+            );
+            $remarks = $this->appendLogbookLine(
+                $remarks,
+                preg_match('/\A[1-9][0-9]*\z/D', $messageNumber) === 1
+                    ? 'TBB-Nachweis ' . $messageNumber
+                    : 'noch kein TBB-Nachweis',
+                'Nachricht: '
+            );
+        }
+
         $attachmentId = $this->logbookRowValue(
             $row,
             'estab_attachment_id'
