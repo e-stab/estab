@@ -107,6 +107,24 @@ $recipientCellHtmlSource = $extractFunction(
     $toolsSource,
     'estab_recipient_copy_cell_html'
 );
+// Readable ink is resolved from the same colour table as the background, so
+// the cell helper cannot be exercised without its colour arithmetic.
+$colourChannelsSource = $extractFunction(
+    $toolsSource,
+    'estab_colour_channels'
+);
+$colourLuminanceSource = $extractFunction(
+    $toolsSource,
+    'estab_colour_relative_luminance'
+);
+$colourContrastSource = $extractFunction(
+    $toolsSource,
+    'estab_colour_contrast_ratio'
+);
+$recipientInkSource = $extractFunction(
+    $toolsSource,
+    'estab_recipient_copy_ink'
+);
 
 $assert(
     preg_match('/\$_SERVER\s*\[\s*["\']PHP_SELF["\']\s*\]/', $source) !== 1,
@@ -213,6 +231,10 @@ foreach ([
     'estab_recipient_copy_map',
     'estab_recipient_copy_colours',
     'estab_recipient_copy_background',
+    'estab_colour_channels',
+    'estab_colour_relative_luminance',
+    'estab_colour_contrast_ratio',
+    'estab_recipient_copy_ink',
     'estab_recipient_copy_cell_html',
     'estab_overview_url',
     'estab_overview_row_start',
@@ -223,6 +245,10 @@ foreach ([
         'estab_recipient_copy_map' => $recipientMapSource,
         'estab_recipient_copy_colours' => $recipientColoursSource,
         'estab_recipient_copy_background' => $recipientBackgroundSource,
+        'estab_colour_channels' => $colourChannelsSource,
+        'estab_colour_relative_luminance' => $colourLuminanceSource,
+        'estab_colour_contrast_ratio' => $colourContrastSource,
+        'estab_recipient_copy_ink' => $recipientInkSource,
         'estab_recipient_copy_cell_html' => $recipientCellHtmlSource,
         'estab_overview_url' => $overviewUrlSource,
         'estab_overview_row_start' => $rowStartSource,

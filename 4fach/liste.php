@@ -1258,9 +1258,18 @@ class Listen extends kategorien {
                $cfg ["lbg"],
                $cfg ["lbg"] ["dflt"]
              );
+             // Die Durchschriftenfarben sind helle Pastelltoene und der
+             // Standardwert ist Weiss. Eine feste weisse Schrift machte jede
+             // Zeile ohne eigene Durchschrift unsichtbar.
+             $receiverink = estab_recipient_copy_ink (
+               $receivercolor,
+               $cfg ["lbg"],
+               $cfg ["lbg"] ["dflt"]
+             );
              echo "<tr style=\"background: ".
                estab_message_html ($receiverbackground).
-               "; color:#FFFFFF; font-weight:bold;\">\n";
+               "; color:".estab_message_html ($receiverink).
+               "; font-weight:bold;\">\n";
              // Liegt eine Vorrangstufe vor!!!
              $vorrang = estab_message_priority_requires_attention (
                $row["09_vorrangstufe"]

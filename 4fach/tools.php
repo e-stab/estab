@@ -852,6 +852,101 @@ bersichtlich dargestellt werden.
     return $result;
   }
 
+  /****************************************************************************\
+  | Lesbare Schriftfarbe zu einem Durchschriften-Hintergrund.
+  |
+  | Die Durchschriftenfarben sind helle Pastelltoene und der Standardwert ist
+  | Weiss. Eine fest verdrahtete weisse Schrift verschwindet darauf. Die Farbe
+  | wird deshalb aus der Helligkeit des Hintergrunds bestimmt, und bei mehreren
+  | Durchschriften so gewaehlt, dass sie auf jedem Abschnitt lesbar bleibt.
+  \****************************************************************************/
+  function estab_colour_channels ($colour){
+    $colour = trim (strtolower ((string) $colour));
+    if (preg_match ('/\A#([0-9a-f]{3})\z/', $colour, $short) === 1) {
+      return array (
+        hexdec (str_repeat ($short [1] [0], 2)),
+        hexdec (str_repeat ($short [1] [1], 2)),
+        hexdec (str_repeat ($short [1] [2], 2))
+      );
+    }
+    if (preg_match ('/\A#([0-9a-f]{6})\z/', $colour, $long) === 1) {
+      return array (
+        hexdec (substr ($long [1], 0, 2)),
+        hexdec (substr ($long [1], 2, 2)),
+        hexdec (substr ($long [1], 4, 2))
+      );
+    }
+    if (
+      preg_match (
+        '/\Argba?\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*[,)]/',
+        $colour,
+        $rgb
+      ) === 1
+    ) {
+      $channels = array ((int) $rgb [1], (int) $rgb [2], (int) $rgb [3]);
+      foreach ($channels as $channel) {
+        if ($channel > 255) {
+          return null;
+        }
+      }
+      return $channels;
+    }
+    return null;
+  }
+
+  function estab_colour_relative_luminance (array $channels){
+    $linear = array ();
+    foreach ($channels as $channel) {
+      $value = $channel / 255;
+      $linear [] = $value <= 0.03928
+        ? $value / 12.92
+        : pow (($value + 0.055) / 1.055, 2.4);
+    }
+    return 0.2126 * $linear [0] + 0.7152 * $linear [1] + 0.0722 * $linear [2];
+  }
+
+  function estab_colour_contrast_ratio ($first, $second){
+    $lighter = max ($first, $second);
+    $darker = min ($first, $second);
+    return ($lighter + 0.05) / ($darker + 0.05);
+  }
+
+  function estab_recipient_copy_ink (
+    $copyColours,
+    array $backgroundColours,
+    $defaultColour
+  ){
+    $resolved = array ();
+    foreach (estab_recipient_copy_colours ($copyColours) as $colour) {
+      $lookup = $colour === "gb" ? "ge" : $colour;
+      if (isset ($backgroundColours [$lookup])) {
+        $resolved [] = (string) $backgroundColours [$lookup];
+      }
+    }
+    if (count ($resolved) === 0) {
+      $resolved [] = (string) $defaultColour;
+    }
+    $darkWorst = null;
+    $lightWorst = null;
+    foreach ($resolved as $colour) {
+      $channels = estab_colour_channels ($colour);
+      if ($channels === null) {
+        // Unbekannte Notation: die Vordruckfarben sind hell, also dunkle Tinte.
+        return "#000000";
+      }
+      $luminance = estab_colour_relative_luminance ($channels);
+      $againstDark = estab_colour_contrast_ratio ($luminance, 0.0);
+      $againstLight = estab_colour_contrast_ratio ($luminance, 1.0);
+      $darkWorst = $darkWorst === null
+        ? $againstDark
+        : min ($darkWorst, $againstDark);
+      $lightWorst = $lightWorst === null
+        ? $againstLight
+        : min ($lightWorst, $againstLight);
+    }
+    return $darkWorst >= $lightWorst ? "#000000" : "#ffffff";
+  }
+
   function estab_recipient_copy_background (
     $copyColours,
     array $backgroundColours,
@@ -907,9 +1002,20 @@ bersichtlich dargestellt werden.
     foreach ($colours as $colour) {
       $labels [] = $names [$colour];
     }
+    $ink = estab_recipient_copy_ink (
+      $copyColours,
+      $backgroundColours,
+      "rgb(250, 250, 250)"
+    );
     return "<td style=\"text-align: center; background: ".
       htmlspecialchars (
         $background,
+        ENT_QUOTES | ENT_SUBSTITUTE | ENT_HTML5,
+        "UTF-8"
+      ).
+      "; color: ".
+      htmlspecialchars (
+        $ink,
         ENT_QUOTES | ENT_SUBSTITUTE | ENT_HTML5,
         "UTF-8"
       ).

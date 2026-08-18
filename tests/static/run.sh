@@ -123,6 +123,7 @@ for test_name in \
     message_security \
     message_list_filter_security \
     message_list_ui_security \
+    list_contrast_security \
     message_timeline_security \
     message_timeline_integration_security \
     workflow_form_rehydration_security \
