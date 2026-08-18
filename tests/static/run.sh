@@ -135,6 +135,7 @@ for test_name in \
     official_message_form_ui_security \
     official_message_field_numbering \
     official_message_desired_medium_security \
+    message_print_annex_security \
     message_priority_security \
     read_authorization_security \
     message_suggestion_security \

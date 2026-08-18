@@ -7624,3 +7624,51 @@ a.estab-message-list-chip:hover {
         font-size: 1.2rem;
     }
 }
+
+/* Anlage zum Ausdruck: auf dem Bildschirm überflüssig, auf Papier notwendig.
+   Anlagen und zusätzliche Empfänger gehören zum Nachweis, ihre bedienbaren
+   Bereiche werden im Druck aber ausgeblendet. Die Anlage druckt sie als
+   schlichte Liste auf einer eigenen Seite. */
+.estab-message-print-annex {
+    display: none;
+}
+
+@media print {
+    .estab-message-print-annex {
+        break-before: page;
+        color: #000000;
+        display: block;
+        font-family: Arial, Helvetica, sans-serif;
+        font-size: 11pt;
+        line-height: 1.4;
+        padding: 1.5rem 1rem;
+        page-break-before: always;
+    }
+
+    .estab-message-print-annex h2 {
+        border-bottom: 1.5px solid #000000;
+        font-size: 13pt;
+        margin: 0 0 0.6rem;
+        padding-bottom: 0.3rem;
+    }
+
+    .estab-message-print-annex h3 {
+        font-size: 11.5pt;
+        margin: 1rem 0 0.3rem;
+    }
+
+    .estab-message-print-annex-subject {
+        margin: 0 0 0.5rem;
+    }
+
+    .estab-message-print-annex ol,
+    .estab-message-print-annex ul {
+        margin: 0;
+        padding-left: 1.4rem;
+    }
+
+    .estab-message-print-annex li {
+        break-inside: avoid;
+        margin-bottom: 0.2rem;
+    }
+}

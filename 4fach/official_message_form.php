@@ -2033,6 +2033,77 @@ HTML;
 HTML;
     }
 
+    /**
+     * Record annex for the printout.
+     *
+     * The paper form has room for the twenty official fields and nothing
+     * else. Attachments and additional recipients are part of the record all
+     * the same, and the print rules hid their interactive panels entirely, so
+     * a printed message form silently lost them. The annex prints them as a
+     * plain list on its own page, without the controls that only make sense
+     * on screen. It stays hidden while working.
+     */
+    function official_message_print_annex(): void
+    {
+        $references = $this->official_message_attachment_references();
+        $model = $this->official_message_distribution_model();
+        $extras = [];
+        foreach ($model['extras'] as $entry) {
+            $function = trim((string)($entry['display'] ?? $entry['function'] ?? ''));
+            $copies = $entry['copies'] ?? [];
+            if ($function === '' || !is_array($copies) || $copies === []) {
+                continue;
+            }
+            $extras[] = ['function' => $function, 'copies' => $copies];
+        }
+        if ($references === [] && $extras === []) {
+            return;
+        }
+
+        $number = trim((string)($this->formdata['04_nummer'] ?? ''));
+        $subject = trim((string)($this->formdata['12_betreff'] ?? ''));
+        echo '<section class="estab-message-print-annex" '
+            . 'aria-hidden="true" data-estab-print-annex>';
+        echo '<h2>Anlage zum Nachrichtenvordruck'
+            . ($number === ''
+                ? ''
+                : ' Nr. ' . estab_message_html($number))
+            . '</h2>';
+        if ($subject !== '') {
+            echo '<p class="estab-message-print-annex-subject">Betreff: '
+                . estab_message_html($subject) . '</p>';
+        }
+        if ($references !== []) {
+            echo '<h3>Anlagen (' . count($references) . ')</h3><ol>';
+            foreach ($references as $reference) {
+                echo '<li>' . estab_message_html($reference) . '</li>';
+            }
+            echo '</ol>';
+        }
+        if ($extras !== []) {
+            echo '<h3>Weitere Empfänger</h3><ul>';
+            $names = [
+                'bl' => 'blau',
+                'gn' => 'grün',
+                'rt' => 'rot',
+                'ge' => 'gelb',
+                'gb' => 'gelb',
+            ];
+            foreach ($extras as $entry) {
+                $labels = [];
+                foreach ($entry['copies'] as $copy) {
+                    $labels[] = $names[(string) $copy] ?? (string) $copy;
+                }
+                echo '<li>' . estab_message_html($entry['function'])
+                    . ' — Durchschrift ' . estab_message_html(
+                        implode(', ', $labels)
+                    ) . '</li>';
+            }
+            echo '</ul>';
+        }
+        echo '</section>';
+    }
+
     function plot_official_message_form(): void
     {
         include __DIR__ . '/../4fcfg/config.inc.php';
@@ -2560,6 +2631,7 @@ HTML;
         $this->official_message_extra_distribution();
 
         $this->official_message_attachments();
+        $this->official_message_print_annex();
         $this->official_message_actions('bottom');
         echo '</form></main>';
         $this->show_message_suggestion_script();
