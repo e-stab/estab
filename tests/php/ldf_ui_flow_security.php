@@ -274,9 +274,32 @@ $assert(
     str_contains($listHeaders, 'case "ldfliste":')
         && str_contains($listHeaders, 'http-equiv=\"pragma\"')
         && str_contains($listHeaders, 'http-equiv=\"expires\"')
-        && str_contains($listHeaders, 'http-equiv=\"refresh\"')
+        && str_contains($listHeaders, 'estab_list_refresh_script')
         && str_contains($listHeaders, '$cfg ["itv"] ["fmdliste"]'),
-    'LdF queue does not inherit the no-cache and automatic refresh headers'
+    'LdF queue does not inherit the no-cache headers and the automatic refresh'
+);
+
+// The queue has to keep refreshing itself, and it must not do so while the
+// operator is working in the page: an unconditional reload discarded the
+// search term and the scroll position every ten seconds.
+$originalWorkingDirectory = getcwd();
+if (!is_string($originalWorkingDirectory) || !chdir($root . '/4fach')) {
+    throw new RuntimeException('Cannot enter the message runtime directory');
+}
+try {
+    require_once $root . '/4fach/tools.php';
+} finally {
+    chdir($originalWorkingDirectory);
+}
+$ldfRefresh = estab_list_refresh_script(10);
+$assert(
+    $ldfRefresh !== '' && str_contains($ldfRefresh, 'window.location.reload()'),
+    'The LdF queue no longer refreshes itself'
+);
+$assert(
+    !str_contains($ldfRefresh, 'http-equiv')
+        && str_contains($ldfRefresh, 'schedule(5000)'),
+    'The LdF queue reloads unconditionally and interrupts the operator'
 );
 
 printf("LdF UI flow security test: OK (%d assertions)\n", $assertions);
