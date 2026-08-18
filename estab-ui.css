@@ -4653,6 +4653,15 @@ section.estab-message-timeline[data-estab-message-timeline] * {
     width: 100%;
 }
 
+/* Die Fm-Zentrale-Zone behaelt bewusst das zweispaltige Grundraster mit der
+   senkrechten Beschriftung links, waehrend --content und --review es
+   aufloesen. Die Regel steht ausdruecklich hier, damit die Zone nicht als
+   formatlose Klasse im Markup haengt. */
+.estab-official-zone--fmz {
+    display: grid;
+    grid-template-columns: 5.25rem minmax(0, 1fr);
+}
+
 .estab-official-zone--content {
     background: var(--estab-official-blue);
     border-left: 2px solid var(--estab-official-line);
@@ -6878,6 +6887,75 @@ a.estab-message-list-chip:hover {
     color: #7d1422;
 }
 
+/* Vorrangverkehr muss ohne Lesen der Zeile auffallen. Die Hervorhebung
+   arbeitet nicht mit Farbe allein: die Zeile bekommt eine kraeftige Kante,
+   das Abzeichen zusaetzlich eine Raute. Die Regeln stehen bewusst mit zwei
+   Klassen, damit sie :nth-child(even) und :hover schlagen. */
+.estab-message-list-row.estab-message-list-row--priority,
+.estab-message-list-row.estab-message-list-row--priority:nth-child(even) {
+    background: #fff7e6;
+    box-shadow: inset 5px 0 0 #b8620d;
+}
+
+.estab-message-list-row.estab-message-list-row--priority:hover,
+.estab-message-list-row.estab-message-list-row--priority:focus-within {
+    background: #fdeecd;
+    box-shadow: inset 5px 0 0 #8f4b09;
+}
+
+.estab-message-list-priority--urgent {
+    border-width: 2px;
+    font-variant-numeric: tabular-nums;
+}
+
+.estab-message-list-priority--urgent::before {
+    background: currentColor;
+    content: "";
+    flex: 0 0 auto;
+    height: 0.5rem;
+    margin-right: 0.4rem;
+    transform: rotate(45deg);
+    width: 0.5rem;
+}
+
+/* Bearbeitungsstand. Der Text nennt den Stand bereits im Klartext, die Farbe
+   verstaerkt ihn nur. */
+.estab-message-list-status--active {
+    background: #e3eefb;
+    border-color: #6f9ecd;
+    color: #12446f;
+}
+
+.estab-message-list-status--done {
+    background: #e5f1e9;
+    border-color: #79ac90;
+    color: #1a5133;
+}
+
+.estab-message-list-status--returned {
+    background: #fce9da;
+    border-color: #c9772f;
+    color: #713605;
+}
+
+.estab-message-list-status--neutral {
+    background: #ebeef2;
+    border-color: #a8b3c0;
+    color: #3d4956;
+}
+
+.estab-message-list-attachments {
+    align-items: center;
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 0.3rem;
+}
+
+.estab-message-attachment-count {
+    font-variant-numeric: tabular-nums;
+    font-weight: 700;
+}
+
 .estab-message-list-status {
     background: #e4eef8;
     border-color: #8faac4;
@@ -7359,4 +7437,105 @@ a.estab-message-list-chip:hover {
         display: block;
         overflow: visible;
     }
+}
+
+/* Hinweise, die eine Bearbeitung blockieren, mussten bisher ohne jede
+   Formatierung auskommen und waren dadurch nicht als Fehler erkennbar. */
+.estab-field-error {
+    background: #fdeceb;
+    border-left: 4px solid #a3231b;
+    color: #75190f;
+    font-weight: 600;
+    margin: 0.45rem 0;
+    padding: 0.5rem 0.7rem;
+}
+
+.estab-message-transport-conflict {
+    background: #fdeceb;
+    border: 1px solid #a3231b;
+    border-left-width: 5px;
+    color: #75190f;
+    font-weight: 600;
+    margin: 0.85rem 0;
+    padding: 0.8rem 0.95rem;
+}
+
+.estab-message-transport-conflict p {
+    margin: 0.35rem 0 0;
+}
+
+.estab-danger {
+    background: #a3231b;
+    border: 1px solid #7d1810;
+    border-radius: 6px;
+    color: #ffffff;
+    cursor: pointer;
+    font-weight: 700;
+    padding: 0.45rem 0.85rem;
+}
+
+.estab-danger:hover,
+.estab-danger:focus-visible {
+    background: #7d1810;
+}
+
+.estab-sidebar-duty-required {
+    background: #3a1f1c;
+    border: 1px solid #b5504a;
+    border-left: 4px solid #e08a83;
+    border-radius: 8px;
+    box-sizing: border-box;
+    color: #ffffff;
+    padding: 0.75rem;
+}
+
+.estab-sidebar-duty-required p {
+    margin: 0.35rem 0 0;
+}
+
+.estab-auth-exit {
+    margin: 1.25rem 0 0;
+}
+
+.estab-tool-shell {
+    box-sizing: border-box;
+    margin: 0 auto;
+    max-width: 82rem;
+    padding: 1rem 1.25rem 2.5rem;
+    width: 100%;
+}
+
+.estab-tool-meta {
+    color: #4a5a6d;
+    font-size: 0.85rem;
+    margin: 0.25rem 0 0.75rem;
+}
+
+.estab-message-suggestion-match-context {
+    color: #4a5a6d;
+    display: block;
+    font-size: 0.82rem;
+    line-height: 1.35;
+}
+
+.estab-message-attachment-file {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    max-width: 100%;
+}
+
+.estab-official-author-unit {
+    display: block;
+    min-width: 0;
+}
+
+.estab-telecom-routes,
+.estab-telecom-history {
+    display: block;
+    margin-top: 1rem;
+}
+
+.estab-password-policy-confirm {
+    margin-top: 1rem;
 }
