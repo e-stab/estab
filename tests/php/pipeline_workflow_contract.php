@@ -24,7 +24,22 @@ $osv = $read($root . '/.github/workflows/osv-scanner.yml');
 $dependencyReview = $read($root . '/.github/workflows/dependency-review.yml');
 $dependabot = $read($root . '/.github/dependabot.yml');
 $technicalGuide = $read($root . '/docs/TECHNIK.md');
-$staticSuite = $read($root . '/tests/static/run.sh');
+// Verified against the checks the suite actually registers, not its source text.
+$staticChecks = (static function (string $root): array {
+    $output = [];
+    $status = 0;
+    exec(
+        'sh ' . escapeshellarg($root . '/tests/static/run.sh') . ' --list 2>&1',
+        $output,
+        $status
+    );
+    if ($status !== 0) {
+        throw new RuntimeException(
+            'Could not list the static suite checks: ' . implode("\n", $output)
+        );
+    }
+    return array_values(array_filter(array_map('trim', $output), 'strlen'));
+})($root);
 $composerManifest = json_decode(
     $read($root . '/composer.json'),
     true,
@@ -63,7 +78,7 @@ $assert(
     && !str_contains($ci, 'migration/verify_provenance.py')
     && !str_contains($ci, 'PROVENANCE_OUTCOME')
     && !str_contains($ci, 'fetch-tags: true')
-    && !str_contains($staticSuite, 'tests/php/provenance_security.php')
+    && !in_array('provenance_security', $staticChecks, true)
     && str_contains($ci, 'name: Enforce static results')
     && str_contains($ci, 'if: ${{ !cancelled() }}')
     && substr_count($ci, 'continue-on-error: true') >= 4,

@@ -39,7 +39,24 @@ $deploymentOperator = $read($root . '/deploy/registry/deploy.sh');
 $offlineHelper = $read($root . '/deploy/registry/offline-images.sh');
 $releaseEvidenceGuide = $read($root . '/deploy/registry/RELEASE-EVIDENCE.md');
 $offlineStaticTest = $read($root . '/tests/static/offline_images.sh');
-$staticRunner = $read($root . '/tests/static/run.sh');
+// The static suite registers its checks programmatically, so the contract is
+// verified against the checks it actually runs, not against source text.
+$registeredChecks = static function (string $root): array {
+    $output = [];
+    $status = 0;
+    exec(
+        'sh ' . escapeshellarg($root . '/tests/static/run.sh') . ' --list 2>&1',
+        $output,
+        $status
+    );
+    if ($status !== 0) {
+        throw new RuntimeException(
+            'Could not list the static suite checks: ' . implode("\n", $output)
+        );
+    }
+    return array_values(array_filter(array_map('trim', $output), 'strlen'));
+};
+$staticChecks = $registeredChecks($root);
 $trivyIgnore = $read($root . '/.trivyignore.yaml');
 $ci = $read($root . '/tests/integration/ci.sh');
 $candidateVerifier = $read($root . '/tests/integration/verify_release_candidate.sh');
@@ -672,7 +689,7 @@ $assert(
     && str_contains($offlineStaticTest, 'failed export unexpectedly succeeded')
     && str_contains($offlineStaticTest, 'public-export-parent')
     && str_contains($offlineStaticTest, 'helper still mutates registry tags')
-    && str_contains($staticRunner, 'tests/static/offline_images.sh'),
+    && in_array('offline_images', $staticChecks, true),
     'Offline multi-architecture export and registry recovery are not fail-closed or tested'
 );
 foreach ([$appDockerfile, $migrateDockerfile] as $dockerfile) {
@@ -875,7 +892,7 @@ $assert(
         $registryReadme,
         'Die Zeilen `ESTAB_APP_IMAGE` und `ESTAB_MIGRATE_IMAGE`'
     )
-    && str_contains($staticRunner, 'tests/static/registry_release.sh'),
+    && in_array('registry_release', $staticChecks, true),
     'Release deployment is not digest-bound, self-verifying, and admin-init-gated'
 );
 $assert(
@@ -934,7 +951,7 @@ $assert(
     && str_contains($backupOperatorStaticTest, 'concurrent target creation was overwritten')
     && str_contains($backupOperatorStaticTest, 'foreign target must remain untouched')
     && str_contains($backupOperatorStaticTest, '${app_id}:z')
-    && str_contains($staticRunner, 'tests/static/backup_operator.sh'),
+    && in_array('backup_operator', $staticChecks, true),
     'Operator backup does not fail closed, capture every data source, bind metadata, and publish without clobbering'
 );
 $assert(
@@ -1036,7 +1053,7 @@ $assert(
     && str_contains($restoreStaticTest, 'mutable release references authorized a runtime-ID change')
     && str_contains($restoreStaticTest, '--allow-runtime-image-id-change')
     && str_contains($restoreStaticTest, 'database_operation_count')
-    && str_contains($staticRunner, 'tests/static/restore_operator.sh'),
+    && in_array('restore_operator', $staticChecks, true),
     'Operator restore is not explicitly confirmed, metadata-bound, fail-closed, and health-gated'
 );
 $assert(
