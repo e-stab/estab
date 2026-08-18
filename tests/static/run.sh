@@ -131,6 +131,7 @@ for test_name in \
     message_timeline_integration_security \
     workflow_form_rehydration_security \
     message_form_fields_security \
+    nv_time_format_security \
     official_message_form_ui_security \
     official_message_field_numbering \
     official_message_desired_medium_security \

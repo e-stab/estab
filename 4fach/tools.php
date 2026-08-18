@@ -213,6 +213,23 @@ require_once __DIR__ . "/../app/session_ui.php";
          "dec" => '12' );
 
     $laenge = strlen ($data);
+    /* Ausfuellanleitung Nachrichtenvordruck: Uhrzeiten werden vierstellig
+       gefuehrt, Datumsangaben mindestens zweistellig. Nur Ziffern sind eine
+       Zeitangabe - ohne diese Pruefung vergleicht PHP eine Eingabe wie "1x"
+       als Zeichenkette mit 23, und "1x59" wandert bis in die Datenbankzeit. */
+    $zeitangabe = (string) $data;
+    $ziffernform = true;
+    if ( ($laenge == 4) or ($laenge == 6) ){
+      $ziffernform = ctype_digit ($zeitangabe);
+    }
+    if ( $laenge == 13 ){
+      $ziffernform = (ctype_digit (substr ($zeitangabe, 0, 6))
+                      && ctype_digit (substr ($zeitangabe, 9, 4))
+                      && isset ($rew_tak_monate [substr ($zeitangabe, 6, 3)]));
+    }
+    if ( !$ziffernform ){
+      return array ("l_data" => false, "data" => $data);
+    }
     switch ( $laenge ){
       case 13:// TThhmmMMMJJJJ
           $tag    = substr ($data, 0, 2);
