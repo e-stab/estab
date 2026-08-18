@@ -151,6 +151,7 @@ for test_name in \
     tbb_receipt_handover_security \
     dv_evidence_security \
     dv_operations_security \
+    dv_composition_time \
     dv_rule_registry \
     telecom_plan_security \
     upload_security \

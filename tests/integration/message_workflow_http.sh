@@ -3130,7 +3130,7 @@ assert_status 200 'save POL/FB answer' \
     --data-urlencode '12_anhang=' \
     --data-urlencode "12_betreff=AW: $incoming_subject" \
     --data-urlencode "12_inhalt=$reply_content" \
-    --data-urlencode '12_abfzeit=' \
+    --data-urlencode "12_abfzeit=$tactical_time" \
     --data-urlencode '13_abseinheit=E2E-Einsatzleitung' \
     --data-urlencode "14_zeichen=$pol_code" \
     --data-urlencode '14_funktion=POL' \
@@ -3235,7 +3235,7 @@ assert_status 200 'save POL/FB forwarding' \
     --data-urlencode '12_anhang=' \
     --data-urlencode "12_betreff=WG: $incoming_subject" \
     --data-urlencode "12_inhalt=$forward_content" \
-    --data-urlencode '12_abfzeit=' \
+    --data-urlencode "12_abfzeit=$tactical_time" \
     --data-urlencode '13_abseinheit=E2E-Einsatzleitung' \
     --data-urlencode "14_zeichen=$pol_code" \
     --data-urlencode '14_funktion=POL' \
@@ -4283,7 +4283,7 @@ assert_status 200 'save open conversation note for Si' \
     --data-urlencode '12_anhang=' \
     --data-urlencode "12_betreff=$conversation_subject" \
     --data-urlencode "12_inhalt=$conversation_marker" \
-    --data-urlencode '12_abfzeit=' \
+    --data-urlencode "12_abfzeit=$tactical_time" \
     --data-urlencode "13_abseinheit=$authoritative_sender" \
     --data-urlencode "14_zeichen=$s1_code" \
     --data-urlencode '14_funktion=S1' \

@@ -976,7 +976,12 @@ function check_and_save ($data, $activeCommandPostName, $expectedIncidentId){
 			// Lage/Dokumentation red copy exists. Never append browser data.
 			$data ["16_empf"] = $redcopy2."_rt,";
 			if ($data ["01_datum"] == "" ) { $data ["01_datum"] = date ("Hi") ; }
-			if ($data ["12_abfzeit"] == "" ) { $data ["12_abfzeit"] = date ("Hi") ; }
+			// Feld 16 trägt die Abfassungszeit des Verfassers. Bei einem Eingang
+			// steht sie im Spruchkopf und wird von der Gegenstelle übernommen;
+			// die Anwendung kennt sie nicht. Die Eingangszeit in Feld 1 darf sie
+			// vorbelegen, weil sie den Eingang selbst beobachtet. Die
+			// Abfassungszeit beobachtet sie nicht, deshalb bleibt Feld 16 leer
+			// und die Pflichtprüfung in vali_data.php fordert es beim A/W an.
 			if (validate){
          		/*----------------------------------------------------*/
 				if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b>"; var_dump ($data); echo "<br>\n";}         	
@@ -1073,7 +1078,10 @@ function check_and_save ($data, $activeCommandPostName, $expectedIncidentId){
 */
 
 
-      if ($data ["12_abfzeit"] == "" ) { $data ["12_abfzeit"] = date ("Hi") ; }
+      // Feld 16 bleibt Sache des Verfassers. Der Zeitpunkt des Absendens
+      // dieses Formulars ist nicht die Abfassungszeit der Nachricht;
+      // vali_data.php weist einen leeren Eintrag zurück und der Vordruck
+      // fordert ihn sichtbar nach.
 
       if (validate){
          /*----------------------------------------------------*/
@@ -1158,9 +1166,9 @@ function check_and_save ($data, $activeCommandPostName, $expectedIncidentId){
     break;
 
     case "Stab_korrigieren":
-      if ($data ["12_abfzeit"] == "") {
-        $data ["12_abfzeit"] = date ("Hi");
-      }
+      // Eine formal zurückgegebene Nachricht behält ihre Abfassungszeit.
+      // Der Zeitpunkt der Korrektur ist nicht die Abfassungszeit, deshalb
+      // setzt die Anwendung hier nichts ein.
       if (validate) {
         $vali = new vali_data_form ($data);
         $result = $vali->validatethis ();
@@ -1305,7 +1313,10 @@ function check_and_save ($data, $activeCommandPostName, $expectedIncidentId){
     case "Stab_gesprnoti":
 		if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><big>Stab_gesprnoti</big><br>\n";}
       if ($data ["01_datum"] == "" )     { $data ["01_datum"]     = date ("Hi") ; }
-      if ($data ["12_abfzeit"] == "" )   { $data ["12_abfzeit"]   = date ("Hi") ; }
+      // Auch bei der Gesprächsnotiz ist die Abfassungszeit eine Angabe des
+      // Verfassers. Die Eingangszeit in Feld 1 beobachtet die Anwendung
+      // selbst und belegt sie deshalb vor; wann die Notiz abgefasst wurde,
+      // weiß nur der Bearbeiter.
 
       try {
         estab_workflow_require_recipient_matrix_revision (
