@@ -287,7 +287,9 @@ $assert(
 $sidebar = $read('app/sidebar.php');
 $assert(
     !str_contains($sidebar, 'estab_dv_message_run_staffing')
-        && str_contains($sidebar, 'Aktivität nach Primärfunktion'),
+        && str_contains($sidebar, 'Aktivität nach ')
+        && str_contains($sidebar, "'Primärfunktion'")
+        && str_contains($sidebar, "'Dienstfunktion'"),
     estab_dv_requirement(
         'FUEST-BESETZUNG-VOLLSTAENDIG',
         'Die Seitenleiste wiederholt den Besetzungsbericht bei jedem '

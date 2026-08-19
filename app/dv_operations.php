@@ -3339,6 +3339,70 @@ function estab_dv_user_hats(
     }
 }
 
+/**
+ * Return the accepted duty functions of the active shift, by account.
+ *
+ * The occupancy overview must name the station a person actually took over,
+ * never the function stored on their account. One person may have accepted
+ * several stations in a small command post, so every account maps to a list.
+ * One statement answers for the complete shift.
+ *
+ * @return array<string, list<array{funktion: string, rolle: string}>>
+ */
+function estab_dv_active_duty_functions(
+    mysqli $connection,
+    int $incidentId
+): array {
+    $incidentId = estab_incident_positive_id($incidentId);
+    $statement = $connection->prepare(
+        'SELECT b.`benutzer_kuerzel`, b.`funktion`, b.`rolle`'
+        . ' FROM `nv_dienstbesetzungen` AS b'
+        . ' JOIN `nv_dienstschichten` AS s'
+        . ' ON s.`dienstschicht_id` = b.`dienstschicht_id`'
+        . " WHERE s.`einsatz_id` = ? AND s.`status` = 'AKTIV'"
+        . " AND b.`status` = 'ANGENOMMEN'"
+        . ' ORDER BY b.`benutzer_kuerzel`, b.`funktion`'
+    );
+    if (!$statement) {
+        throw new RuntimeException(
+            'Angenommene Dienstfunktionen konnten nicht vorbereitet werden.'
+        );
+    }
+    try {
+        $statement->bind_param('i', $incidentId);
+        if (!$statement->execute()) {
+            throw new RuntimeException(
+                'Angenommene Dienstfunktionen konnten nicht gelesen werden.'
+            );
+        }
+        $result = $statement->get_result();
+        $occupancies = [];
+        while (($row = $result->fetch_assoc()) !== null) {
+            $code = strtolower(trim((string) ($row['benutzer_kuerzel'] ?? '')));
+            $function = trim((string) ($row['funktion'] ?? ''));
+            $role = trim((string) ($row['rolle'] ?? ''));
+            if (
+                preg_match('/\A[a-z0-9_]{1,6}\z/D', $code) !== 1
+                || preg_match(
+                    '/\A(?:A\/W|[A-Za-z0-9_]{1,10})\z/D',
+                    $function
+                ) !== 1
+                || !in_array($role, ['Stab', 'FB', 'Fernmelder'], true)
+            ) {
+                continue;
+            }
+            $occupancies[$code][] = [
+                'funktion' => $function,
+                'rolle' => $role,
+            ];
+        }
+        $result->free();
+        return $occupancies;
+    } finally {
+        $statement->close();
+    }
+}
+
 function estab_dv_user_has_active_hat(
     mysqli $connection,
     int $incidentId,

@@ -219,7 +219,12 @@ $assert(
 );
 $assert(
     substr_count($sidebar, '`einsatz_id` = ?') >= 4
-        && str_contains($sidebar, 'estab_incident_active($connection)'),
+        && str_contains($sidebar, 'estab_incident_positive_id($incidentId)')
+        && !str_contains($sidebar, 'estab_incident_active($connection)')
+        && str_contains(
+            $source('4fach/vorgaben.php'),
+            "(int) \$scope['incident']['active_einsatz_id']"
+        ),
     'sidebar queue counts are not restricted to the active incident'
 );
 $assert(

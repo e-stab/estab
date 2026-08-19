@@ -660,6 +660,62 @@
     color: #b9cbe0;
 }
 
+/* Jede weitere getragene Funktion kostet eine Zeile von rund 26 px statt
+   eines zweiten grossen Zaehlerblocks: Kuerzel links, Wert rechts, mehrere
+   Eintraege nebeneinander, solange die Spalte breit genug ist. */
+.estab-sidebar-queue-strip {
+    display: grid;
+    gap: 0.25rem;
+    grid-template-columns: repeat(auto-fit, minmax(4.5rem, 1fr));
+    list-style: none;
+    margin: 0.4rem 0 0;
+    padding: 0;
+}
+
+.estab-sidebar-queue-item {
+    align-items: baseline;
+    background: #263f5d;
+    border: 1px solid #5d7692;
+    border-radius: 5px;
+    box-sizing: border-box;
+    display: flex;
+    gap: 0.3rem;
+    justify-content: space-between;
+    min-width: 0;
+    padding: 0.15rem 0.35rem;
+}
+
+.estab-sidebar-queue-item span {
+    color: #c5d6e8;
+    font-size: 0.72rem;
+    font-weight: 700;
+    min-width: 0;
+    overflow-wrap: anywhere;
+    text-transform: uppercase;
+}
+
+.estab-sidebar-queue-item strong {
+    font-size: 0.95rem;
+    line-height: 1.2;
+}
+
+.estab-sidebar-queue-item.has-work {
+    background: #4b3d18;
+    border-color: #e5b247;
+}
+
+.estab-sidebar-queue-item.has-work span {
+    color: #ffe29b;
+}
+
+.estab-sidebar-queue-item.has-work strong {
+    color: #ffd36b;
+}
+
+.estab-sidebar-queue-item.unavailable strong {
+    color: #b9cbe0;
+}
+
 .estab-sidebar-time {
     align-items: end;
     display: grid;
@@ -7601,6 +7657,19 @@ a.estab-message-list-chip:hover {
     .estab-sidebar-action {
         min-height: 2.4rem;
         padding: 0.32rem 0.5rem;
+    }
+
+    .estab-sidebar-queue strong {
+        font-size: 1.5rem;
+    }
+
+    .estab-sidebar-queue-strip {
+        gap: 0.2rem;
+        margin: 0.3rem 0 0;
+    }
+
+    .estab-sidebar-queue-item {
+        padding: 0.1rem 0.3rem;
     }
 
     .estab-sidebar-action-description {

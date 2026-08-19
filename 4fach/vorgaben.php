@@ -138,7 +138,7 @@ function estab_vorgaben_status_markup(
     string $messageTable,
     string $userTablePrefix,
     string $matrixTable,
-    ?array $queueProfile,
+    array $queueProfiles,
     bool $includeOutgoingForReview,
     bool $soundsEnabled,
     ?string $soundUrl
@@ -150,11 +150,9 @@ function estab_vorgaben_status_markup(
 
     $users = [];
     $positions = [];
-    $queueCount = null;
+    $queueCounts = [];
+    $dutyFunctions = [];
     $freshnessState = 'current';
-    $queueLabel = is_string($queueProfile['label'] ?? null)
-        ? $queueProfile['label']
-        : 'Offene Meldungen';
     $incidentState = [
         'availability' => 'unavailable',
         'active' => false,
@@ -203,22 +201,35 @@ function estab_vorgaben_status_markup(
             }
 
             try {
-                $queueSessionKey = $queueProfile['session_key'] ?? null;
-                if (is_string($queueSessionKey)) {
-                    $queueCount = estab_sidebar_queue_count(
-                        $connection,
-                        $queueSessionKey,
-                        $messageTable,
-                        $userTablePrefix,
-                        (string) ($queueProfile['funktion'] ?? ''),
-                        $includeOutgoingForReview
-                    );
-                }
+                $queueCounts = estab_sidebar_queue_counts(
+                    $connection,
+                    $queueProfiles,
+                    $messageTable,
+                    $userTablePrefix,
+                    $includeOutgoingForReview,
+                    (int) $scope['incident']['active_einsatz_id']
+                );
             } catch (Throwable $exception) {
-                $queueCount = null;
+                $queueCounts = [];
                 $freshnessState = 'partial';
                 error_log(
                     'eStab sidebar queue lookup failed: '
+                    . $exception->getMessage()
+                );
+            }
+
+            try {
+                if (estab_incident_duty_shift_required($scope['incident'])) {
+                    $dutyFunctions = estab_dv_active_duty_functions(
+                        $connection,
+                        (int) $scope['incident']['active_einsatz_id']
+                    );
+                }
+            } catch (Throwable $exception) {
+                $dutyFunctions = [];
+                $freshnessState = 'partial';
+                error_log(
+                    'eStab sidebar duty occupancy lookup failed: '
                     . $exception->getMessage()
                 );
             }
@@ -240,12 +251,39 @@ function estab_vorgaben_status_markup(
         }
     }
 
-    $notificationSoundUrl = estab_sidebar_queue_notification(
+    $primaryQueue = $queueProfiles[0] ?? null;
+    $queueCount = $primaryQueue === null
+        ? null
+        : ($queueCounts[$primaryQueue['baseline_key']] ?? null);
+    $queueLabel = 'Offene Meldungen';
+    if ($primaryQueue !== null) {
+        // Wer zwei Funktionen traegt, muss am grossen Zaehler erkennen,
+        // welche gemeint ist; allein bleibt es beim bisherigen Wortlaut.
+        $queueLabel = $primaryQueue['session_key'] === 'old_que_stab'
+            && count($queueProfiles) > 1
+            ? $primaryQueue['label'] . ' · ' . $primaryQueue['short_label']
+            : $primaryQueue['label'];
+    }
+    $measurements = [];
+    $secondaryQueues = [];
+    foreach ($queueProfiles as $index => $profile) {
+        $measurements[] = [
+            'baseline_key' => $profile['baseline_key'],
+            'count' => $queueCounts[$profile['baseline_key']] ?? null,
+        ];
+        if ($index === 0) {
+            continue;
+        }
+        $secondaryQueues[] = [
+            'baseline_key' => $profile['baseline_key'],
+            'label' => $profile['label'],
+            'short_label' => $profile['short_label'],
+            'count' => $queueCounts[$profile['baseline_key']] ?? null,
+        ];
+    }
+    $notificationSoundUrl = estab_sidebar_queue_notifications(
         $session,
-        is_string($queueProfile['session_key'] ?? null)
-            ? $queueProfile['session_key']
-            : null,
-        $queueCount,
+        $measurements,
         $soundsEnabled,
         $soundUrl
     );
@@ -260,16 +298,21 @@ function estab_vorgaben_status_markup(
         $notificationSoundUrl,
         $freshnessState,
         estab_incident_ui_markup($incidentState, true, true),
-        $identity
+        $identity,
+        $secondaryQueues,
+        $dutyFunctions
     );
 }
 
-$queueProfile = $selectedIdentity === null
-    ? null
-    : estab_sidebar_queue_profile($selectedIdentity);
+$queueProfiles = $selectedIdentity === null
+    ? []
+    : estab_sidebar_queue_profiles($selectedIdentity);
 $soundsEnabled = (bool) ($conf_4f['sounds'] ?? false);
-$soundUrl = $soundsEnabled && is_string($queueProfile['sound_file'] ?? null)
-    ? estab_application_url('4fach/audio/' . $queueProfile['sound_file'])
+$soundUrl = $soundsEnabled
+    && is_string($queueProfiles[0]['sound_file'] ?? null)
+    ? estab_application_url(
+        '4fach/audio/' . $queueProfiles[0]['sound_file']
+    )
     : null;
 $statusMarkup = $selectedIdentity === null
     ? ''
@@ -280,7 +323,7 @@ $statusMarkup = $selectedIdentity === null
         (string) $conf_4f_tbl['nachrichten'],
         (string) $conf_4f_tbl['usrtblprefix'],
         (string) $conf_4f_tbl['empfmtx'],
-        $queueProfile,
+        $queueProfiles,
         (bool) ($conf_4f['si_in_out'] ?? false),
         $soundsEnabled,
         $soundUrl
