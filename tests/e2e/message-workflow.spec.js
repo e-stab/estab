@@ -131,6 +131,13 @@ async function fillCommonMessageFields(content, values) {
   if (await priority.count()) {
     await priority.selectOption('eee');
   }
+  // Feld 16 gehoert dem Verfasser: die Anwendung setzt die Abfassungszeit
+  // nicht mehr selbst ein, weil sie den Zeitpunkt der Erfassung kennt und
+  // nicht den der Abfassung.
+  const compositionTime = content.locator('[name="12_abfzeit"]').first();
+  if (await compositionTime.count() && await compositionTime.isEditable()) {
+    await compositionTime.fill(values.compositionTime ?? '1215');
+  }
 }
 
 async function createOutgoing(page, account) {
