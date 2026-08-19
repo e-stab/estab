@@ -73,6 +73,7 @@ FOR EACH ROW
 BEGIN
   DECLARE active_shift_status VARCHAR(16) DEFAULT NULL;
   DECLARE previous_assignment_id BIGINT UNSIGNED DEFAULT NULL;
+  DECLARE relieved_predecessor_ignored TINYINT UNSIGNED DEFAULT 1;
 
   IF NEW.`status` <> 'ZUGEWIESEN'
      OR NEW.`angenommen_am` IS NOT NULL
@@ -112,10 +113,13 @@ BEGIN
 
   IF BINARY active_shift_status = BINARY 'AKTIV'
      AND BINARY NEW.`funktion` <> BINARY 'A/W' THEN
-    -- relieved_predecessor_ignored: a station whose holder was relieved or
-    -- whose assignment was declined is free again. Only a currently assigned
-    -- or accepted row still occupies the function, exactly as the generated
-    -- column `aktive_funktion` and its unique key define occupancy.
+    -- A station whose holder was relieved, or whose assignment was declined,
+    -- is free again. Only a currently assigned or accepted row still occupies
+    -- the function, exactly as the generated column `aktive_funktion` and its
+    -- unique key define occupancy. MariaDB drops comments from the stored
+    -- trigger body, so relieved_predecessor_ignored is declared above and
+    -- carries that meaning into information_schema for the checks below.
+    SET relieved_predecessor_ignored = 1;
     SELECT existing_assignment.`dienstbesetzung_id`
       INTO previous_assignment_id
       FROM `nv_dienstbesetzungen` AS existing_assignment
