@@ -83,6 +83,42 @@ Mit lokalem PHP 8.5:
 tests/static/run.sh
 ```
 
+Die statische Suite registriert ihre Prüfungen programmatisch und führt sie
+nebenläufig aus. Sie bricht nicht beim ersten Fehler ab, sondern meldet am Ende
+jede fehlgeschlagene Prüfung mit ihrer Ausgabe. Die Zahl der gleichzeitigen
+Läufe folgt der Kernzahl und lässt sich mit `ESTAB_TEST_JOBS` setzen. Welche
+Prüfungen registriert sind, beantwortet:
+
+```console
+tests/static/run.sh --list
+```
+
+Den Lint des gesamten Baums erledigt `tools/lint_sources.php` in einem einzigen
+Prozess. Über `opcache_compile_file()` meldet es dieselben zwei Fehlerklassen
+wie `php -l` -- Kompilierfehler und Kompilierzeit-Deprecations -- und fällt auf
+hosts ohne nutzbare OPcache auf `php -l` je Datei zurück:
+
+```console
+php -d opcache.enable_cli=1 tools/lint_sources.php
+```
+
+### Regeln der Dienstvorschriften
+
+`app/dv_rules.php` führt die Regeln, denen die Anwendung entsprechen muss, mit
+Quelle, Fundstelle und Anforderung. Ein Test benennt die Regel, die er
+absichert, über die Fehlermeldung:
+
+```php
+require_once $root . '/app/dv_rules.php';
+$assert($bedingung, estab_dv_requirement('NV-19-VERTEILER-EINGANG', 'was fehlt'));
+```
+
+`tests/php/dv_rule_registry.php` führt die abgedeckten Regeln zur Laufzeit mit
+und schlägt fehl, sobald eine Regel ohne Test im Katalog steht oder ein Test
+eine Regel benennt, die es nicht gibt. Eine Regel, deren Durchsetzung an einem
+Datenbank-Trigger hängt, muss ihre Migration ausdrücklich mitprüfen -- sonst
+gilt sie als erfüllt, während der Betrieb sie abweist.
+
 Workflow-Lint:
 
 ```console
