@@ -110,7 +110,7 @@ $assert(
 $assert(
     str_contains($outgoing, '`03_datum`')
         && str_contains($outgoing, '`06_befweg`')
-        && str_contains($outgoing, '`06_befwegausw`')
+        && str_contains($outgoing, '`01_medium`')
         && str_contains($outgoing, 'Beförderungsweg')
         && str_contains($outgoing, 'estab_message_transport_text')
         && str_contains($outgoing, 'Noch nicht befördert'),

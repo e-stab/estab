@@ -1638,7 +1638,9 @@ HTML;
                 . '<label for="f_fernmeldeplan_eintrag_id">'
                 . 'Freigegebenen Fernmeldeweg auswählen</label>'
                 . '<select id="f_fernmeldeplan_eintrag_id" '
-                . 'name="fernmeldeplan_eintrag_id" required>'
+                . 'name="fernmeldeplan_eintrag_id"'
+                . ($this->activeTelecomRoutes === [] ? '' : ' required')
+                . '>'
                 . '<option value="">Bitte Fernmeldeweg auswählen</option>';
             $selected = (string)(
                 $this->formdata['fernmeldeplan_eintrag_id'] ?? ''
@@ -1664,7 +1666,17 @@ HTML;
             echo '</select>';
             if ($this->activeTelecomRoutes === []) {
                 echo '<p class="estab-field-error">Kein aktuell gültiger, '
-                    . 'freigegebener S6-Fernmeldeplan verfügbar.</p>';
+                    . 'freigegebener S6-Fernmeldeplan verfügbar.</p>'
+                    . '<p>Ohne veröffentlichten Fernmeldeplan disponieren Sie '
+                    . 'das Übermittlungsmittel in Feld 1 und benennen den '
+                    . 'Beförderungsweg hier.</p>'
+                    . '<label for="f_06_befweg">Beförderungsweg</label>';
+                $this->official_message_text_input(
+                    '06_befweg',
+                    true,
+                    128,
+                    'Beförderungsweg'
+                );
             }
             echo '</fieldset>'
                 . '<fieldset data-estab-ldf-return>'
@@ -1689,7 +1701,7 @@ HTML;
         }
         if ($this->task === 'FM-Ausgang') {
             $summary = implode(' · ', array_values(array_filter([
-                trim((string)$this->formdata['06_befwegausw']),
+                trim((string)$this->formdata['01_medium']),
                 trim((string)$this->formdata['06_befweg']),
             ], static fn(string $part): bool => $part !== '')));
             echo '<fieldset data-estab-transport-confirmation="required">'
@@ -2229,8 +2241,14 @@ HTML;
         $conversationDraft = $this->task === 'Stab_schreiben';
         $conversationSelected =
             ($this->formdata['11_gesprnotiz'] ?? false) === true;
+        // Mit veröffentlichtem S6-Plan leitet der Server Feld 1 zwingend aus
+        // dem gewählten Weg ab; ein eigenes Auswahlfeld wäre dort eine
+        // Eingabe, die still verworfen wird. Ohne Plan disponiert LdF das
+        // Übermittlungsmittel hier unmittelbar.
         $actualMediumEditable = (bool)$this->feld[1]
             || $this->task === 'LdF-Eingang'
+            || ($this->task === 'LdF-Ausgang'
+                && $this->activeTelecomRoutes === [])
             || $conversationDraft;
         $actualMediumEnabled = !$conversationDraft || $conversationSelected;
         $actualMediumRequired = $this->task === 'Stab_gesprnoti'

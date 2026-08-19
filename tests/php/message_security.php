@@ -215,7 +215,10 @@ $incoming = [
 $outgoing = $incoming + [];
 $outgoing['04_richtung'] = 'A';
 $outgoing['x00_status'] = 2;
-$outgoing['06_befwegausw'] = 'Fu';
+// Feld 7 bleibt der Wunsch des Verfassers. Die A/W-Stufe hängt an der
+// Disposition des LdF: Mittel in Feld 1, Weg in Feld 6.
+$outgoing['01_medium'] = 'Fu';
+$outgoing['06_befweg'] = 'FuKrs 1 · Kanal 31';
 $outgoing['15_quitdatum'] = '2026-07-23 11:58:00';
 $outgoing['15_quitzeichen'] = 'si0001';
 $outgoing['x02_sperre'] = 't';

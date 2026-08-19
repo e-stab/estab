@@ -874,7 +874,7 @@ class Listen extends kategorien {
     $query = "SELECT m.`00_lfd`,m.`01_zeichen`,m.`02_zeit`,".
       "m.`02_zeichen`,m.`03_datum`,m.`03_zeichen`,m.`04_richtung`,".
       estab_message_list_tbb_number_select_sql ("m").",".
-      "m.`05_gegenstelle`,m.`06_befwegausw`,".
+      "m.`01_medium`,m.`05_gegenstelle`,m.`06_befweg`,".
       "m.`09_vorrangstufe`,m.`10_anschrift`,m.`11_rufnummer`,".
       "m.`12_anhang`,m.`12_betreff`,m.`12_inhalt`,m.`12_abfzeit`,".
       "m.`13_abseinheit`,m.`14_funktion`,m.`15_quitdatum`,".
@@ -1166,7 +1166,8 @@ class Listen extends kategorien {
                   WHERE `einsatz_id` = ?
                   AND `x00_status` = 2
                   AND `02_zeit` IS NOT NULL AND `02_zeichen` != \"\"
-                  AND `06_befwegausw` != \"\"
+                  AND `01_medium` != \"\"
+                  AND `06_befweg` != \"\"
                   AND `15_quitdatum` IS NOT NULL
                   AND `15_quitzeichen` != \"\"
                   AND ((`04_richtung` = \"A\") AND (`03_datum` IS NULL) AND (`03_zeichen` = \"\")) order by ".
@@ -1917,8 +1918,8 @@ class Listen extends kategorien {
       case "FmNwA":  // *****  F M N W A usgang ******
         if (debug) {echo "<b>file:liste.php:714 fkt:createlist - switch(listenart) -- case (FmNwA) ></b><br>";}
         $incidentId = $this->required_incident_id ();
-        $query = "SELECT m.`00_lfd`,m.`03_datum`,m.`06_befweg`,".
-                  "m.`06_befwegausw`,m.`09_vorrangstufe`,".
+        $query = "SELECT m.`00_lfd`,m.`01_medium`,m.`03_datum`,".
+                  "m.`06_befweg`,m.`09_vorrangstufe`,".
                   "m.`04_richtung`,".
                   estab_message_list_tbb_number_select_sql ("m").",".
                   "m.`10_anschrift`,m.`12_abfzeit`,m.`12_inhalt`,".
@@ -1990,7 +1991,7 @@ class Listen extends kategorien {
                  echo "Noch nicht befördert";
                } else {
                  $transportPath = estab_message_transport_text (
-                   $row["06_befwegausw"] ?? "",
+                   $row["01_medium"] ?? "",
                    $row["06_befweg"] ?? ""
                  );
                  echo $transportPath !== ""
@@ -2126,7 +2127,7 @@ class Listen extends kategorien {
                  echo "Noch nicht befördert";
                } else {
                  $trackingPath = estab_message_transport_text (
-                   $row["06_befwegausw"] ?? "",
+                   $row["01_medium"] ?? "",
                    $row["06_befweg"] ?? ""
                  );
                  echo $trackingPath !== ""

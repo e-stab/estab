@@ -1054,7 +1054,8 @@ function estab_read_message_visibility_sql_for_identity(
             . ' AND ' . $column('04_richtung') . " = 'A'"
             . ' AND ' . $dateSet('02_zeit')
             . " AND " . $column('02_zeichen') . " <> ''"
-            . " AND " . $column('06_befwegausw') . " <> ''"
+            . " AND " . $column('01_medium') . " <> ''"
+            . " AND " . $column('06_befweg') . " <> ''"
             . ' AND ' . $dateUnset('03_datum')
             . " AND " . $column('03_zeichen') . " = ''"
             . ' AND ' . $dateSet('15_quitdatum')
@@ -1382,7 +1383,7 @@ function estab_read_attachment_authorization_columns(): string
     // incidents may contain thousands of long messages.
     return implode(', ', [
         '`00_lfd`', '`einsatz_id`', '`12_anhang`', '`04_richtung`',
-        '`06_befwegausw`', '`16_empf`',
+        '`01_medium`', '`06_befweg`', '`16_empf`',
         '`x00_status`', '`x01_abschluss`', '`x02_sperre`',
         '`x03_sperruser`', '`01_zeichen`', '`02_zeit`', '`02_zeichen`',
         '`03_datum`', '`03_zeichen`', '`14_zeichen`', '`14_funktion`',

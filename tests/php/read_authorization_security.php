@@ -40,7 +40,8 @@ $terminal = [
     '02_zeichen' => 'ldf001',
     '03_datum' => null,
     '03_zeichen' => '',
-    '06_befwegausw' => 'Fu',
+    '01_medium' => 'Fu',
+    '06_befweg' => 'FuKrs 1 · Kanal 31',
     '14_zeichen' => '',
     '14_funktion' => '',
     '15_quitdatum' => '2026-07-30 10:02:00',
@@ -214,7 +215,8 @@ $assert(
 );
 $assert(
     str_contains($awVisibility['sql'], "msg.`x00_status` = 2")
-        && str_contains($awVisibility['sql'], "msg.`06_befwegausw` <> ''")
+        && str_contains($awVisibility['sql'], "msg.`01_medium` <> ''")
+        && str_contains($awVisibility['sql'], "msg.`06_befweg` <> ''")
         && $awVisibility['params'] === ['aw0001', 'aw0001', 'aw0001'],
     'pageable A/W SQL does not preserve queue, lock and personal mark semantics'
 );

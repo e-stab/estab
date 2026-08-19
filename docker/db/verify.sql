@@ -1936,7 +1936,7 @@ SELECT
        BINARY 'STRICT', BINARY 'LOOSE'
      )) = 0)
        AS `incident_permission_mode_ok`,
-  ((SELECT COUNT(*) FROM `estab_schema_migrations`) = 26
+  ((SELECT COUNT(*) FROM `estab_schema_migrations`) = 27
    AND
    (SELECT COUNT(*)
       FROM `estab_schema_migrations`
@@ -1966,10 +1966,11 @@ SELECT
        '117-telecom-draft-discard.sql',
        '118-operational-authority.sql',
        '119-inactive-messenger-dispatch.sql',
-       '120-single-function-relief.sql'
+       '120-single-function-relief.sql',
+       '121-transport-disposition-field-one.sql'
      )
        AND `state` = 'applied'
-       AND `checksum` REGEXP BINARY '^[0-9a-f]{64}$') = 26)
+       AND `checksum` REGEXP BINARY '^[0-9a-f]{64}$') = 27)
        AS `schema_migrations_ok`;
 
 SELECT `table_name`, `engine`, `table_collation`

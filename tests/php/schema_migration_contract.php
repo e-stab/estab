@@ -3012,7 +3012,7 @@ foreach ([
     'missing ETB head was not rejected explicitly',
     'missing TTB head was not rejected explicitly',
     'MariaDB default snapshot isolation is not enabled for concurrency tests',
-    'assert_equal "26"',
+    'assert_equal "27"',
 ] as $marker) {
     $assert(
         str_contains($schemaIntegration, $marker),
@@ -3079,7 +3079,7 @@ $assert(
         && str_contains($verifySql, "index_name <> 'PRIMARY') = 0")
         && str_contains(
             $verifySql,
-            '(SELECT COUNT(*) FROM `estab_schema_migrations`) = 26'
+            '(SELECT COUNT(*) FROM `estab_schema_migrations`) = 27'
         )
         && str_contains($verifySql, "'96-etb-duty-function.sql'")
         && str_contains(
@@ -3118,7 +3118,11 @@ $assert(
             $verifySql,
             "'120-single-function-relief.sql'"
         )
-        && str_contains($verifySql, ") = 26) AS `schema_migrations_ok`")
+        && str_contains(
+            $verifySql,
+            "'121-transport-disposition-field-one.sql'"
+        )
+        && str_contains($verifySql, ") = 27) AS `schema_migrations_ok`")
         && str_contains(
             $verifySql,
             'Discarded telecommunications drafts are immutable evidence'
@@ -3145,7 +3149,7 @@ $assert(
         && str_contains($readinessSql, "index_name <> 'PRIMARY') = 0")
         && str_contains(
             $readinessSql,
-            '(SELECT COUNT(*) FROM estab_schema_migrations) = 26'
+            '(SELECT COUNT(*) FROM estab_schema_migrations) = 27'
         )
         && str_contains($readinessSql, "'96-etb-duty-function.sql'")
         && str_contains(
@@ -3197,7 +3201,7 @@ $assert(
         )
         && str_contains(
             $readinessSql,
-            "checksum REGEXP BINARY '^[0-9a-f]{64}$') = 26"
+            "checksum REGEXP BINARY '^[0-9a-f]{64}$') = 27"
         ),
     'Runtime readiness does not require the exact final ETB catalogue and ledger'
 );
@@ -3443,8 +3447,8 @@ $assert(
         && str_contains($verify, "'117-telecom-draft-discard.sql'")
         && str_contains($verify, "'118-operational-authority.sql'")
         && str_contains($verify, "'119-inactive-messenger-dispatch.sql'")
-        && str_contains($verify, 'estab_schema_migrations`) = 26')
-        && str_contains($readiness, 'estab_schema_migrations) = 26'),
+        && str_contains($verify, 'estab_schema_migrations`) = 27')
+        && str_contains($readiness, 'estab_schema_migrations) = 27'),
     'Migration ledger/readiness does not require all twenty-five release migrations'
 );
 $assert(

@@ -159,6 +159,7 @@ for test_name in \
     dv_composition_time \
     dv_shift_relief \
     command_post_staffing \
+    small_command_post_transport \
     dv_command_post_growth \
     dv_double_hat_queues \
     dv_rule_registry \

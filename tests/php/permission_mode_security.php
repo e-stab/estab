@@ -252,7 +252,8 @@ $pendingOutgoing = [
     '02_zeichen' => 'ldf001',
     '03_datum' => null,
     '03_zeichen' => '',
-    '06_befwegausw' => 'Fu',
+    '01_medium' => 'Fu',
+    '06_befweg' => 'FuKrs 1 · Kanal 31',
     '15_quitdatum' => '2026-08-01 11:59:00',
     '15_quitzeichen' => 'si0001',
     '16_empf' => 'S1_rt',
@@ -827,10 +828,12 @@ $assert(
         )
         && str_contains($verify, "'120-single-function-relief.sql'")
         && str_contains($readiness, "'120-single-function-relief.sql'")
+        && str_contains($verify, "'121-transport-disposition-field-one.sql'")
+        && str_contains($readiness, "'121-transport-disposition-field-one.sql'")
         && str_contains($verify, 'estab_permission_mode')
         && str_contains($readiness, 'estab_permission_mode')
-        && str_contains($verify, 'estab_schema_migrations`) = 26')
-        && str_contains($readiness, 'estab_schema_migrations) = 26')
+        && str_contains($verify, 'estab_schema_migrations`) = 27')
+        && str_contains($readiness, 'estab_schema_migrations) = 27')
         && str_contains($verify, 'inactive_messenger_target_allowed')
         && str_contains($readiness, 'inactive_messenger_target_allowed')
         && str_contains($readiness, 'nv_zugangsschicht_mitglieder')
@@ -867,7 +870,7 @@ $assert(
             $readiness,
             "'%messenger_account.`aktiv` = 1%'"
         ),
-    'Migrations 115-120 and exact ledger are outside verify/readiness gates'
+    'Migrations 115-121 and exact ledger are outside verify/readiness gates'
 );
 $assert(
     str_contains($permissionSource, 'Missing context fails closed')

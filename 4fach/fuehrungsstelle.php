@@ -696,7 +696,7 @@ try {
                     . ' n.`12_inhalt` FROM `nv_nachrichten` AS n'
                     . ' WHERE n.`einsatz_id` = ?'
                     . " AND n.`04_richtung` = 'A'"
-                    . " AND n.`06_befwegausw` = 'Me'"
+                    . " AND n.`01_medium` = 'Me'"
                     . ' AND n.`x00_status` = 2'
                     . " AND n.`x01_abschluss` = 'f'"
                     . ' AND NOT EXISTS ('

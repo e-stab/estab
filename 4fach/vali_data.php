@@ -1,6 +1,7 @@
 <?php
 
 require_once __DIR__ . "/../app/message_transport.php";
+require_once __DIR__ . "/../app/permission_mode.php";
 require_once __DIR__ . "/../app/message_priority.php";
 require_once __DIR__ . "/../app/workflow.php";
 
@@ -441,10 +442,18 @@ class vali_data_form {
                  $this->validate["13_abseinheit"]);
         break ;
       case "LdF-Ausgang":
+          // Mit veroeffentlichtem S6-Fernmeldeplan bleibt der Weg aus dem
+          // Plan Pflicht. Ohne Plan (Modus LOCKER, DV 1-101 Fuehrungsstelle
+          // ohne Stab) disponiert LdF das Mittel in Feld 1 und benennt den
+          // Befoerderungsweg in Feld 6 unmittelbar.
           $zw = ($this->validate["02_zeit"] &&
                  $this->validate["02_zeichen"] &&
                  $this->validate["05_gegenstelle"] &&
-                 $this->validate["fernmeldeplan_eintrag_id"]);
+                 ($this->validate["fernmeldeplan_eintrag_id"] ||
+                  (!estab_permission_telecom_plan_required () &&
+                   $this->validate["01_medium"] &&
+                   $this->validate["06_befweg"] &&
+                   trim ((string) ($this->i_data ["06_befweg"] ?? "")) !== "")));
         break ;
       case "Stab_sichten":
          $zw = ($this->validate["15_quitzeichen"] &&

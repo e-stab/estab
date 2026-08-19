@@ -1394,6 +1394,9 @@ finish_ldf_outgoing()
         'name="06_befwegausw"' \
         "LdF cannot submit a free transport medium"
     assert_body_absent \
+        'name="01_medium" value="Fu" type="radio"' \
+        "LdF cannot overrule the medium of the disposed S6 route"
+    assert_body_absent \
         'id="f_03_datum" maxlength=' \
         'LdF must not write transport completion time'
     ldf_csrf=$(csrf_from_body)
@@ -1416,7 +1419,7 @@ finish_ldf_outgoing()
     assert_db_equals \
         "2|${ldf_code}|${ldf_callsign}|Fu|${ldf_route_text}|${ldf_route_id}" \
         "LdF-authored outgoing disposition for $ldf_marker" \
-        "SELECT CONCAT(\`x00_status\`, '|', \`02_zeichen\`, '|', \`05_gegenstelle\`, '|', \`06_befwegausw\`, '|', \`06_befweg\`, '|', \`estab_fernmeldeplan_eintrag_id\`) FROM \`nv_nachrichten\` WHERE \`00_lfd\`=${ldf_record_id};"
+        "SELECT CONCAT(\`x00_status\`, '|', \`02_zeichen\`, '|', \`05_gegenstelle\`, '|', \`01_medium\`, '|', \`06_befweg\`, '|', \`estab_fernmeldeplan_eintrag_id\`) FROM \`nv_nachrichten\` WHERE \`00_lfd\`=${ldf_record_id};"
 }
 
 finish_fm_outgoing()
@@ -4018,7 +4021,7 @@ assert_message_state "$outgoing_marker" \
 assert_db_equals \
     "unset||${telecom_route_id}|Fu|${telecom_route_text}" \
     'A/W return retained rejected route while clearing LdF completion mark' \
-    "SELECT CONCAT(IF(\`02_zeit\` IS NULL, 'unset', 'set'), '|', \`02_zeichen\`, '|', \`estab_fernmeldeplan_eintrag_id\`, '|', \`06_befwegausw\`, '|', \`06_befweg\`) FROM \`nv_nachrichten\` WHERE \`00_lfd\`=${outgoing_id};"
+    "SELECT CONCAT(IF(\`02_zeit\` IS NULL, 'unset', 'set'), '|', \`02_zeichen\`, '|', \`estab_fernmeldeplan_eintrag_id\`, '|', \`01_medium\`, '|', \`06_befweg\`) FROM \`nv_nachrichten\` WHERE \`00_lfd\`=${outgoing_id};"
 assert_db_equals \
     "${transport_return_reason}|${telecom_route_id}|Fu|${telecom_route_text}" \
     'A/W return event preserves reason and rejected S6 decision' \
@@ -4049,7 +4052,7 @@ assert_numeric 'redisposition S6 route B fixture' "$telecom_route_b_id"
 assert_numeric 'redisposition S6 plan B version' "$telecom_plan_b_version"
 
 if printf '%s\n' \
-    "UPDATE \`nv_nachrichten\` SET \`estab_fernmeldeplan_eintrag_id\`=${telecom_route_b_id}, \`06_befwegausw\`='Fu', \`06_befweg\`='${telecom_route_b_text}' WHERE \`00_lfd\`=${outgoing_id};" \
+    "UPDATE \`nv_nachrichten\` SET \`estab_fernmeldeplan_eintrag_id\`=${telecom_route_b_id}, \`01_medium\`='Fu', \`06_befwegausw\`='Fu', \`06_befweg\`='${telecom_route_b_text}' WHERE \`00_lfd\`=${outgoing_id};" \
     | db_sql >/dev/null 2>&1
 then
     echo 'Message workflow HTTP: route trigger accepted an unlocked direct replacement' >&2
@@ -4104,7 +4107,7 @@ assert_db_equals "$outgoing_backdated_sql" 'edited A/W transport time' \
 assert_db_equals \
     "${aw_code}|E2E-Gegenstelle|${telecom_route_b_text}|Fu|${telecom_route_b_id}" \
     'A/W transport preserved LdF decision and authenticated code' \
-    "SELECT CONCAT(\`03_zeichen\`, '|', \`05_gegenstelle\`, '|', \`06_befweg\`, '|', \`06_befwegausw\`, '|', \`estab_fernmeldeplan_eintrag_id\`) FROM \`nv_nachrichten\` WHERE \`00_lfd\`=${outgoing_id};"
+    "SELECT CONCAT(\`03_zeichen\`, '|', \`05_gegenstelle\`, '|', \`06_befweg\`, '|', \`01_medium\`, '|', \`estab_fernmeldeplan_eintrag_id\`) FROM \`nv_nachrichten\` WHERE \`00_lfd\`=${outgoing_id};"
 assert_db_equals \
     "true|${telecom_route_b_id}|Fu|${telecom_route_b_text}" \
     'A/W event proves the confirmed database-bound transport route' \
@@ -4493,9 +4496,13 @@ assert_message_state "$conversation_marker" \
     "A|2|f|set|${si_code}|S2_rt,S1_gn,|f||f" \
     'LdF-disposed conversation awaiting A/W'
 assert_db_equals \
-    "Fe|${conversation_callsign}|Fu|${telecom_route_b_text}|${telecom_route_b_id}" \
-    'original conversation medium remains distinct from LdF route' \
-    "SELECT CONCAT(\`01_medium\`, '|', \`05_gegenstelle\`, '|', \`06_befwegausw\`, '|', \`06_befweg\`, '|', \`estab_fernmeldeplan_eintrag_id\`) FROM \`nv_nachrichten\` WHERE \`00_lfd\`=${conversation_id};"
+    "Fu|${conversation_callsign}|${telecom_route_b_text}|${telecom_route_b_id}" \
+    'LdF disposition of the conversation note is documented in Feld 1' \
+    "SELECT CONCAT(\`01_medium\`, '|', \`05_gegenstelle\`, '|', \`06_befweg\`, '|', \`estab_fernmeldeplan_eintrag_id\`) FROM \`nv_nachrichten\` WHERE \`00_lfd\`=${conversation_id};"
+assert_db_equals \
+    'Fe' \
+    'medium of the documented conversation stays in the immutable evidence' \
+    "SELECT JSON_UNQUOTE(JSON_EXTRACT(\`field_snapshot\`, '$.medium_before_disposition')) FROM \`nv_nachrichten_ereignisse\` WHERE \`message_id\`=${conversation_id} AND \`event_type\`='ldf_dispatched' ORDER BY \`event_id\` DESC LIMIT 1;"
 assert_db_equals 0 'LdF disposition creates no premature TTB evidence' \
     "SELECT COUNT(*) FROM \`nv_tbb\` WHERE \`einsatz_id\`=${active_incident_id} AND \`estab_message_id\`=${conversation_id};"
 
@@ -4512,9 +4519,9 @@ assert_db_equals \
     'conversation-note DV transition event order' \
     "SELECT GROUP_CONCAT(\`event_type\` ORDER BY \`event_id\` SEPARATOR ',') FROM \`nv_nachrichten_ereignisse\` WHERE \`message_id\`=${conversation_id};"
 assert_db_equals \
-    "Fe|Fu|${telecom_route_b_id}|${aw_code}" \
-    'conversation completion preserves original medium and route evidence' \
-    "SELECT CONCAT(\`01_medium\`, '|', \`06_befwegausw\`, '|', \`estab_fernmeldeplan_eintrag_id\`, '|', \`03_zeichen\`) FROM \`nv_nachrichten\` WHERE \`00_lfd\`=${conversation_id};"
+    "Fu|${telecom_route_b_text}|${telecom_route_b_id}|${aw_code}" \
+    'conversation completion preserves the disposed route evidence' \
+    "SELECT CONCAT(\`01_medium\`, '|', \`06_befweg\`, '|', \`estab_fernmeldeplan_eintrag_id\`, '|', \`03_zeichen\`) FROM \`nv_nachrichten\` WHERE \`00_lfd\`=${conversation_id};"
 if ! generated_form_check present A "$conversation_number"; then
     echo 'Message workflow HTTP: conversation completion generated no form' >&2
     exit 1

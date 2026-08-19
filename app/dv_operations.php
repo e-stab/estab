@@ -6316,7 +6316,7 @@ function estab_dv_assign_messenger(
             );
             $actorCode = $selected['kuerzel'];
             $message = $connection->prepare(
-                'SELECT `04_richtung`, `06_befwegausw`, `einsatz_id`,'
+                'SELECT `04_richtung`, `01_medium`, `einsatz_id`,'
                 . ' `estab_fernmeldeplan_eintrag_id`,'
                 . ' `x00_status`, `x01_abschluss`'
                 . ' FROM `nv_nachrichten` WHERE `00_lfd` = ? FOR UPDATE'
@@ -6335,8 +6335,11 @@ function estab_dv_assign_messenger(
                 !is_array($messageRow)
                 || (int) $messageRow['einsatz_id'] !== $incidentId
                 || $messageRow['04_richtung'] !== 'A'
-                || $messageRow['06_befwegausw'] !== 'Me'
-                || (int) ($messageRow['estab_fernmeldeplan_eintrag_id'] ?? 0) < 1
+                || $messageRow['01_medium'] !== 'Me'
+                || (
+                    (int) ($messageRow['estab_fernmeldeplan_eintrag_id'] ?? 0) < 1
+                    && estab_permission_telecom_plan_required()
+                )
                 || (int) $messageRow['x00_status'] !== 2
                 || !in_array(
                     (string) $messageRow['x01_abschluss'],
@@ -6346,7 +6349,8 @@ function estab_dv_assign_messenger(
             ) {
                 throw new EstabDvConflictException(
                     'Ein Melderauftrag benötigt einen Ausgang mit '
-                    . 'disponiertem Medium Me und nachgewiesenem S6-Weg.'
+                    . 'disponiertem Medium Me und nachgewiesenem '
+                    . 'Beförderungsweg.'
                 );
             }
             estab_dv_require_no_open_messenger_for_redispatch(

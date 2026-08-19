@@ -118,6 +118,20 @@ function estab_permission_loose_mode_active(): bool
 }
 
 /**
+ * Decide whether an outgoing message must be disposed from a published
+ * S6 telecommunications plan.
+ *
+ * DV 1-101 knows the Führungsstelle without an own S6 section. Its LdF has no
+ * published plan and names the means and the way himself, so the plan is
+ * mandatory only in STRICT. Missing context fails closed and therefore keeps
+ * the plan mandatory.
+ */
+function estab_permission_telecom_plan_required(): bool
+{
+    return !estab_permission_loose_mode_active();
+}
+
+/**
  * Reject a write when the policy changed after the request admission check.
  * The active incident/status row is already locked by the caller.
  */

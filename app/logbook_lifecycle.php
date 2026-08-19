@@ -673,7 +673,7 @@ function estab_logbook_lifecycle_message_transport(
     $statement = $connection->prepare(
         'SELECT `04_nummer`, `01_medium`, `01_datum`, `01_zeichen`,'
         . ' `03_datum`, `03_zeichen`,'
-        . ' `05_gegenstelle`, `06_befweg`, `06_befwegausw`,'
+        . ' `05_gegenstelle`, `06_befweg`,'
         . ' `10_anschrift`, `12_betreff`, `13_abseinheit`,'
         . ' `15_quitzeichen` FROM `nv_nachrichten`'
         . ' WHERE `00_lfd` = ? AND `einsatz_id` = ?'
@@ -715,10 +715,12 @@ function estab_logbook_lifecycle_message_transport(
             ? ($message['10_anschrift'] ?? '')
             : ($message['13_abseinheit'] ?? '')
     ));
-    $selectedRoute = trim((string) ($message['06_befwegausw'] ?? ''));
+    // Spalte 3 des Fb Fü 44 weist den tatsächlich benutzten Weg nach: die
+    // Disposition in Feld 1 zusammen mit dem Weg in Feld 6. Der Wunsch des
+    // Verfassers in Feld 7 ist kein Nachweis und gehört nicht hierher.
     $medium = trim((string) ($message['01_medium'] ?? ''));
     $route = trim(implode(' / ', array_filter([
-        $selectedRoute !== '' ? $selectedRoute : $medium,
+        $medium,
         (string) ($message['06_befweg'] ?? ''),
     ], static fn (string $part): bool => trim($part) !== '')));
     $mark = trim((string) (

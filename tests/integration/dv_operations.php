@@ -2241,7 +2241,7 @@ try {
     $insertMessage = $connection->prepare(
         'INSERT INTO `nv_nachrichten`'
         . ' (`einsatz_id`, `04_richtung`, `04_nummer`, `06_befweg`,'
-        . ' `06_befwegausw`, `estab_fernmeldeplan_eintrag_id`,'
+        . ' `01_medium`, `estab_fernmeldeplan_eintrag_id`,'
         . ' `10_anschrift`, `12_inhalt`, `14_zeichen`, `14_funktion`,'
         . ' `x00_status`, `x01_abschluss`)'
         . " VALUES (?, 'A', 1, ?, 'Me', ?, ?, ?, ?, 'LdF', 2, 'f')"
@@ -2462,7 +2462,7 @@ try {
     $looseMessageInsert = $connection->prepare(
         'INSERT INTO `nv_nachrichten`'
             . ' (`einsatz_id`, `04_richtung`, `04_nummer`, `06_befweg`,'
-            . ' `06_befwegausw`, `estab_fernmeldeplan_eintrag_id`,'
+            . ' `01_medium`, `estab_fernmeldeplan_eintrag_id`,'
             . ' `10_anschrift`, `12_inhalt`, `14_zeichen`, `14_funktion`,'
             . ' `x00_status`, `x01_abschluss`)'
             . " VALUES (?, 'A', 1, ?, 'Me', ?, ?, ?, ?, 'LdF', 2, 'f')"

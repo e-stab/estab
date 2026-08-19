@@ -558,8 +558,10 @@ function estab_rehydrate_authoritative_message_form (
       "estab_route_error",
     ),
     "LdF-Ausgang" => array (
+      "01_medium",
       "02_zeit",
       "05_gegenstelle",
+      "06_befweg",
       "fernmeldeplan_eintrag_id",
       "ldf_rueckgabegrund",
       "estab_route_error",
@@ -1166,8 +1168,9 @@ function check_and_save ($data, $activeCommandPostName, $expectedIncidentId){
            // The acceptance mark belongs to LdF, not to the author.
            "02_zeit" => null,
            "02_zeichen" => "",
-           // Feld 7 is the author's wish. LdF replaces it with the medium of
-           // the disposed S6 route; the actually used way stays in Feld 1.
+           // Feld 7 is the wish of the author. Nobody rewrites it after the
+           // message was written; LdF disposes the actually used means in
+           // Feld 1 and the way in Feld 6.
            "06_befwegausw" => estab_message_medium_storage_value (
              $data ["06_befwegausw"]
            ) ?? "",
@@ -1645,11 +1648,23 @@ function check_and_save ($data, $activeCommandPostName, $expectedIncidentId){
         $ldfFields ["05_gegenstelle"] = trim (
           (string) $data ["05_gegenstelle"]
         );
-        // The repository resolves this immutable ID again while holding the
-        // active incident transaction and derives medium/route from the
-        // currently valid S6 plan. Browser-supplied 06_* values are ignored.
-        $ldfFields ["estab_fernmeldeplan_eintrag_id"] =
-          estab_message_positive_id ($data ["fernmeldeplan_eintrag_id"]);
+        // Feld 1 nimmt die Disposition des LdF auf. Waehlt LdF einen Weg aus
+        // dem S6-Plan, ersetzt das Repository das Mittel unveraenderbar durch
+        // das Medium dieses Weges; Feld 7 bleibt der Wunsch des Verfassers.
+        $ldfFields ["01_medium"] = (string) $data ["01_medium"];
+        $ldfRouteEntry = trim ((string) $data ["fernmeldeplan_eintrag_id"]);
+        if ($ldfRouteEntry !== "") {
+          // The repository resolves this immutable ID again while holding the
+          // active incident transaction and derives medium/route from the
+          // currently valid S6 plan. Browser-supplied 06_* values are ignored.
+          $ldfFields ["estab_fernmeldeplan_eintrag_id"] =
+            estab_message_positive_id ($ldfRouteEntry);
+        } else {
+          // FUEST-KLEIN-BEFOERDERUNG: Ohne veroeffentlichten Fernmeldeplan
+          // benennt LdF den Befoerderungsweg selbst. Das Repository prueft
+          // Mittel und Weg erneut und weist sie im Modus STRENG zurueck.
+          $ldfFields ["06_befweg"] = trim ((string) $data ["06_befweg"]);
+        }
         $ldfFields ["x00_status"] = 2;
         $ldfFields ["x01_abschluss"] = "f";
       }
@@ -1688,7 +1703,10 @@ function check_and_save ($data, $activeCommandPostName, $expectedIncidentId){
                 "direction" => "A",
                 "remote_callsign" => $ldfFields ["05_gegenstelle"],
                 "requested_telecom_plan_entry_id" =>
-                  $ldfFields ["estab_fernmeldeplan_eintrag_id"],
+                  $ldfFields ["estab_fernmeldeplan_eintrag_id"] ?? null,
+                "requested_transport_medium" => $ldfFields ["01_medium"],
+                "requested_transport_route" =>
+                  $ldfFields ["06_befweg"] ?? "",
                 "accepted_by" => $sessionCode,
               ),
             "occurred_at" => $ldfFields ["02_zeit"],
@@ -1711,7 +1729,15 @@ function check_and_save ($data, $activeCommandPostName, $expectedIncidentId){
         $data = $rehydratedLead;
         $routeValidation = $vali->validate;
         if ($ldfDirection === "A") {
-          $routeValidation ["fernmeldeplan_eintrag_id"] = false;
+          if ($ldfRouteEntry === "") {
+            // Ohne veroeffentlichten Fernmeldeplan gibt es keinen
+            // Auswahlkasten. Die Ablehnung muss dann die Felder markieren,
+            // die der LdF ueberhaupt sieht: Mittel und Befoerderungsweg.
+            $routeValidation ["01_medium"] = false;
+            $routeValidation ["06_befweg"] = false;
+          } else {
+            $routeValidation ["fernmeldeplan_eintrag_id"] = false;
+          }
         }
         $form = new nachrichten4fach (
           $data,

@@ -357,7 +357,8 @@ function estab_sidebar_queue_query(
                 . " AND `04_richtung` = 'A'"
                 . ' AND `02_zeit` IS NOT NULL'
                 . " AND `02_zeichen` != ''"
-                . " AND `06_befwegausw` != ''"
+                . " AND `01_medium` != ''"
+                . " AND `06_befweg` != ''"
                 . ' AND `03_datum` IS NULL'
                 . " AND `03_zeichen` = ''"
                 . ' AND `15_quitdatum` IS NOT NULL'
