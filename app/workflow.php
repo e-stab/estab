@@ -1421,6 +1421,29 @@ function estab_workflow_distribution_selection(array $request): array
 }
 
 /**
+ * Does the request carry at least one browser-selected recipient box?
+ *
+ * Only these coordinates are resolved through the recipient matrix. A request
+ * without them yields the mandatory server-side copies alone, so a changed
+ * matrix cannot misroute anything and the stale-form guard has nothing left
+ * to protect.
+ */
+function estab_workflow_distribution_has_selection(array $request): bool
+{
+    foreach ($request as $field => $value) {
+        if (
+            is_string($field)
+            && preg_match('/\A16_[1-5][1-4]\z/D', $field) === 1
+            && $value !== ''
+        ) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+/**
  * Resolve validated browser coordinates to canonical matrix recipient tokens.
  */
 function estab_workflow_distribution_tokens(

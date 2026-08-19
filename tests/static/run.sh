@@ -145,6 +145,7 @@ for test_name in \
     message_transport_security \
     ldf_validation_security \
     message_review_recipient_security \
+    message_outgoing_recipient_security \
     ldf_return_security \
     ldf_ui_flow_security \
     exercise_leadership_view_security \

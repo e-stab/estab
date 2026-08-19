@@ -937,6 +937,12 @@ HTML;
         $this->feld [14] = false;
         // The local organisation is derived from server configuration.
         $this->feld [13] = false;
+        // Feld 19 gilt für ein- und ausgehende Nachrichten. Der Verfasser
+        // legt den innerdienstlichen Laufweg seiner Nachricht selbst fest.
+        // Die rote Lage-/Dokumentationsdurchschrift und seine eigene grüne
+        // Durchschrift ergänzt der Server beim Speichern unabwählbar.
+        $this->bg [16] = $this->feldbg [16]["a"];
+        $this->feld [16] = true;
         if ($this->task === "Stab_korrigieren") {
           // A formally returned outgoing message remains an outgoing message.
           // Its author may correct content, but may not convert the object into

@@ -9318,13 +9318,22 @@ class BrowserAcceptance:
                         externalGreenControls.length === 0,
                     readonlyCopyControlsLabeled:
                         activeOfficialRecipients.length > 0
-                        && activeOfficialRecipients.every(recipient =>
-                            Boolean(
-                                recipient.querySelector(
-                                    ":scope > .estab-official-copy-indicator"
-                                )
-                            )
-                        )
+                        && activeOfficialRecipients.every(recipient => {
+                            const indicator = recipient.querySelector(
+                                ":scope > .estab-official-copy-indicator"
+                            );
+                            if (indicator) {
+                                return true;
+                            }
+                            const choice = recipient.querySelector(
+                                ":scope > .estab-official-box-choice"
+                            );
+                            return Boolean(
+                                choice
+                                && /^16_[1-5][1-4]$/.test(choice.name)
+                                && choice.getAttribute("aria-label")
+                            );
+                        })
                         && readonlyCopyControls.every(control =>
                             control.disabled
                             && Boolean(control.getAttribute("aria-label"))

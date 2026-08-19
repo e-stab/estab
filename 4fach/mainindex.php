@@ -2146,8 +2146,22 @@ ANTWORT % WEITERLEITUNG
           (string) $workflowSelectedIdentity ["kuerzel"];
         $formdata ["14_funktion"] =
           (string) $workflowSelectedIdentity ["funktion"];
-        $formdata ["16_empf"] = $redcopy2."_rt,".
-          $workflowSelectedIdentity ["funktion"]."_gn";
+        // Der Wechsel in die Gesprächsnotiz behält den Verteiler, den der
+        // Verfasser im Ausgangsvordruck bereits angekreuzt hat. Die rote
+        // Lage-/Dokumentationsdurchschrift und die grüne des Verfassers
+        // bleiben dabei vorgeschrieben.
+        try {
+          $formdata ["16_empf"] = estab_workflow_distribution_tokens (
+            $returnValue,
+            $empf_matrix,
+            array (
+              $redcopy2."_rt",
+              ((string) $workflowSelectedIdentity ["funktion"])."_gn"
+            )
+          );
+        } catch (InvalidArgumentException $exception) {
+          estab_workflow_forbid ();
+        }
         $formdata ["15_quitdatum"]    = "";
         $formdata ["15_quitzeichen"]  = "";
         $formdata ["task"]            = "Stab_gesprnoti";

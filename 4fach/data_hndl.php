@@ -668,7 +668,8 @@ function estab_rehydrate_staff_correction_form (
   string $table,
   array $actor,
   string $commandPostName,
-  array $submitted
+  array $submitted,
+  ?string $distribution = null
 ): ?array {
   $message = estab_message_fetch_by_id (
     $connection,
@@ -689,18 +690,27 @@ function estab_rehydrate_staff_correction_form (
     return null;
   }
 
+  $serverValues = array (
+    // The type is immutable during a correction, but a returned
+    // conversation note must keep its original marker.
+    "11_gesprnotiz" => (string) ($message ["11_gesprnotiz"] ?? "f"),
+    "13_abseinheit" => $commandPostName,
+    "14_zeichen" => (string) ($actor ["kuerzel"] ?? ""),
+    "14_funktion" => (string) ($actor ["funktion"] ?? ""),
+  );
+  if ($distribution !== null) {
+    // Feld 19 der Korrektur leitet der Server aus der Empfängermatrix ab,
+    // er übernimmt es nicht aus dem Browser. Nur deshalb darf es den
+    // autoritativen Datensatz überschreiben, damit die Auswahl des
+    // Verfassers bei einer Fehleranzeige erhalten bleibt.
+    $serverValues ["16_empf"] = $distribution;
+  }
+
   return estab_rehydrate_authoritative_message_form (
     $message,
     $submitted,
     "Stab_korrigieren",
-    array (
-      // The type is immutable during a correction, but a returned
-      // conversation note must keep its original marker.
-      "11_gesprnotiz" => (string) ($message ["11_gesprnotiz"] ?? "f"),
-      "13_abseinheit" => $commandPostName,
-      "14_zeichen" => (string) ($actor ["kuerzel"] ?? ""),
-      "14_funktion" => (string) ($actor ["funktion"] ?? ""),
-    )
+    $serverValues
   );
 }
 
@@ -858,6 +868,42 @@ function check_and_save ($data, $activeCommandPostName, $expectedIncidentId){
       $data ["13_abseinheit"] = $activeCommandPostName;
       $data ["14_zeichen"] = $sessionCode;
       $data ["14_funktion"] = $sessionFunction;
+      // Feld 19, Laufweg Ausgang: Der Verteiler gilt für ein- und ausgehende
+      // Nachrichten. Der Verfasser kreuzt die blauen Durchschriften selbst
+      // an; die rote Lage-/Dokumentationsdurchschrift und seine eigene grüne
+      // Durchschrift setzt der Server als vorgeschriebene Token dazu, genau
+      // wie im Eingangspfad. Der Browser überträgt nur Matrixkoordinaten,
+      // niemals Funktionsnamen oder Durchschriftfarben.
+      if (estab_workflow_distribution_has_selection ($browserData)) {
+        // Nur Koordinaten werden über die Matrix aufgelöst. Ohne Auswahl
+        // besteht der Verteiler ausschließlich aus den serverseitig
+        // gesetzten Durchschriften; eine zwischenzeitlich geänderte Matrix
+        // kann dann nichts fehlleiten. So verliert eine kleine
+        // Führungsstelle, die ihre Besetzung im laufenden Einsatz nachträgt,
+        // keinen Entwurf, dessen Verfasser Feld 19 gar nicht angefasst hat.
+        try {
+          estab_workflow_require_recipient_matrix_revision (
+            $browserData,
+            $empf_matrix,
+            (string) $redcopy2
+          );
+        } catch (InvalidArgumentException $exception) {
+          estab_render_message_stage_conflict ("Die Empfängermatrix");
+        }
+      }
+      try {
+        $authorDistribution = estab_workflow_distribution_tokens (
+          $browserData,
+          $empf_matrix,
+          array ($redcopy2."_rt", $sessionFunction."_gn")
+        );
+      } catch (InvalidArgumentException $exception) {
+        estab_workflow_forbid ();
+      }
+      // Eine abgewiesene Eingabe zeigt den Vordruck erneut. Der bereits
+      // abgeleitete Verteiler gehört dann in die Anzeige, damit die Auswahl
+      // des Verfassers nicht stillschweigend verloren geht.
+      $data ["16_empf"] = $authorDistribution;
     break;
 
     case "Stab_gesprnoti":
@@ -1105,7 +1151,11 @@ function check_and_save ($data, $activeCommandPostName, $expectedIncidentId){
          /*----------------------------------------------------*/
       }
 
-       $data ["16_empf"] = $redcopy2."_rt,".$data ["14_funktion"]."_gn"; // Der Verfasser bekommt den gruenen
+       // Re-assert the server-derived distribution after legacy validation
+       // as a defense-in-depth boundary against hidden 16_* fields. Feld 19
+       // keeps the mandatory red Lage/Dokumentation copy and the author's
+       // own green copy in every case.
+       $data ["16_empf"] = $authorDistribution;
        $storedMessage = estab_message_insert_numbered (
          $messageConnection,
          $conf_4f_db ["datenbank"],
@@ -1183,7 +1233,8 @@ function check_and_save ($data, $activeCommandPostName, $expectedIncidentId){
             (string) $conf_4f_tbl ["nachrichten"],
             $messageActor,
             $activeCommandPostName,
-            $data
+            $data,
+            $authorDistribution
           );
           if (!is_array ($rehydratedCorrection)) {
             estab_render_message_stage_conflict (
@@ -1221,6 +1272,8 @@ function check_and_save ($data, $activeCommandPostName, $expectedIncidentId){
           "13_abseinheit" => $activeCommandPostName,
           "14_zeichen" => $sessionCode,
           "14_funktion" => $sessionFunction,
+          // Feld 19 bleibt auch in der Korrektur Sache des Verfassers.
+          "16_empf" => $authorDistribution,
           "15_quitdatum" => null,
           "15_quitzeichen" => "",
           "x00_status" => 4,
@@ -1256,7 +1309,8 @@ function check_and_save ($data, $activeCommandPostName, $expectedIncidentId){
           (string) $conf_4f_tbl ["nachrichten"],
           $messageActor,
           $activeCommandPostName,
-          $data
+          $data,
+          $authorDistribution
         );
         if (!is_array ($rehydratedCorrection)) {
           estab_render_message_stage_conflict (
@@ -1277,7 +1331,8 @@ function check_and_save ($data, $activeCommandPostName, $expectedIncidentId){
           (string) $conf_4f_tbl ["nachrichten"],
           $messageActor,
           $activeCommandPostName,
-          $data
+          $data,
+          $authorDistribution
         );
         if (!is_array ($rehydratedCorrection)) {
           estab_render_message_stage_conflict (

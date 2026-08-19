@@ -3200,9 +3200,11 @@ assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --request POST --data-urlencode 'stab_schreiben_x=1' \
     "$base_url/4fach/mainindex.php"
 assert_body 'name="task" value="Stab_schreiben"'
+# Feld 19 gilt fuer ein- und ausgehende Nachrichten. Der Verfasser kreuzt den
+# innerdienstlichen Laufweg selbst an, auch bei einer Funktion mit Unterstrich.
 assert_body \
-    'aria-label="AB_C, keine Durchschrift ausgewählt, schreibgeschützt"'
-assert_body_absent 'name="16_54" value="16_54_bl" type="checkbox"'
+    'aria-label="AB_C als Empfänger auswählen"'
+assert_body 'name="16_54" value="16_54_bl" type="checkbox"'
 assert_body '>AB_C</span>'
 workflow_csrf_token=$(csrf_from_body)
 conversation_matrix_revision=$(recipient_matrix_revision_from_body)

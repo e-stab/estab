@@ -3144,7 +3144,7 @@ SQL
 )
 assert_numeric 'POL/FB answer message ID' "$reply_id"
 assert_db_equals \
-    "A|4|E2E-Absender|${authoritative_sender}|${pol_code}|POL|S2_rt,POL_gn|${incoming_phone}|AW: ${incoming_subject}|1|1|1" \
+    "A|4|E2E-Absender|${authoritative_sender}|${pol_code}|POL|S2_rt,POL_gn,|${incoming_phone}|AW: ${incoming_subject}|1|1|1" \
     'persisted POL/FB answer' \
     "SELECT CONCAT(\`04_richtung\`, '|', \`x00_status\`, '|', \`10_anschrift\`, '|', \`13_abseinheit\`, '|', \`14_zeichen\`, '|', \`14_funktion\`, '|', \`16_empf\`, '|', \`11_rufnummer\`, '|', \`12_betreff\`, '|', LOCATE('Zitat: von E ${incoming_number}', \`12_inhalt\`) > 0, '|', LOCATE('${incoming_marker}', \`12_inhalt\`) > 0, '|', LOCATE('${reply_marker}', \`12_inhalt\`) > 0) FROM \`nv_nachrichten\` WHERE \`00_lfd\` = ${reply_id};"
 
@@ -3249,7 +3249,7 @@ SQL
 )
 assert_numeric 'POL/FB forwarding message ID' "$forward_id"
 assert_db_equals \
-    "A|4|E2E-Weiterleitungsziel|${authoritative_sender}|${pol_code}|POL|S2_rt,POL_gn||WG: ${incoming_subject}|1|1|1" \
+    "A|4|E2E-Weiterleitungsziel|${authoritative_sender}|${pol_code}|POL|S2_rt,POL_gn,||WG: ${incoming_subject}|1|1|1" \
     'persisted POL/FB forwarding' \
     "SELECT CONCAT(\`04_richtung\`, '|', \`x00_status\`, '|', \`10_anschrift\`, '|', \`13_abseinheit\`, '|', \`14_zeichen\`, '|', \`14_funktion\`, '|', \`16_empf\`, '|', \`11_rufnummer\`, '|', \`12_betreff\`, '|', LOCATE('Zitat: von E ${incoming_number}', \`12_inhalt\`) > 0, '|', LOCATE('${incoming_marker}', \`12_inhalt\`) > 0, '|', LOCATE('${forward_marker}', \`12_inhalt\`) > 0) FROM \`nv_nachrichten\` WHERE \`00_lfd\` = ${forward_id};"
 assert_db_equals 1 'POL/FB source read state' \
@@ -3354,7 +3354,7 @@ assert_db_equals "$authoritative_sender" \
     'new outgoing local sender came from active incident' \
     "SELECT \`13_abseinheit\` FROM \`nv_nachrichten\` WHERE \`00_lfd\`=${outgoing_id};"
 assert_message_state "$outgoing_marker" \
-    'A|4|f|null||S2_rt,S1_gn|f||f' \
+    'A|4|f|null||S2_rt,S1_gn,|f||f' \
     'S1 outgoing status 4 awaiting formal Si review'
 if ! generated_form_check absent A "$outgoing_number"; then
     echo 'Message workflow HTTP: outgoing form existed before completion' >&2
@@ -3395,7 +3395,7 @@ assert_body_absent "$outgoing_marker" 'unreviewed outgoing hidden from LdF'
 return_viewer_outgoing \
     "$outgoing_marker" "$outgoing_id" 'Anschrift fachlich präzisieren'
 assert_message_state "$outgoing_marker" \
-    "A|10|f|set|${si_code}|S2_rt,S1_gn|f||f" \
+    "A|10|f|set|${si_code}|S2_rt,S1_gn,|f||f" \
     'Si returned outgoing to original author'
 load_dashboard "$ldf_cookies" 'LdF queue after Si return'
 assert_body_absent "$outgoing_marker" 'returned outgoing hidden from LdF'
@@ -3476,7 +3476,7 @@ assert_status 403 'reject conversation-note conversion during correction' \
     --data-urlencode '11_gesprnotiz=on' \
     "$base_url/4fach/mainindex.php"
 assert_message_state "$outgoing_marker" \
-    "A|10|f|set|${si_code}|S2_rt,S1_gn|f||f" \
+    "A|10|f|set|${si_code}|S2_rt,S1_gn,|f||f" \
     'conversation-note overpost preserved returned outgoing status'
 tactical_time=$(date '+%H%M')
 assert_status 409 'reject forged attachment during correction resubmission' \
@@ -3506,7 +3506,7 @@ assert_no_runtime_error 'forged correction attachment rejection'
 assert_body 'gehört nicht zum aktiven Einsatz' \
     'forged correction attachment error'
 assert_message_state "$outgoing_marker" \
-    "A|10|f|set|${si_code}|S2_rt,S1_gn|f||f" \
+    "A|10|f|set|${si_code}|S2_rt,S1_gn,|f||f" \
     'forged correction attachment preserved returned status'
 assert_db_equals '' 'forged correction attachment did not mutate message' \
     "SELECT \`12_anhang\` FROM \`nv_nachrichten\` WHERE \`00_lfd\`=${outgoing_id};"
@@ -3539,7 +3539,7 @@ assert_status 200 'resubmit corrected outgoing as original author' \
     "$base_url/4fach/mainindex.php"
 assert_no_runtime_error 'resubmitted corrected outgoing'
 assert_message_state "$outgoing_marker" \
-    'A|4|f|null||S2_rt,S1_gn|f||f' \
+    'A|4|f|null||S2_rt,S1_gn,|f||f' \
     'corrected outgoing returned to formal Si queue'
 assert_db_equals \
     "E2E-Zielstelle korrigiert|${authoritative_sender}|${s1_code}|S1" \
@@ -3553,7 +3553,7 @@ assert_db_equals \
 finish_viewer_outgoing \
     "$outgoing_marker" "$outgoing_id" 'Formal vollständig'
 assert_message_state "$outgoing_marker" \
-    "A|1|f|set|${si_code}|S2_rt,S1_gn|f||f" \
+    "A|1|f|set|${si_code}|S2_rt,S1_gn,|f||f" \
     'Si-approved outgoing status 1'
 
 load_dashboard "$s1_cookies" 'S1 list at outgoing status 1'
@@ -3571,7 +3571,7 @@ assert_status 403 'reject tokenless LdF outgoing lock request' \
     --data-urlencode "00_lfd=$outgoing_id" \
     "$base_url/4fach/mainindex.php"
 assert_message_state "$outgoing_marker" \
-    "A|1|f|set|${si_code}|S2_rt,S1_gn|f||f" \
+    "A|1|f|set|${si_code}|S2_rt,S1_gn,|f||f" \
     'tokenless LdF request left outgoing unlocked'
 
 # LdF can return a formally reviewed outgoing message only from its locked
@@ -3604,7 +3604,7 @@ assert_body \
     'data-estab-timeline-station="ldf" data-estab-timeline-state="current"' \
     'LdF timeline marks the current status-1 station'
 assert_message_state "$outgoing_marker" \
-    "A|1|f|set|${si_code}|S2_rt,S1_gn|t|${ldf_code}|f" \
+    "A|1|f|set|${si_code}|S2_rt,S1_gn,|t|${ldf_code}|f" \
     'LdF owns outgoing before return to author'
 
 ldf_return_csrf=$(csrf_from_body)
@@ -3629,7 +3629,7 @@ assert_body \
     'data-estab-timeline-station="ldf" data-estab-timeline-state="current"' \
     'rehydrated timeline retains the current LdF station'
 assert_message_state "$outgoing_marker" \
-    "A|1|f|set|${si_code}|S2_rt,S1_gn|t|${ldf_code}|f" \
+    "A|1|f|set|${si_code}|S2_rt,S1_gn,|t|${ldf_code}|f" \
     'missing LdF return reason preserved stage-one ownership'
 
 ldf_return_csrf=$(csrf_from_body)
@@ -3645,7 +3645,7 @@ assert_status 200 'return outgoing from LdF to author with reason' \
     "$base_url/4fach/mainindex.php"
 assert_no_runtime_error 'LdF returned outgoing to author'
 assert_message_state "$outgoing_marker" \
-    "A|10|f|set|${si_code}|S2_rt,S1_gn|f||f" \
+    "A|10|f|set|${si_code}|S2_rt,S1_gn,|f||f" \
     'LdF return moved outgoing to unlocked author correction'
 assert_db_equals \
     "1|10|${ldf_code}|${ldf_return_reason}" \
@@ -3722,7 +3722,7 @@ assert_status 200 'resubmit outgoing after LdF return' \
     "$base_url/4fach/mainindex.php"
 assert_no_runtime_error 'resubmitted outgoing after LdF return'
 assert_message_state "$outgoing_marker" \
-    'A|4|f|null||S2_rt,S1_gn|f||f' \
+    'A|4|f|null||S2_rt,S1_gn,|f||f' \
     'LdF-corrected outgoing returned to formal Si queue'
 assert_db_equals \
     "E2E-Zielstelle korrigiert|+49 711 7654321|${authoritative_sender}|${s1_code}|S1" \
@@ -3737,7 +3737,7 @@ assert_db_equals 2 'outgoing contains both author resubmission rounds' \
 finish_viewer_outgoing \
     "$outgoing_marker" "$outgoing_id" 'Nach LdF-Rückgabe formal vollständig'
 assert_message_state "$outgoing_marker" \
-    "A|1|f|set|${si_code}|S2_rt,S1_gn|f||f" \
+    "A|1|f|set|${si_code}|S2_rt,S1_gn,|f||f" \
     'Si re-approved outgoing after LdF correction'
 assert_db_equals \
     'created,si_returned,author_resubmitted,si_approved,ldf_returned,author_resubmitted,si_approved' \
@@ -3786,7 +3786,7 @@ assert_body "$outgoing_marker" 'LdF queue after outgoing cancel'
 assert_route_control \
     ldf meldung "$outgoing_id" 'LdF outgoing control after cancel'
 assert_message_state "$outgoing_marker" \
-    "A|1|f|set|${si_code}|S2_rt,S1_gn|f||f" \
+    "A|1|f|set|${si_code}|S2_rt,S1_gn,|f||f" \
     'LdF cancel released the outgoing stage-one lock'
 
 # A route from a superseded plan must fail while the record is locked, without
@@ -3822,7 +3822,7 @@ assert_body \
     'gehört nicht zum gültigen S6-Fernmeldeplan' \
     'superseded S6 route error'
 assert_message_state "$outgoing_marker" \
-    "A|1|f|set|${si_code}|S2_rt,S1_gn|t|${ldf_code}|f" \
+    "A|1|f|set|${si_code}|S2_rt,S1_gn,|t|${ldf_code}|f" \
     'superseded route preserved LdF lock and workflow'
 assert_db_equals '||0' 'superseded route persisted no disposition' \
     "SELECT CONCAT(COALESCE(\`05_gegenstelle\`, ''), '|', COALESCE(\`06_befweg\`, ''), '|', COALESCE(\`estab_fernmeldeplan_eintrag_id\`, 0)) FROM \`nv_nachrichten\` WHERE \`00_lfd\`=${outgoing_id};"
@@ -3851,7 +3851,7 @@ assert_status 403 'reject tokenless outgoing lock request' \
     --data-urlencode "00_lfd=$outgoing_id" \
     "$base_url/4fach/mainindex.php"
 assert_message_state "$outgoing_marker" \
-    "A|2|f|set|${si_code}|S2_rt,S1_gn|f||f" \
+    "A|2|f|set|${si_code}|S2_rt,S1_gn,|f||f" \
     'tokenless request left outgoing unlocked'
 
 load_dashboard "$aw_cookies" 'A/W queue before locking outgoing'
@@ -3897,7 +3897,7 @@ assert_current_editable_tactical_time_input \
     f_03_datum "$outgoing_clock_before" "$outgoing_clock_after" \
     'A/W transport time'
 assert_message_state "$outgoing_marker" \
-    "A|2|f|set|${si_code}|S2_rt,S1_gn|t|${aw_code}|f" \
+    "A|2|f|set|${si_code}|S2_rt,S1_gn,|t|${aw_code}|f" \
     'A/W-owned outgoing lock'
 
 # A successful A/W cancel must release the stage-two lock and render exactly
@@ -3918,7 +3918,7 @@ assert_body "$outgoing_marker" 'A/W outgoing queue after cancel'
 assert_route_control fm meldung "$outgoing_id" \
     'A/W outgoing control after cancel'
 assert_message_state "$outgoing_marker" \
-    "A|2|f|set|${si_code}|S2_rt,S1_gn|f||f" \
+    "A|2|f|set|${si_code}|S2_rt,S1_gn,|f||f" \
     'A/W cancel released the outgoing stage-two lock'
 
 outgoing_csrf=$(csrf_from_body)
@@ -3933,7 +3933,7 @@ assert_no_runtime_error 're-locked outgoing transport after cancel'
 assert_body 'name="task" value="FM-Ausgang"' \
     're-locked outgoing transport form after cancel'
 assert_message_state "$outgoing_marker" \
-    "A|2|f|set|${si_code}|S2_rt,S1_gn|t|${aw_code}|f" \
+    "A|2|f|set|${si_code}|S2_rt,S1_gn,|t|${aw_code}|f" \
     'A/W re-acquired outgoing stage-two lock after cancel'
 
 assert_status 403 'reject tokenless outgoing transport save' \
@@ -3946,7 +3946,7 @@ assert_status 403 'reject tokenless outgoing transport save' \
     --data-urlencode "03_zeichen=$aw_code" \
     "$base_url/4fach/mainindex.php"
 assert_message_state "$outgoing_marker" \
-    "A|2|f|set|${si_code}|S2_rt,S1_gn|t|${aw_code}|f" \
+    "A|2|f|set|${si_code}|S2_rt,S1_gn,|t|${aw_code}|f" \
     'tokenless transport save preserved lock and status'
 
 # Re-open the owner-held lock idempotently. A valid CSRF token without the
@@ -3978,7 +3978,7 @@ assert_body \
     'Bestätigen Sie den disponierten S6-Beförderungsweg' \
     'missing S6 route confirmation error'
 assert_message_state "$outgoing_marker" \
-    "A|2|f|set|${si_code}|S2_rt,S1_gn|t|${aw_code}|f" \
+    "A|2|f|set|${si_code}|S2_rt,S1_gn,|t|${aw_code}|f" \
     'missing route confirmation preserved transport lock'
 
 # A/W may not silently invent another route. An impossible disposition goes
@@ -3997,7 +3997,7 @@ assert_body \
     'Für die Rückgabe an LdF ist ein Grund erforderlich' \
     'mandatory transport-return reason error'
 assert_message_state "$outgoing_marker" \
-    "A|2|f|set|${si_code}|S2_rt,S1_gn|t|${aw_code}|f" \
+    "A|2|f|set|${si_code}|S2_rt,S1_gn,|t|${aw_code}|f" \
     'missing return reason preserved A/W ownership'
 
 outgoing_csrf=$(csrf_from_body)
@@ -4013,7 +4013,7 @@ assert_status 200 'return impossible transport to LdF with reason' \
     "$base_url/4fach/mainindex.php"
 assert_no_runtime_error 'A/W return to LdF'
 assert_message_state "$outgoing_marker" \
-    "A|1|f|set|${si_code}|S2_rt,S1_gn|f||f" \
+    "A|1|f|set|${si_code}|S2_rt,S1_gn,|f||f" \
     'A/W returned impossible transport to unlocked LdF stage'
 assert_db_equals \
     "unset||${telecom_route_id}|Fu|${telecom_route_text}" \
@@ -4126,7 +4126,7 @@ if [ "$outgoing_status" != 8 ]; then
     exit 1
 fi
 assert_message_state "$outgoing_marker" \
-    "A|8|t|set|${si_code}|S2_rt,S1_gn|f||t" \
+    "A|8|t|set|${si_code}|S2_rt,S1_gn,|f||t" \
     'A/W-completed outgoing status 8'
 assert_db_equals \
     'created,si_returned,author_resubmitted,si_approved,ldf_returned,author_resubmitted,si_approved,ldf_dispatched,aw_transport_returned,ldf_dispatched,aw_transported' \
