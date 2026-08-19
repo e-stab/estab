@@ -859,6 +859,10 @@ function check_and_save ($data, $activeCommandPostName, $expectedIncidentId){
 
   // Local marks and the local sender identity are signed account attributes.
   // The browser may display them, but it can neither choose nor forge them.
+  // Feld 19 des Ausgangs entsteht in diesem Vorbereitungsschritt und wird im
+  // Speicherschritt weiter unten erneut gesetzt. Die Vorbelegung haelt beide
+  // Schritte nachweisbar zusammen.
+  $authorDistribution = null;
   switch ($data ["task"]) {
     case "FM-Eingang":
     case "FM-Eingang_Anhang":
@@ -1006,6 +1010,19 @@ function check_and_save ($data, $activeCommandPostName, $expectedIncidentId){
         return;
       }
     }
+  // Der Verteiler des Ausgangs muss den Vorbereitungsschritt ueberlebt haben.
+  // Fehlt er hier, liegt ein Programmfehler vor; der Vordruck darf dann nicht
+  // gespeichert werden, weil Feld 19 sonst leer in den Nachweis ginge.
+  if (
+    in_array (
+      $data ["task"],
+      array ("Stab_schreiben", "Stab_korrigieren"),
+      true
+    )
+    && !is_string ($authorDistribution)
+  ) {
+    estab_workflow_forbid ();
+  }
 	switch ($data["task"]){
 		case "FM-Eingang":
     	case "FM-Eingang_Anhang":

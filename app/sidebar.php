@@ -436,11 +436,10 @@ function estab_sidebar_queue_query(
  * trip: each profile contributes one scalar sub-select column to the same
  * statement, and the parameters follow the column order.
  *
- * @param list<array{
- *     session_key: string,
- *     baseline_key: string,
- *     funktion: string
- * }> $profiles
+ * The shape is re-checked at runtime instead of being trusted: this is the
+ * boundary between the session-derived profile list and a prepared statement.
+ *
+ * @param list<array<string, mixed>> $profiles
  * @return array{sql: string, parameters: list<int|string>, keys: list<string>}
  */
 function estab_sidebar_queue_batch_query(
@@ -457,10 +456,9 @@ function estab_sidebar_queue_batch_query(
     $columns = [];
     $parameters = [];
     $keys = [];
-    foreach (array_values($profiles) as $index => $profile) {
+    foreach ($profiles as $index => $profile) {
         if (
-            !is_array($profile)
-            || !is_string($profile['session_key'] ?? null)
+            !is_string($profile['session_key'] ?? null)
             || !is_string($profile['baseline_key'] ?? null)
             || !is_string($profile['funktion'] ?? null)
         ) {
@@ -665,7 +663,10 @@ function estab_sidebar_queue_notification(
  * The loop never stops at the first increase: a queue whose baseline is not
  * advanced would report the same growth again at the next poll.
  *
- * @param list<array{baseline_key: string, count: ?int}> $measurements
+ * The shape is re-checked at runtime instead of being trusted: the baselines
+ * are written back into the session.
+ *
+ * @param list<array<string, mixed>> $measurements
  */
 function estab_sidebar_queue_notifications(
     array &$session,
@@ -677,8 +678,7 @@ function estab_sidebar_queue_notifications(
     $seen = [];
     foreach ($measurements as $measurement) {
         if (
-            !is_array($measurement)
-            || !is_string($measurement['baseline_key'] ?? null)
+            !is_string($measurement['baseline_key'] ?? null)
             || (
                 ($measurement['count'] ?? null) !== null
                 && !is_int($measurement['count'])
