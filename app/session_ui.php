@@ -477,6 +477,374 @@ function estab_session_ui_frame_refresh_script(): string
     return 'FramesVeraendern(' . implode(',', $encoded) . ');';
 }
 
+/**
+ * Refresh the sidebar alone after a completed message action.
+ *
+ * The answer document of that action is the confirmation the operator has to
+ * read. Reloading the message frame as well would erase it before it can be
+ * read, while the sidebar must reload at once so the queue counters and the
+ * correction counter match the state the action just created.
+ */
+function estab_session_ui_sidebar_refresh_script(): string
+{
+    $arguments = [
+        estab_application_url('4fach/vorgaben.php'),
+        'vorgaben',
+    ];
+    $encoded = array_map(
+        static fn (string $value): string => json_encode(
+            $value,
+            JSON_HEX_TAG
+                | JSON_HEX_AMP
+                | JSON_HEX_APOS
+                | JSON_HEX_QUOT
+                | JSON_UNESCAPED_SLASHES
+                | JSON_THROW_ON_ERROR
+        ),
+        $arguments
+    );
+
+    return 'FramesVeraendern(' . implode(',', $encoded) . ');';
+}
+
+/**
+ * Name the station one completed message action moved the message to.
+ *
+ * The historical message controller answers its own form POST inside the
+ * message frame and has no redirect that could carry a query flash the way
+ * the command-post pages do. The statement is therefore derived from the same
+ * server-side task, action selector and stored direction that the save itself
+ * used; no browser text reaches it. An unknown combination yields no
+ * statement at all rather than an invented one.
+ *
+ * @return array{
+ *     tone: string,
+ *     title: string,
+ *     destination: string,
+ *     detail: string,
+ *     acting_function: ?string,
+ *     actions: list<array{name: string, label: string, primary: bool}>
+ * }|null
+ */
+function estab_session_ui_message_outcome(
+    string $task,
+    array $request,
+    string $direction = '',
+    string $actingFunction = ''
+): ?array {
+    $direction = in_array($direction, ['E', 'A'], true) ? $direction : '';
+    $actingFunction = preg_match(
+        '/\A(?:A\/W|[A-Za-z0-9_]{1,10})\z/D',
+        $actingFunction
+    ) === 1
+        ? $actingFunction
+        : null;
+    // The historical image buttons submit x/y coordinates. Both spellings
+    // select the same action, exactly as the save path reads them.
+    $pressed = static fn (string $name): bool =>
+        array_key_exists($name . '_x', $request)
+        || array_key_exists($name . '_y', $request);
+    $staffNext = [
+        [
+            'name' => 'stab_schreiben_x',
+            'label' => 'Nächste Meldung schreiben',
+            'primary' => true,
+        ],
+        [
+            'name' => 'stab_lesen_x',
+            'label' => 'Meldungen dieser Funktion',
+            'primary' => false,
+        ],
+    ];
+    $viewerNext = [
+        [
+            'name' => 'stab_sichten_x',
+            'label' => 'Weiter sichten',
+            'primary' => true,
+        ],
+    ];
+    $leadNext = [
+        [
+            'name' => 'ldf_nachrichten_x',
+            'label' => 'Weiter disponieren',
+            'primary' => true,
+        ],
+    ];
+    $operatorNext = [
+        [
+            'name' => 'fm_eingang_x',
+            'label' => 'Nächsten Eingang aufnehmen',
+            'primary' => true,
+        ],
+        [
+            'name' => 'fm_ausgang_x',
+            'label' => 'Ausgang bearbeiten',
+            'primary' => false,
+        ],
+    ];
+
+    switch ($task) {
+        case 'Stab_schreiben':
+            return [
+                'tone' => 'forwarded',
+                'title' => 'Nachrichtenvordruck abgesetzt',
+                'destination' => 'An Sichter übergeben',
+                'detail' => 'Die Ausgangsnachricht wartet in der '
+                    . 'Sichtungswarteschlange. Nach der formalen Sichtung '
+                    . 'legt der LdF Übermittlungsmittel und Beförderungsweg '
+                    . 'fest.',
+                'acting_function' => $actingFunction,
+                'actions' => $staffNext,
+            ];
+        case 'Stab_korrigieren':
+            return [
+                'tone' => 'forwarded',
+                'title' => 'Korrektur abgesetzt',
+                'destination' => 'Erneut an Sichter übergeben',
+                'detail' => 'Die überarbeitete Ausgangsnachricht hat Ihre '
+                    . 'Korrekturschleife verlassen und wartet wieder auf die '
+                    . 'formale Sichtung.',
+                'acting_function' => $actingFunction,
+                'actions' => $staffNext,
+            ];
+        case 'Stab_gesprnoti':
+            return [
+                'tone' => 'forwarded',
+                'title' => 'Gesprächsnotiz abgesetzt',
+                'destination' => 'An Sichter übergeben',
+                'detail' => 'Die Gesprächsnotiz ist als eigener Vordruck '
+                    . 'erfasst und wartet auf die formale Sichtung.',
+                'acting_function' => $actingFunction,
+                'actions' => $staffNext,
+            ];
+        case 'FM-Eingang':
+        case 'FM-Eingang_Anhang':
+            return [
+                'tone' => 'forwarded',
+                'title' => 'Eingang aufgenommen',
+                'destination' => 'An LdF zur Annahme übergeben',
+                'detail' => 'Der LdF bestätigt das Aufnahmemittel und trägt '
+                    . 'den übersetzten Absender nach. Danach geht die '
+                    . 'Nachricht in die Sichtung.',
+                'acting_function' => null,
+                'actions' => $operatorNext,
+            ];
+        case 'LdF-Eingang':
+            return [
+                'tone' => 'forwarded',
+                'title' => 'Eingang angenommen',
+                'destination' => 'An Sichter übergeben',
+                'detail' => 'Der Sichter verteilt die Eingangsnachricht an '
+                    . 'die im Laufweg angekreuzten Stabsfunktionen.',
+                'acting_function' => null,
+                'actions' => $leadNext,
+            ];
+        case 'LdF-Ausgang':
+            if ($pressed('ldf_zurueckweisen')) {
+                return [
+                    'tone' => 'returned',
+                    'title' => 'Ausgang an den Verfasser zurückgegeben',
+                    'destination' => 'In die Korrekturschleife der '
+                        . 'verfassenden Stabsfunktion',
+                    'detail' => 'Ihre Begründung steht im Vordruck. Die '
+                        . 'verfassende Funktion sieht die Nachricht jetzt in '
+                        . 'ihrer Korrekturschleife.',
+                    'acting_function' => null,
+                    'actions' => $leadNext,
+                ];
+            }
+            return [
+                'tone' => 'forwarded',
+                'title' => 'Beförderungsweg festgelegt',
+                'destination' => 'Zur Beförderung an A/W',
+                'detail' => 'Feld 1 trägt Ihre Disposition. A/W befördert '
+                    . 'die Nachricht und weist Zeit und Zeichen der '
+                    . 'Beförderung nach.',
+                'acting_function' => null,
+                'actions' => $leadNext,
+            ];
+        case 'FM-Ausgang':
+            if ($pressed('transport_nicht_moeglich')) {
+                return [
+                    'tone' => 'returned',
+                    'title' => 'Beförderung nicht möglich',
+                    'destination' => 'An LdF zurückgegeben',
+                    'detail' => 'Der LdF wählt ein anderes Übermittlungs'
+                        . 'mittel oder einen anderen Beförderungsweg.',
+                    'acting_function' => null,
+                    'actions' => $operatorNext,
+                ];
+            }
+            return [
+                'tone' => 'completed',
+                'title' => 'Nachricht befördert',
+                'destination' => 'Vorgang abgeschlossen',
+                'detail' => 'Zeit und Zeichen der Beförderung sind im '
+                    . 'Vordruck nachgewiesen. Der Laufweg dieser Nachricht '
+                    . 'ist beendet.',
+                'acting_function' => null,
+                'actions' => $operatorNext,
+            ];
+        case 'Stab_sichten':
+            if ($pressed('zurueckweisen')) {
+                return [
+                    'tone' => 'returned',
+                    'title' => 'Ausgang formal zurückgewiesen',
+                    'destination' => 'In die Korrekturschleife der '
+                        . 'verfassenden Stabsfunktion',
+                    'detail' => 'Ihre Begründung steht in den Vermerken. Die '
+                        . 'verfassende Funktion sieht die Nachricht jetzt in '
+                        . 'ihrer Korrekturschleife.',
+                    'acting_function' => null,
+                    'actions' => $viewerNext,
+                ];
+            }
+            if ($direction === 'E') {
+                return [
+                    'tone' => 'completed',
+                    'title' => 'Eingang gesichtet',
+                    'destination' => 'An die Stabsfunktionen verteilt',
+                    'detail' => 'Die Durchschriften stehen den im Laufweg '
+                        . 'angekreuzten Funktionen zur Verfügung. Der '
+                        . 'Vordruck ist abgeschlossen.',
+                    'acting_function' => null,
+                    'actions' => $viewerNext,
+                ];
+            }
+            return [
+                'tone' => 'forwarded',
+                'title' => 'Ausgang gesichtet',
+                'destination' => 'An LdF zur Disposition übergeben',
+                'detail' => 'Der LdF legt Übermittlungsmittel und '
+                    . 'Beförderungsweg fest, danach befördert A/W die '
+                    . 'Nachricht.',
+                'acting_function' => null,
+                'actions' => $viewerNext,
+            ];
+    }
+
+    return null;
+}
+
+/**
+ * Render the statement the message frame keeps after a completed action.
+ *
+ * Every sentence comes from the fixed table above. The continuation controls
+ * carry nothing but a fixed action name and the server-resolved acting
+ * function, so the confirmation stays a statement of fact while an
+ * experienced operator keeps the next step one click away.
+ */
+function estab_session_ui_message_confirmation_markup(
+    ?array $outcome,
+    string $actionUrl
+): string {
+    if ($outcome === null) {
+        return '';
+    }
+    $tone = $outcome['tone'] ?? null;
+    if (!in_array($tone, ['forwarded', 'returned', 'completed'], true)) {
+        throw new InvalidArgumentException('Invalid message outcome tone');
+    }
+    $texts = [];
+    foreach (['title', 'destination', 'detail'] as $field) {
+        $value = $outcome[$field] ?? null;
+        if (
+            !is_string($value)
+            || trim($value) === ''
+            || strlen($value) > 400
+            || preg_match('//u', $value) !== 1
+        ) {
+            throw new InvalidArgumentException('Invalid message outcome text');
+        }
+        $texts[$field] = trim($value);
+    }
+    if (
+        $actionUrl === ''
+        || strlen($actionUrl) > 2048
+        || preg_match('//u', $actionUrl) !== 1
+        || preg_match('/[\x00-\x20]/', $actionUrl) === 1
+    ) {
+        throw new InvalidArgumentException('Invalid message outcome action');
+    }
+    $actingFunction = $outcome['acting_function'] ?? null;
+    if (
+        $actingFunction !== null
+        && (
+            !is_string($actingFunction)
+            || preg_match(
+                '/\A(?:A\/W|[A-Za-z0-9_]{1,10})\z/D',
+                $actingFunction
+            ) !== 1
+        )
+    ) {
+        throw new InvalidArgumentException('Invalid message outcome function');
+    }
+
+    $controls = '';
+    $steps = $outcome['actions'] ?? [];
+    if (!is_array($steps)) {
+        throw new InvalidArgumentException('Invalid message outcome steps');
+    }
+    foreach ($steps as $action) {
+        if (
+            !is_array($action)
+            || !is_string($action['name'] ?? null)
+            || preg_match('/\A[a-z0-9_]{1,32}_x\z/D', $action['name']) !== 1
+            || !is_string($action['label'] ?? null)
+            || trim($action['label']) === ''
+            || strlen($action['label']) > 80
+            || preg_match('//u', $action['label']) !== 1
+        ) {
+            throw new InvalidArgumentException('Invalid message outcome step');
+        }
+        // Der geuebte Bedienende soll den naechsten Griff mit der Tastatur
+        // ausloesen koennen, ohne erst zur Maus zu greifen.
+        $controls .= '<button class="estab-button'
+            . (($action['primary'] ?? false) === true
+                ? ' estab-button-primary" autofocus'
+                : '"')
+            . ' type="submit" name="' . estab_auth_html($action['name'])
+            . '" value="1">'
+            . estab_auth_html(trim($action['label']))
+            . '</button>';
+    }
+    if ($controls !== '' && session_status() === PHP_SESSION_ACTIVE) {
+        $controls = '<form class="estab-message-confirmation-actions"'
+            . ' method="post" action="' . estab_auth_html($actionUrl) . '">'
+            . estab_csrf_field()
+            . ($actingFunction === null
+                ? ''
+                : '<input type="hidden" name="acting_function" value="'
+                    . estab_auth_html($actingFunction) . '">')
+            . $controls
+            . '</form>';
+    } else {
+        // Without an active session there is no CSRF token, and a control
+        // without one would be refused. The statement itself still stands.
+        $controls = '';
+    }
+
+    return '<main class="estab-tool-main estab-tool-main-narrow'
+        . ' estab-message-confirmation" data-estab-message-confirmation="'
+        . $tone . '">'
+        . '<section class="estab-tool-panel">'
+        . '<p class="estab-tool-eyebrow">Nachrichtenvordruck</p>'
+        . '<p class="estab-tool-feedback '
+        . ($tone === 'returned'
+            ? 'estab-tool-feedback-warning'
+            : 'estab-tool-feedback-success')
+        . '" role="status" aria-live="polite">'
+        . '<strong>' . estab_auth_html($texts['title']) . '</strong>'
+        . '<span class="estab-message-confirmation-target">'
+        . estab_auth_html($texts['destination']) . '</span>'
+        . '</p>'
+        . '<p class="estab-message-confirmation-detail">'
+        . estab_auth_html($texts['detail']) . '</p>'
+        . $controls
+        . '</section>'
+        . '</main>';
+}
+
 /** Return the session bar for a valid current login, or an empty string. */
 function estab_session_ui_current_markup(
     array $session,

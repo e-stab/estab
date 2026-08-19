@@ -263,6 +263,55 @@ function estab_sidebar_queue_profiles(?array $identity): array
 }
 
 /**
+ * Resolve one correction queue per staff function the account actually wears.
+ *
+ * A formally returned outgoing message waits for its author, not for a
+ * station of the message run. It therefore needs its own measurement, in the
+ * same shape the queue batch already understands, so that the sidebar can
+ * offer the correction loop without a second database round trip.
+ *
+ * @return list<array{
+ *     session_key: string,
+ *     baseline_key: string,
+ *     funktion: string,
+ *     rolle: string
+ * }>
+ */
+function estab_sidebar_correction_profiles(?array $identity): array
+{
+    if ($identity === null) {
+        return [];
+    }
+    $profiles = [];
+    $seen = [];
+    foreach (estab_auth_effective_function_roles($identity) as $tuple) {
+        if (
+            !estab_auth_has_staff_message_workspace(
+                $tuple['funktion'],
+                $tuple['rolle']
+            )
+            || preg_match('/\A[A-Za-z0-9_]{1,10}\z/D', $tuple['funktion'])
+                !== 1
+        ) {
+            continue;
+        }
+        $key = 'old_que_korr_' . strtolower($tuple['funktion']);
+        if (isset($seen[$key])) {
+            continue;
+        }
+        $seen[$key] = true;
+        $profiles[] = [
+            'session_key' => 'old_que_korr',
+            'baseline_key' => $key,
+            'funktion' => $tuple['funktion'],
+            'rolle' => $tuple['rolle'],
+        ];
+    }
+
+    return array_slice($profiles, 0, ESTAB_SIDEBAR_MAX_QUEUES);
+}
+
+/**
  * Resolve the primary queue profile in the established legacy shape.
  *
  * @return array{
@@ -298,10 +347,19 @@ function estab_sidebar_queue_baseline_key(string $key): string
     if (
         !in_array(
             $key,
-            ['old_que_ldf', 'old_que_aw', 'old_que_si', 'old_que_stab'],
+            [
+                'old_que_ldf',
+                'old_que_aw',
+                'old_que_si',
+                'old_que_stab',
+                'old_que_korr',
+            ],
             true
         )
-        && preg_match('/\Aold_que_stab_[a-z0-9_]{1,10}\z/D', $key) !== 1
+        && preg_match(
+            '/\Aold_que_(?:stab|korr)_[a-z0-9_]{1,10}\z/D',
+            $key
+        ) !== 1
     ) {
         throw new InvalidArgumentException('Invalid sidebar queue key');
     }
@@ -385,6 +443,37 @@ function estab_sidebar_queue_query(
                 . " AND `15_quitzeichen` = ''"
                 . " AND `04_richtung` IN ('E','A')",
             'parameters' => [$incidentId],
+        ];
+    }
+
+    if ($queueSessionKey === 'old_que_korr') {
+        if (preg_match('/\A[A-Za-z0-9_]{1,10}\z/D', $function) !== 1) {
+            throw new InvalidArgumentException('Invalid sidebar queue function');
+        }
+
+        /*
+         * Dieselben Merkmale, die 4fach/liste.php als Korrekturwarteschlange
+         * anzeigt: formal zurueckgewiesener Ausgang der eigenen Funktion, vom
+         * Sichter quittiert, noch ohne Annahme und noch nicht abgeschlossen.
+         * Der Funktionsvergleich ist BINARY, weil estab_message_object_allowed()
+         * die Zeilen der Liste anschliessend exakt vergleicht; ein loser
+         * Kollationsvergleich meldete sonst mehr, als die Liste zeigt.
+         */
+        return [
+            'sql' => 'SELECT COUNT(*) FROM ' . $messages
+                . ' WHERE `einsatz_id` = ?'
+                . ' AND `x00_status` = 10'
+                . " AND `04_richtung` = 'A'"
+                . ' AND BINARY `14_funktion` = BINARY ?'
+                . " AND `14_zeichen` != ''"
+                . ' AND `02_zeit` IS NULL'
+                . " AND `02_zeichen` = ''"
+                . ' AND `03_datum` IS NULL'
+                . " AND `03_zeichen` = ''"
+                . ' AND `15_quitdatum` IS NOT NULL'
+                . " AND `15_quitzeichen` != ''"
+                . " AND `x01_abschluss` = 'f'",
+            'parameters' => [$incidentId, $function],
         ];
     }
 
@@ -775,17 +864,24 @@ function estab_sidebar_audio_markup(?string $soundUrl): string
 /**
  * Return the complete legacy role action set as semantic sidebar buttons.
  *
+ * $correctionCounts maps one worn staff function to its number of formally
+ * returned messages. The correction loop only ever appears with work behind
+ * it, so an empty map keeps the established action set unchanged.
+ *
+ * @param array<string, int> $correctionCounts
  * @return list<array{
  *     key: string,
  *     name: string,
  *     label: string,
  *     description: string,
- *     acting_function?: string
+ *     acting_function?: string,
+ *     badge?: string
  * }>
  */
 function estab_sidebar_workflow_actions(
     ?array $identity,
-    mixed $menuState
+    mixed $menuState,
+    array $correctionCounts = []
 ): array {
     if ($identity === null || $menuState !== 'ROLLE') {
         return [];
@@ -887,6 +983,40 @@ function estab_sidebar_workflow_actions(
                 'description' => 'Dateien auswählen und hochladen',
             ]);
         }
+    }
+
+    /*
+     * Die Korrekturschleife hatte bisher keinen Einstieg: die Route bestand,
+     * aber kein Bedienelement fuehrte dorthin. Sie erscheint genau dann, wenn
+     * fuer eine getragene Stabsfunktion wirklich etwas zurueckliegt, und der
+     * Zaehler stammt aus derselben Messung wie die Warteschlangen.
+     */
+    $pendingCorrections = 0;
+    foreach (estab_auth_effective_function_roles($identity) as $tuple) {
+        if (
+            !estab_auth_has_staff_message_workspace(
+                $tuple['funktion'],
+                $tuple['rolle']
+            )
+        ) {
+            continue;
+        }
+        $pending = $correctionCounts[$tuple['funktion']] ?? null;
+        if (is_int($pending) && $pending > 0) {
+            $pendingCorrections += $pending;
+        }
+    }
+    if ($pendingCorrections > 0) {
+        $append([
+            'key' => 'stab_korrekturen',
+            'name' => 'stab_korrekturen_x',
+            'label' => 'Korrekturen',
+            'description' => $pendingCorrections === 1
+                ? '1 zurückgewiesene Meldung überarbeiten'
+                : $pendingCorrections
+                    . ' zurückgewiesene Meldungen überarbeiten',
+            'badge' => (string) $pendingCorrections,
+        ]);
     }
 
     $append([

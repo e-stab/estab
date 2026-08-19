@@ -1561,12 +1561,55 @@ if (
 
 /**********************************************************************\
 \**********************************************************************/
-  function resetframeset () {
+  /**
+   * Antwortseite einer abgeschlossenen Aktion im Nachrichtenrahmen.
+   *
+   * Ohne Rueckmeldung entsteht nur ein leeres Dokument, das beide Rahmen neu
+   * laedt; der Bedienende sieht dann nicht, ob und wohin die Nachricht
+   * gegangen ist. Liegt eine Rueckmeldung vor, bleibt sie im
+   * Nachrichtenrahmen stehen, und nur die Seitenleiste wird neu geladen,
+   * damit Warteschlangen und der Zaehler der Korrekturschleife sofort
+   * stimmen.
+   */
+  function resetframeset ($confirmation = null) {
     global $conf_4f;
-    pre_html ("reset", "Framereset ".$conf_4f ["Titelkurz"]." ".$conf_4f ["Version"], ""); // Normaler Seitenaufbau mit Auffrischung
-    echo "<body onload=\"".
-         estab_auth_html (estab_session_ui_frame_refresh_script ()).
+    $confirmationMarkup = "";
+    if (is_array ($confirmation)) {
+      try {
+        $confirmationMarkup = estab_session_ui_message_confirmation_markup (
+          $confirmation,
+          (string) ($conf_4f ["MainURL"] ?? "")
+        );
+      } catch (Throwable $exception) {
+        // Die Nachricht ist zu diesem Zeitpunkt gespeichert. Scheitert allein
+        // die Tafel, faellt der Rahmen auf die historische Auffrischung
+        // zurueck, statt die Antwort einer abgeschlossenen Aktion zu
+        // zerstoeren.
+        $confirmationMarkup = "";
+        error_log (
+          "eStab message confirmation rendering failed: ".
+          $exception->getMessage ()
+        );
+      }
+    }
+    pre_html (
+      "reset",
+      $confirmationMarkup === ""
+        ? "Framereset ".$conf_4f ["Titelkurz"]." ".$conf_4f ["Version"]
+        : "Nachricht abgesetzt",
+      "",
+      $confirmationMarkup !== ""
+    ); // Normaler Seitenaufbau mit Auffrischung
+    if ($confirmationMarkup === "") {
+      echo "<body onload=\"".
+           estab_auth_html (estab_session_ui_frame_refresh_script ()).
+           "\">";
+      return;
+    }
+    echo "<body class=\"estab-tool-page\" onload=\"".
+         estab_auth_html (estab_session_ui_sidebar_refresh_script ()).
          "\">";
+    echo $confirmationMarkup;
   }
 
   /**
@@ -2245,7 +2288,19 @@ ANTWORT % WEITERLEITUNG
       }
 
       if ( !$weiterantwort ){
-        resetframeset ();
+        // Was ist geschehen und wohin ist die Nachricht gegangen? Beides
+        // leitet der Server aus der bereits geprueften Aufgabe, dem
+        // Aktionsschalter und der gespeicherten Richtung ab.
+        resetframeset (estab_session_ui_message_outcome (
+          (string) ($returnValue ["task"] ?? ""),
+          $returnValue,
+          is_array ($objectMessage)
+            ? (string) ($objectMessage ["04_richtung"] ?? "")
+            : "",
+          is_array ($workflowSelectedIdentity)
+            ? (string) ($workflowSelectedIdentity ["funktion"] ?? "")
+            : ""
+        ));
       }
     }
   } elseif ( ( in_array (

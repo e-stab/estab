@@ -141,8 +141,11 @@ function estab_vorgaben_status_markup(
     array $queueProfiles,
     bool $includeOutgoingForReview,
     bool $soundsEnabled,
-    ?string $soundUrl
+    ?string $soundUrl,
+    array $correctionProfiles = [],
+    ?array &$correctionCounts = null
 ): string {
+    $correctionCounts = [];
     $identity = estab_read_session_identity($session);
     if ($identity === null) {
         return '';
@@ -200,17 +203,39 @@ function estab_vorgaben_status_markup(
                 );
             }
 
+            /*
+             * Die Korrekturzaehler reisen im selben Statement mit; eine
+             * zweite Abfrage je Seitenleistenaufbau waere reine Verdopplung.
+             * Das Budget des Stapels bleibt massgeblich, damit sehr viele
+             * getragene Funktionen die Statusanzeige nicht zum Absturz
+             * bringen.
+             */
+            $correctionBudget = ESTAB_SIDEBAR_MAX_QUEUES
+                - count($queueProfiles);
+            $measuredCorrections = $correctionBudget > 0
+                ? array_slice($correctionProfiles, 0, $correctionBudget)
+                : [];
             try {
                 $queueCounts = estab_sidebar_queue_counts(
                     $connection,
-                    $queueProfiles,
+                    array_merge($queueProfiles, $measuredCorrections),
                     $messageTable,
                     $userTablePrefix,
                     $includeOutgoingForReview,
                     (int) $scope['incident']['active_einsatz_id']
                 );
+                foreach ($measuredCorrections as $correctionProfile) {
+                    $pending =
+                        $queueCounts[$correctionProfile['baseline_key']] ?? null;
+                    unset($queueCounts[$correctionProfile['baseline_key']]);
+                    if (is_int($pending) && $pending > 0) {
+                        $correctionCounts[$correctionProfile['funktion']] =
+                            $pending;
+                    }
+                }
             } catch (Throwable $exception) {
                 $queueCounts = [];
+                $correctionCounts = [];
                 $freshnessState = 'partial';
                 error_log(
                     'eStab sidebar queue lookup failed: '
@@ -307,6 +332,10 @@ function estab_vorgaben_status_markup(
 $queueProfiles = $selectedIdentity === null
     ? []
     : estab_sidebar_queue_profiles($selectedIdentity);
+$correctionProfiles = $selectedIdentity === null
+    ? []
+    : estab_sidebar_correction_profiles($selectedIdentity);
+$correctionCounts = [];
 $soundsEnabled = (bool) ($conf_4f['sounds'] ?? false);
 $soundUrl = $soundsEnabled
     && is_string($queueProfiles[0]['sound_file'] ?? null)
@@ -326,7 +355,9 @@ $statusMarkup = $selectedIdentity === null
         $queueProfiles,
         (bool) ($conf_4f['si_in_out'] ?? false),
         $soundsEnabled,
-        $soundUrl
+        $soundUrl,
+        $correctionProfiles,
+        $correctionCounts
     );
 
 if ($statusFragment) {
@@ -335,7 +366,11 @@ if ($statusFragment) {
 }
 
 $menuState = $_SESSION['menue'] ?? '';
-$actions = estab_sidebar_workflow_actions($selectedIdentity, $menuState);
+$actions = estab_sidebar_workflow_actions(
+    $selectedIdentity,
+    $menuState,
+    $correctionCounts
+);
 $navigationIdentity = $selectedIdentity ?? $identity;
 
 $refreshInterval = isset($cfg['itv']['status'])
@@ -443,6 +478,10 @@ $refreshScript = $selectedIdentity === null
                 >
                   <span class="estab-sidebar-action-title">
                     <?= estab_auth_html($action['label']) ?>
+                    <?php if (is_string($action['badge'] ?? null)): ?>
+                      <span class="estab-sidebar-action-badge"
+                        ><?= estab_auth_html($action['badge']) ?></span>
+                    <?php endif; ?>
                   </span>
                   <span class="estab-sidebar-action-description">
                     <?= estab_auth_html($action['description']) ?>

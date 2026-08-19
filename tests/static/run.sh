@@ -126,6 +126,7 @@ for test_name in \
     legacy_search_security \
     list_refresh_security \
     message_list_ui_security \
+    message_feedback_loop_security \
     list_contrast_security \
     list_style_coverage_security \
     viewport_density_security \

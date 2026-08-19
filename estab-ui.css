@@ -1190,6 +1190,33 @@ audio[data-estab-sidebar-audio] {
     margin-top: 0.12rem;
 }
 
+/* Der Zaehler steht an der Schaltflaeche selbst. Auf einem flachen
+   Laptopschirm ist jede zusaetzliche Zeile teuer. */
+.estab-sidebar-action-badge {
+    background: #f4ca70;
+    border-radius: 999px;
+    color: #3a2a05;
+    display: inline-block;
+    font-size: 0.76rem;
+    font-weight: 800;
+    line-height: 1.15;
+    margin-left: 0.35rem;
+    min-width: 1.3rem;
+    padding: 0.08rem 0.4rem;
+    text-align: center;
+}
+
+.estab-sidebar-action[data-estab-workflow-key="stab_korrekturen"] {
+    background: #4a2f18;
+    border-color: #c98b3a;
+    border-left-color: #f4ca70;
+}
+
+.estab-sidebar-action[data-estab-workflow-key="stab_korrekturen"]:hover,
+.estab-sidebar-action[data-estab-workflow-key="stab_korrekturen"]:focus-visible {
+    background: #63401f;
+}
+
 .estab-sidebar-empty {
     color: #c5d6e8;
     font-size: 0.78rem;
@@ -2498,6 +2525,39 @@ form[data-estab-incident-disabled="true"]::before {
     background: #fff8dd;
     border-color: #b47a05;
     color: #5b430e;
+}
+
+/* Rueckmeldung nach einer abgeschlossenen Nachrichtenaktion: was geschehen
+   ist, wohin die Nachricht gegangen ist und was der naechste Griff ist. */
+.estab-message-confirmation {
+    gap: 0.75rem;
+    padding: 1.25rem 1rem 2rem;
+}
+
+.estab-message-confirmation .estab-tool-feedback {
+    display: grid;
+    gap: 0.15rem;
+}
+
+.estab-message-confirmation .estab-tool-feedback strong {
+    font-size: 1.15rem;
+}
+
+.estab-message-confirmation-target {
+    font-size: 0.95rem;
+    font-weight: 700;
+}
+
+.estab-message-confirmation-detail {
+    color: #3d5266;
+    margin: 0.75rem 0 0;
+}
+
+.estab-message-confirmation-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin: 1rem 0 0;
 }
 
 .estab-error-page {
@@ -7634,6 +7694,19 @@ a.estab-message-list-chip:hover {
         padding: 0.42rem 0.55rem;
     }
 
+    .estab-message-confirmation {
+        gap: 0.55rem;
+        padding: 0.9rem 0.85rem 1.5rem;
+    }
+
+    .estab-message-confirmation-detail {
+        margin: 0.55rem 0 0;
+    }
+
+    .estab-message-confirmation-actions {
+        margin: 0.7rem 0 0;
+    }
+
     .estab-tool-shell {
         padding: 0.7rem 1rem 1.5rem;
     }
@@ -7675,6 +7748,28 @@ a.estab-message-list-chip:hover {
     .estab-sidebar-action-description {
         font-size: 0.72rem;
         line-height: 1.2;
+    }
+
+    .estab-sidebar-action-badge {
+        font-size: 0.7rem;
+        padding: 0.05rem 0.32rem;
+    }
+
+    .estab-message-confirmation {
+        gap: 0.4rem;
+        padding: 0.6rem 0.7rem 1rem;
+    }
+
+    .estab-message-confirmation .estab-tool-feedback strong {
+        font-size: 1.05rem;
+    }
+
+    .estab-message-confirmation-detail {
+        margin: 0.4rem 0 0;
+    }
+
+    .estab-message-confirmation-actions {
+        margin: 0.5rem 0 0;
     }
 
     .estab-sidebar-section-heading p {
