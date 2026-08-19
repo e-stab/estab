@@ -2009,13 +2009,44 @@ function estab_dv_activate_initial_shift(
                 $update->close();
             }
             // STRICT restores the binding pre-efbc lifecycle: the first
-            // accepted duty roster must atomically create both empty books
-            // with its exact shift id. Existing rows make activation fail.
-            estab_logbook_lifecycle_open_books(
+            // accepted duty roster atomically creates both empty books with
+            // its exact shift id. Existing rows make activation fail, damit
+            // ein unerklärter Altbestand nicht überschrieben wird. Nur nach
+            // einem im Einsatzprotokoll nachgewiesenen Aufwuchs von Locker
+            // auf Streng sind die Bücher bereits rechtmäßig eröffnet; dann
+            // bleibt ihre Beweiskette unangetastet und die Übernahme durch
+            // die erste Dienstschicht wird im Einsatztagebuch ausgewiesen.
+            if (!estab_incident_grew_to_strict($connection, $incidentId)) {
+                estab_logbook_lifecycle_open_books(
+                    $connection,
+                    $incident,
+                    $shiftId
+                );
+            } elseif (!estab_logbook_lifecycle_open_books_if_empty(
                 $connection,
                 $incident,
                 $shiftId
-            );
+            )) {
+                estab_logbook_lifecycle_insert_etb(
+                    $connection,
+                    $incidentId,
+                    date('Y-m-d H:i:s'),
+                    'Erste Dienstschicht der Führungsstelle mit Stab '
+                    . 'aktiviert. Führungsstellenbesetzung: '
+                    . estab_logbook_lifecycle_roster_text(
+                        estab_logbook_lifecycle_roster(
+                            $connection,
+                            $shiftId,
+                            'ANGENOMMEN'
+                        )
+                    ) . '.',
+                    'Automatisch und atomar mit der Schichtaktivierung nach '
+                    . 'dem Aufwuchs auf den strengen Berechtigungsmodus '
+                    . 'erzeugt.',
+                    'ohne',
+                    $shiftId
+                );
+            }
             estab_dv_audit(
                 $connection,
                 $protocolTable,

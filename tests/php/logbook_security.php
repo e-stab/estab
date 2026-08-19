@@ -706,7 +706,11 @@ $assert(
             $operationsDomain,
             'estab_logbook_lifecycle_open_books('
         )
-        && !str_contains(
+        && str_contains(
+            $operationsDomain,
+            'estab_incident_grew_to_strict($connection, $incidentId)'
+        )
+        && str_contains(
             $operationsDomain,
             'estab_logbook_lifecycle_open_books_if_empty('
         )

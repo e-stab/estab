@@ -193,7 +193,8 @@ if ($requestMethod === 'POST') {
                     $_POST['expected_permission_mode'] ?? null,
                     estab_incident_revision($_POST['status_revision'] ?? null),
                     estab_incident_actor($actor),
-                    ($_POST['confirm_loose_permissions'] ?? null) === '1'
+                    ($_POST['confirm_loose_permissions'] ?? null) === '1',
+                    ($_POST['confirm_permission_growth'] ?? null) === '1'
                 );
                 $_SESSION['estab_incident_flash'] = [
                     'type' => 'permission_mode_updated',
@@ -959,10 +960,20 @@ $activeMissingHeader = is_array($status) && $activeId !== null
                         feste Kontofunktion und ausdrücklich vergebene
                         Zusatzfunktionen ohne formale Dienstschicht bestätigen.
                       </label>
-                      <small>Ein Wechsel ist nur möglich, solange noch keine
-                        operative oder formale Eintragung für den Einsatz
-                        existiert. Er wird global serialisiert und im
-                        Einsatzprotokoll festgehalten.</small>
+                      <label class="estab-tool-check">
+                        <input type="checkbox"
+                          name="confirm_permission_growth" value="1">
+                        Aufwuchs von Locker auf Streng im laufenden Einsatz
+                        bestätigen: operative Eingaben bleiben gesperrt, bis
+                        eine Dienstschicht mit allen Pflichtfunktionen
+                        aktiviert und persönlich angenommen ist.
+                      </label>
+                      <small>Nach der ersten operativen oder formalen
+                        Eintragung ist nur noch der Aufwuchs von Locker auf
+                        Streng möglich; die Abschwächung auf Locker bleibt
+                        gesperrt. Der Wechsel wird global serialisiert, im
+                        Einsatzprotokoll und im Einsatztagebuch
+                        festgehalten.</small>
                       <button class="estab-button" type="submit">
                         Modus speichern
                       </button>

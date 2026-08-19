@@ -839,6 +839,49 @@ function estab_incident_has_operational_data(
 }
 
 /**
+ * Prove from the incident log that this incident grew from LOOSE to STRICT.
+ *
+ * Nur dieser Nachweis rechtfertigt es, die erste Dienstschicht über bereits
+ * eröffnete Bücher zu aktivieren. Ohne ihn bleibt jede vorgefundene Zeile ein
+ * unerklärter Altbestand, den eine Logbucheröffnung nicht überschreiben darf.
+ */
+function estab_incident_grew_to_strict(
+    mysqli $connection,
+    int $incidentId
+): bool {
+    $incidentId = estab_incident_positive_id($incidentId);
+    $statement = $connection->prepare(
+        'SELECT 1 FROM `nv_einsatz_ereignisse`'
+        . ' WHERE `einsatz_id` = ?'
+        . " AND BINARY `aktion` = BINARY 'berechtigung_geaendert'"
+        . " AND BINARY JSON_UNQUOTE(JSON_EXTRACT(`details`, "
+        . "'$.vorher')) = BINARY 'LOOSE'"
+        . " AND BINARY JSON_UNQUOTE(JSON_EXTRACT(`details`, "
+        . "'$.nachher')) = BINARY 'STRICT'"
+        . ' LIMIT 1'
+    );
+    if (!$statement) {
+        throw new RuntimeException(
+            'Der Aufwuchsnachweis konnte nicht vorbereitet werden.'
+        );
+    }
+    try {
+        $statement->bind_param('i', $incidentId);
+        if (!$statement->execute()) {
+            throw new RuntimeException(
+                'Der Aufwuchsnachweis konnte nicht geprüft werden.'
+            );
+        }
+        $result = $statement->get_result();
+        $row = $result->fetch_row();
+        $result->free();
+    } finally {
+        $statement->close();
+    }
+    return $row !== null;
+}
+
+/**
  * Set or correct the command-post name while preserving historical identity.
  *
  * A migrated NULL value may be confirmed once even when data already exists.
@@ -1190,6 +1233,13 @@ function estab_incident_update_logbook_header(
  * The singleton status lock uses the same lock order as activation and every
  * operational write. Its revision also provides stale-form and ABA protection
  * for inactive incidents without introducing a second revision authority.
+ *
+ * Nach der ersten Eintragung bleibt genau eine Richtung offen: der Aufwuchs
+ * von der Fuehrungsstelle ohne Stab (LOOSE) zur Fuehrungsstelle mit Stab
+ * (STRICT). Er ist im Einsatztagebuch nachzuweisen und deshalb nur fuer den
+ * aktiven Einsatz moeglich. Die Gegenrichtung bleibt gesperrt: eine bereits
+ * formal gefuehrte Fuehrungsstelle darf ihre Nachweisfuehrung nicht
+ * abschwaechen.
  */
 function estab_incident_update_permission_mode(
     mysqli $connection,
@@ -1198,7 +1248,8 @@ function estab_incident_update_permission_mode(
     mixed $expectedValue,
     int $expectedRevision,
     string $actor,
-    bool $confirmedLoose = false
+    bool $confirmedLoose = false,
+    bool $confirmedGrowth = false
 ): array {
     $incidentId = estab_incident_positive_id($incidentId);
     $mode = estab_incident_permission_mode($value);
@@ -1240,10 +1291,33 @@ function estab_incident_update_permission_mode(
             $incident['revision'] = $expectedRevision;
             return $incident;
         }
-        if (estab_incident_has_operational_data($connection, $incidentId)) {
+        $activeTarget = (int) ($status['active_einsatz_id'] ?? 0)
+            === $incidentId;
+        $growth = $currentMode === ESTAB_PERMISSION_MODE_LOOSE
+            && $mode === ESTAB_PERMISSION_MODE_STRICT;
+        $hasOperationalData =
+            estab_incident_has_operational_data($connection, $incidentId);
+        if ($hasOperationalData && !$growth) {
             throw new EstabIncidentConflictException(
                 'Der Berechtigungsmodus ist nach der ersten operativen oder '
-                . 'formalen Eintragung unveränderlich.'
+                . 'formalen Eintragung nur noch als Aufwuchs von Locker auf '
+                . 'Streng änderbar. Eine formal geführte Führungsstelle darf '
+                . 'ihre Nachweisführung nicht abschwächen.'
+            );
+        }
+        if ($hasOperationalData && !$activeTarget) {
+            throw new EstabIncidentConflictException(
+                'Der Aufwuchs auf den strengen Berechtigungsmodus ist nur '
+                . 'für den aktiven Einsatz möglich, weil er im '
+                . 'Einsatztagebuch nachgewiesen werden muss.'
+            );
+        }
+        if ($hasOperationalData && !$confirmedGrowth) {
+            throw new EstabIncidentInputException(
+                'Bestätigen Sie ausdrücklich den Aufwuchs zur Führungsstelle '
+                . 'mit Stab. Bis eine Dienstschicht mit allen '
+                . 'Pflichtfunktionen aktiviert und persönlich angenommen ist, '
+                . 'bleiben operative Eingaben gesperrt.'
             );
         }
         if (
@@ -1263,6 +1337,28 @@ function estab_incident_update_permission_mode(
             );
         }
         $nextRevision = $expectedRevision + 1;
+        if ($hasOperationalData) {
+            // Der Nachweis entsteht, solange der Einsatz noch als Locker
+            // gilt: ab dem strengen Modus verlangt der ETB-Trigger aus
+            // Migration 118 eine Dienstschicht, die erst nach dem Aufwuchs
+            // geplant werden kann.
+            estab_logbook_lifecycle_insert_etb(
+                $connection,
+                $incidentId,
+                date('Y-m-d H:i:s'),
+                'Aufwuchs der Führungsstelle: Berechtigungsmodus von '
+                . estab_permission_mode_label($currentMode) . ' auf '
+                . estab_permission_mode_label($mode) . ' umgestellt. '
+                . 'Operative Eingaben bleiben gesperrt, bis eine '
+                . 'Dienstschicht mit allen Pflichtfunktionen aktiviert und '
+                . 'persönlich angenommen ist. Im lockeren Betrieb wirksame '
+                . 'Zusatzfunktionen bleiben dem Konto erhalten, tragen für '
+                . 'diesen Einsatz aber keine Eingabe mehr.',
+                'Automatisch und atomar mit der Modusumstellung durch '
+                . $actor . ' erzeugt.',
+                'ohne'
+            );
+        }
         if (!$connection->query(
             'SET @estab_permission_mode_admin_write_id = ' . $incidentId
         )) {
@@ -1335,8 +1431,6 @@ function estab_incident_update_permission_mode(
         } finally {
             $statusStatement->close();
         }
-        $activeTarget =
-            (int) ($status['active_einsatz_id'] ?? 0) === $incidentId;
         if ($mode === ESTAB_PERMISSION_MODE_LOOSE && $activeTarget) {
             // A newly activated LOOSE incident opens both books immediately.
             // Apply the same invariant when an already-active STRICT incident
