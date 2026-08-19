@@ -64,6 +64,7 @@ if [ ! -r "$fixture" ] \
     || [ ! -r "$ESTAB_MIGRATIONS_DIR/117-telecom-draft-discard.sql" ] \
     || [ ! -r "$ESTAB_MIGRATIONS_DIR/118-operational-authority.sql" ] \
     || [ ! -r "$ESTAB_MIGRATIONS_DIR/119-inactive-messenger-dispatch.sql" ] \
+    || [ ! -r "$ESTAB_MIGRATIONS_DIR/120-single-function-relief.sql" ] \
     || [ ! -x "$ESTAB_MIGRATOR_BIN" ]; then
     echo "schema migrator test: fixture, baseline, or migrator is unavailable" >&2
     exit 1
@@ -81,7 +82,7 @@ pre_110_migrations=$(mktemp -d "${TMPDIR:-/tmp}/estab-pre-110-migrations.XXXXXX"
 
 for migration_path in "$ESTAB_MIGRATIONS_DIR"/*.sql; do
     case "$(basename "$migration_path")" in
-        110-etb-tbb-rules.sql|111-logbook-shift-assignment.sql|112-optional-access-shifts.sql|113-password-policy.sql|114-self-registration-policy.sql|115-incident-permission-mode.sql|116-standard-categories.sql|117-telecom-draft-discard.sql|118-operational-authority.sql|119-inactive-messenger-dispatch.sql)
+        110-etb-tbb-rules.sql|111-logbook-shift-assignment.sql|112-optional-access-shifts.sql|113-password-policy.sql|114-self-registration-policy.sql|115-incident-permission-mode.sql|116-standard-categories.sql|117-telecom-draft-discard.sql|118-operational-authority.sql|119-inactive-messenger-dispatch.sql|120-single-function-relief.sql)
             continue
             ;;
     esac
@@ -357,7 +358,8 @@ SELECT GROUP_CONCAT(CONCAT(version, ':', checksum, ':', state)
    '114-self-registration-policy.sql', '115-incident-permission-mode.sql',
    '116-standard-categories.sql', '117-telecom-draft-discard.sql',
    '118-operational-authority.sql',
-   '119-inactive-messenger-dispatch.sql'
+   '119-inactive-messenger-dispatch.sql',
+   '120-single-function-relief.sql'
  )"
 )" \
     "migration 110 upgrade rewrote a released migration ledger row"
@@ -576,7 +578,7 @@ SELECT GROUP_CONCAT(kategorie ORDER BY BINARY kategorie SEPARATOR ',')
   FROM nv_masterkatego"
 )" \
     "fresh installation did not receive exact standard categories"
-assert_equal "7|7|1|1|1|1|25" "$(database_query "$fresh_database" "
+assert_equal "7|7|1|1|1|1|26" "$(database_query "$fresh_database" "
 SELECT CONCAT(
          COUNT(*), '|', COUNT(DISTINCT BINARY kategorie), '|',
          (SELECT COUNT(*) FROM estab_schema_migrations
@@ -2461,7 +2463,7 @@ finish_checksum=$(
         awk '{print $1}'
 )
 assert_equal \
-    "25|25|$prepare_checksum|$incident_predecessor_checksum|$finish_checksum" \
+    "26|26|$prepare_checksum|$incident_predecessor_checksum|$finish_checksum" \
     "$(database_query "$predecessor_database" "
 SELECT CONCAT(
          COUNT(*), '|',
@@ -2701,7 +2703,7 @@ SELECT CONCAT(
        )")" \
     "second upgrade run changed existing global categories or links"
 
-assert_equal "25" "$(fixture_query "
+assert_equal "26" "$(fixture_query "
 SELECT COUNT(*) FROM estab_schema_migrations
  WHERE state = 'applied'
    AND checksum REGEXP BINARY '^[0-9a-f]{64}$'")" \
@@ -2983,7 +2985,7 @@ fixture_query "
 DELETE FROM estab_schema_migrations
  WHERE version = '119-inactive-messenger-dispatch.sql'"
 ESTAB_DB_NAME="$test_database" "$ESTAB_MIGRATOR_BIN"
-assert_equal "$inactive_messenger_dispatch_checksum|applied|25|1" "$(fixture_query "
+assert_equal "$inactive_messenger_dispatch_checksum|applied|26|1" "$(fixture_query "
 SELECT CONCAT(
          (SELECT checksum FROM estab_schema_migrations
            WHERE version = '119-inactive-messenger-dispatch.sql'), '|',
@@ -4369,7 +4371,8 @@ VALUES
 DELETE FROM estab_schema_migrations
  WHERE version IN (
    '110-etb-tbb-rules.sql', '111-logbook-shift-assignment.sql',
-   '112-optional-access-shifts.sql'
+   '112-optional-access-shifts.sql',
+   '120-single-function-relief.sql'
  );
 DROP TRIGGER estab_einsaetze_ai_logbook_heads;
 DELETE FROM nv_logbuch_koepfe

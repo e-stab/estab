@@ -1037,6 +1037,124 @@ function estab_logbook_lifecycle_shift_extension(
     );
 }
 
+/**
+ * Compose the documentary record of one single-function relief.
+ *
+ * Kept apart from the write so the wording can be proven without a database.
+ * DV 1-101 wants the same two names in the book that a handover carries: who
+ * hands the station over, who takes it on, which station it is, and why.
+ *
+ * @return array{ereignis:string,bemerkung:string,besetzung:string}
+ */
+function estab_logbook_lifecycle_relief_text(
+    int $shiftNumber,
+    string $shiftLabel,
+    string $function,
+    string $role,
+    string $outgoingName,
+    string $outgoingCode,
+    string $successorName,
+    string $successorCode,
+    string $reason
+): array {
+    $function = trim($function);
+    $role = trim($role);
+    $outgoingCode = trim($outgoingCode);
+    $successorCode = trim($successorCode);
+    $reason = trim($reason);
+    if (
+        $shiftNumber < 1
+        || $function === ''
+        || $role === ''
+        || $outgoingCode === ''
+        || $successorCode === ''
+        || $reason === ''
+    ) {
+        throw new InvalidArgumentException('Die Ablösung ist unvollständig.');
+    }
+    $person = static function (string $name, string $code): string {
+        $name = trim($name);
+        return $name === '' ? $code : $name . ' [' . $code . ']';
+    };
+    $shiftText = 'Schicht #' . $shiftNumber;
+    $shiftLabel = trim($shiftLabel);
+    if ($shiftLabel !== '') {
+        $shiftText .= ' (' . $shiftLabel . ')';
+    }
+    $assignmentText = $function . ' (' . $role . '): abgebend '
+        . $person($outgoingName, $outgoingCode) . ', übernehmend '
+        . $person($successorName, $successorCode);
+    return [
+        'ereignis' => 'Funktionsbesetzung einzeln abgelöst. ' . $shiftText
+            . '. ' . $assignmentText . '. Grund: ' . $reason,
+        'bemerkung' => 'Die Dienstschicht läuft unverändert weiter. Die '
+            . 'Ablösung wird mit der persönlichen Annahme durch die '
+            . 'übernehmende Person wirksam.',
+        'besetzung' => $assignmentText,
+    ];
+}
+
+/**
+ * Append one single-function relief to the books.
+ *
+ * The shift keeps running, so this is not a handover row. Personnel of the
+ * telecommunications operating point additionally belongs in the TBB, exactly
+ * as for a shift extension.
+ */
+function estab_logbook_lifecycle_relief(
+    mysqli $connection,
+    int $incidentId,
+    int $shiftId,
+    int $shiftNumber,
+    string $shiftLabel,
+    string $relievedAt,
+    string $outgoingName,
+    string $outgoingCode,
+    string $successorName,
+    string $successorCode,
+    string $function,
+    string $role,
+    string $reason
+): void {
+    if ($incidentId < 1 || $shiftId < 1) {
+        throw new InvalidArgumentException('Die Ablösung ist unvollständig.');
+    }
+    $record = estab_logbook_lifecycle_relief_text(
+        $shiftNumber,
+        $shiftLabel,
+        $function,
+        $role,
+        $outgoingName,
+        $outgoingCode,
+        $successorName,
+        $successorCode,
+        $reason
+    );
+    estab_logbook_lifecycle_insert_etb(
+        $connection,
+        $incidentId,
+        $relievedAt,
+        $record['ereignis'],
+        $record['bemerkung'],
+        'ohne',
+        $shiftId
+    );
+    if (!in_array(trim($function), ['LdF', 'A/W', 'TBB'], true)) {
+        return;
+    }
+    estab_logbook_lifecycle_insert_ttb(
+        $connection,
+        $incidentId,
+        $relievedAt,
+        'Besetzung der Fernmeldebetriebsstelle einzeln abgelöst. '
+            . $record['besetzung'] . '.',
+        'Schicht #' . $shiftNumber . '; die Schicht läuft weiter.',
+        $record['bemerkung'],
+        'betrieb_personal',
+        $shiftId
+    );
+}
+
 function estab_logbook_lifecycle_last_sequence(
     mysqli $connection,
     int $incidentId,

@@ -1415,7 +1415,7 @@ function estab_readiness_schema_query(): string
         . "WHERE estab_status = 'closed' AND (estab_closed_at IS NULL "
         . "OR estab_retain_until IS NULL OR estab_retain_until "
         . "< DATE_ADD(estab_closed_at, INTERVAL 10 YEAR))) = 0) "
-        . "AND ((SELECT COUNT(*) FROM estab_schema_migrations) = 25) "
+        . "AND ((SELECT COUNT(*) FROM estab_schema_migrations) = 26) "
         . "AND ((SELECT COUNT(*) FROM estab_schema_migrations "
         . "WHERE version IN ('20-nullable-dates.sql','30-runtime-schema.sql',"
         . "'40-recipient-matrix-standard.sql','45-global-incidents-prepare.sql',"
@@ -1434,7 +1434,8 @@ function estab_readiness_schema_query(): string
         . "'116-standard-categories.sql',"
         . "'117-telecom-draft-discard.sql',"
         . "'118-operational-authority.sql',"
-        . "'119-inactive-messenger-dispatch.sql') "
+        . "'119-inactive-messenger-dispatch.sql',"
+        . "'120-single-function-relief.sql') "
         . "AND state = 'applied' "
-        . "AND checksum REGEXP BINARY '^[0-9a-f]{64}$') = 25)";
+        . "AND checksum REGEXP BINARY '^[0-9a-f]{64}$') = 26)";
 }

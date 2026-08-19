@@ -108,6 +108,7 @@ if ($requestMethod === 'POST') {
             [
                 'create_duty_shift',
                 'assign_duty_function',
+                'relieve_duty_function',
                 'activate_duty_shift',
                 'handover_duty_shift',
                 'cancel_duty_handover',
@@ -992,6 +993,21 @@ if ($requestMethod === 'POST') {
                     : 'hat_assigned'
             );
         }
+        if ($action === 'relieve_duty_function') {
+            estab_dv_relieve_hat(
+                $connection,
+                $incidentId,
+                estab_dv_positive_id(
+                    $_POST['dienstbesetzung_id'] ?? null,
+                    'Dienstbesetzung'
+                ),
+                $_POST['nachfolger_kuerzel'] ?? null,
+                $_POST['abloesungsgrund'] ?? null,
+                $actor,
+                $conf_4f_tbl['protokoll']
+            );
+            dv_admin_redirect('hat_relieved');
+        }
         if ($action === 'activate_duty_shift') {
             estab_dv_activate_initial_shift(
                 $connection,
@@ -1160,6 +1176,10 @@ try {
 $flashMessages = [
     'shift_created' => 'Die geplante Dienstschicht wurde angelegt.',
     'hat_assigned' => 'Die Funktionsbesetzung wurde verbindlich zugewiesen.',
+    'hat_relieved' =>
+        'Die Funktion wurde einzeln abgelöst. Abgebende und übernehmende '
+        . 'Person stehen im ETB; wirksam wird die Nachbesetzung mit der '
+        . 'persönlichen Annahme durch die übernehmende Person.',
     'hat_extension_assigned' =>
         'Die Ergänzung wurde zugewiesen. Sie wird erst mit der persönlichen '
         . 'Annahme wirksam und dann automatisch im ETB nachgewiesen.',
@@ -1573,7 +1593,8 @@ foreach ($handoverRequests as $handoverRequest) {
         </header>
         <div class="estab-tool-table-wrap">
           <table class="estab-tool-table">
-            <thead><tr><th>Funktion</th><th>Person</th><th>Status</th></tr></thead>
+            <thead><tr><th>Funktion</th><th>Person</th><th>Status</th>
+              <th>Einzelablösung</th></tr></thead>
             <tbody>
             <?php foreach ($activeShift['besetzungen'] as $hat): ?>
               <tr>
@@ -1587,6 +1608,52 @@ foreach ($handoverRequests as $handoverRequest) {
                     $hat['benutzer'] . ' (' . $hat['benutzer_kuerzel'] . ')'
                 ) ?></td>
                 <td><?= estab_admin_html($hat['status']) ?></td>
+                <td>
+                  <?php if (($hat['status'] ?? null) !== 'ANGENOMMEN'): ?>
+                    <span>Nur eine angenommene Funktion kann abgelöst
+                      werden.</span>
+                  <?php elseif ((string) $hat['funktion'] === 'ETB'): ?>
+                    <span>Die bestimmte ETB-Führung wechselt ausschließlich
+                      über eine bestätigte Schichtübergabe.</span>
+                  <?php else: ?>
+                    <form class="estab-tool-form" method="post"
+                      action="fuehrungsstelle.php">
+                      <?= estab_csrf_field() ?>
+                      <input type="hidden" name="admin_action"
+                        value="relieve_duty_function">
+                      <input type="hidden" name="dienstbesetzung_id"
+                        value="<?= (int) $hat['dienstbesetzung_id'] ?>">
+                      <label>Übernehmende Person
+                        <select name="nachfolger_kuerzel" required>
+                          <?php foreach ($users as $user): ?>
+                            <?php if (
+                                (int) ($user['estab_gesperrt'] ?? 0) === 1
+                                || (string) $user['kuerzel']
+                                    === (string) $hat['benutzer_kuerzel']
+                            ) {
+                                continue;
+                            } ?>
+                            <option
+                              value="<?= estab_admin_html($user['kuerzel']) ?>">
+                              <?= estab_admin_html(
+                                  $user['benutzer'] . ' ('
+                                  . $user['kuerzel'] . ')'
+                              ) ?>
+                            </option>
+                          <?php endforeach; ?>
+                        </select>
+                      </label>
+                      <label>Grund der Ablösung
+                        <input name="abloesungsgrund" maxlength="200"
+                          placeholder="z. B. Ausfall, Ablösung, Abbruch"
+                          required>
+                      </label>
+                      <button class="estab-button" type="submit">
+                        Funktion einzeln ablösen
+                      </button>
+                    </form>
+                  <?php endif; ?>
+                </td>
               </tr>
             <?php endforeach; ?>
             </tbody>

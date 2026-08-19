@@ -1137,6 +1137,361 @@ function estab_dv_assign_hat(
     );
 }
 
+/**
+ * Replace one accepted duty function while its shift keeps running.
+ *
+ * DV 1-101 expects a command post to stay able to work when a single person
+ * drops out. Relieving one function is therefore not a shift handover: the
+ * shift, its books and every other function continue unchanged, and only the
+ * named function changes hands. What relief and handover share is their
+ * evidence. Both name the outgoing and the incoming person, both append the
+ * event to the ETB and to the tamper-evident event chain, and both refuse
+ * while the outgoing person still owes the command post an open messenger job
+ * or a message they hold locked. The successor is assigned here, never
+ * accepted: like every other assignment it becomes operative only when that
+ * person accepts it personally, while the relieved person loses every
+ * operational right the moment this transaction commits.
+ */
+function estab_dv_relieve_hat(
+    mysqli $connection,
+    int $incidentId,
+    int $assignmentId,
+    mixed $successorCodeValue,
+    mixed $reasonValue,
+    string $actor,
+    string $protocolTable = 'nv_protokoll'
+): array {
+    $incidentId = estab_incident_positive_id($incidentId);
+    $assignmentId = estab_dv_positive_id($assignmentId, 'Dienstbesetzung');
+    $successorCode = estab_dv_code($successorCodeValue);
+    $reason = estab_dv_text($reasonValue, 'Ablösungsgrund', 10000);
+    $actor = estab_dv_actor($actor);
+
+    return estab_incident_with_active_write(
+        $connection,
+        static function (array $incident) use (
+            $connection,
+            $incidentId,
+            $assignmentId,
+            $successorCode,
+            $reason,
+            $actor,
+            $protocolTable
+        ): array {
+            estab_dv_require_strict_incident_snapshot($incident, $incidentId);
+            $select = $connection->prepare(
+                'SELECT b.`dienstschicht_id`, b.`benutzer_kuerzel`,'
+                . ' b.`funktion`, b.`rolle`, b.`status`,'
+                . ' s.`status` AS `schicht_status`,'
+                . ' s.`nummer` AS `schicht_nummer`,'
+                . ' s.`bezeichnung` AS `schicht_bezeichnung`,'
+                . ' u.`benutzer` AS `benutzer_name`'
+                . ' FROM `nv_dienstbesetzungen` AS b'
+                . ' JOIN `nv_dienstschichten` AS s'
+                . ' ON s.`dienstschicht_id` = b.`dienstschicht_id`'
+                . ' JOIN `nv_benutzer` AS u'
+                . ' ON BINARY u.`kuerzel` = BINARY b.`benutzer_kuerzel`'
+                . ' WHERE b.`dienstbesetzung_id` = ?'
+                . ' AND s.`einsatz_id` = ? FOR UPDATE'
+            );
+            if (!$select) {
+                throw new RuntimeException(
+                    'Abzulösende Funktionsbesetzung konnte nicht gesperrt '
+                    . 'werden.'
+                );
+            }
+            try {
+                $select->bind_param('ii', $assignmentId, $incidentId);
+                $select->execute();
+                $row = $select->get_result()->fetch_assoc();
+            } finally {
+                $select->close();
+            }
+            if (!is_array($row)) {
+                throw new EstabDvConflictException(
+                    'Diese Funktionsbesetzung gehört nicht zum aktiven '
+                    . 'Einsatz.'
+                );
+            }
+            if ((string) $row['schicht_status'] !== 'AKTIV') {
+                throw new EstabDvConflictException(
+                    'Nur eine Besetzung der aktiven Schicht kann einzeln '
+                    . 'abgelöst werden.'
+                );
+            }
+            if ((string) $row['status'] !== 'ANGENOMMEN') {
+                throw new EstabDvConflictException(
+                    'Nur eine persönlich angenommene Funktion kann abgelöst '
+                    . 'werden. Eine noch nicht angenommene Zuweisung bindet '
+                    . 'die Station nicht.'
+                );
+            }
+            $outgoingCode = (string) $row['benutzer_kuerzel'];
+            if ($outgoingCode === $successorCode) {
+                throw new EstabDvInputException(
+                    'Die Ablösung braucht eine andere Person als die bisher '
+                    . 'besetzende.'
+                );
+            }
+            $shiftId = (int) $row['dienstschicht_id'];
+            $function = (string) $row['funktion'];
+            $role = (string) $row['rolle'];
+            // The determined logbook writer is the one station a relief may
+            // not touch: the ETB must not change hands without the confirmed
+            // handover that closes and reopens the book. The acceptance rule
+            // of the duty-assignment trigger enforces the same, so relieving
+            // ETB here would strand the station with nobody able to accept.
+            if ($function === 'ETB') {
+                throw new EstabDvConflictException(
+                    'Die bestimmte ETB-Führung wechselt ausschließlich über '
+                    . 'eine dokumentierte und bestätigte Schichtübergabe. '
+                    . 'Eine Einzelablösung würde die Buchführung ohne '
+                    . 'Übergabe unterbrechen.'
+                );
+            }
+
+            // A relief hands over a station, never an unfinished errand: the
+            // successor cannot report a transport they never made. The shift
+            // handover applies the same yardstick to the whole shift; here it
+            // is narrowed to the person who leaves.
+            $openMessenger = $connection->prepare(
+                'SELECT `melderauftrag_id`, `status`'
+                . ' FROM `nv_melderauftraege`'
+                . ' WHERE `einsatz_id` = ?'
+                . ' AND BINARY `melder_kuerzel` = BINARY ?'
+                . " AND `status` NOT IN ('GEMELDET','ABGEBROCHEN')"
+                . ' ORDER BY `melderauftrag_id` LIMIT 1 FOR UPDATE'
+            );
+            if (!$openMessenger) {
+                throw new RuntimeException(
+                    'Offene Melderaufträge konnten nicht geprüft werden.'
+                );
+            }
+            try {
+                $openMessenger->bind_param('is', $incidentId, $outgoingCode);
+                $openMessenger->execute();
+                $openJob = $openMessenger->get_result()->fetch_assoc();
+            } finally {
+                $openMessenger->close();
+            }
+            if (is_array($openJob)) {
+                throw new EstabDvConflictException(
+                    'Die abgebende Person hat den Melderauftrag #'
+                    . (int) $openJob['melderauftrag_id'] . ' im Status '
+                    . (string) $openJob['status'] . ' noch nicht '
+                    . 'abgeschlossen. Erst nach Rückmeldung oder '
+                    . 'nachvollziehbarem Abbruch kann die Funktion abgelöst '
+                    . 'werden.'
+                );
+            }
+
+            // A locked message is an unfinished Vordruck in this person's
+            // hand. The lock is personal, so relieving the station now would
+            // strand the message between two bearbeitenden Personen.
+            $lockedMessage = $connection->prepare(
+                'SELECT `00_lfd` FROM `nv_nachrichten`'
+                . ' WHERE `einsatz_id` = ?'
+                . " AND `x02_sperre` IN ('t','1')"
+                . ' AND BINARY `x03_sperruser` = BINARY ?'
+                . ' ORDER BY `00_lfd` LIMIT 1 FOR UPDATE'
+            );
+            if (!$lockedMessage) {
+                throw new RuntimeException(
+                    'Nachrichten in Bearbeitung konnten nicht geprüft werden.'
+                );
+            }
+            try {
+                $lockedMessage->bind_param('is', $incidentId, $outgoingCode);
+                $lockedMessage->execute();
+                $lockedRow = $lockedMessage->get_result()->fetch_assoc();
+            } finally {
+                $lockedMessage->close();
+            }
+            if (is_array($lockedRow)) {
+                throw new EstabDvConflictException(
+                    'Die abgebende Person bearbeitet noch die Nachricht mit '
+                    . 'der laufenden Nummer ' . (int) $lockedRow['00_lfd']
+                    . '. Der Vordruck muss zuerst abgeschlossen oder '
+                    . 'freigegeben werden.'
+                );
+            }
+
+            $successor = $connection->prepare(
+                'SELECT `benutzer`, `estab_gesperrt` FROM `nv_benutzer`'
+                . ' WHERE BINARY `kuerzel` = BINARY ? FOR UPDATE'
+            );
+            if (!$successor) {
+                throw new RuntimeException(
+                    'Übernehmendes Benutzerkonto konnte nicht geprüft werden.'
+                );
+            }
+            try {
+                $successor->bind_param('s', $successorCode);
+                $successor->execute();
+                $successorRow = $successor->get_result()->fetch_assoc();
+            } finally {
+                $successor->close();
+            }
+            if (
+                !is_array($successorRow)
+                || (int) $successorRow['estab_gesperrt'] === 1
+            ) {
+                throw new EstabDvConflictException(
+                    'Das übernehmende Benutzerkonto ist nicht verfügbar.'
+                );
+            }
+
+            $relievedAt = estab_dv_database_now($connection);
+            $relieve = $connection->prepare(
+                "UPDATE `nv_dienstbesetzungen` SET `status` = 'ABGELOEST',"
+                . ' `abgeloest_am` = ?'
+                . ' WHERE `dienstbesetzung_id` = ?'
+                . " AND `status` = 'ANGENOMMEN'"
+            );
+            if (!$relieve) {
+                throw new RuntimeException(
+                    'Ablösung konnte nicht vorbereitet werden.'
+                );
+            }
+            try {
+                $relieve->bind_param('si', $relievedAt, $assignmentId);
+                if (!$relieve->execute() || $relieve->affected_rows !== 1) {
+                    throw new EstabDvConflictException(
+                        'Die Besetzung wurde zwischenzeitlich geändert.'
+                    );
+                }
+            } finally {
+                $relieve->close();
+            }
+
+            $insert = $connection->prepare(
+                'INSERT INTO `nv_dienstbesetzungen`'
+                . ' (`dienstschicht_id`, `benutzer_kuerzel`, `funktion`,'
+                . ' `rolle`, `zugewiesen_von`) VALUES (?, ?, ?, ?, ?)'
+            );
+            if (!$insert) {
+                throw new RuntimeException(
+                    'Nachbesetzung konnte nicht vorbereitet werden.'
+                );
+            }
+            try {
+                $insert->bind_param(
+                    'issss',
+                    $shiftId,
+                    $successorCode,
+                    $function,
+                    $role,
+                    $actor
+                );
+                try {
+                    $executed = $insert->execute();
+                } catch (mysqli_sql_exception $exception) {
+                    $code = (int) $exception->getCode();
+                    if ($code === 1062) {
+                        throw new EstabDvConflictException(
+                            'Diese Person ist der Funktion in dieser Schicht '
+                            . 'bereits zugewiesen.'
+                        );
+                    }
+                    if ($code === 1644) {
+                        throw new EstabDvConflictException(
+                            'Der Betrieb hat die Nachbesetzung dieser '
+                            . 'Funktion in der laufenden Schicht abgelehnt; '
+                            . 'die Schicht bleibt unverändert. Für diese '
+                            . 'Funktion bleibt dann nur die geordnete '
+                            . 'Schichtübergabe.'
+                        );
+                    }
+                    throw new RuntimeException(
+                        'Nachbesetzung konnte nicht gespeichert werden.',
+                        0,
+                        $exception
+                    );
+                }
+                if (!$executed) {
+                    if ($insert->errno === 1062) {
+                        throw new EstabDvConflictException(
+                            'Diese Person ist der Funktion in dieser Schicht '
+                            . 'bereits zugewiesen.'
+                        );
+                    }
+                    throw new RuntimeException(
+                        'Nachbesetzung konnte nicht gespeichert werden.'
+                    );
+                }
+                $successorAssignmentId = (int) $connection->insert_id;
+            } finally {
+                $insert->close();
+            }
+
+            estab_logbook_lifecycle_relief(
+                $connection,
+                $incidentId,
+                $shiftId,
+                (int) $row['schicht_nummer'],
+                (string) $row['schicht_bezeichnung'],
+                $relievedAt,
+                (string) $row['benutzer_name'],
+                $outgoingCode,
+                (string) ($successorRow['benutzer'] ?? ''),
+                $successorCode,
+                $function,
+                $role,
+                $reason
+            );
+            estab_dv_audit(
+                $connection,
+                $protocolTable,
+                $incidentId,
+                'DV Besetzung',
+                [
+                    'action' => 'hat_relieved_in_shift',
+                    'assignment_id' => $assignmentId,
+                    'shift_id' => $shiftId,
+                    'target' => $outgoingCode,
+                    'function' => $function,
+                    'role' => $role,
+                    'actor' => $actor,
+                    'successor' => $successorCode,
+                    'successor_assignment_id' => $successorAssignmentId,
+                    'reason' => $reason,
+                    'relieved_at' => $relievedAt,
+                    'shift_status' => 'AKTIV',
+                ]
+            );
+            estab_dv_audit(
+                $connection,
+                $protocolTable,
+                $incidentId,
+                'DV Besetzung',
+                [
+                    'action' => 'hat_assigned_as_relief',
+                    'assignment_id' => $successorAssignmentId,
+                    'shift_id' => $shiftId,
+                    'target' => $successorCode,
+                    'function' => $function,
+                    'role' => $role,
+                    'actor' => $actor,
+                    'predecessor' => $outgoingCode,
+                    'relieved_assignment_id' => $assignmentId,
+                    'reason' => $reason,
+                    'shift_status' => 'AKTIV',
+                    'active_shift_extension' => true,
+                ]
+            );
+            return [
+                'dienstbesetzung_id' => $successorAssignmentId,
+                'abgeloeste_dienstbesetzung_id' => $assignmentId,
+                'funktion' => $function,
+                'rolle' => $role,
+                'abgebend' => $outgoingCode,
+                'uebernehmend' => $successorCode,
+                'schicht_status' => 'AKTIV',
+            ];
+        }
+    );
+}
+
 function estab_dv_accept_hat(
     mysqli $connection,
     int $incidentId,

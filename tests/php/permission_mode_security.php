@@ -825,10 +825,12 @@ $assert(
             $readiness,
             "'119-inactive-messenger-dispatch.sql'"
         )
+        && str_contains($verify, "'120-single-function-relief.sql'")
+        && str_contains($readiness, "'120-single-function-relief.sql'")
         && str_contains($verify, 'estab_permission_mode')
         && str_contains($readiness, 'estab_permission_mode')
-        && str_contains($verify, 'estab_schema_migrations`) = 25')
-        && str_contains($readiness, 'estab_schema_migrations) = 25')
+        && str_contains($verify, 'estab_schema_migrations`) = 26')
+        && str_contains($readiness, 'estab_schema_migrations) = 26')
         && str_contains($verify, 'inactive_messenger_target_allowed')
         && str_contains($readiness, 'inactive_messenger_target_allowed')
         && str_contains($readiness, 'nv_zugangsschicht_mitglieder')
@@ -865,7 +867,7 @@ $assert(
             $readiness,
             "'%messenger_account.`aktiv` = 1%'"
         ),
-    'Migrations 115-119 and exact ledger are outside verify/readiness gates'
+    'Migrations 115-120 and exact ledger are outside verify/readiness gates'
 );
 $assert(
     str_contains($permissionSource, 'Missing context fails closed')
