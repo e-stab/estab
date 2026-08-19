@@ -282,6 +282,25 @@ $handbookUpdated = '3. August 2026';
               Zusatzfunktionen. Jede Funktion gibt nur ihre eigenen Bereiche
               und Arbeitsschritte frei.</span></div>
           </div>
+          <div class="estab-handbook-callout">
+            <strong>Aufwuchs im laufenden Einsatz</strong>
+            <p>Eine Führungsstelle ohne Stab beginnt im Modus „Locker“. Steigt
+              die Führungsstufe und tritt ein Stab zusammen, lässt sich der
+              Einsatz auf „Streng“ umstellen, ohne ihn zu beenden. Der Wechsel
+              steht im Einsatztagebuch. Bis eine Dienstschicht mit allen
+              Pflichtfunktionen aktiviert und persönlich angenommen ist,
+              bleiben operative Eingaben gesperrt. Die Gegenrichtung ist
+              gesperrt: eine bereits formal geführte Führungsstelle darf ihre
+              Nachweisführung nicht abschwächen.</p>
+          </div>
+          <div class="estab-handbook-callout">
+            <strong>Wenn eine Kraft ausfällt</strong>
+            <p>Eine einzelne Dienstfunktion lässt sich in der laufenden Schicht
+              neu besetzen, ohne die gesamte Schicht zu übergeben. Abgebende
+              und übernehmende Person stehen mit Grund im Einsatztagebuch;
+              wirksam wird die Nachbesetzung mit der persönlichen Annahme durch
+              die übernehmende Person.</p>
+          </div>
           <div class="estab-handbook-callout estab-handbook-callout-important">
             <strong>Locker bedeutet nicht „alle dürfen alles“</strong>
             <p>Ohne passende feste oder zusätzliche Funktion bleiben Menü,
@@ -293,7 +312,10 @@ $handbookUpdated = '3. August 2026';
           </div>
           <p>Besitzt ein Konto in „Locker“ mehrere gewöhnliche Stabs- oder
             Fachberaterfunktionen, zeigt die linke Seitenleiste dafür getrennte
-            Aktionen wie „Schreiben als S1“ und „Lesen als S1“. Wählen Sie
+            Aktionen wie „Schreiben als S1“ und „Lesen als S1“, und sie führt
+            für jede getragene Funktion einen eigenen Warteschlangenzähler.
+            Der Hinweiston meldet sich, sobald in irgendeiner davon etwas Neues
+            liegt. Wählen Sie
             bewusst die Funktion, in der Sie den Vorgang bearbeiten. Diese
             Auswahl bleibt beim Öffnen, Suchen, Bearbeiten und Absenden an den
             Vorgang gebunden und wird serverseitig erneut geprüft. Eine nicht
@@ -450,19 +472,31 @@ $handbookUpdated = '3. August 2026';
             <h3 id="outgoing-title">Ausgang</h3>
             <ol>
               <li><strong>Verfasser:</strong> Anschrift, Betreff, Inhalt,
-                Abfassungszeit und Verteiler erfassen und zur Sichtung geben.</li>
+                Abfassungszeit und Verteiler erfassen und zur Sichtung geben.
+                Die Abfassungszeit (Feld 16) setzt die Anwendung nicht selbst
+                ein; sie gehört dem Verfasser. In Feld 7 trägt er ein, über
+                welches Übermittlungsmittel die Nachricht seiner Ansicht nach
+                laufen soll — dieser Wunsch bleibt dauerhaft im Vordruck
+                stehen.</li>
               <li><strong>Si:</strong> Anschrift, Verfasserzeichen und Funktion
                 formal prüfen. Freigeben oder mit Pflichtgrund zurückgeben;
                 der Verfasser reicht die Korrektur erneut bei Si ein.</li>
-              <li><strong>LdF:</strong> Gegenstellenrufname und vorgesehenen,
-                im freigegebenen S6-Plan gültigen Beförderungsweg festlegen.
-                Ist der Vordruck fachlich nicht disponierbar, geht er mit
-                Pflichtgrund an den Verfasser zurück und durchläuft danach Si
-                und LdF erneut.</li>
+              <li><strong>LdF:</strong> Gegenstellenrufname festlegen und in
+                Feld 1 das Übermittlungsmittel disponieren, den Weg in Feld 6.
+                Im Modus „Streng“ stammt der Weg aus dem freigegebenen
+                S6-Plan. Eine Führungsstelle ohne eigenes S6 hat keinen
+                veröffentlichten Plan: im Modus „Locker“ benennt der LdF
+                Mittel und Weg deshalb unmittelbar. Der Wunsch des Verfassers
+                aus Feld 7 bleibt daneben sichtbar und wird nicht
+                überschrieben. Ist der Vordruck fachlich nicht disponierbar,
+                geht er mit Pflichtgrund an den Verfasser zurück und durchläuft
+                danach Si und LdF erneut.</li>
               <li><strong>Fernmelder:</strong> Nachricht tatsächlich übermitteln und
-                wirklichen Weg, Beförderungszeit und Zeichen dokumentieren.
-                Ist der Weg nicht nutzbar, geht die Nachricht mit Grund zu LdF
-                zurück.</li>
+                Beförderungszeit und Zeichen dokumentieren. Ist der Empfänger
+                über das disponierte Mittel nicht erreichbar, geht die
+                Nachricht mit Grund zu LdF zurück; Feld 20 hält fest, über
+                welches Mittel er nicht erreichbar war. Der LdF disponiert
+                dann ein anderes Mittel und gibt erneut an die Fernmelder.</li>
             </ol>
           </section>
           <section class="estab-handbook-workflow" aria-labelledby="incoming-title">
@@ -477,8 +511,12 @@ $handbookUpdated = '3. August 2026';
                 übersetzen und den erfassten Eingangsweg bestätigen. Eine
                 Änderung benötigt eine Begründung.</li>
               <li><strong>Si:</strong> Nachricht bewerten, Empfänger festlegen
-                und den Vorgang abschließen. Erst dann erhalten fremde
-                Empfänger ihre Kopie.</li>
+                und den Vorgang abschließen. Ohne mindestens einen benannten
+                Bearbeiter — eine blaue Durchschrift — lässt sich die Sichtung
+                nicht abschließen; die Nachricht erreichte sonst niemanden.
+                Erst mit dem Abschluss erhalten fremde Empfänger ihre Kopie,
+                und das Technische Betriebsbuch verzeichnet die Aushändigung
+                als eigenen Eintrag.</li>
             </ol>
           </section>
           <div class="estab-handbook-flow-summary" aria-label="Kurzform der Nachrichtenwege">

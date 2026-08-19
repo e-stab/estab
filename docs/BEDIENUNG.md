@@ -21,8 +21,18 @@ Unter `/4fadm/incidents.php` werden mindestens erfasst:
 - Auftrag und Ausgangslage,
 - Berechtigungsmodus.
 
-Es kann nur einen aktiven Einsatz geben. Der Modus muss vor der ersten
-operativen oder formalen Eintragung feststehen.
+Es kann nur einen aktiven Einsatz geben. Der Modus soll vor der ersten
+operativen oder formalen Eintragung feststehen. Danach bleibt genau eine
+Richtung offen: der Aufwuchs von „Locker“ auf „Streng“, wenn die
+Führungsstufe steigt und ein Stab zusammentritt. Der Wechsel steht im
+Einsatztagebuch, und bis eine Dienstschicht mit allen Pflichtfunktionen
+aktiviert und angenommen ist, bleiben operative Eingaben gesperrt. Der
+umgekehrte Weg ist gesperrt: eine formal geführte Führungsstelle darf ihre
+Nachweisführung nicht abschwächen.
+
+Vor der Freigabe benennt die Einsatzverwaltung die Stationen des
+Nachrichtenlaufs, die nicht besetzt sind. Das ist ein Hinweis, keine Sperre --
+eine Führungsstelle ohne Stab arbeitet auch mit Lücken.
 
 ### Streng
 
@@ -30,7 +40,9 @@ operativen oder formalen Eintragung feststehen.
 - aktive formale Dienstschicht erforderlich,
 - Funktionen werden persönlich besetzt,
 - die Person nimmt die Besetzung an und wählt sie als aktuelle Funktion,
-- nur diese ausgewählte Besetzung verleiht operative Rechte.
+- nur diese ausgewählte Besetzung verleiht operative Rechte,
+- fällt eine Kraft aus, lässt sich ihre Funktion einzeln neu besetzen, ohne
+  die Schicht zu übergeben; beide Namen stehen mit Grund im Einsatztagebuch.
 
 ### Locker
 
@@ -38,7 +50,11 @@ operativen oder formalen Eintragung feststehen.
 - Rechte stammen aus fester Kontofunktion und ausdrücklich vergebenen
   Zusatzfunktionen,
 - optionale Zugangsschichten steuern Gruppenzugänge, nicht Fachrechte,
-- die manuelle Kontosperre hat immer Vorrang.
+- die manuelle Kontosperre hat immer Vorrang,
+- ausgehende Nachrichten sind auch ohne veröffentlichten S6-Fernmeldeplan
+  beförderbar; der LdF benennt Übermittlungsmittel und Weg dann unmittelbar,
+- trägt eine Person mehrere Funktionen, führt die Seitenleiste für jede einen
+  eigenen Warteschlangenzähler.
 
 ## Benutzer
 
@@ -69,13 +85,26 @@ Gesprächsnotizen durchlaufen denselben Ausgangsweg.
 
 1. Richtung und Art wählen.
 2. Rufnamen, Absender, Empfänger, Überschrift und Text ausfüllen.
-3. Priorität, Übertragungsweg und erforderliche Vermerke im Vordruck setzen.
-4. Anhänge direkt am Vordruck auswählen und hochladen.
-5. Nachricht an die nächste Station übergeben.
+3. Vorrangstufe, gewünschtes Übermittlungsmittel (Feld 7) und erforderliche
+   Vermerke im Vordruck setzen.
+4. Abfassungszeit (Feld 16) eintragen. Die Anwendung setzt sie nicht selbst
+   ein: sie kennt den Zeitpunkt der Erfassung, nicht den der Abfassung.
+5. Verteiler (Feld 19) ausfüllen. Die rote Lage- und die eigene grüne
+   Durchschrift ergänzt der Server unabwählbar.
+6. Anhänge direkt am Vordruck auswählen und hochladen.
+7. Nachricht an die nächste Station übergeben.
 
 Rufnamen und Absender werden aus früheren Einträgen desselben Einsatzes
 vorgeschlagen. Die tatsächliche Aufnahme- oder Beförderungszeit bleibt
 änderbar.
+
+Feld 7 trägt den Wunsch des Verfassers und bleibt dauerhaft stehen. Der LdF
+disponiert davon unabhängig in Feld 1; erreicht der Fernmelder den Empfänger
+darüber nicht, geht die Nachricht mit einem Vermerk in Feld 20 an den LdF
+zurück und wird neu disponiert.
+
+Eine eingehende Nachricht lässt sich erst abschliessen, wenn im Verteiler
+mindestens ein Bearbeiter benannt ist -- sonst erreichte sie niemanden.
 
 ### Anhänge
 
