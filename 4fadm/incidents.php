@@ -12,6 +12,7 @@ if (PHP_SAPI !== 'cli' && empty($_SERVER['REMOTE_USER'])) {
 require_once __DIR__ . '/../4fcfg/dbcfg.inc.php';
 require_once __DIR__ . '/../4fcfg/config.inc.php';
 require_once __DIR__ . '/../app/csrf.php';
+require_once __DIR__ . '/../app/dv_operations.php';
 require_once __DIR__ . '/../app/incident.php';
 require_once __DIR__ . '/../app/session_ui.php';
 
@@ -37,6 +38,80 @@ function incident_admin_datetime(?string $value): string
     } catch (Throwable) {
         return 'ungültiger Zeitpunkt';
     }
+}
+
+/**
+ * Name the stations of the message run without blocking the small operation.
+ *
+ * DV 1-101 lets a command post without a staff work with gaps and only
+ * requires that the gaps are named before the incident is released. The
+ * notice therefore carries no control of its own: it disables no button and
+ * renders no form. A STRICT incident that cannot name a single bearer yet -
+ * the normal state before its release, because duty shifts are planned on
+ * the active incident - gets the same report worded as the plan for the
+ * first duty shift instead of a warning nobody could act on.
+ *
+ * @param array{modus?:mixed,stationen?:mixed,unbesetzt?:mixed}|null $staffing
+ */
+function incident_admin_staffing_notice(
+    ?array $staffing,
+    bool $active
+): string {
+    if ($staffing === null) {
+        return '';
+    }
+    $strict = ($staffing['modus'] ?? null) === ESTAB_PERMISSION_MODE_STRICT;
+    $missing = is_array($staffing['unbesetzt'] ?? null)
+        ? $staffing['unbesetzt']
+        : [];
+    $stations = is_array($staffing['stationen'] ?? null)
+        ? $staffing['stationen']
+        : [];
+    $origin = $strict
+        ? 'Im strengen Modus trägt eine Station nur, wer sie in der aktiven '
+            . 'Dienstschicht persönlich angenommen hat.'
+            . ($active
+                ? ''
+                : ' Dienstschichten werden erst am aktiven Einsatz geplant.')
+        : 'Im lockeren Modus trägt eine Station jedes nicht gesperrte Konto '
+            . 'mit passender Kontofunktion oder ausdrücklich vergebener '
+            . 'Zusatzfunktion.';
+    $consequence = ' Eine Nachricht, deren nächste Station unbesetzt ist, '
+        . 'bleibt unbemerkt in ihrer Warteschlange liegen.';
+    // The planning wording is read out of the report, never assumed: a paused
+    // STRICT incident whose duty shift still runs keeps its real answer
+    // instead of being told to staff stations it already holds.
+    $planning = $strict
+        && !$active
+        && $stations !== []
+        && count($missing) === count($stations);
+    $listed = [];
+    foreach ($missing as $entry) {
+        $label = is_string($entry) ? $entry : '';
+        if ($label !== '') {
+            $listed[] = '<li>' . incident_admin_html($label) . '</li>';
+        }
+    }
+    if ($listed === []) {
+        return '<aside class="estab-tool-notice"'
+            . ' data-estab-message-run-staffing="complete">'
+            . '<strong>Nachrichtenlauf vollständig besetzt.</strong>'
+            . ' <small>' . $origin . '</small></aside>';
+    }
+    return '<aside class="estab-tool-notice'
+        . ($planning ? '' : ' estab-tool-notice-warning') . '"'
+        . ' data-estab-message-run-staffing="'
+        . ($planning ? 'planned' : 'incomplete') . '"'
+        . ($planning ? '' : ' role="status"') . '>'
+        . '<strong>' . ($planning
+            ? 'Diese Stationen des Nachrichtenlaufs muss die erste '
+                . 'Dienstschicht besetzen:'
+            : ($active
+                ? 'Unbesetzte Stationen des Nachrichtenlaufs:'
+                : 'Vor der Freigabe unbesetzt – der Einsatz lässt sich '
+                    . 'trotzdem aktivieren:'))
+        . '</strong><ul>' . implode('', $listed) . '</ul>'
+        . '<small>' . $origin . $consequence . '</small></aside>';
 }
 
 function incident_admin_redirect(string $result): never
@@ -272,6 +347,7 @@ if ($requestMethod === 'POST') {
 $status = null;
 $incidents = [];
 $activePreflight = null;
+$messageRunStaffing = [];
 try {
     $connection = estab_auth_connect($conf_4f_db);
     try {
@@ -283,6 +359,32 @@ try {
                 (int) $status['active_einsatz_id'],
                 (string) $conf_4f['ablage_dir']
             );
+        }
+        // Naming the gaps is a report, never a gate: a command post without a
+        // staff has to stay able to release and run its incident. A report
+        // that cannot be produced therefore degrades to no notice instead of
+        // taking the incident administration - and with it the activation -
+        // down.
+        foreach ($incidents as $listedIncident) {
+            if (($listedIncident['estab_status'] ?? null) === 'closed') {
+                continue;
+            }
+            $listedIncidentId = (int) $listedIncident['einsatz_id'];
+            try {
+                $messageRunStaffing[$listedIncidentId] =
+                    estab_dv_message_run_staffing(
+                        $connection,
+                        $listedIncident,
+                        $listedIncidentId
+                    );
+            } catch (Throwable $staffingException) {
+                error_log(
+                    'eStab message-run staffing report failed: '
+                    . $staffingException->getMessage()
+                );
+                $messageRunStaffing = [];
+                break;
+            }
         }
     } finally {
         estab_auth_close($connection);
@@ -412,6 +514,10 @@ $activeMissingHeader = is_array($status) && $activeId !== null
           </button>
         </form>
       </section>
+      <?= incident_admin_staffing_notice(
+          $messageRunStaffing[(int) $activeId] ?? null,
+          true
+      ) ?>
       <section class="estab-tool-panel" aria-labelledby="incident-close-title">
         <header class="estab-tool-panel-heading">
           <p class="estab-tool-eyebrow">Revisionssicherer Abschluss</p>
@@ -992,6 +1098,12 @@ $activeMissingHeader = is_array($status) && $activeId !== null
                     </div>
                   <?php endif; ?>
                   <?php if (!$incident['ist_aktiv'] && !$ended): ?>
+                    <?= incident_admin_staffing_notice(
+                        $messageRunStaffing[
+                            (int) $incident['einsatz_id']
+                        ] ?? null,
+                        false
+                    ) ?>
                     <form
                       class="estab-tool-form estab-incident-action"
                       method="post">

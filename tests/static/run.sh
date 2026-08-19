@@ -157,6 +157,7 @@ for test_name in \
     dv_operations_security \
     dv_composition_time \
     dv_shift_relief \
+    command_post_staffing \
     dv_rule_registry \
     telecom_plan_security \
     upload_security \

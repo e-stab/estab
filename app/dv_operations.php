@@ -18,6 +18,33 @@ require_once __DIR__ . '/incident.php';
 require_once __DIR__ . '/logbook_lifecycle.php';
 
 const ESTAB_DV_REQUIRED_HATS = ['S2', 'Si', 'S6', 'LdF', 'A/W'];
+/**
+ * Stations of the message run, in the order a message passes them.
+ *
+ * ESTAB_DV_REQUIRED_HATS names the complete roster of a command post with a
+ * staff. This list is deliberately narrower: it holds only the stations that a
+ * message has to pass to reach or leave the command post, together with the
+ * role the authoritative assignment policy binds to each of them. S6 plans the
+ * telecommunications and is therefore no station of the run itself.
+ */
+const ESTAB_DV_MESSAGE_RUN_STATIONS = [
+    'Si' => [
+        'rolle' => 'Stab',
+        'station' => 'Sichtung eingehender Nachrichten',
+    ],
+    'S2' => [
+        'rolle' => 'Stab',
+        'station' => 'Einsatztagebuch',
+    ],
+    'A/W' => [
+        'rolle' => 'Fernmelder',
+        'station' => 'Annahme und Weitergabe',
+    ],
+    'LdF' => [
+        'rolle' => 'Fernmelder',
+        'station' => 'Leitung des Fernmeldebetriebs',
+    ],
+];
 const ESTAB_DV_MEDIA = ['Fe', 'Fu', 'Me', 'FAX', 'FS', '@'];
 const ESTAB_DV_LEGACY_AUDIT_MAX_BYTES = 60000;
 const ESTAB_DV_MEDIA_DEFINITIONS = [
@@ -1745,6 +1772,158 @@ function estab_dv_shift_required_hats(
         $statement->close();
     }
     return array_values(array_diff(ESTAB_DV_REQUIRED_HATS, $accepted));
+}
+
+/**
+ * Build the operator-facing report from the per-station staffing answers.
+ *
+ * Keeping the wording apart from the two database queries makes the naming
+ * rule provable without a database and states the fail-closed default: a
+ * station without an answer counts as unstaffed and is named.
+ *
+ * @param array<string,bool> $bearers Station function => at least one
+ *     unblocked account can serve this station
+ * @return array{
+ *   modus:string,
+ *   stationen:list<array{funktion:string,rolle:string,station:string,
+ *     bezeichnung:string,besetzt:bool}>,
+ *   unbesetzt:list<string>
+ * }
+ */
+function estab_dv_message_run_report(string $mode, array $bearers): array
+{
+    $mode = estab_permission_mode($mode);
+    $stations = [];
+    $unstaffed = [];
+    foreach (ESTAB_DV_MESSAGE_RUN_STATIONS as $function => $definition) {
+        $staffed = ($bearers[$function] ?? false) === true;
+        $label = $definition['station'] . ' ('
+            . estab_function_display_name($function) . ')';
+        $stations[] = [
+            'funktion' => $function,
+            'rolle' => $definition['rolle'],
+            'station' => $definition['station'],
+            'bezeichnung' => $label,
+            'besetzt' => $staffed,
+        ];
+        if (!$staffed) {
+            $unstaffed[] = $label;
+        }
+    }
+    return [
+        'modus' => $mode,
+        'stationen' => $stations,
+        'unbesetzt' => $unstaffed,
+    ];
+}
+
+/**
+ * Name the stations of the message run that no account can currently serve.
+ *
+ * DV 1-101 does not force a small command post into a complete roster; it
+ * requires that the gaps are named before the incident is released. This
+ * report therefore only reports: it refuses no activation, disables no
+ * control and is deliberately not consulted by the activation domain.
+ *
+ * STRICT asks the same question the write gate asks: is the station held in
+ * the active duty shift by a personally accepted assignment. LOOSE resolves a
+ * station from the fixed account function and the explicitly granted
+ * additional functions. An administratively blocked account carries nothing
+ * in either mode.
+ *
+ * @param array<string,mixed> $incident One incident row carrying
+ *     `estab_permission_mode`, from estab_incident_list(),
+ *     estab_incident_find() or the active-status row
+ * @return array{
+ *   modus:string,
+ *   stationen:list<array{funktion:string,rolle:string,station:string,
+ *     bezeichnung:string,besetzt:bool}>,
+ *   unbesetzt:list<string>
+ * }
+ */
+function estab_dv_message_run_staffing(
+    mysqli $connection,
+    array $incident,
+    int $incidentId
+): array {
+    $incidentId = estab_incident_positive_id($incidentId);
+    $strictMode = estab_incident_duty_shift_required($incident);
+    $statement = $strictMode
+        ? $connection->prepare(
+            'SELECT 1 FROM `nv_dienstbesetzungen` AS assignment'
+            . ' JOIN `nv_dienstschichten` AS duty_shift'
+            . ' ON duty_shift.`dienstschicht_id` ='
+            . ' assignment.`dienstschicht_id`'
+            . ' JOIN `nv_benutzer` AS account'
+            . ' ON BINARY account.`kuerzel` ='
+            . ' BINARY assignment.`benutzer_kuerzel`'
+            . ' WHERE duty_shift.`einsatz_id` = ?'
+            . " AND duty_shift.`status` = 'AKTIV'"
+            . " AND assignment.`status` = 'ANGENOMMEN'"
+            . ' AND BINARY assignment.`funktion` = BINARY ?'
+            . ' AND BINARY assignment.`rolle` = BINARY ?'
+            . ' AND account.`estab_gesperrt` = 0 LIMIT 1'
+        )
+        : $connection->prepare(
+            'SELECT 1 FROM `nv_benutzer` AS account'
+            . ' WHERE account.`estab_gesperrt` = 0'
+            . ' AND ((BINARY account.`funktion` = BINARY ?'
+            . ' AND BINARY account.`rolle` = BINARY ?)'
+            . ' OR EXISTS (SELECT 1'
+            . ' FROM `nv_benutzer_zusatzfunktionen` AS extra'
+            . ' WHERE BINARY extra.`benutzer_kuerzel` ='
+            . ' BINARY account.`kuerzel`'
+            . ' AND BINARY extra.`funktion` = BINARY ?'
+            . ' AND BINARY extra.`rolle` = BINARY ?)) LIMIT 1'
+        );
+    if (!$statement) {
+        throw new RuntimeException(
+            'Besetzung des Nachrichtenlaufs konnte nicht vorbereitet werden.'
+        );
+    }
+    // One prepared statement answers all four stations: the bound variables
+    // are assigned per station, the statement itself never changes.
+    $function = '';
+    $role = '';
+    $extraFunction = '';
+    $extraRole = '';
+    $bearers = [];
+    try {
+        if ($strictMode) {
+            $statement->bind_param('iss', $incidentId, $function, $role);
+        } else {
+            $statement->bind_param(
+                'ssss',
+                $function,
+                $role,
+                $extraFunction,
+                $extraRole
+            );
+        }
+        foreach (ESTAB_DV_MESSAGE_RUN_STATIONS as $station => $definition) {
+            $function = $station;
+            $role = $definition['rolle'];
+            $extraFunction = $station;
+            $extraRole = $definition['rolle'];
+            if (!$statement->execute()) {
+                throw new RuntimeException(
+                    'Besetzung des Nachrichtenlaufs konnte nicht gelesen '
+                    . 'werden.'
+                );
+            }
+            $result = $statement->get_result();
+            $bearers[$station] = $result->fetch_row() !== null;
+            $result->free();
+        }
+    } finally {
+        $statement->close();
+    }
+    return estab_dv_message_run_report(
+        $strictMode
+            ? ESTAB_PERMISSION_MODE_STRICT
+            : ESTAB_PERMISSION_MODE_LOOSE,
+        $bearers
+    );
 }
 
 function estab_dv_activate_initial_shift(
