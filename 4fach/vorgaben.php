@@ -143,7 +143,7 @@ function estab_vorgaben_status_markup(
     bool $soundsEnabled,
     ?string $soundUrl,
     array $correctionProfiles = [],
-    ?array &$correctionCounts = null
+    array &$correctionCounts = []
 ): string {
     $correctionCounts = [];
     $identity = estab_read_session_identity($session);
