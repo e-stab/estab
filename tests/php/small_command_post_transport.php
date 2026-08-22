@@ -97,8 +97,8 @@ $assert(
 $repository = $read('/app/message_repository.php');
 $leadOutgoing = $section(
     $repository,
-    "if (\$direction === 'A' && \$status === 1)",
-    "if (\$direction === 'A' && \$status === 2)"
+    "if (\$direction === 'A' && \$status === ESTAB_MESSAGE_STATUS_LDF)",
+    "if (\$direction === 'A' && \$status === ESTAB_MESSAGE_STATUS_TRANSPORT)"
 );
 $assert(
     !str_contains($repository, "\$fields['06_befwegausw']"),
@@ -339,7 +339,7 @@ $assert(
 //    der einzige Weg zu einer neuen Disposition.
 $transportStage = $section(
     $repository,
-    "if (\$direction === 'A' && \$status === 2)",
+    "if (\$direction === 'A' && \$status === ESTAB_MESSAGE_STATUS_TRANSPORT)",
     '            $assignments = [];'
 );
 $assert(

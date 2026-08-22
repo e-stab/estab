@@ -25,11 +25,11 @@ $assert(is_string($repository), 'Message repository source is unreadable');
 
 $incomingRepositoryStart = strpos(
     $repository,
-    "if (\$direction === 'E' && \$status === 1)"
+    "if (\$direction === 'E' && \$status === ESTAB_MESSAGE_STATUS_LDF)"
 );
 $outgoingRepositoryStart = strpos(
     $repository,
-    "if (\$direction === 'A' && \$status === 1)",
+    "if (\$direction === 'A' && \$status === ESTAB_MESSAGE_STATUS_LDF)",
     $incomingRepositoryStart === false ? 0 : $incomingRepositoryStart
 );
 $incomingRepository = (
@@ -135,7 +135,7 @@ $assert(
 $assert(
     str_contains(
         $repository,
-        "if (\$direction === 'E' && \$status === 1)"
+        "if (\$direction === 'E' && \$status === ESTAB_MESSAGE_STATUS_LDF)"
     )
         && str_contains(
             $incomingRepository,

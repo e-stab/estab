@@ -8,30 +8,23 @@ require_once __DIR__ . '/file_access.php';
 require_once __DIR__ . '/message_priority.php';
 require_once __DIR__ . '/message_repository.php';
 require_once __DIR__ . '/message_list.php';
+require_once __DIR__ . '/message_status.php';
 require_once __DIR__ . '/message_timeline.php';
 
 /** Human-readable workflow state without relying on colour alone. */
 function estab_message_list_status_label(mixed $status): string
 {
-    $parsed = filter_var($status, FILTER_VALIDATE_INT);
-    return match ($parsed) {
-        0 => 'Entwurf',
-        1 => 'Bei LdF',
-        2 => 'In Beförderung',
-        4 => 'In Sichtung',
-        8 => 'Abgeschlossen',
-        10 => 'Zur Korrektur',
-        default => 'Unbekannter Stand',
-    };
+    return estab_message_status_name($status);
 }
 
 function estab_message_list_status_class(mixed $status): string
 {
-    $parsed = filter_var($status, FILTER_VALIDATE_INT);
-    return match ($parsed) {
-        8 => 'estab-message-list-status--done',
-        10 => 'estab-message-list-status--returned',
-        1, 2, 4 => 'estab-message-list-status--active',
+    return match (estab_message_status($status)) {
+        ESTAB_MESSAGE_STATUS_CLOSED => 'estab-message-list-status--done',
+        ESTAB_MESSAGE_STATUS_RETURNED => 'estab-message-list-status--returned',
+        ESTAB_MESSAGE_STATUS_LDF,
+        ESTAB_MESSAGE_STATUS_TRANSPORT,
+        ESTAB_MESSAGE_STATUS_REVIEW => 'estab-message-list-status--active',
         default => 'estab-message-list-status--neutral',
     };
 }

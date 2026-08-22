@@ -414,7 +414,7 @@ $assert(
         && str_contains($messageStageActor, 'estab_dv_require_write_capability(')
         && str_contains($messageStageActor, "'FERNMELDEBETRIEB'")
         && str_contains($messageStageActor, "'BEFOERDERUNG'")
-        && str_contains($messageStageActor, "\$requiredFunction = \$status === 1 ? 'LdF' : 'A/W'")
+        && str_contains($messageStageActor, "\$requiredFunction = \$status === ESTAB_MESSAGE_STATUS_LDF ? 'LdF' : 'A/W'")
         && str_contains($messageStageActor, "'Fernmelder'")
         && !str_contains(
             $messageStageActor,

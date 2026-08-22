@@ -74,8 +74,20 @@ foreach ($iterator as $file) {
         } elseif ($id === T_END_HEREDOC) {
             $insideInterpolatedString = false;
         }
+        // `[` opens a subscript only behind something subscriptable. In every
+        // other position it opens an array literal, and quoting a constant
+        // there would silently turn ESTAB_X into the string 'ESTAB_X'.
+        $bracketOwner = significantToken($tokens, $index - 1, -1) === '['
+            ? significantToken($tokens, $index - 2, -1)
+            : null;
+        $isSubscript = in_array(
+            $bracketOwner,
+            [T_VARIABLE, T_STRING, T_CONSTANT_ENCAPSED_STRING, ']', ')', '}'],
+            true
+        );
         $isBareArrayKey = $id === T_STRING
             && !$insideInterpolatedString
+            && $isSubscript
             && significantToken($tokens, $index - 1, -1) === '['
             && significantToken($tokens, $index + 1, 1) === ']'
             && !in_array($text, $constantKeys, true);

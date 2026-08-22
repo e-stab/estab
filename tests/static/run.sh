@@ -145,6 +145,8 @@ for test_name in \
     official_message_desired_medium_security \
     message_print_annex_security \
     message_priority_security \
+    message_status_contract \
+    modernize_tokens_security \
     read_authorization_security \
     message_suggestion_security \
     message_transport_security \

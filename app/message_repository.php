@@ -14,6 +14,7 @@ require_once __DIR__ . '/dv_operations.php';
 require_once __DIR__ . '/incident.php';
 require_once __DIR__ . '/message_evidence.php';
 require_once __DIR__ . '/message_priority.php';
+require_once __DIR__ . '/message_status.php';
 require_once __DIR__ . '/message_transport.php';
 
 /** @return array<string, true> */
@@ -1285,7 +1286,7 @@ function estab_message_operator_stage_predicate(
     string $direction,
     int $status
 ): string {
-    if ($status === 1 && $direction === 'E') {
+    if ($status === ESTAB_MESSAGE_STATUS_LDF && $direction === 'E') {
         return " AND `04_richtung` = '" . $direction . "'"
             . ' AND `x00_status` = 1'
             . ' AND `02_zeit` IS NULL AND `02_zeichen` = ?'
@@ -1293,7 +1294,7 @@ function estab_message_operator_stage_predicate(
             . ' AND `15_quitdatum` IS NULL AND `15_quitzeichen` = ?'
             . " AND `x01_abschluss` = 'f'";
     }
-    if ($status === 1 && $direction === 'A') {
+    if ($status === ESTAB_MESSAGE_STATUS_LDF && $direction === 'A') {
         return " AND `04_richtung` = 'A'"
             . ' AND `x00_status` = 1'
             . ' AND `02_zeit` IS NULL AND `02_zeichen` = ?'
@@ -1301,7 +1302,7 @@ function estab_message_operator_stage_predicate(
             . ' AND `15_quitdatum` IS NOT NULL AND `15_quitzeichen` <> ?'
             . " AND `x01_abschluss` = 'f'";
     }
-    if ($status === 2 && $direction === 'A') {
+    if ($status === ESTAB_MESSAGE_STATUS_TRANSPORT && $direction === 'A') {
         return " AND `04_richtung` = 'A'"
             . ' AND `x00_status` = 2'
             . ' AND `02_zeit` IS NOT NULL AND `02_zeichen` <> ?'
@@ -1320,7 +1321,7 @@ function estab_message_operator_stage_parameters(
     int $status
 ): array {
     estab_message_operator_stage_predicate($direction, $status);
-    return $status === 1 ? ['', '', ''] : ['', '', '', '', ''];
+    return $status === ESTAB_MESSAGE_STATUS_LDF ? ['', '', ''] : ['', '', '', '', ''];
 }
 
 /**
@@ -1342,12 +1343,12 @@ function estab_message_require_operator_stage_actor(
     // Validate the closed direction/status vocabulary even in LOOSE.
     estab_message_operator_stage_predicate($direction, $status);
     $incidentId = (int) ($incident['active_einsatz_id'] ?? 0);
-    $requiredFunction = $status === 1 ? 'LdF' : 'A/W';
+    $requiredFunction = $status === ESTAB_MESSAGE_STATUS_LDF ? 'LdF' : 'A/W';
     $operationalActor = estab_dv_require_write_capability(
         $connection,
         $incidentId,
         $actor,
-        $status === 1 ? 'FERNMELDEBETRIEB' : 'BEFOERDERUNG'
+        $status === ESTAB_MESSAGE_STATUS_LDF ? 'FERNMELDEBETRIEB' : 'BEFOERDERUNG'
     );
     if (
         $operationalActor['funktion'] !== $requiredFunction
@@ -1546,7 +1547,7 @@ function estab_message_update_locked_operator_stage(
             // Evidence and lock ownership are one authenticated identity.
             $event['actor'] = $operationalActor;
             $incomingTbbCorrection = null;
-            if ($direction === 'E' && $status === 1) {
+            if ($direction === 'E' && $status === ESTAB_MESSAGE_STATUS_LDF) {
                 if (
                     ($event['snapshot']['incoming_transport_confirmed'] ?? null)
                     !== true
@@ -1708,7 +1709,7 @@ function estab_message_update_locked_operator_stage(
                     'reason' => $correctionReason,
                 ];
             }
-            if ($direction === 'A' && $status === 1) {
+            if ($direction === 'A' && $status === ESTAB_MESSAGE_STATUS_LDF) {
                 $remoteCallsign = estab_message_single_line_value(
                     $fields['05_gegenstelle'] ?? null,
                     128,
@@ -1891,7 +1892,7 @@ function estab_message_update_locked_operator_stage(
                         $previousRouteText;
                 }
             }
-            if ($direction === 'A' && $status === 2) {
+            if ($direction === 'A' && $status === ESTAB_MESSAGE_STATUS_TRANSPORT) {
                 $targetStatus = (int) ($fields['x00_status'] ?? 0);
                 $mediumStatement = estab_message_execute(
                     $connection,
@@ -2077,7 +2078,7 @@ function estab_message_update_locked_operator_stage(
                 }
                 if (
                     $direction === 'A'
-                    && $status === 2
+                    && $status === ESTAB_MESSAGE_STATUS_TRANSPORT
                     && (int) ($fields['x00_status'] ?? 0) === 8
                     && ($event['event_type'] ?? null) === 'aw_transported'
                 ) {
@@ -3484,7 +3485,7 @@ function estab_message_object_allowed(
     $hasViewerApproval =
         !estab_datetime_is_unset($message['15_quitdatum'] ?? null)
         && (string) ($message['15_quitzeichen'] ?? '') !== '';
-    $isPendingIncomingLead = $status === 1
+    $isPendingIncomingLead = $status === ESTAB_MESSAGE_STATUS_LDF
         && $direction === 'E'
         && estab_datetime_is_unset($message['02_zeit'] ?? null)
         && (string) ($message['02_zeichen'] ?? '') === ''
@@ -3492,7 +3493,7 @@ function estab_message_object_allowed(
         && (string) ($message['03_zeichen'] ?? '') === ''
         && !$hasViewerApproval
         && (string) ($message['x01_abschluss'] ?? 'f') === 'f';
-    $isPendingOutgoingLead = $status === 1
+    $isPendingOutgoingLead = $status === ESTAB_MESSAGE_STATUS_LDF
         && $direction === 'A'
         && estab_datetime_is_unset($message['02_zeit'] ?? null)
         && (string) ($message['02_zeichen'] ?? '') === ''
@@ -3501,7 +3502,7 @@ function estab_message_object_allowed(
         && $hasViewerApproval
         && (string) ($message['x01_abschluss'] ?? 'f') === 'f';
     $isPendingLead = $isPendingIncomingLead || $isPendingOutgoingLead;
-    $isPendingOutgoing = $status === 2
+    $isPendingOutgoing = $status === ESTAB_MESSAGE_STATUS_TRANSPORT
         && $direction === 'A'
         && !estab_datetime_is_unset($message['02_zeit'] ?? null)
         && (string) ($message['02_zeichen'] ?? '') !== ''
@@ -3511,7 +3512,7 @@ function estab_message_object_allowed(
         && (string) ($message['03_zeichen'] ?? '') === ''
         && $hasViewerApproval
         && (string) ($message['x01_abschluss'] ?? 'f') === 'f';
-    $isPendingReview = $status === 4
+    $isPendingReview = $status === ESTAB_MESSAGE_STATUS_REVIEW
         && estab_datetime_is_unset($message['15_quitdatum'] ?? null)
         && (string) ($message['15_quitzeichen'] ?? '') === ''
         && (
@@ -3528,7 +3529,7 @@ function estab_message_object_allowed(
                 && (string) ($message['03_zeichen'] ?? '') === ''
             )
         );
-    $isReturnedToAuthor = $status === 10
+    $isReturnedToAuthor = $status === ESTAB_MESSAGE_STATUS_RETURNED
         && $direction === 'A'
         && (string) ($message['14_zeichen'] ?? '') !== ''
         && (string) ($message['14_funktion'] ?? '') !== ''
@@ -3540,7 +3541,7 @@ function estab_message_object_allowed(
         && $hasViewerApproval
         && (string) ($message['x01_abschluss'] ?? 'f') === 'f';
     $isTerminalStaffRecipient = false;
-    if ($status === 8) {
+    if ($status === ESTAB_MESSAGE_STATUS_CLOSED) {
         foreach (array_keys($staffFunctions) as $staffFunction) {
             if (estab_message_is_recipient($message, $staffFunction)) {
                 $isTerminalStaffRecipient = true;
