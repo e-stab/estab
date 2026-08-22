@@ -1875,7 +1875,7 @@ foreach ($plans as $plan) {
     <span>Alle Änderungen sind einsatzgebunden und hashverkettet.</span>
   </footer>
 </main>
-<script data-estab-telecom-media-fields>
+<script<?= estab_csp_script_attribute() ?> data-estab-telecom-media-fields>
 (function () {
   'use strict';
   var media = <?= json_encode(

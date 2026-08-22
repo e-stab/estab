@@ -125,7 +125,7 @@ $navigationFrameUrl = './vorgaben.php'
     <span aria-hidden="true">←</span>
     Menü
   </button>
-  <script data-estab-mobile-workspace-navigation>
+  <script<?= estab_csp_script_attribute() ?> data-estab-mobile-workspace-navigation>
     (function () {
       var sidebar = document.querySelector('.estab-message-sidebar-frame');
       var content = document.querySelector('.estab-message-content-frame');

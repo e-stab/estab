@@ -75,7 +75,8 @@ $assert(
 
 $script = estab_list_refresh_script(10);
 $assert(
-    str_starts_with($script, '<script data-estab-list-refresh="10">')
+    str_starts_with($script, '<script nonce="')
+        && str_contains($script, ' data-estab-list-refresh="10">')
         && str_ends_with(rtrim($script), '</script>'),
     'The refresh script is not a closed script element'
 );

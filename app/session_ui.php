@@ -213,7 +213,7 @@ function estab_session_ui_activity_script(
             | JSON_THROW_ON_ERROR
     );
 
-    return '<script data-estab-activity-monitor>'
+    return '<script' . estab_csp_script_attribute() . ' data-estab-activity-monitor>'
         . '(function(){'
         . 'var endpoint=' . $activityUrl . ';'
         . 'var login=' . $loginUrl . ';'
@@ -334,7 +334,7 @@ function estab_session_ui_public_markup(
  */
 function estab_session_ui_mainframe_guard(): string
 {
-    return '<script data-estab-mainframe-guard>'
+    return '<script' . estab_csp_script_attribute() . ' data-estab-mainframe-guard>'
         . '(function(script){'
         . 'var bar=script.previousElementSibling;'
         . 'if(window.parent!==window&&window.name==="mainframe"'
@@ -355,7 +355,7 @@ function estab_session_ui_mainframe_guard(): string
  */
 function estab_session_ui_dirty_guard_script(bool $popup = false): string
 {
-    return '<script data-estab-dirty-guard>'
+    return '<script' . estab_csp_script_attribute() . ' data-estab-dirty-guard>'
         . '(function(){'
         . 'var popupContext=' . ($popup ? 'true' : 'false') . ';'
         . 'function applicationWindow(){'

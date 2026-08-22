@@ -101,6 +101,7 @@ register generate_notification_tones "$php_bin" \
 for test_name in \
     runtime_compatibility \
     config_security \
+    csp_nonce_security \
     pipeline_workflow_contract \
     third_party_notice_contract \
     date_compatibility \

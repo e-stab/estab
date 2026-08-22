@@ -109,7 +109,7 @@ function estab_incident_ui_datetime(mixed $value): string
 /** Disable only forms explicitly marked as operational when fail-closed. */
 function estab_incident_ui_input_guard_script(): string
 {
-    return '<script data-estab-incident-input-guard>'
+    return '<script' . estab_csp_script_attribute() . ' data-estab-incident-input-guard>'
         . '(function(){'
         . 'function lock(){'
         . 'var forms=document.querySelectorAll('

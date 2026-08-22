@@ -1544,7 +1544,8 @@ function estab_sidebar_status_refresh_script(
             | JSON_THROW_ON_ERROR
     );
 
-    return '<script data-estab-sidebar-refresh data-refresh-seconds="'
+    return '<script' . estab_csp_script_attribute()
+        . ' data-estab-sidebar-refresh data-refresh-seconds="'
         . $intervalSeconds . '" data-timeout-ms="'
         . $timeoutMilliseconds . '">'
         . '(function(){'

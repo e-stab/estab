@@ -8,6 +8,7 @@
  * incrementally and centralises safe runtime defaults.
  */
 
+require_once __DIR__ . '/csp.php';
 require_once __DIR__ . '/legacy_mysql.php';
 require_once __DIR__ . '/legacy_php.php';
 require_once __DIR__ . '/datetime.php';
@@ -15,6 +16,10 @@ require_once __DIR__ . '/message_priority.php';
 require_once __DIR__ . '/function_label.php';
 
 date_default_timezone_set(getenv('TZ') ?: 'Europe/Berlin');
+
+// Die Richtlinie traegt eine Nonce je Anfrage und muss deshalb hier
+// entstehen, nicht im Webserver.
+estab_csp_send_header();
 
 ini_set('display_errors', '0');
 ini_set('log_errors', '1');

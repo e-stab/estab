@@ -31,7 +31,7 @@ require_once __DIR__ . "/../app/session_ui.php";
     echo "<head><meta http-equiv=\"content-type\" content=\"text/html; charset=UTF-8\" />\n";
     echo "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n";
 
-    echo "<script language=\"JavaScript\">\n";
+    echo "<script".estab_csp_script_attribute()." language=\"JavaScript\">\n";
     echo "<!--\n";
     echo "function FramesVeraendern(){";
     echo "for(var i=0;i+1<arguments.length;i+=2){";
@@ -45,7 +45,7 @@ require_once __DIR__ . "/../app/session_ui.php";
     echo "<meta http-equiv=\"Content-Type\" content=\"text/html; charset=UTF-8\">\n";
    switch ($art){
      case "N":
-        echo"<script type=\"text/javascript\">";
+        echo"<script".estab_csp_script_attribute()." type=\"text/javascript\">";
         echo "function FensterOeffnen (Adresse) {MeinFenster = window.open(Adresse, \"Zweitfenster\", \"width=700,height=650,left=100,top=100,menubar=no,location=no,resizable=yes,scrollbars=yes,status=no,toolbar=no\"); if (MeinFenster) { MeinFenster.focus(); }}";
         echo "</script>";
 
@@ -816,7 +816,7 @@ bersichtlich dargestellt werden.
   function errorwindow ($lokation, $parameter){
     $timestr = date ("His");
     echo "<!--  fehlermeldung ".$timestr."   -->";
-    echo "<script type=\"text/javascript\">\n";
+    echo "<script".estab_csp_script_attribute()." type=\"text/javascript\">\n";
     echo "var Neufenster = window.open(\"./info.php?sub=$lokation&info=".$parameter."\",\"AnderesFenster\",\"width=640,height=480, resizable=yes, scrollbars=yes\");\n";
     echo "</script>\n";
   }
@@ -875,7 +875,8 @@ bersichtlich dargestellt werden.
       return "";
     }
     $milliseconds = $interval * 1000;
-    return "<script data-estab-list-refresh=\"".$interval."\">\n".
+    return "<script".estab_csp_script_attribute().
+      " data-estab-list-refresh=\"".$interval."\">\n".
       "(function(){\n".
       "var key='estab-list-scroll:'+window.location.pathname".
       "+window.location.search;\n".

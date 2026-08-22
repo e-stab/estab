@@ -628,8 +628,8 @@ class nachrichten4fach {
       if ($this->messageSuggestionField === "") {
         return;
       }
+      echo '<script' . estab_csp_script_attribute() . ' data-estab-message-suggestion-picker>';
       echo <<<'HTML'
-<script data-estab-message-suggestion-picker>
 (function () {
   "use strict";
   var inputs = document.querySelectorAll(

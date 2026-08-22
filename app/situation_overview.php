@@ -678,7 +678,7 @@ function estab_situation_markup(array $snapshot): string
  */
 function estab_situation_shortcut_script(): string
 {
-    return '<script data-estab-situation-shortcuts>'
+    return '<script' . estab_csp_script_attribute() . ' data-estab-situation-shortcuts>'
         . '(function(){'
         . 'document.addEventListener("keydown",function(event){'
         . 'if(event.defaultPrevented||event.altKey||event.ctrlKey'

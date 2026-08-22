@@ -444,8 +444,8 @@ trait EstabOfficialMessageFormView
             echo '</div>';
         }
         if ($hasAttachmentFeedback || $hasEmbeddedPdf || $hasEmbeddedEmail) {
+            echo '<script' . estab_csp_script_attribute() . ' data-estab-attachment-presentation>';
             echo <<<'HTML'
-<script data-estab-attachment-presentation>
 (function () {
   "use strict";
   document.querySelectorAll(
@@ -470,8 +470,8 @@ trait EstabOfficialMessageFormView
 HTML;
         }
         if ($editable && is_string($directActionToken)) {
+            echo '<script' . estab_csp_script_attribute() . ' data-estab-attachment-upload-limit>';
             echo <<<'HTML'
-<script data-estab-attachment-upload-limit>
 (function () {
   "use strict";
   var input = document.getElementById("message-attachment-upload");
@@ -1826,8 +1826,10 @@ HTML;
                 . '"';
         }
         echo '>';
+        // Ein Ereignisattribut im Markup laeuft unter der Richtlinie nicht
+        // mehr; der Knopf traegt seine Absicht als Datenmerkmal.
         echo '<button type="button" class="estab-button estab-button-secondary" '
-            . 'onclick="window.print()">Drucken</button>';
+            . 'data-estab-print>Drucken</button>';
         switch ($this->task) {
             case 'Stab_lesen':
                 echo '<button type="submit" name="gelesen_x" value="1" '
@@ -2163,8 +2165,8 @@ HTML;
 
     function official_message_help_script(): void
     {
+        echo '<script' . estab_csp_script_attribute() . ' data-estab-official-form-help>';
         echo <<<'HTML'
-<script data-estab-official-form-help>
 (function () {
   "use strict";
   var buttons = Array.prototype.slice.call(
@@ -2493,10 +2495,17 @@ HTML;
      */
     function official_message_guidance_script(): void
     {
+        echo '<script' . estab_csp_script_attribute() . ' data-estab-official-form-focus>';
         echo <<<'HTML'
-<script data-estab-official-form-focus>
 (function () {
   "use strict";
+  document.addEventListener("click", function (event) {
+    var target = event.target;
+    if (target && typeof target.closest === "function"
+        && target.closest("[data-estab-print]")) {
+      window.print();
+    }
+  });
   if (window.location.hash) {
     return;
   }

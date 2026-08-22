@@ -507,7 +507,7 @@ $refreshScript = $selectedIdentity === null
   </div>
   <?= estab_sidebar_audio_markup($soundUrl) ?>
   <?= $refreshScript ?>
-  <script data-estab-sidebar-workspace-link>
+  <script<?= estab_csp_script_attribute() ?> data-estab-sidebar-workspace-link>
     document.addEventListener('submit', function (event) {
       if (
         event.target instanceof HTMLFormElement

@@ -478,7 +478,7 @@ try {
       <a href="incidents.php">Einsätze verwalten</a>
     </footer>
   </main>
-  <script>
+  <script<?= estab_csp_script_attribute() ?>>
   (() => {
     const incident = document.getElementById('incident-export-incident');
     const scope = document.getElementById('incident-export-logbook-scope');

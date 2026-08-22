@@ -173,7 +173,11 @@ $assert(
     'full session bar is not suppressed in the composed main frame'
 );
 $assert(
-    substr_count($markup, '<script data-estab-dirty-guard>') === 1
+    substr_count($markup, ' data-estab-dirty-guard>') === 1
+        // Jedes eingebettete Skript traegt die Nonce der Anfrage; ohne sie
+        // fuehrt der Browser es unter der Richtlinie nicht mehr aus.
+        && substr_count($markup, '<script')
+            === substr_count($markup, '<script nonce="')
         && str_contains($markup, 'form[data-estab-dirty-guard]')
         && str_contains($markup, 'data-estab-dirty-initial')
         && str_contains($markup, 'event.submitter')

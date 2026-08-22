@@ -94,10 +94,19 @@ if ($method === 'HEAD') {
         <button
           class="estab-button estab-button-primary"
           type="button"
-          onclick="window.close()">
+          data-estab-window-close>
           Problemfenster schließen
         </button>
       </div>
+      <script<?= estab_csp_script_attribute() ?>>
+      document.addEventListener("click", function (event) {
+        var target = event.target;
+        if (target && typeof target.closest === "function"
+            && target.closest("[data-estab-window-close]")) {
+          window.close();
+        }
+      });
+      </script>
     </section>
     <footer class="estab-tool-footer">
       <span>Bei wiederholten Fehlern den Zeitpunkt und die ausgeführte Aktion

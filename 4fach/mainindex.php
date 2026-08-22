@@ -1637,7 +1637,7 @@ if (
     echo "<p>Der gewählte eStab-Bereich wird geöffnet.</p>";
     echo "<p><a href=\"".estab_auth_html ($destinationUrl).
          "\" target=\"_top\">Jetzt öffnen</a></p>";
-    echo "<script>window.top.location.replace(".$encodedUrl.");</script>";
+    echo "<script".estab_csp_script_attribute().">window.top.location.replace(".$encodedUrl.");</script>";
     echo "</body></html>";
     exit;
   }

@@ -69,6 +69,15 @@ if ($method === 'HEAD') {
 // nosemgrep: php.lang.security.injection.echoed-request.echoed-request
 echo $body;
 ?>
-<p><button type="button" onclick="window.close()">Hilfefenster schließen</button></p>
+<p><button type="button" data-estab-window-close>Hilfefenster schließen</button></p>
+<script<?= estab_csp_script_attribute() ?>>
+document.addEventListener("click", function (event) {
+  var target = event.target;
+  if (target && typeof target.closest === "function"
+      && target.closest("[data-estab-window-close]")) {
+    window.close();
+  }
+});
+</script>
 </body>
 </html>

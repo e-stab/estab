@@ -25,8 +25,11 @@ $assert = static function (bool $condition, string $message) use (&$assertions):
 
 $script = estab_session_ui_dirty_guard_script();
 $assert(
-    $script !== '' && str_starts_with($script, '<script data-estab-dirty-guard>'),
-    'The guard against unsaved input is no longer emitted'
+    $script !== ''
+        && str_starts_with($script, '<script nonce="')
+        && str_contains($script, ' data-estab-dirty-guard>'),
+    'The guard against unsaved input is no longer emitted, or it runs without'
+        . ' the nonce of its request'
 );
 
 // The guard has to know both ways out of a form.

@@ -62,7 +62,7 @@ $documents = require __DIR__ . '/documents.php';
       </nav>
     </main>
   </div>
-  <script data-estab-bos-workspace-link>
+  <script<?= estab_csp_script_attribute() ?> data-estab-bos-workspace-link>
     (function () {
       var links = Array.from(
         document.querySelectorAll('[data-estab-bos-document-link]')
