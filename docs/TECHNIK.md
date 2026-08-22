@@ -59,6 +59,34 @@ Jeder Endpunkt prüft seine Berechtigung unabhängig von der Navigation:
 
 Die Sidebar blendet unzulässige Ziele aus, ist aber keine Sicherheitsgrenze.
 
+### Content-Security-Policy
+
+Jede von PHP erzeugte Seite sendet ihre eigene Richtlinie mit einer Nonce je
+Anfrage (`app/csp.php`, gesendet aus `app/bootstrap.php`). Ein Webserver kann
+keine unratbare Nonce erzeugen, deshalb entsteht sie in der Anwendung.
+
+Jedes eingebettete Skript muss `estab_csp_script_attribute()` tragen:
+
+```php
+echo '<script' . estab_csp_script_attribute() . ' data-estab-beispiel>';
+```
+
+Ereignisattribute im Markup (`onclick=` und Verwandte) laufen unter dieser
+Richtlinie nicht mehr; eine Nonce deckt sie nicht ab. Stattdessen trägt das
+Bedienelement ein Datenmerkmal, und ein Skript bindet den Zuhörer.
+
+`docker/apache/estab.conf` setzt die Richtlinie nur für Antworten, die noch
+keine haben: statische Auslieferungen und Apache-eigene Fehlerseiten. Dort gilt
+`script-src 'none'`. Die Bedingung `expr=-z %{resp:Content-Security-Policy}`
+ist notwendig -- ohne sie hängt der Webserver eine zweite Richtlinie an die
+PHP-Antwort, und mehrere Richtlinien gelten gemeinsam.
+
+`style-src` behält `'unsafe-inline'`: die Listen färben eine Zeile nach der
+Durchschrift, die die lesende Funktion erreicht. Das ist Datum, nicht Markup,
+und Stilattribute lassen sich mit einer Nonce ohnehin nicht freigeben.
+
+`tests/php/csp_nonce_security.php` hält all das fest.
+
 ## Dateien und PDF
 
 Uploads werden nach Größe, Endung, MIME-Typ und Integrität geprüft. E-Mail-
