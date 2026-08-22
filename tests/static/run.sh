@@ -116,6 +116,7 @@ for test_name in \
     audio_asset_security \
     tool_ui_security \
     root_menu_security \
+    situation_overview \
     ui_encoding_security \
     bos_info_ui_security \
     handbook_ui_security \

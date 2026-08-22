@@ -13,6 +13,7 @@ if (session_status() !== PHP_SESSION_ACTIVE) {
 estab_session_ui_start($_SESSION);
 $rootIdentity = estab_auth_session_identity($_SESSION);
 $authenticated = $rootIdentity !== null;
+$situation = null;
 $registrationAvailable = false;
 $registrationAllowed = false;
 $registrationConnection = null;
@@ -59,6 +60,28 @@ if ($authenticated) {
             $organisationLabel = 'Führungsstellenname nicht festgelegt';
         }
     }
+    // Das Lagebild tritt an die Stelle des Linkmenues, solange dieses Konto
+    // gerade operativ lesen darf. Ohne aktiven Einsatz, ohne gueltige
+    // Funktion und bei jeder anderen Anfragemethode bleibt es bei der
+    // bisherigen Einstiegsseite.
+    if (
+        ($incidentState['active'] ?? false) === true
+        && in_array(
+            $_SERVER['REQUEST_METHOD'] ?? 'GET',
+            ['GET', 'HEAD'],
+            true
+        )
+    ) {
+        require_once __DIR__ . '/app/situation_overview.php';
+        include __DIR__ . '/4fcfg/dbcfg.inc.php';
+        $situation = estab_situation_entry_snapshot(
+            $rootIdentity,
+            (array) ($conf_4f_db ?? []),
+            (string) ($conf_4f_tbl['nachrichten'] ?? ''),
+            (string) ($conf_4f_tbl['usrtblprefix'] ?? ''),
+            (bool) ($conf_4f['si_in_out'] ?? false)
+        );
+    }
 }
 $organisation = estab_auth_html($organisationLabel);
 $background = estab_auth_html((string) $conf_menue['background_color']);
@@ -83,14 +106,17 @@ $applicationUrl = estab_auth_html(estab_application_url('4fach/index.php'));
   <link rel="stylesheet" href="./estab-ui.css">
   <title><?= $pageTitle ?></title>
 </head>
-<body class="estab-root-page" style="background-color:<?= $background ?>">
+<body class="estab-root-page<?= $situation === null ? '' : ' estab-root-page-situation' ?>" style="background-color:<?= $background ?>">
   <header class="estab-root-header" style="--estab-menu-background:<?= $foreground ?>">
     <img src="<?= $leftSymbol ?>" alt="Taktisches Zeichen Einsatzleitung">
     <p><?= $organisation ?></p>
     <img src="<?= $rightSymbol ?>" alt="Taktisches Zeichen Information und Kommunikation">
   </header>
 
-  <main class="estab-root-main">
+  <main class="estab-root-main<?= $situation === null ? '' : ' estab-root-main-situation' ?>">
+<?php if ($situation !== null): ?>
+    <?= estab_situation_markup($situation) ?>
+<?php else: ?>
     <section class="estab-login-cta" aria-labelledby="estab-login-title">
 <?php if (!$authenticated): ?>
       <h1 id="estab-login-title">eStab-Anmeldung</h1>
@@ -121,10 +147,11 @@ $applicationUrl = estab_auth_html(estab_application_url('4fach/index.php'));
 <?php endif; ?>
       <p><small>Die Administration verwendet einen separaten technischen Zugang und ist kein eStab-Funktionskonto.</small></p>
     </section>
+<?php endif; ?>
 
     <nav class="estab-menu-section" aria-labelledby="estab-modules-title">
       <h2 id="estab-modules-title">Bereiche</h2>
-      <?= estab_root_menu_markup($menue, $authenticated) ?>
+      <?= estab_root_menu_markup($menue, $authenticated, $situation !== null) ?>
     </nav>
 
 <?php if (showmenue): ?>
@@ -134,5 +161,8 @@ $applicationUrl = estab_auth_html(estab_application_url('4fach/index.php'));
     </nav>
 <?php endif; ?>
   </main>
+<?php if ($situation !== null): ?>
+  <?= estab_situation_shortcut_script() ?>
+<?php endif; ?>
 </body>
 </html>

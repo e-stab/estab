@@ -7939,6 +7939,294 @@ a.estab-message-list-chip:hover {
 }
 
 /* ---------------------------------------------------------------------------
+   Lagebild der Einstiegsseite
+
+   Wer die Führungsstelle betritt, soll in wenigen Sekunden sehen, welcher
+   Einsatz läuft, was auf ihn wartet, ob Vorrangverkehr offen liegt und welche
+   Station des Nachrichtenlaufs unbesetzt ist. Das Lagebild ist dafür eine
+   Fläche und keine Seite: die Seite selbst scrollt nicht, ihre beiden Spalten
+   scrollen bei Bedarf in sich.
+   --------------------------------------------------------------------------- */
+.estab-root-page-situation {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+}
+
+.estab-root-main-situation {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    gap: 0.6rem;
+    max-width: 82rem;
+    min-height: 0;
+    padding: 0.6rem 1rem 0.8rem;
+    width: 100%;
+}
+
+/* Das Lagebild nennt Einsatz, Berechtigungsmodus und Beginn selbst und dazu
+   die Laufzeit. Nur die aktive Anzeige der gemeinsamen Kopfleiste weicht ihm;
+   jede Meldung eines gesperrten Betriebs bleibt sichtbar. */
+.estab-root-page-situation [data-estab-incident-state="active"] {
+    display: none;
+}
+
+.estab-situation {
+    box-sizing: border-box;
+    color: #172033;
+    display: grid;
+    font-family: Arial, Helvetica, sans-serif;
+    gap: 0.6rem;
+    grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+    min-height: 0;
+}
+
+.estab-situation-incident {
+    align-items: baseline;
+    background: #10314f;
+    border-radius: 8px;
+    color: #f2f7fc;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.15rem 0.9rem;
+    grid-column: 1 / -1;
+    line-height: 1.3;
+    padding: 0.45rem 0.75rem;
+}
+
+.estab-situation-post {
+    font-size: 1.05rem;
+}
+
+.estab-situation-mode {
+    background: #f2f7fc;
+    border-radius: 999px;
+    color: #10314f;
+    font-weight: 700;
+    padding: 0.1rem 0.5rem;
+}
+
+.estab-situation-code,
+.estab-situation-since,
+.estab-situation-place {
+    font-size: 0.88rem;
+}
+
+.estab-situation-work,
+.estab-situation-run {
+    background: #ffffff;
+    border: 1px solid #8da2bd;
+    border-radius: 10px;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 0.7rem 0.8rem;
+}
+
+.estab-situation-heading {
+    align-items: baseline;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0 0.6rem;
+}
+
+.estab-situation-heading h2 {
+    font-size: 1.05rem;
+    margin: 0;
+}
+
+.estab-situation-heading p {
+    color: #3b4a5d;
+    font-size: 0.85rem;
+    margin: 0;
+}
+
+.estab-situation-step {
+    background: #eef4fb;
+    border-left: 5px solid #6f9ecd;
+    font-size: 0.95rem;
+    font-weight: 700;
+    line-height: 1.3;
+    margin: 0;
+    padding: 0.4rem 0.6rem;
+}
+
+.estab-situation-step[data-estab-situation-step="vorrang"] {
+    background: #fff3e0;
+    border-left-color: #b8620d;
+    color: #6b3400;
+}
+
+.estab-situation-step[data-estab-situation-step="ruhig"] {
+    background: #edf5ef;
+    border-left-color: #4f8b68;
+    color: #1e4a31;
+}
+
+.estab-situation-step[data-estab-situation-step="unbekannt"] {
+    background: #f6e9ea;
+    border-left-color: #a03a44;
+    color: #6d1620;
+}
+
+.estab-situation-enter {
+    align-items: center;
+    display: flex;
+    gap: 0.6rem;
+    justify-content: center;
+    text-align: center;
+}
+
+.estab-situation-key,
+.estab-menu-shortcut {
+    background: #ffffff;
+    border: 1px solid #45627f;
+    border-radius: 4px;
+    box-shadow: 0 1px 0 #45627f;
+    color: #183454;
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 0.72rem;
+    font-weight: 700;
+    padding: 0.05rem 0.35rem;
+}
+
+.estab-menu-shortcut {
+    margin-right: 0.4rem;
+}
+
+.estab-situation-queues {
+    display: grid;
+    gap: 0.4rem;
+    grid-template-columns: repeat(auto-fit, minmax(6.5rem, 1fr));
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.estab-situation-queue {
+    align-items: baseline;
+    background: #f1f5fa;
+    border: 1px solid #aebed0;
+    border-radius: 8px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0 0.4rem;
+    min-width: 0;
+    padding: 0.3rem 0.5rem;
+}
+
+.estab-situation-queue-count {
+    font-size: 1.5rem;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.1;
+}
+
+.estab-situation-queue-label {
+    font-size: 0.82rem;
+}
+
+.estab-situation-queue-function {
+    color: #3b4a5d;
+    flex-basis: 100%;
+    font-size: 0.72rem;
+    font-weight: 700;
+}
+
+/* Wartende Arbeit fällt ohne Farbe allein auf: die Kachel bekommt zusätzlich
+   eine kräftige Kante. */
+.estab-situation-queue-has-work {
+    background: #fff5e2;
+    border-color: #b8620d;
+    box-shadow: inset 4px 0 0 #b8620d;
+}
+
+/* Eine leere Warteschlange bleibt lesbar, tritt aber zurück. */
+.estab-situation-queue-empty {
+    background: #f7f9fc;
+}
+
+.estab-situation-queue-unavailable {
+    background: #f4f5f6;
+    border-style: dashed;
+}
+
+.estab-situation-stations {
+    display: grid;
+    gap: 0.3rem;
+    grid-template-columns: repeat(auto-fit, minmax(5rem, 1fr));
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.estab-situation-station {
+    background: #f1f5fa;
+    border: 1px solid #aebed0;
+    border-radius: 6px;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    padding: 0.2rem 0.4rem;
+}
+
+.estab-situation-station-name {
+    font-size: 0.85rem;
+    font-weight: 700;
+}
+
+.estab-situation-station-state {
+    font-size: 0.72rem;
+}
+
+.estab-situation-station-staffed {
+    background: #eaf3ec;
+    border-color: #79ac90;
+    color: #1e4a31;
+}
+
+.estab-situation-station-open {
+    background: #fdecec;
+    border-color: #b52a3a;
+    color: #6d1620;
+}
+
+.estab-situation-station-note,
+.estab-situation-empty {
+    color: #3b4a5d;
+    font-size: 0.78rem;
+    line-height: 1.3;
+    margin: 0;
+}
+
+.estab-situation-facts {
+    display: grid;
+    gap: 0.3rem;
+    grid-template-columns: repeat(auto-fit, minmax(7rem, 1fr));
+    margin: 0;
+}
+
+.estab-situation-facts dt {
+    color: #3b4a5d;
+    font-size: 0.72rem;
+}
+
+.estab-situation-facts dd {
+    font-size: 1.05rem;
+    font-weight: 700;
+    margin: 0;
+}
+
+.estab-situation-hint {
+    color: #3b4a5d;
+    font-size: 0.75rem;
+    grid-column: 1 / -1;
+    margin: 0;
+}
+
+/* ---------------------------------------------------------------------------
    Dichte auf flachen Bildschirmen
 
    Auf den Geraeten, auf denen eine Fuehrungsstelle arbeitet, ist nicht die
@@ -7987,6 +8275,26 @@ a.estab-message-list-chip:hover {
 
     .estab-tool-shell {
         padding: 0.7rem 1rem 1.5rem;
+    }
+
+    .estab-root-main-situation {
+        gap: 0.45rem;
+        padding: 0.45rem 0.8rem 0.6rem;
+    }
+
+    .estab-situation {
+        gap: 0.45rem;
+    }
+
+    .estab-situation-work,
+    .estab-situation-run {
+        gap: 0.4rem;
+        padding: 0.5rem 0.6rem;
+    }
+
+    .estab-root-page-situation .estab-root-header {
+        margin-top: 0.5rem;
+        padding: 0.4rem 0.75rem;
     }
 
     .estab-tool-panel {
@@ -8056,6 +8364,85 @@ a.estab-message-list-chip:hover {
     }
 
     .estab-sidebar-section-heading p {
+        display: none;
+    }
+
+    .estab-root-main-situation {
+        gap: 0.35rem;
+        padding: 0.35rem 0.7rem 0.5rem;
+    }
+
+    .estab-situation {
+        gap: 0.35rem;
+    }
+
+    .estab-situation-work,
+    .estab-situation-run {
+        gap: 0.3rem;
+        padding: 0.4rem 0.5rem;
+    }
+
+    .estab-situation-incident {
+        padding: 0.3rem 0.6rem;
+    }
+
+    .estab-situation-queue-count {
+        font-size: 1.3rem;
+    }
+
+    .estab-situation-hint {
+        font-size: 0.7rem;
+    }
+
+    /* Die Kacheln der Bereiche werden zur Leiste: Symbol und Titel bleiben,
+       der erklärende Satz weicht dem Lagebild. */
+    .estab-root-page-situation .estab-root-header {
+        margin-top: 0.3rem;
+        padding: 0.3rem 0.6rem;
+    }
+
+    .estab-root-page-situation .estab-root-header p {
+        font-size: clamp(1rem, 2.2vw, 1.4rem);
+    }
+
+    .estab-root-page-situation .estab-root-header img {
+        max-height: 2.4rem;
+        width: auto;
+    }
+
+    .estab-root-page-situation .estab-session-bar {
+        padding: 0.3rem 0.6rem;
+    }
+
+    .estab-root-page-situation .estab-menu-section {
+        margin: 0.2rem auto;
+    }
+
+    .estab-root-page-situation .estab-menu-section h2 {
+        font-size: 1rem;
+        margin: 0 0 0.3rem;
+    }
+
+    .estab-root-page-situation .estab-root-menu {
+        gap: 0.4rem;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+
+    .estab-root-page-situation .estab-menu-link {
+        gap: 0.5rem;
+        grid-template-columns: 2.2rem minmax(0, 1fr);
+        padding: 0.35rem 0.5rem;
+    }
+
+    .estab-root-page-situation .estab-menu-icon img {
+        max-height: 2rem;
+    }
+
+    .estab-root-page-situation .estab-menu-title {
+        font-size: 0.85rem;
+    }
+
+    .estab-root-page-situation .estab-menu-description {
         display: none;
     }
 
