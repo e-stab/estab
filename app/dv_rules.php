@@ -96,6 +96,14 @@ function estab_dv_rules(): array
                 . 'mit der Aushändigung der eingegangenen Nachricht ergänzt und '
                 . 'enthält keine anwendungsinternen Kennungen.',
         ],
+        'NV-GESPRAECHSNOTIZ-LAUFWEG' => [
+            'source' => ESTAB_DV_SOURCE_UNTERLAGE,
+            'reference' => 'Feld 12, Gesprächsnotiz',
+            'requirement' => 'Eine Gesprächsnotiz hält ein bereits geführtes '
+                . 'Gespräch fest. Sie durchläuft die Sichtung und ist damit '
+                . 'abgeschlossen; eine Disposition und eine Beförderung finden '
+                . 'nicht statt.',
+        ],
         'FUEST-KLEIN-BEFOERDERUNG' => [
             'source' => ESTAB_DV_SOURCE_DV_1_101,
             'reference' => 'Führungsstelle ohne Stab',

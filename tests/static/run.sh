@@ -151,6 +151,7 @@ for test_name in \
     ldf_validation_security \
     message_review_recipient_security \
     message_outgoing_recipient_security \
+    conversation_note_route \
     ldf_return_security \
     ldf_ui_flow_security \
     exercise_leadership_view_security \

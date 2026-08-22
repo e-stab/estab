@@ -1973,6 +1973,9 @@ function check_and_save ($data, $activeCommandPostName, $expectedIncidentId){
        $isFormalReturn =
          isset ($data ["zurueckweisen_x"])
          || isset ($data ["zurueckweisen_y"]);
+       // Die Art steht unveraenderlich am Datensatz, nicht im Browser.
+       $isConversationNote =
+         (string) ($reviewMessage ["11_gesprnotiz"] ?? "f") === "t";
        if ($isFormalReturn && $reviewDirection !== "A") {
          throw new InvalidArgumentException (
            "Nur Ausgangsnachrichten können formal zurückgegeben werden"
@@ -2085,10 +2088,20 @@ function check_and_save ($data, $activeCommandPostName, $expectedIncidentId){
          ));
          $reviewFields ["x00_status"] = 8;
          $reviewFields ["x01_abschluss"] = "t";
-       } else {
+       } elseif ($isFormalReturn) {
          // Outgoing review is formal only: address, author mark and function.
          // Neither content nor recipient routing is accepted from the browser.
-         $reviewFields ["x00_status"] = $isFormalReturn ? 10 : 1;
+         $reviewFields ["x00_status"] = 10;
+         $reviewFields ["x01_abschluss"] = "f";
+       } elseif ($isConversationNote) {
+         // Eine Gespraechsnotiz dokumentiert ein bereits gefuehrtes Gespraech.
+         // Es gibt nichts zu disponieren und nichts zu befoerdern: mit der
+         // Sichtung ist der Nachweis abgeschlossen. LdF und A/W sehen sie
+         // deshalb nie in ihrer Warteschlange.
+         $reviewFields ["x00_status"] = 8;
+         $reviewFields ["x01_abschluss"] = "t";
+       } else {
+         $reviewFields ["x00_status"] = 1;
          $reviewFields ["x01_abschluss"] = "f";
        }
 
@@ -2100,7 +2113,11 @@ function check_and_save ($data, $activeCommandPostName, $expectedIncidentId){
          array (
            "event_type" => $reviewDirection === "E"
              ? "incoming_routed"
-             : ($isFormalReturn ? "si_returned" : "si_approved"),
+             : ($isFormalReturn
+               ? "si_returned"
+               : ($isConversationNote
+                 ? "conversation_note_closed"
+                 : "si_approved")),
            "actor" => $messageActor,
            "from_status" => 4,
            "to_status" => (int) $reviewFields ["x00_status"],

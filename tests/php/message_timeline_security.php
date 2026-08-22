@@ -248,10 +248,43 @@ $assert(
         && $conversation['visits'][0]['duration_seconds'] === null
         && $conversation['visits'][1]['station'] === 'review'
         && $conversation['visits'][1]['duration_seconds'] === 90
-        && array_column($conversation['future'], 'station') === [
-            'ldf', 'telecommunications', 'completed',
-        ],
-    'Conversation-note duration used occurred_at or invented draft time'
+        // Eine Gesprächsnotiz dokumentiert ein bereits geführtes Gespräch.
+        // Nach der Sichtung ist der Nachweis abgeschlossen; Disposition und
+        // Beförderung kommen in ihrem Laufweg nicht vor.
+        && array_column($conversation['future'], 'station') === ['completed'],
+    'Conversation-note duration or short route is incorrect'
+);
+
+// Die abgeschlossene Gesprächsnotiz endet beim Sichter, nicht beim Fernmelder.
+$closedConversation = estab_message_timeline_build(
+    ['04_richtung' => 'A', '11_gesprnotiz' => 't', 'x00_status' => 8],
+    [
+        $event(
+            31,
+            'conversation_note_created',
+            null,
+            4,
+            '2026-08-02 13:00:00.000000',
+            [],
+            '1990-01-01 00:00:00.000000'
+        ),
+        $event(
+            32,
+            'conversation_note_closed',
+            4,
+            8,
+            '2026-08-02 13:05:00.000000'
+        ),
+    ],
+    '2026-08-02 13:10:00.000000'
+);
+$assert(
+    $closedConversation['kind'] === 'conversation-note'
+        && array_column($closedConversation['visits'], 'station')
+            === ['author', 'review', 'completed']
+        && $closedConversation['future'] === []
+        && $closedConversation['visits'][1]['duration_seconds'] === 300,
+    'A closed conversation note does not end at the Sichter'
 );
 
 $legacy = estab_message_timeline_build(

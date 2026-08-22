@@ -164,7 +164,7 @@ function estab_list_page_window ($resultCount) {
  * is used to keep the page control on the view the operator is looking at.
  */
 function estab_list_tracking_view () {
-  $request = is_array ($_GET ?? null) ? $_GET : array ();
+  $request = $_GET;
   foreach (array ("nwalle", "nwe", "nwa") as $view) {
     if (array_key_exists ($view, $request)) { return $view; }
   }
@@ -182,7 +182,7 @@ function estab_list_tracking_filters ($prefix) {
   $filters = estab_message_list_default_filters ();
   $filters ["sort"] = "number_asc";
   $request = array ();
-  $source = is_array ($_GET ?? null) ? $_GET : array ();
+  $source = $_GET;
   foreach (array ("page", "page_size") as $field) {
     if (array_key_exists ($prefix.$field, $source)) {
       $request [$prefix.$field] = $source [$prefix.$field];
@@ -199,7 +199,7 @@ function estab_list_tracking_filters ($prefix) {
 /** Render the page control of one Nachweisung without losing its sibling. */
 function estab_list_tracking_pager (array $filters, array $pageWindow, $prefix) {
   $hidden = array (estab_list_tracking_view () => "1");
-  $source = is_array ($_GET ?? null) ? $_GET : array ();
+  $source = $_GET;
   foreach (array ("nwe_", "nwa_") as $sibling) {
     if ($sibling === $prefix) { continue; }
     $page = $source [$sibling."page"] ?? null;
@@ -278,6 +278,7 @@ function estab_list_combined_tracking_rows (
  *
  * @return array{
  *   incident:array<string,mixed>,
+ *   page_window:array<string,mixed>,
  *   rows:list<array<string,mixed>>
  * }
  */

@@ -2483,7 +2483,13 @@ function estab_message_update_pending_review(
                 // handed out. The TBB is append-only, so the receipt column of
                 // the intake row can never be filled in afterwards: the
                 // handover receives its own entry inside this transaction.
-                if ((int) ($fields['x00_status'] ?? 0) === 8) {
+                // Nur ein Eingang wird ausgehaendigt. Eine Gespraechsnotiz
+                // schliesst mit der Sichtung ab, ohne dass die
+                // Fernmeldebetriebsstelle sie je in der Hand hatte.
+                if (
+                    (int) ($fields['x00_status'] ?? 0) === 8
+                    && $handedOverTo !== ''
+                ) {
                     $occurredAt = is_string($event['occurred_at'] ?? null)
                         ? (string) $event['occurred_at']
                         : date('Y-m-d H:i:s');
