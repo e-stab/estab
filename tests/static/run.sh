@@ -130,6 +130,7 @@ for test_name in \
     message_feedback_loop_security \
     list_contrast_security \
     list_style_coverage_security \
+    stylesheet_integrity_security \
     viewport_density_security \
     legacy_database_disclosure_security \
     message_timeline_security \
@@ -139,6 +140,7 @@ for test_name in \
     nv_time_format_security \
     official_message_form_ui_security \
     official_message_field_numbering \
+    official_message_guidance \
     official_message_desired_medium_security \
     message_print_annex_security \
     message_priority_security \

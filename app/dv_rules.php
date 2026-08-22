@@ -35,6 +35,14 @@ function estab_dv_rules(): array
                 . 'und die Nummer der zugehörigen Ausfüllhilfe sind gleich, '
                 . 'und jedes der zwanzig Felder trägt eine Nummer.',
         ],
+        'NV-PFLICHTFELDER' => [
+            'source' => ESTAB_DV_SOURCE_AUSFUELLANLEITUNG,
+            'reference' => 'Felder 10 und 13 bis 17',
+            'requirement' => 'Die Ausfüllanleitung bezeichnet Felder, die '
+                . 'immer auszufüllen sind. Der Vordruck weist die Felder aus, '
+                . 'die der jeweilige Arbeitsschritt verlangt, und benennt bei '
+                . 'einer Rückweisung das Feld und den Grund.',
+        ],
         'NV-07-TKM-WUNSCH' => [
             'source' => ESTAB_DV_SOURCE_AUSFUELLANLEITUNG,
             'reference' => 'Feld 7',

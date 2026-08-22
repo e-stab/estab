@@ -667,12 +667,437 @@ HTML;
         echo '</span></span>';
     }
 
+    /** @var array<string,bool> Felder, die im Raster eine Marke tragen. */
+    public array $officialMessageMarkedFields = [];
+
+    /**
+     * Feldnummer, Feldname, kurze Marke und voller Grund je geprüftem Feld.
+     *
+     * 4fach/vali_data.php reicht nur ein Ja oder Nein bis zum Vordruck durch.
+     * Deshalb trug jedes Feld dieselbe Marke "Eingabe prüfen", und wer sie
+     * las, musste den Grund raten. Diese Tabelle sagt, was dort tatsächlich
+     * geprüft wird: die Nummer des amtlichen Rasters, den Feldnamen der
+     * Ausfüllanleitung, die kurze Marke am Feld und den vollen Satz für
+     * Fehlerübersicht und Vorlesehilfe. Nummer 0 trägt kein Feld des
+     * Rasters, sondern die digitale Bearbeitung daneben.
+     *
+     * @return array<string,array{
+     *     number: int,
+     *     label: string,
+     *     hint: string,
+     *     reason: string
+     * }>
+     */
+    function official_message_field_guidance(): array
+    {
+        $timeHint = 'Zeit vierstellig';
+        $timeReason = 'Uhrzeit vierstellig eintragen, zum Beispiel 0730; '
+            . 'mit Tag sechsstellig (TThhmm), taktisch vollständig '
+            . 'dreizehnstellig (TThhmmMMMJJJJ).';
+        $markHint = 'Zeichen';
+        $markReason = 'Namenszeichen eintragen, höchstens sechs Zeichen.';
+        return [
+            '01_medium' => [
+                'number' => 1,
+                'label' => 'Übermittlungsmittel',
+                'hint' => 'Mittel wählen',
+                'reason' => 'Tatsächlich verwendetes Übermittlungsmittel '
+                    . 'ankreuzen.',
+            ],
+            '01_datum' => [
+                'number' => 2,
+                'label' => 'Aufnahmevermerk, Zeit',
+                'hint' => $timeHint,
+                'reason' => $timeReason,
+            ],
+            '01_zeichen' => [
+                'number' => 2,
+                'label' => 'Aufnahmevermerk, Zeichen',
+                'hint' => $markHint,
+                'reason' => $markReason,
+            ],
+            '02_zeit' => [
+                'number' => 3,
+                'label' => 'Annahmevermerk, Zeit',
+                'hint' => $timeHint,
+                'reason' => $timeReason,
+            ],
+            '02_zeichen' => [
+                'number' => 3,
+                'label' => 'Annahmevermerk, Zeichen',
+                'hint' => $markHint,
+                'reason' => $markReason,
+            ],
+            '03_datum' => [
+                'number' => 4,
+                'label' => 'Beförderungsvermerk, Zeit',
+                'hint' => $timeHint,
+                'reason' => $timeReason,
+            ],
+            '03_zeichen' => [
+                'number' => 4,
+                'label' => 'Beförderungsvermerk, Zeichen',
+                'hint' => $markHint,
+                'reason' => $markReason,
+            ],
+            '05_gegenstelle' => [
+                'number' => 6,
+                'label' => 'Rufname der Gegenstelle',
+                'hint' => 'Rufname fehlt',
+                'reason' => 'Rufname der Gegenstelle eintragen, einzeilig '
+                    . 'und höchstens 128 Zeichen.',
+            ],
+            '06_befwegausw' => [
+                'number' => 7,
+                'label' => 'Gewünschtes Übermittlungsmittel',
+                'hint' => 'Auswahl prüfen',
+                'reason' => 'Nur eines der angebotenen Übermittlungsmittel '
+                    . 'ist zulässig; das Feld darf frei bleiben.',
+            ],
+            '09_vorrangstufe' => [
+                'number' => 9,
+                'label' => 'Vorrangstufe',
+                'hint' => 'Auswahl prüfen',
+                'reason' => 'Nur die angebotenen Vorrangstufen sind '
+                    . 'zulässig; ohne besondere Vorrangstufe bleibt das Feld '
+                    . 'frei.',
+            ],
+            '10_anschrift' => [
+                'number' => 10,
+                'label' => 'Anschrift',
+                'hint' => 'Anschrift fehlt',
+                'reason' => 'Anschrift eintragen: Dienststelle, Teileinheit '
+                    . 'oder Einheit, kein Eigenname.',
+            ],
+            '11_rufnummer' => [
+                'number' => 11,
+                'label' => 'Ruf Nr.',
+                'hint' => 'Rufnummer prüfen',
+                'reason' => 'Rufnummer einzeilig und höchstens 128 Zeichen; '
+                    . 'das Feld darf frei bleiben.',
+            ],
+            '12_betreff' => [
+                'number' => 13,
+                'label' => 'Inhalt, Betreff',
+                'hint' => 'Betreff fehlt',
+                'reason' => 'Betreff eintragen, einzeilig und höchstens 255 '
+                    . 'Zeichen.',
+            ],
+            '12_inhalt' => [
+                'number' => 14,
+                'label' => 'Nachricht, Text',
+                'hint' => 'Text fehlt',
+                'reason' => 'Nachrichtentext eintragen.',
+            ],
+            '13_abseinheit' => [
+                'number' => 15,
+                'label' => 'Absender',
+                'hint' => 'Absender fehlt',
+                'reason' => 'Absender als Dienststellen-, Teileinheits- oder '
+                    . 'Einheitsbezeichnung eintragen, höchstens 128 Zeichen.',
+            ],
+            '12_abfzeit' => [
+                'number' => 16,
+                'label' => 'Abfassungszeit',
+                'hint' => $timeHint,
+                'reason' => $timeReason,
+            ],
+            '14_zeichen' => [
+                'number' => 17,
+                'label' => 'Zeichen des Verfassers',
+                'hint' => $markHint,
+                'reason' => $markReason,
+            ],
+            '14_funktion' => [
+                'number' => 17,
+                'label' => 'Funktion des Verfassers',
+                'hint' => 'Funktion fehlt',
+                'reason' => 'Funktion des Verfassers eintragen.',
+            ],
+            '15_quitdatum' => [
+                'number' => 18,
+                'label' => 'Quittung, Zeit',
+                'hint' => $timeHint,
+                'reason' => $timeReason,
+            ],
+            '15_quitzeichen' => [
+                'number' => 18,
+                'label' => 'Quittung, Zeichen',
+                'hint' => $markHint,
+                'reason' => $markReason,
+            ],
+            '16_empf' => [
+                'number' => 19,
+                'label' => 'Verteiler',
+                'hint' => 'Empfänger fehlt',
+                'reason' => 'Mindestens einen Bearbeiter im Verteiler '
+                    . 'ankreuzen; die rote Lagedurchschrift allein genügt '
+                    . 'nicht.',
+            ],
+            '17_vermerke' => [
+                'number' => 20,
+                'label' => 'Vermerke',
+                'hint' => 'Eintrag fehlt',
+                'reason' => 'Vermerk zur Bearbeitung eintragen.',
+            ],
+            '06_befweg' => [
+                'number' => 0,
+                'label' => 'Beförderungsweg',
+                'hint' => 'Weg fehlt',
+                'reason' => 'Beförderungsweg benennen, einzeilig und '
+                    . 'höchstens 128 Zeichen.',
+            ],
+            'fernmeldeplan_eintrag_id' => [
+                'number' => 0,
+                'label' => 'Fernmeldeweg aus dem S6-Plan',
+                'hint' => 'Weg wählen',
+                'reason' => 'Einen freigegebenen Weg aus dem gültigen '
+                    . 'S6-Fernmeldeplan auswählen.',
+            ],
+            'incoming_transport_confirmed' => [
+                'number' => 0,
+                'label' => 'Eingangsweg',
+                'hint' => 'Bestätigung fehlt',
+                'reason' => 'Eingangsweg prüfen und bestätigen.',
+            ],
+            'incoming_transport_correction_reason' => [
+                'number' => 0,
+                'label' => 'Begründung der Änderung',
+                'hint' => 'Begründung prüfen',
+                'reason' => 'Begründung höchstens 500 Zeichen, ohne '
+                    . 'Steuerzeichen.',
+            ],
+        ];
+    }
+
+    /**
+     * Felder, ohne die der laufende Arbeitsschritt nicht abschließbar ist.
+     *
+     * Die Liste bildet den Zweig ab, den vali_data_form::checkdata() für
+     * diesen Arbeitsschritt auswertet, beschränkt auf die Felder, deren
+     * eigene Prüfung einen leeren Eintrag zurückweist. Feld 9 und Feld 11
+     * stehen deshalb nicht darin: die Prüfung lässt sie leer zu. Damit
+     * verspricht die Kennzeichnung im Vordruck genau das, was der Server
+     * annimmt. tests/php/official_message_guidance.php leitet dieselbe Liste
+     * aus 4fach/vali_data.php ab und vergleicht sie.
+     *
+     * @return list<string>
+     */
+    function official_message_required_fields(): array
+    {
+        return match ((string) $this->task) {
+            'FM-Eingang', 'FM-Eingang_Anhang' => [
+                '01_medium',
+                '01_datum',
+                '01_zeichen',
+                '05_gegenstelle',
+                '10_anschrift',
+                '12_betreff',
+                '12_inhalt',
+                '12_abfzeit',
+            ],
+            'Stab_schreiben', 'Stab_korrigieren' => [
+                '10_anschrift',
+                '12_betreff',
+                '12_inhalt',
+                '12_abfzeit',
+                '13_abseinheit',
+                '14_zeichen',
+                '14_funktion',
+            ],
+            'Stab_gesprnoti' => [
+                '01_medium',
+                '01_datum',
+                '10_anschrift',
+                '12_betreff',
+                '12_inhalt',
+                '12_abfzeit',
+                '13_abseinheit',
+                '14_zeichen',
+                '14_funktion',
+            ],
+            'FM-Ausgang' => ['03_datum', '03_zeichen'],
+            'LdF-Eingang' => [
+                '01_medium',
+                'incoming_transport_confirmed',
+                '02_zeit',
+                '02_zeichen',
+                '13_abseinheit',
+            ],
+            // Ohne veröffentlichten S6-Plan gibt es keinen Auswahlkasten:
+            // dann disponiert LdF Mittel und Weg unmittelbar.
+            'LdF-Ausgang' => $this->activeTelecomRoutes === []
+                ? [
+                    '02_zeit',
+                    '02_zeichen',
+                    '05_gegenstelle',
+                    '01_medium',
+                    '06_befweg',
+                ]
+                : [
+                    '02_zeit',
+                    '02_zeichen',
+                    '05_gegenstelle',
+                    'fernmeldeplan_eintrag_id',
+                ],
+            // Die Sichtung eines Eingangs schließt den Nachweis ab; ohne
+            // benannten Bearbeiter erreicht die Nachricht danach niemanden.
+            'Stab_sichten' => ($this->formdata['04_richtung'] ?? '') === 'E'
+                ? ['15_quitdatum', '15_quitzeichen', '16_empf']
+                : ['15_quitdatum', '15_quitzeichen'],
+            default => [],
+        };
+    }
+
+    function official_message_field_required(string $field): bool
+    {
+        return in_array(
+            $field,
+            $this->official_message_required_fields(),
+            true
+        );
+    }
+
+    /** Sprungziel eines Feldes: das Bedienelement, nicht nur die Zelle. */
+    function official_message_field_anchor(string $field): string
+    {
+        return match ($field) {
+            '01_medium' => 'f_01_medium_fu',
+            '09_vorrangstufe' => 'f_09_vorrangstufe_keine',
+            default => 'f_' . $field,
+        };
+    }
+
+    function official_message_error_id(string $field): string
+    {
+        return 'estab-field-error-' . $field;
+    }
+
+    /**
+     * Attribute eines ausfüllbaren Feldes um die Fehlermarke ergänzen.
+     *
+     * Rufname und Absender tragen bereits ein aria-describedby der
+     * Vorschlagsliste. Ein zweites gleichnamiges Attribut verwirft der
+     * Browser, deshalb tritt die Marke der vorhandenen Liste bei.
+     */
+    function official_message_described_by(
+        string $field,
+        bool $invalid,
+        string $extraAttributes
+    ): string {
+        if (!$invalid) {
+            return $extraAttributes;
+        }
+        $marker = $this->official_message_error_id($field);
+        if (str_contains($extraAttributes, ' aria-describedby="')) {
+            return str_replace(
+                ' aria-describedby="',
+                ' aria-describedby="' . $marker . ' ',
+                $extraAttributes
+            );
+        }
+        return $extraAttributes . ' aria-describedby="' . $marker . '"';
+    }
+
+    /** Kennzeichnung eines Pflichtfeldes am ausfüllbaren Bedienelement. */
+    function official_message_required_attributes(
+        string $field,
+        bool $editable
+    ): string {
+        return $editable && $this->official_message_field_required($field)
+            ? ' aria-required="true" data-estab-required="true"'
+            : '';
+    }
+
+    /**
+     * Marke am Feld: kurz sichtbar, vollständig für die Vorlesehilfe.
+     *
+     * Die Marke meldet sich nicht selbst als Alarm. Bei acht offenen Feldern
+     * spräche der Screenreader acht Alarme; die Übersicht am Seitenkopf ist
+     * die eine Meldung, die Marke der Hinweis am Feld.
+     */
     function official_message_error(string $field): void
     {
-        if (($this->errorselect[$field] ?? true) === false) {
-            echo '<span class="estab-official-field-error" role="alert">'
-                . 'Eingabe prüfen</span>';
+        if (($this->errorselect[$field] ?? true) !== false) {
+            return;
         }
+        $this->officialMessageMarkedFields[$field] = true;
+        $guidance = $this->official_message_field_guidance()[$field] ?? null;
+        $hint = is_array($guidance) ? $guidance['hint'] : 'Eintrag prüfen';
+        $reason = is_array($guidance)
+            ? $guidance['reason']
+            : 'Eintrag prüfen.';
+        echo '<span id="' . $this->official_message_error_id($field) . '" '
+            . 'class="estab-official-field-error">'
+            . estab_message_html($hint)
+            . '<span class="estab-visually-hidden">. '
+            . estab_message_html($reason) . '</span></span>';
+    }
+
+    /**
+     * Fehlerübersicht am Seitenkopf mit Sprungmarke je Feld.
+     *
+     * Aufgeführt wird, was im Raster eine Marke trägt, und zusätzlich jedes
+     * Pflichtfeld dieses Arbeitsschritts, das die Prüfung zurückgewiesen hat.
+     * Der zweite Teil ist nötig, weil Ankreuzfelder wie das
+     * Übermittlungsmittel oder der Verteiler keine Marke am Feld tragen.
+     */
+    function official_message_error_summary(): void
+    {
+        $guidance = $this->official_message_field_guidance();
+        $fields = array_keys($this->officialMessageMarkedFields);
+        foreach ($this->official_message_required_fields() as $field) {
+            if (
+                ($this->errorselect[$field] ?? true) === false
+                && !in_array($field, $fields, true)
+            ) {
+                $fields[] = $field;
+            }
+        }
+        $entries = [];
+        foreach ($fields as $field) {
+            if (!isset($guidance[$field])) {
+                continue;
+            }
+            $entries[] = [
+                'number' => $guidance[$field]['number'],
+                'anchor' => $this->official_message_field_anchor($field),
+                'title' => ($guidance[$field]['number'] > 0
+                    ? 'Feld ' . $guidance[$field]['number'] . ' · '
+                    : '') . $guidance[$field]['label'],
+                'reason' => $guidance[$field]['reason'],
+            ];
+        }
+        if ($entries === []) {
+            return;
+        }
+        // In der Reihenfolge des Vordrucks lesen; die Angaben neben dem
+        // Raster tragen die Nummer 0 und stehen wie im Ablauf voran.
+        usort(
+            $entries,
+            static function (array $first, array $second): int {
+                return [$first['number'], $first['title']]
+                    <=> [$second['number'], $second['title']];
+            }
+        );
+        $count = count($entries);
+        echo '<section class="estab-message-error-summary" '
+            . 'id="estab-nachrichtenfehler" role="alert" tabindex="-1" '
+            . 'aria-labelledby="estab-nachrichtenfehler-title" '
+            . 'data-estab-form-error-summary="' . $count . '" '
+            . 'data-estab-form-error-focus="'
+            . estab_message_html($entries[0]['anchor']) . '">'
+            . '<h2 id="estab-nachrichtenfehler-title">Noch nicht gespeichert: '
+            . $count . ($count === 1 ? ' Feld' : ' Felder') . ' prüfen</h2>'
+            . '<p>Ihre Eingaben stehen unverändert im Vordruck. '
+            . 'Ein Klick springt in das Feld.</p><ol>';
+        foreach ($entries as $entry) {
+            echo '<li><a href="#' . estab_message_html($entry['anchor']) . '">'
+                . '<strong>' . estab_message_html($entry['title']) . '</strong>'
+                . '<span>' . estab_message_html($entry['reason'])
+                . '</span></a></li>';
+        }
+        echo '</ol></section>';
     }
 
     function official_message_text_input(
@@ -696,8 +1121,13 @@ HTML;
                 . 'name="' . $field . '" value="' . $value . '" '
                 . 'maxlength="' . $maxlength . '" '
                 . 'aria-label="' . estab_message_html($label) . '"'
+                . $this->official_message_required_attributes($field, true)
                 . ($invalid ? ' aria-invalid="true"' : '')
-                . $extraAttributes . '>';
+                . $this->official_message_described_by(
+                    $field,
+                    $invalid,
+                    $extraAttributes
+                ) . '>';
             $this->official_message_error($field);
             return;
         }
@@ -725,7 +1155,9 @@ HTML;
                 . 'class="estab-official-textarea" '
                 . 'aria-label="' . estab_message_html($label) . '"'
                 . ($maxlength > 0 ? ' maxlength="' . $maxlength . '"' : '')
+                . $this->official_message_required_attributes($field, true)
                 . ($invalid ? ' aria-invalid="true"' : '')
+                . $this->official_message_described_by($field, $invalid, '')
                 . ' name="' . $field . '">' . $value . '</textarea>';
             $this->official_message_error($field);
             return;
@@ -772,7 +1204,11 @@ HTML;
                     . estab_message_html($describedBy) . '"'
                 : '')
             . ($disabled ? ' aria-disabled="true"' : '')
-            . ($editable && $required ? ' aria-required="true"' : '')
+            . ($editable
+                && ($required
+                    || $this->official_message_field_required($field))
+                ? ' aria-required="true"'
+                : '')
             . '>';
         foreach ($options as $option) {
             $checked = hash_equals($current, $option['value'])
@@ -2046,6 +2482,84 @@ HTML;
     }
 
     /**
+     * Führung ohne Mausweg: Fokus auf das erste Feld, das an der Reihe ist.
+     *
+     * Im DOM stehen Aktionsleiste und betriebliche Ergänzungen vor dem
+     * Raster; ohne Fokus kostete das erste Datenfeld sieben und mehr
+     * Tabulatorschritte. Nach einer Rückweisung springt der Fokus auf das
+     * erste beanstandete Feld, sonst auf das erste ausfüllbare. Wer über
+     * eine Sprungmarke kommt oder bereits ein Feld gewählt hat, behält
+     * seinen Platz.
+     */
+    function official_message_guidance_script(): void
+    {
+        echo <<<'HTML'
+<script data-estab-official-form-focus>
+(function () {
+  "use strict";
+  if (window.location.hash) {
+    return;
+  }
+  var active = document.activeElement;
+  if (
+    active
+    && active !== document.body
+    && active !== document.documentElement
+  ) {
+    return;
+  }
+  var form = document.querySelector("form[name='4fach']");
+  if (!form) {
+    return;
+  }
+  var summary = document.querySelector("[data-estab-form-error-summary]");
+  var target = null;
+  if (summary) {
+    target = document.getElementById(
+      summary.getAttribute("data-estab-form-error-focus") || ""
+    );
+  }
+  var rejected = target !== null;
+  if (!target) {
+    var candidates = form.querySelectorAll(
+      "input:not([type=hidden]):not([disabled]):not([readonly]),"
+        + "textarea:not([disabled]):not([readonly]),"
+        + "select:not([disabled])"
+    );
+    for (var index = 0; index < candidates.length; index++) {
+      var candidate = candidates[index];
+      if (
+        candidate.closest
+        && candidate.closest(
+          ".estab-message-categories, .estab-message-attachments"
+        )
+      ) {
+        continue;
+      }
+      target = candidate;
+      break;
+    }
+  }
+  if (!target || typeof target.focus !== "function") {
+    if (summary && typeof summary.focus === "function") {
+      summary.focus();
+    }
+    return;
+  }
+  try {
+    target.focus({ preventScroll: !rejected });
+  } catch (error) {
+    target.focus();
+  }
+  if (rejected && typeof target.scrollIntoView === "function") {
+    target.scrollIntoView({ block: "center" });
+  }
+})();
+</script>
+HTML;
+    }
+
+    /**
      * Record annex for the printout.
      *
      * The paper form has room for the twenty official fields and nothing
@@ -2168,7 +2682,12 @@ HTML;
             . '<div><span class="estab-section-kicker">Nachrichtenwesen</span>'
             . '<h1>Nachrichtenvordruck</h1>'
             . '<p>Amtliches Raster mit feldbezogenen Ausfüllhinweisen. '
-            . 'Das Symbol <strong>i</strong> öffnet die jeweilige Anleitung.</p>'
+            . 'Das Symbol <strong>i</strong> öffnet die jeweilige Anleitung.'
+            . ($this->official_message_required_fields() === []
+                ? ''
+                : ' Felder mit rotem Randstreifen gehören zu diesem '
+                    . 'Arbeitsschritt und sind auszufüllen.')
+            . '</p>'
             . '</div><div class="estab-message-header-badges">'
             . '<span class="estab-message-task-badge">'
             . estab_message_html($this->task) . '</span>';
@@ -2224,6 +2743,11 @@ HTML;
             echo '<input type="hidden" name="task" value="'
                 . estab_message_html($this->task) . '">';
         }
+        // Die Übersicht der Rückweisungen kennt erst nach dem Rendern
+        // jedes Feld, gehört aber an den Kopf des Formulars. Der Vordruck
+        // wird deshalb zwischengespeichert und danach ausgegeben.
+        $officialFormBufferLevel = ob_get_level();
+        ob_start();
         $this->official_message_actions('top');
         $this->official_message_workflow_controls();
 
@@ -2626,7 +3150,8 @@ HTML;
             . 'aria-hidden="true"><span>Uhrzeit</span><span>Zeichen</span></div>'
             . '<span class="estab-official-print-number">18</span></section>';
 
-        echo '<section class="estab-official-distribution">'
+        echo '<section class="estab-official-distribution" '
+            . 'id="f_16_empf" tabindex="-1">'
             . '<div class="estab-official-cell-heading">';
         $this->official_message_help(19);
         echo '</div>';
@@ -2651,9 +3176,15 @@ HTML;
         $this->official_message_attachments();
         $this->official_message_print_annex();
         $this->official_message_actions('bottom');
+        $officialFormBody = ob_get_level() > $officialFormBufferLevel
+            ? (string) ob_get_clean()
+            : '';
+        $this->official_message_error_summary();
+        echo $officialFormBody;
         echo '</form></main>';
         $this->show_message_suggestion_script();
         $this->official_message_help_script();
+        $this->official_message_guidance_script();
         echo '</body></html>';
     }
 }

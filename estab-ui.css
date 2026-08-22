@@ -3893,6 +3893,69 @@ body.estab-message-form-body {
     text-transform: uppercase;
 }
 
+/* Fehlerübersicht am Seitenkopf: eine Meldung, ein Sprung je Feld. */
+.estab-message-error-summary {
+    background: #fdf2f1;
+    border: 1px solid #9d1c16;
+    border-left: 6px solid #9d1c16;
+    border-radius: 9px;
+    color: #4a100c;
+    margin: 0 0 0.85rem;
+    padding: 0.75rem 0.95rem;
+}
+
+.estab-message-error-summary:focus-visible {
+    outline: 3px solid #174f82;
+    outline-offset: 2px;
+}
+
+.estab-message-error-summary h2 {
+    color: #7d1611;
+    font-size: 1rem;
+    margin: 0 0 0.2rem;
+}
+
+.estab-message-error-summary p {
+    font-size: 0.85rem;
+    margin: 0 0 0.5rem;
+}
+
+.estab-message-error-summary ol {
+    display: grid;
+    gap: 0.25rem;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.estab-message-error-summary a {
+    align-items: baseline;
+    color: inherit;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    text-decoration: none;
+}
+
+.estab-message-error-summary a:hover,
+.estab-message-error-summary a:focus-visible {
+    text-decoration: underline;
+}
+
+.estab-message-error-summary strong {
+    background: #9d1c16;
+    border-radius: 4px;
+    color: #ffffff;
+    flex: 0 0 auto;
+    font-size: 0.72rem;
+    font-weight: 800;
+    padding: 0.1rem 0.4rem;
+}
+
+.estab-message-error-summary span {
+    font-size: 0.85rem;
+}
+
 .estab-message-task-badge,
 .estab-message-readonly-badge {
     background: #edf4fb;
@@ -4076,6 +4139,7 @@ body.estab-message-form-body {
     margin: 0;
     min-width: 0;
     padding: 0.75rem;
+    position: relative;
 }
 
 .estab-message-workflow-fields legend {
@@ -5293,8 +5357,12 @@ section.estab-message-timeline[data-estab-message-timeline] * {
     resize: none;
 }
 
+/* Gesperrt und ausfüllbar waren nicht zu unterscheiden: beide Flächen
+   waren durchsichtig. Der Sperrvermerk ist ein leiser Grauschleier, der im
+   Druck wieder verschwindet. */
 .estab-official-readonly {
     align-items: center;
+    background: rgba(17, 24, 33, 0.07);
     display: flex;
     overflow-wrap: anywhere;
 }
@@ -5322,22 +5390,58 @@ section.estab-message-timeline[data-estab-message-timeline] * {
     z-index: 5;
 }
 
+/* Führung im Vordruck: Pflichtkennzeichen, Fehlermarke, Sperrvermerk.
+
+   Das amtliche Raster bleibt unverändert. Alle drei Mittel liegen im Feld
+   selbst auf und verschieben keine Zelle. Die Fehlermarke haftet absolut im
+   Wertfeld, deshalb trägt jedes Wertfeld seinen eigenen Bezugsrahmen. Ohne
+   ihn wandert sie in den nächsten positionierten Vorfahren: bei den Feldern
+   10 und 11 war das die gesamte Nachrichtenzone, so dass die Marke an deren
+   Kopf erschien statt am Feld. */
+.estab-official-field-value,
+.estab-official-sender-value,
+.estab-official-address-value,
+.estab-official-phone-value,
+.estab-official-composition-value {
+    position: relative;
+}
+
+.estab-official-input[data-estab-required="true"],
+.estab-official-textarea[data-estab-required="true"] {
+    box-shadow: inset 0.16rem 0 0 0 rgba(157, 28, 22, 0.62);
+}
+
 .estab-official-input[aria-invalid="true"],
 .estab-official-textarea[aria-invalid="true"] {
     border-color: #9d1c16;
     box-shadow: inset 0 0 0 1px #9d1c16;
 }
 
+/* Die Marke sitzt unten rechts im Feld: oben rechts steht in jeder Zelle
+   die Schaltfläche der Ausfüllhilfe. */
 .estab-official-field-error {
     background: #9d1c16;
+    bottom: 0.12rem;
     color: #ffffff;
-    font-size: 0.65rem;
+    font-size: 0.62rem;
     font-weight: 800;
-    padding: 0.1rem 0.25rem;
+    line-height: 1.2;
+    max-width: 13rem;
+    padding: 0.08rem 0.3rem;
     position: absolute;
-    right: 0.25rem;
-    top: 0.2rem;
+    right: 0.2rem;
+    text-align: right;
     z-index: 8;
+}
+
+/* Die Wertfelder strecken jedes Kind auf die volle Breite. Die Marke ist
+   aufgelegt und behält ihre Textbreite. */
+.estab-official-field-value > .estab-official-field-error,
+.estab-official-sender-value > .estab-official-field-error,
+.estab-official-address-value > .estab-official-field-error,
+.estab-official-phone-value > .estab-official-field-error,
+.estab-official-composition-value > .estab-official-field-error {
+    width: auto;
 }
 
 .estab-official-box-choice {
@@ -5361,6 +5465,8 @@ section.estab-message-timeline[data-estab-message-timeline] * {
 }
 
 .estab-official-box-choice:disabled {
+    background: rgba(17, 24, 33, 0.12);
+    border-color: rgba(0, 0, 0, 0.6);
     cursor: default;
     opacity: 1;
 }
@@ -6106,6 +6212,8 @@ section.estab-message-timeline[data-estab-message-timeline] * {
     .estab-message-attachment-list,
     .estab-message-attachments,
     .estab-official-help-anchor,
+    .estab-official-field-error,
+    .estab-message-error-summary,
     .estab-official-priority-clear {
         display: none !important;
     }
@@ -6233,6 +6341,12 @@ section.estab-message-timeline[data-estab-message-timeline] * {
     .estab-official-readonly {
         background: transparent;
         border-color: transparent;
+        box-shadow: none;
+    }
+
+    .estab-official-box-choice:disabled {
+        background: rgba(255, 255, 255, 0.55);
+        border-color: #000000;
     }
 }
 
@@ -7849,6 +7963,15 @@ a.estab-message-list-chip:hover {
         padding: 0.42rem 0.55rem;
     }
 
+    .estab-message-error-summary {
+        margin: 0 0 0.6rem;
+        padding: 0.55rem 0.7rem;
+    }
+
+    .estab-message-error-summary p {
+        font-size: 0.8rem;
+    }
+
     .estab-message-confirmation {
         gap: 0.55rem;
         padding: 0.9rem 0.85rem 1.5rem;
@@ -7933,6 +8056,19 @@ a.estab-message-list-chip:hover {
     }
 
     .estab-sidebar-section-heading p {
+        display: none;
+    }
+
+    .estab-message-error-summary {
+        margin: 0 0 0.45rem;
+        padding: 0.4rem 0.55rem;
+    }
+
+    .estab-message-error-summary h2 {
+        font-size: 0.9rem;
+    }
+
+    .estab-message-error-summary p {
         display: none;
     }
 
