@@ -158,6 +158,84 @@ function estab_list_page_window ($resultCount) {
 }
 
 /**
+ * Return the fixed Nachweisung view of the current request.
+ *
+ * The value is never echoed as data: it selects one of three known keys and
+ * is used to keep the page control on the view the operator is looking at.
+ */
+function estab_list_tracking_view () {
+  $request = is_array ($_GET ?? null) ? $_GET : array ();
+  foreach (array ("nwalle", "nwe", "nwa") as $view) {
+    if (array_key_exists ($view, $request)) { return $view; }
+  }
+  return "nwalle";
+}
+
+/**
+ * Page state of one Nachweisung, read from its own request namespace.
+ *
+ * The order of a Nachweisung is prescribed by the TBB evidence number, so
+ * only the page and the page size are negotiable. Each list carries its own
+ * prefix, so two Nachweisungen on one page turn their pages independently.
+ */
+function estab_list_tracking_filters ($prefix) {
+  $filters = estab_message_list_default_filters ();
+  $filters ["sort"] = "number_asc";
+  $request = array ();
+  $source = is_array ($_GET ?? null) ? $_GET : array ();
+  foreach (array ("page", "page_size") as $field) {
+    if (array_key_exists ($prefix.$field, $source)) {
+      $request [$prefix.$field] = $source [$prefix.$field];
+    }
+  }
+  return estab_message_list_apply_request (
+    $filters,
+    $request,
+    array (),
+    $prefix
+  );
+}
+
+/** Render the page control of one Nachweisung without losing its sibling. */
+function estab_list_tracking_pager (array $filters, array $pageWindow, $prefix) {
+  $hidden = array (estab_list_tracking_view () => "1");
+  $source = is_array ($_GET ?? null) ? $_GET : array ();
+  foreach (array ("nwe_", "nwa_") as $sibling) {
+    if ($sibling === $prefix) { continue; }
+    $page = $source [$sibling."page"] ?? null;
+    if (
+      is_string ($page)
+      && preg_match ("/\\A[1-9][0-9]{0,6}\\z/D", $page) === 1
+    ) {
+      $hidden [$sibling."page"] = $page;
+    }
+  }
+  estab_message_list_render_pager ($filters, $pageWindow, array (
+    "action" => "nachwea.php",
+    "method" => "get",
+    "target" => "_self",
+    "prefix" => $prefix,
+    "hidden" => $hidden,
+  ));
+}
+
+/** Count the combined transmission log of one already captured incident. */
+function estab_list_combined_tracking_count (
+  mysqli $connection,
+  string $messageTable,
+  int $incidentId
+): int {
+  $messageTable = estab_message_table ($messageTable);
+  $incidentId = estab_message_positive_id ($incidentId);
+  return estab_message_query_int (
+    $connection,
+    "SELECT COUNT(*) FROM ".$messageTable." AS m"
+      ." WHERE m.`einsatz_id` = ?",
+    array ($incidentId)
+  );
+}
+
+/**
  * Read the combined transmission log for one already captured incident.
  *
  * The incident ID is deliberately explicit. A concurrent activation after
@@ -169,10 +247,15 @@ function estab_list_page_window ($resultCount) {
 function estab_list_combined_tracking_rows (
   mysqli $connection,
   string $messageTable,
-  int $incidentId
+  int $incidentId,
+  int $limit,
+  int $offset
 ): array {
   $messageTable = estab_message_table ($messageTable);
   $incidentId = estab_message_positive_id ($incidentId);
+  if ($limit < 1 || $offset < 0) {
+    throw new InvalidArgumentException ("Ungültiges Nachweisungsfenster");
+  }
   return estab_message_query_rows (
     $connection,
     "SELECT m.`00_lfd`,m.`01_medium`,m.`01_datum`,m.`01_zeichen`,"
@@ -185,8 +268,8 @@ function estab_list_combined_tracking_rows (
       ." WHERE m.`einsatz_id` = ?"
       ." ORDER BY COALESCE(".
         estab_message_list_tbb_number_sql ("m").", 4294967296) ASC,"
-      ." m.`00_lfd` ASC",
-    array ($incidentId)
+      ." m.`00_lfd` ASC LIMIT ? OFFSET ?",
+    array ($incidentId, $limit, $offset)
   );
 }
 
@@ -201,19 +284,31 @@ function estab_list_combined_tracking_rows (
 function estab_list_combined_tracking_data (
   mysqli $connection,
   int $incidentId,
-  string $messageTable
+  string $messageTable,
+  array $filters
 ): array {
   $incidentId = estab_message_positive_id ($incidentId);
   $incident = estab_incident_find ($connection, $incidentId);
   if (!is_array ($incident)) {
     throw new RuntimeException ("Einsatz für Nachweisung nicht gefunden");
   }
-  return array (
-    "incident" => $incident,
-    "rows" => estab_list_combined_tracking_rows (
+  $pageWindow = estab_message_list_page_window (
+    estab_list_combined_tracking_count (
       $connection,
       $messageTable,
       $incidentId
+    ),
+    $filters
+  );
+  return array (
+    "incident" => $incident,
+    "page_window" => $pageWindow,
+    "rows" => estab_list_combined_tracking_rows (
+      $connection,
+      $messageTable,
+      $incidentId,
+      (int) $pageWindow ["page_size"],
+      (int) $pageWindow ["offset"]
     ),
   );
 }
@@ -251,6 +346,7 @@ class Listen extends kategorien {
   var $filters;
   var $pageWindow;
   var $operationalIdentity;
+  var $stateFilterAvailable;
 
 
   // Listengestaltung
@@ -332,6 +428,35 @@ class Listen extends kategorien {
       }
     }
     return $recipients;
+  }
+
+  /**
+   * Resolve the read/done state tables of one signed-in identity.
+   *
+   * Only a staff function owns these tables. A Fernmelder function such as
+   * "A/W" carries no per-user read table, so the unread/done filter stays
+   * unavailable there instead of guessing a table name.
+   */
+  function message_list_state_tables ($identity){
+    include ("../4fcfg/dbcfg.inc.php");
+    $prefix = (string) ($conf_4f_tbl ["usrtblprefix"] ?? "");
+    $function = (string) ($identity ["funktion"] ?? "");
+    $userCode = (string) ($identity ["kuerzel"] ?? "");
+    if ($prefix === "" || $function === "" || $userCode === "") {
+      return array ();
+    }
+    try {
+      return array (
+        "read" => estab_message_state_table (
+          $prefix, $function, $userCode, "read"
+        ),
+        "done" => estab_message_state_table (
+          $prefix, $function, $userCode, "done"
+        ),
+      );
+    } catch (InvalidArgumentException) {
+      return array ();
+    }
   }
 
   /** Keep clamped pages separate for A/W and Si second-sighting views. */
@@ -845,7 +970,19 @@ class Listen extends kategorien {
     }
 
     $visibility = estab_read_message_visibility_sql ($identity, "m");
-    $filter = estab_message_list_filter_sql ($this->filters, "m");
+    $stateTables = $this->message_list_state_tables ($identity);
+    $this->stateFilterAvailable =
+      estab_message_list_has_state_tables ($stateTables);
+    if (!$this->stateFilterAvailable) {
+      // A stored filter must not trap a function which cannot answer it.
+      $this->filters ["read_state"] = "";
+      $this->filters ["done_state"] = "";
+    }
+    $filter = estab_message_list_filter_sql (
+      $this->filters,
+      "m",
+      $stateTables
+    );
     $where = array (
       "m.`einsatz_id` = ?",
       $visibility ["sql"],
@@ -871,6 +1008,7 @@ class Listen extends kategorien {
     $this->filters ["page"] = $this->pageWindow ["page"];
     $_SESSION [$this->message_list_session_key ()] = $this->filters;
 
+    $stateSelect = estab_message_list_state_select_sql ($stateTables, "m");
     $query = "SELECT m.`00_lfd`,m.`01_zeichen`,m.`02_zeit`,".
       "m.`02_zeichen`,m.`03_datum`,m.`03_zeichen`,m.`04_richtung`,".
       estab_message_list_tbb_number_select_sql ("m").",".
@@ -879,7 +1017,9 @@ class Listen extends kategorien {
       "m.`12_anhang`,m.`12_betreff`,m.`12_inhalt`,m.`12_abfzeit`,".
       "m.`13_abseinheit`,m.`14_funktion`,m.`15_quitdatum`,".
       "m.`15_quitzeichen`,m.`16_empf`,m.`x00_status`,".
-      "m.`x01_abschluss`,m.`x02_sperre`,m.`x03_sperruser`".
+      "m.`x01_abschluss`,m.`x02_sperre`,m.`x03_sperruser`,".
+      estab_message_list_dwell_select_sql ("m").
+      ($stateSelect === "" ? "" : ",".$stateSelect).
       " FROM ".$messageTable." AS m WHERE ".$whereSql." ORDER BY ".
       estab_message_list_order_sql ($this->filters, "m").
       " LIMIT ? OFFSET ?";
@@ -1649,6 +1789,7 @@ class Listen extends kategorien {
           "dom_prefix" => $domPrefix,
           "hidden" => $hiddenRoute,
           "csrf_html" => estab_csrf_field (),
+          "state_filters" => $this->stateFilterAvailable === true,
         );
 
         echo "<section class=\"estab-tool-panel\" data-estab-message-list ".
@@ -1830,30 +1971,46 @@ class Listen extends kategorien {
       case "FmNwE":  // *****  F M N W E ingang ******
 	    if (debug) {echo "<b>file:liste.php:714 fkt:createlist - switch(listenart) -- case (FmNwE) ></b><br>";}
         $incidentId = $this->required_incident_id ();
+        $trackingFilters = estab_list_tracking_filters ("nwe_");
+        $trackingScope = " FROM `".$conf_4f_tbl ["nachrichten"]."` AS m".
+                  " WHERE m.`einsatz_id` = ?".
+                  " AND m.`04_richtung` = \"E\"";
         $query = "SELECT m.`00_lfd`,m.`01_medium`,m.`09_vorrangstufe`,".
                   "m.`04_richtung`,".
                   estab_message_list_tbb_number_select_sql ("m").",".
                   "m.`10_anschrift`,m.`12_abfzeit`,m.`12_inhalt`,".
                   "m.`12_anhang`,".
                   "m.`13_abseinheit`,m.`x01_abschluss`".
-                  " FROM `".$conf_4f_tbl ["nachrichten"]."` AS m".
-                  " WHERE m.`einsatz_id` = ?".
-                  " AND m.`04_richtung` = \"E\"".
+                  $trackingScope.
                   " ORDER BY COALESCE(".
                   estab_message_list_tbb_number_sql ("m").
-                  ", 4294967296) ASC, m.`00_lfd` ASC";
+                  ", 4294967296) ASC, m.`00_lfd` ASC LIMIT ? OFFSET ?";
         $messageConnection = estab_message_connect ($conf_4f_db);
         try {
+          $trackingWindow = estab_message_list_page_window (
+            estab_message_query_int (
+              $messageConnection,
+              "SELECT COUNT(*)".$trackingScope,
+              array ($incidentId)
+            ),
+            $trackingFilters
+          );
+          $trackingFilters ["page"] = $trackingWindow ["page"];
           $result = estab_message_query_rows (
             $messageConnection,
             $query,
-            array ($incidentId)
+            array (
+              $incidentId,
+              (int) $trackingWindow ["page_size"],
+              (int) $trackingWindow ["offset"]
+            )
           );
         } finally {
           estab_auth_close ($messageConnection);
         }
         $result = $result === array () ? "" : $result;
         echo "<p align=\"center\"><big><big><big><b>Nachweisung Eingang</b></big></big></big></p>";
+        estab_message_list_render_resultbar ($trackingFilters, $trackingWindow);
         if ( $result != "" ){
           echo "<table style=\"text-align: center; background-color: rgb(255,255,255); \" border=\"2\" cellpadding=\"2\" cellspacing=\"2\">\n<tbody>\n";
           echo "<tr style=\"background-color: rgb(240,240,200); color:#000000; font-weight:bold;\">\n";
@@ -1905,11 +2062,12 @@ class Listen extends kategorien {
                  echo "Nicht dokumentiert";
                }
                echo "</td>\n";
-               echo "<td align=\"left\">"; if (($row["12_inhalt"] != "")) { echo "<a>".estab_message_html ($row["12_inhalt"])."</a>\n";  } else { echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";} estab_list_attachment_badge ($row ["12_anhang"] ?? null); echo "</td>\n";
+               echo "<td align=\"left\">".estab_message_list_clamped_text ($row["12_inhalt"] ?? ""); estab_list_attachment_badge ($row ["12_anhang"] ?? null); echo "</td>\n";
                echo "</tr>";
             }  // foreach $result
           } // if 2. result == ""
           echo "</tbody></table>";
+          estab_list_tracking_pager ($trackingFilters, $trackingWindow, "nwe_");
         } else { // Result ist leer
           echo "<big><big><big>Keine Daten vorhanden!</big></big></big>";
         }
@@ -1918,6 +2076,10 @@ class Listen extends kategorien {
       case "FmNwA":  // *****  F M N W A usgang ******
         if (debug) {echo "<b>file:liste.php:714 fkt:createlist - switch(listenart) -- case (FmNwA) ></b><br>";}
         $incidentId = $this->required_incident_id ();
+        $trackingFilters = estab_list_tracking_filters ("nwa_");
+        $trackingScope = " FROM `".$conf_4f_tbl ["nachrichten"]."` AS m".
+                  " WHERE m.`einsatz_id` = ?".
+                  " AND m.`04_richtung` = \"A\"";
         $query = "SELECT m.`00_lfd`,m.`01_medium`,m.`03_datum`,".
                   "m.`06_befweg`,m.`09_vorrangstufe`,".
                   "m.`04_richtung`,".
@@ -1925,24 +2087,36 @@ class Listen extends kategorien {
                   "m.`10_anschrift`,m.`12_abfzeit`,m.`12_inhalt`,".
                   "m.`12_anhang`,".
                   "m.`13_abseinheit`,m.`x01_abschluss`".
-                  " FROM `".$conf_4f_tbl ["nachrichten"]."` AS m".
-                  " WHERE m.`einsatz_id` = ?".
-                  " AND m.`04_richtung` = \"A\"".
+                  $trackingScope.
                   " ORDER BY COALESCE(".
                   estab_message_list_tbb_number_sql ("m").
-                  ", 4294967296) ASC, m.`00_lfd` ASC";
+                  ", 4294967296) ASC, m.`00_lfd` ASC LIMIT ? OFFSET ?";
         $messageConnection = estab_message_connect ($conf_4f_db);
         try {
+          $trackingWindow = estab_message_list_page_window (
+            estab_message_query_int (
+              $messageConnection,
+              "SELECT COUNT(*)".$trackingScope,
+              array ($incidentId)
+            ),
+            $trackingFilters
+          );
+          $trackingFilters ["page"] = $trackingWindow ["page"];
           $result = estab_message_query_rows (
             $messageConnection,
             $query,
-            array ($incidentId)
+            array (
+              $incidentId,
+              (int) $trackingWindow ["page_size"],
+              (int) $trackingWindow ["offset"]
+            )
           );
         } finally {
           estab_auth_close ($messageConnection);
         }
         $result = $result === array () ? "" : $result;
         echo "<p align=\"center\"><big><big><big><b>Nachweisung Ausgang</b></big></big></big></p>";
+        estab_message_list_render_resultbar ($trackingFilters, $trackingWindow);
         if ( $result != "" ){
           echo "<table style=\"text-align: center; background-color: rgb(255,255,255); \" border=\"2\" cellpadding=\"2\" cellspacing=\"2\">\n<tbody>\n";
           echo "<tr style=\"background-color: rgb(240,240,200); color:#000000; font-weight:bold;\">\n";
@@ -1999,11 +2173,12 @@ class Listen extends kategorien {
                    : "Nicht dokumentiert";
                }
                echo "</td>\n";
-               echo "<td align=\"left\">"; if (($row["12_inhalt"] != "")) { echo "<a>".estab_message_html ($row["12_inhalt"])."</a>\n";  } else { echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";} estab_list_attachment_badge ($row ["12_anhang"] ?? null); echo "</td>\n";
+               echo "<td align=\"left\">".estab_message_list_clamped_text ($row["12_inhalt"] ?? ""); estab_list_attachment_badge ($row ["12_anhang"] ?? null); echo "</td>\n";
                echo "</tr>";
             }  // foreach $result
           }
           echo "</tbody></table>";
+          estab_list_tracking_pager ($trackingFilters, $trackingWindow, "nwa_");
         } else { // Result ist leer
           echo "<big><big><big>Keine Daten vorhanden!</big></big></big>";
         }
@@ -2012,24 +2187,29 @@ class Listen extends kategorien {
       case "FmNw":  // *****  F M N W  ******
         if (debug) {echo "<b>file:liste.php:714 fkt:createlist - switch(listenart) -- case (FmNw) ></b><br>";}
         $incidentId = $this->required_incident_id ();
+        $trackingFilters = estab_list_tracking_filters ("nw_");
         $messageConnection = estab_message_connect ($conf_4f_db);
         try {
           $trackingData = estab_list_combined_tracking_data (
             $messageConnection,
             $incidentId,
-            (string) $conf_4f_tbl ["nachrichten"]
+            (string) $conf_4f_tbl ["nachrichten"],
+            $trackingFilters
           );
         } finally {
           estab_auth_close ($messageConnection);
         }
         $incidentUi = $trackingData ["incident"];
         $trackingRows = $trackingData ["rows"];
+        $trackingWindow = $trackingData ["page_window"];
+        $trackingFilters ["page"] = $trackingWindow ["page"];
         $result = $trackingRows === array () ? "" : $trackingRows;
         $commandPostName = estab_incident_command_post_name ($incidentUi);
         echo "<p align=\"center\"><big><big><big><b>Führungsstelle ".
              estab_message_html ($commandPostName)." – Einsatz ".
              estab_message_html ($incidentUi ["kennung"] ?? "").
              "</big><br>Nachweisung Eingang / Ausgang</b></big></big></p>";
+        estab_message_list_render_resultbar ($trackingFilters, $trackingWindow);
         if ( $result != "" ){
           echo "<table style=\"text-align: center; background-color: rgb(255,255,255); \" border=\"2\" cellpadding=\"2\" cellspacing=\"2\">\n<tbody>\n";
           echo "<tr style=\"background-color: rgb(240,240,200); color:#000000; font-weight:bold;\">\n";
@@ -2144,11 +2324,12 @@ class Listen extends kategorien {
                }
                echo "</td>\n";
 */
-               echo "<td align=\"left\">"; if (($row["12_inhalt"] != "")) { echo "<a>".estab_message_html ($row["12_inhalt"])."</a>\n";  } else { echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";} estab_list_attachment_badge ($row ["12_anhang"] ?? null); echo "</td>\n";
+               echo "<td align=\"left\">".estab_message_list_clamped_text ($row["12_inhalt"] ?? ""); estab_list_attachment_badge ($row ["12_anhang"] ?? null); echo "</td>\n";
                echo "</tr>";
             }  // foreach $result
           }
           echo "</tbody></table>";
+          estab_list_tracking_pager ($trackingFilters, $trackingWindow, "nw_");
         } else { // Result ist leer
           echo "<big><big><big>Keine Daten vorhanden!</big></big></big>";
         }

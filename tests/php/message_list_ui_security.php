@@ -430,9 +430,19 @@ foreach ([
 ] as $surface => $table) {
     $assert(
         substr_count($table, '<caption class="estab-visually-hidden">') === 1
-            && substr_count($table, '<th scope="col">') === 7
-            && substr_count($table, 'data-label=') === 21,
+            && substr_count($table, '<th scope="col">') === 8
+            && substr_count($table, 'data-label=') === 24,
         $surface . ' result table lacks semantic or responsive labels'
+    );
+    $assert(
+        str_contains($table, '<th scope="col">Zeit und Verweildauer</th>')
+            && str_contains($table, '<th scope="col">Kenntnis</th>')
+            && substr_count($table, 'data-estab-message-dwell="') === 3
+            && substr_count(
+                $table,
+                'class="estab-message-list-awareness-group"'
+            ) === 3,
+        $surface . ' hides dwell time or reading state from the row'
     );
     $assert(
         str_contains($table, '<th scope="col">Überschrift und Inhalt</th>')

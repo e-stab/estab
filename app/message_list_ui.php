@@ -7,6 +7,8 @@ require_once __DIR__ . '/datetime.php';
 require_once __DIR__ . '/file_access.php';
 require_once __DIR__ . '/message_priority.php';
 require_once __DIR__ . '/message_repository.php';
+require_once __DIR__ . '/message_list.php';
+require_once __DIR__ . '/message_timeline.php';
 
 /** Human-readable workflow state without relying on colour alone. */
 function estab_message_list_status_label(mixed $status): string
@@ -141,6 +143,16 @@ function estab_message_list_filter_labels(array $filters): array
         $labels['status'] = 'Stand: '
             . estab_message_list_status_label($statusMap[$filters['status']] ?? null);
     }
+    if (($filters['read_state'] ?? '') !== '') {
+        $labels['read_state'] = 'Kenntnis: ' . (
+            $filters['read_state'] === 'unread' ? 'ungelesen' : 'gelesen'
+        );
+    }
+    if (($filters['done_state'] ?? '') !== '') {
+        $labels['done_state'] = 'Bearbeitung: ' . (
+            $filters['done_state'] === 'done' ? 'erledigt' : 'offen'
+        );
+    }
     if (($filters['from'] ?? '') !== '') {
         $labels['from'] = 'Von: '
             . (new DateTimeImmutable((string) $filters['from']))->format('d.m.Y');
@@ -180,6 +192,26 @@ function estab_message_list_status_options(): array
         'review' => 'In Sichtung',
         'done' => 'Abgeschlossen',
         'returned' => 'Zur Korrektur',
+    ];
+}
+
+/** @return array<string,string> */
+function estab_message_list_read_state_options(): array
+{
+    return [
+        '' => 'Gelesen und ungelesen',
+        'unread' => 'Nur ungelesene',
+        'read' => 'Nur gelesene',
+    ];
+}
+
+/** @return array<string,string> */
+function estab_message_list_done_state_options(): array
+{
+    return [
+        '' => 'Offen und erledigt',
+        'open' => 'Nur offene',
+        'done' => 'Nur erledigte',
     ];
 }
 
@@ -225,6 +257,10 @@ function estab_message_list_render_controls(
         throw new InvalidArgumentException('Ungültige versteckte Listenfelder');
     }
     $csrfHtml = (string) ($options['csrf_html'] ?? '');
+    // Only a caller which really owns per-identity read/done tables may offer
+    // those filters; otherwise the surface would promise a filter that no
+    // query can answer.
+    $stateFilters = ($options['state_filters'] ?? false) === true;
     $labels = estab_message_list_filter_labels($filters);
     $advancedOpen = ($filters['from'] ?? '') !== ''
         || ($filters['to'] ?? '') !== ''
@@ -297,6 +333,21 @@ function estab_message_list_render_controls(
             estab_message_list_status_options(),
             (string) ($filters['status'] ?? '')
         ) . '</select></label>';
+    if ($stateFilters) {
+        echo '<label for="' . $domPrefix . '-read-state"><span>Kenntnis</span>';
+        echo '<select id="' . $domPrefix . '-read-state" name="ml_read_state">'
+            . estab_message_list_select_options(
+                estab_message_list_read_state_options(),
+                (string) ($filters['read_state'] ?? '')
+            ) . '</select></label>';
+        echo '<label for="' . $domPrefix . '-done-state"><span>Bearbeitung'
+            . '</span>';
+        echo '<select id="' . $domPrefix . '-done-state" name="ml_done_state">'
+            . estab_message_list_select_options(
+                estab_message_list_done_state_options(),
+                (string) ($filters['done_state'] ?? '')
+            ) . '</select></label>';
+    }
     echo '</fieldset>';
 
     echo '<details class="estab-message-list-more"'
@@ -388,18 +439,23 @@ function estab_message_list_render_resultbar(
 }
 
 /** @return array<string,string> */
-function estab_message_list_filter_hidden_fields(array $filters): array
-{
+function estab_message_list_filter_hidden_fields(
+    array $filters,
+    string $prefix = 'ml_'
+): array {
+    $prefix = estab_message_list_prefix($prefix);
     return [
-        'ml_q' => (string) ($filters['q'] ?? ''),
-        'ml_direction' => (string) ($filters['direction'] ?? ''),
-        'ml_priority' => (string) ($filters['priority'] ?? ''),
-        'ml_status' => (string) ($filters['status'] ?? ''),
-        'ml_from' => (string) ($filters['from'] ?? ''),
-        'ml_to' => (string) ($filters['to'] ?? ''),
-        'ml_recipient' => (string) ($filters['recipient'] ?? ''),
-        'ml_sort' => (string) ($filters['sort'] ?? 'priority_newest'),
-        'ml_page_size' => (string) ($filters['page_size'] ?? 50),
+        $prefix . 'q' => (string) ($filters['q'] ?? ''),
+        $prefix . 'direction' => (string) ($filters['direction'] ?? ''),
+        $prefix . 'priority' => (string) ($filters['priority'] ?? ''),
+        $prefix . 'status' => (string) ($filters['status'] ?? ''),
+        $prefix . 'read_state' => (string) ($filters['read_state'] ?? ''),
+        $prefix . 'done_state' => (string) ($filters['done_state'] ?? ''),
+        $prefix . 'from' => (string) ($filters['from'] ?? ''),
+        $prefix . 'to' => (string) ($filters['to'] ?? ''),
+        $prefix . 'recipient' => (string) ($filters['recipient'] ?? ''),
+        $prefix . 'sort' => (string) ($filters['sort'] ?? 'priority_newest'),
+        $prefix . 'page_size' => (string) ($filters['page_size'] ?? 50),
     ];
 }
 
@@ -416,6 +472,10 @@ function estab_message_list_render_pager(
     $action = (string) ($options['action'] ?? '');
     $method = strtolower((string) ($options['method'] ?? 'get'));
     $target = (string) ($options['target'] ?? '_self');
+    $prefix = estab_message_list_prefix(
+        (string) ($options['prefix'] ?? 'ml_')
+    );
+    $pageField = $prefix . 'page';
     $hidden = $options['hidden'] ?? [];
     if (!is_array($hidden)) {
         throw new InvalidArgumentException('Ungültige Pagerfelder');
@@ -425,25 +485,27 @@ function estab_message_list_render_pager(
         . estab_auth_html($action) . '" target="' . estab_auth_html($target)
         . '">';
     echo (string) ($options['csrf_html'] ?? '');
-    foreach (array_merge(estab_message_list_filter_hidden_fields($filters), $hidden)
-        as $name => $value) {
+    foreach (array_merge(
+        estab_message_list_filter_hidden_fields($filters, $prefix),
+        $hidden
+    ) as $name => $value) {
         echo '<input type="hidden" name="' . estab_auth_html((string) $name)
             . '" value="' . estab_auth_html((string) $value) . '">';
     }
     $disabledBack = $page <= 1 ? ' disabled' : '';
     $disabledForward = $page >= $pages ? ' disabled' : '';
-    echo '<button class="estab-button" name="ml_page" value="1" type="submit"'
-        . $disabledBack . '>Erste</button>';
-    echo '<button class="estab-button" name="ml_page" value="'
+    echo '<button class="estab-button" name="' . $pageField
+        . '" value="1" type="submit"' . $disabledBack . '>Erste</button>';
+    echo '<button class="estab-button" name="' . $pageField . '" value="'
         . max(1, $page - 1) . '" type="submit"' . $disabledBack
         . '>Zurück</button>';
     echo '<span class="estab-message-list-page-status" aria-current="page">Seite '
         . $page . ' von ' . $pages . '</span>';
-    echo '<button class="estab-button" name="ml_page" value="'
+    echo '<button class="estab-button" name="' . $pageField . '" value="'
         . min($pages, $page + 1) . '" type="submit"' . $disabledForward
         . '>Weiter</button>';
-    echo '<button class="estab-button" name="ml_page" value="' . $pages
-        . '" type="submit"' . $disabledForward . '>Letzte</button>';
+    echo '<button class="estab-button" name="' . $pageField . '" value="'
+        . $pages . '" type="submit"' . $disabledForward . '>Letzte</button>';
     echo '</form></nav>';
 }
 
@@ -463,6 +525,111 @@ function estab_message_list_recipient_labels(mixed $stored): array
 }
 
 /**
+ * Dwell time of one row together with its deadline verdict.
+ *
+ * The verdict is written out, so colour only reinforces a word which is
+ * already there. The exact seconds stay in a data attribute for tooling and
+ * for tests.
+ */
+function estab_message_list_dwell_markup(array $row): string
+{
+    $priority = $row['09_vorrangstufe'] ?? null;
+    $state = estab_message_list_dwell_state(
+        $priority,
+        $row['estab_dwell_seconds'] ?? null,
+        $row['x00_status'] ?? null
+    );
+    $seconds = estab_message_list_dwell_seconds(
+        $row['estab_dwell_seconds'] ?? null
+    );
+    $verdict = [
+        'overdue' => 'überfällig',
+        'warn' => 'wird fällig',
+        'ok' => 'in Frist',
+    ][$state] ?? '';
+    if ($state === 'closed') {
+        $text = 'Laufzeit beendet';
+    } elseif ($seconds === null) {
+        $text = 'Verweildauer nicht nachgewiesen';
+    } else {
+        $text = 'seit ' . estab_message_timeline_duration_label($seconds)
+            . ' · ' . $verdict;
+    }
+    $limits = estab_message_list_dwell_limits($priority);
+    $title = 'Vorrang ' . estab_message_priority_label($priority)
+        . ': überfällig ab '
+        . estab_message_timeline_duration_label($limits['overdue']);
+    return '<span class="estab-message-list-dwell '
+        . 'estab-message-list-dwell--' . $state . '" '
+        . 'data-estab-message-dwell="' . $state . '"'
+        . ($seconds === null
+            ? ''
+            : ' data-estab-message-dwell-seconds="' . $seconds . '"')
+        . ' title="' . estab_auth_html($title) . '">'
+        . estab_auth_html($text) . '</span>';
+}
+
+/** Whether one EXISTS result column reports a present state row. */
+function estab_message_list_state_flag(mixed $value): bool
+{
+    return $value === 1 || $value === true || $value === '1';
+}
+
+/**
+ * Reading and handling state of one row.
+ *
+ * A caller without per-identity state tables says so instead of presenting an
+ * unread message as read.
+ */
+function estab_message_list_awareness_markup(array $row): string
+{
+    if (
+        !array_key_exists('estab_state_read', $row)
+        && !array_key_exists('estab_state_done', $row)
+    ) {
+        return '<span class="estab-message-list-awareness '
+            . 'estab-message-list-awareness--unknown">nicht geführt</span>';
+    }
+    $read = estab_message_list_state_flag($row['estab_state_read'] ?? null);
+    $done = estab_message_list_state_flag($row['estab_state_done'] ?? null);
+    return '<span class="estab-message-list-awareness '
+        . 'estab-message-list-awareness--' . ($read ? 'read' : 'unread')
+        . '">' . ($read ? 'gelesen' : 'ungelesen') . '</span>'
+        . '<span class="estab-message-list-awareness '
+        . 'estab-message-list-awareness--' . ($done ? 'done' : 'open')
+        . '">' . ($done ? 'erledigt' : 'offen') . '</span>';
+}
+
+/**
+ * Shorten one message text and keep the complete text one click away.
+ *
+ * Truncation is a display decision only: the full evidence text stays in the
+ * same row, so a Nachweisung line remains one screen line high without
+ * withholding anything.
+ */
+function estab_message_list_clamped_text(mixed $value, int $limit = 160): string
+{
+    if ($limit < 1) {
+        throw new InvalidArgumentException('Ungültige Textkürzung');
+    }
+    $text = estab_message_plain_text($value);
+    if (trim($text) === '') {
+        return '<span class="estab-message-list-clamp '
+            . 'estab-message-list-clamp--empty">ohne Inhalt</span>';
+    }
+    $excerpt = estab_message_excerpt($text, $limit);
+    if ($excerpt === $text) {
+        return '<span class="estab-message-list-clamp">'
+            . estab_message_html($text) . '</span>';
+    }
+    return '<span class="estab-message-list-clamp">'
+        . estab_message_html($excerpt) . ' …</span>'
+        . '<details class="estab-message-list-fulltext">'
+        . '<summary>Ganze Nachricht</summary><p>'
+        . estab_message_html($text) . '</p></details>';
+}
+
+/**
  * Render the common compact result table. The callback must emit exactly one
  * authenticated detail control for the supplied row.
  *
@@ -476,8 +643,9 @@ function estab_message_list_render_table(array $rows, callable $openControl): vo
         . 'des aktiven Einsatzes</caption>';
     echo '<thead><tr>';
     foreach ([
-        'TBB-Nachweis', 'Zeitpunkt', 'Von und An', 'Überschrift und Inhalt',
-        'Bearbeitungsstand', 'Verteilung', 'Aktion',
+        'TBB-Nachweis', 'Zeit und Verweildauer', 'Von und An',
+        'Überschrift und Inhalt', 'Bearbeitungsstand', 'Kenntnis',
+        'Verteilung', 'Aktion',
     ] as $heading) {
         echo '<th scope="col">' . estab_auth_html($heading) . '</th>';
     }
@@ -528,10 +696,13 @@ function estab_message_list_render_table(array $rows, callable $openControl): vo
             . '" data-priority="'
             . estab_auth_html($storedPriority ?? 'unknown') . '">'
             . estab_auth_html($priorityLabel) . '</span></td>';
-        echo '<td data-label="Zeitpunkt" class="estab-tool-table-number">'
+        echo '<td data-label="Zeit und Verweildauer" '
+            . 'class="estab-tool-table-number">'
+            . '<span class="estab-message-list-time">'
             . estab_auth_html(estab_message_list_datetime_label(
                 $row['12_abfzeit'] ?? null
-            )) . '</td>';
+            )) . '</span>'
+            . estab_message_list_dwell_markup($row) . '</td>';
         echo '<td data-label="Von und An"><span '
             . 'class="estab-message-list-correspondents"><span>'
             . '<strong>Von:</strong> '
@@ -569,6 +740,9 @@ function estab_message_list_render_table(array $rows, callable $openControl): vo
             . '" data-status="'
             . estab_auth_html((string) ($row['x00_status'] ?? 'unknown')) . '">'
             . estab_auth_html($statusLabel) . '</span></td>';
+        echo '<td data-label="Kenntnis"><span '
+            . 'class="estab-message-list-awareness-group">'
+            . estab_message_list_awareness_markup($row) . '</span></td>';
         echo '<td data-label="Verteilung"><span '
             . 'class="estab-message-list-recipients">';
         if ($recipients === []) {

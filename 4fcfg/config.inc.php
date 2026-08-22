@@ -199,6 +199,28 @@ require_once __DIR__ . '/../app/bootstrap.php';
          "dec" => '12'
     );
 /*****************************************************************/
+//    Verweildauer je Vorrangstufe
+//
+//    Ab "warn" gilt eine offene Nachricht in den Listen als auffaellig,
+//    ab "overdue" als ueberfaellig. Beide Werte in Sekunden. Die Stufen
+//    entsprechen den gespeicherten Vorrangwerten: aaa Staatsnotstand,
+//    bbb Blitz, sss Sofort, eee einfach; der leere Schluessel gilt fuer
+//    Nachrichten ohne gesetzte Vorrangstufe.
+//
+//    Ein Eintrag wird nur uebernommen, wenn beide Werte ganze Zahlen
+//    sind und warn nicht groesser als overdue ist. Sonst gilt die
+//    Vorgabe aus estab_message_list_dwell_default_thresholds().
+/*****************************************************************/
+
+$conf_4f ["verweildauer"] = array (
+    "aaa" => array ("warn" =>   300, "overdue" =>   600),
+    "bbb" => array ("warn" =>   600, "overdue" =>  1200),
+    "sss" => array ("warn" =>  1800, "overdue" =>  3600),
+    "eee" => array ("warn" =>  7200, "overdue" => 14400),
+    ""    => array ("warn" =>  7200, "overdue" => 14400)
+);
+
+/*****************************************************************/
 //    Tabellenfarben
 /*****************************************************************/
 

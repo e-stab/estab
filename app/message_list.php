@@ -20,6 +20,8 @@ function estab_message_list_default_filters(): array
         'direction' => '',
         'priority' => '',
         'status' => '',
+        'read_state' => '',
+        'done_state' => '',
         'from' => '',
         'to' => '',
         'recipient' => '',
@@ -259,6 +261,18 @@ function estab_message_list_parse_filters(
         ['', 'draft', 'ldf', 'transport', 'review', 'done', 'returned'],
         (string) $defaults['status']
     );
+    $readState = $enum(
+        $input,
+        $prefix . 'read_state',
+        ['', 'unread', 'read'],
+        (string) $defaults['read_state']
+    );
+    $doneState = $enum(
+        $input,
+        $prefix . 'done_state',
+        ['', 'open', 'done'],
+        (string) $defaults['done_state']
+    );
     $sort = $enum(
         $input,
         $prefix . 'sort',
@@ -304,6 +318,8 @@ function estab_message_list_parse_filters(
         'direction' => $direction,
         'priority' => $priority,
         'status' => $status,
+        'read_state' => $readState,
+        'done_state' => $doneState,
         'from' => $from,
         'to' => $to,
         'recipient' => $recipient,
@@ -375,6 +391,7 @@ function estab_message_list_apply_request(
     if (array_key_exists($removeKey, $request)) {
         $removable = [
             'q', 'direction', 'priority', 'status',
+            'read_state', 'done_state',
             'from', 'to', 'recipient',
         ];
         $field = $request[$removeKey];
@@ -519,7 +536,8 @@ function estab_message_list_exact_number(string $value): int|string|null
  */
 function estab_message_list_filter_sql(
     array $filters,
-    string $alias = 'm'
+    string $alias = 'm',
+    array $stateTables = []
 ): array {
     $alias = estab_message_list_alias($alias);
     $requestedRecipient = $filters['recipient'] ?? '';
@@ -562,6 +580,22 @@ function estab_message_list_filter_sql(
     if ($filters['status'] !== '') {
         $where[] = $column('x00_status') . ' = ?';
         $parameters[] = $statusValues[$filters['status']];
+    }
+    if ($filters['read_state'] !== '') {
+        $where[] = estab_message_list_state_exists_sql(
+            $stateTables,
+            'read',
+            $alias,
+            $filters['read_state'] === 'read'
+        );
+    }
+    if ($filters['done_state'] !== '') {
+        $where[] = estab_message_list_state_exists_sql(
+            $stateTables,
+            'done',
+            $alias,
+            $filters['done_state'] === 'done'
+        );
     }
     if ($filters['from'] !== '') {
         $where[] = $column('12_abfzeit') . ' >= ?';
@@ -742,4 +776,246 @@ function estab_message_list_page_window(int $count, array $filters): array
         'has_previous' => $pageCount > 0 && $page > 1,
         'has_next' => $pageCount > 0 && $page < $pageCount,
     ];
+}
+
+/**
+ * Validate one caller-supplied per-identity state table name.
+ *
+ * Read and done tables are derived from the signed-in identity, never from a
+ * request. Checking them here keeps this file free of a database dependency
+ * while refusing everything that is not a bare table identifier.
+ */
+function estab_message_list_state_table(
+    array $stateTables,
+    string $kind
+): string {
+    if (!in_array($kind, ['read', 'done'], true)) {
+        throw new InvalidArgumentException('Invalid message-list state kind');
+    }
+    $table = $stateTables[$kind] ?? null;
+    if (
+        !is_string($table)
+        || strlen($table) > 64
+        || preg_match('/\A[A-Za-z_][A-Za-z0-9_]*\z/D', $table) !== 1
+    ) {
+        throw new InvalidArgumentException(
+            'Invalid message-list state table'
+        );
+    }
+    return '`' . $table . '`';
+}
+
+/** Whether both per-identity state tables are available for this caller. */
+function estab_message_list_has_state_tables(array $stateTables): bool
+{
+    try {
+        estab_message_list_state_table($stateTables, 'read');
+        estab_message_list_state_table($stateTables, 'done');
+    } catch (InvalidArgumentException) {
+        return false;
+    }
+    return true;
+}
+
+/** Build one EXISTS/NOT EXISTS predicate against a per-identity state table. */
+function estab_message_list_state_exists_sql(
+    array $stateTables,
+    string $kind,
+    string $alias,
+    bool $present
+): string {
+    $alias = estab_message_list_alias($alias);
+    $table = estab_message_list_state_table($stateTables, $kind);
+    $stateAlias = 'estab_' . $kind . '_state';
+    return ($present ? 'EXISTS' : 'NOT EXISTS')
+        . ' (SELECT 1 FROM ' . $table . ' AS ' . $stateAlias
+        . ' WHERE ' . $stateAlias . '.`nachnum` = '
+        . $alias . '.`00_lfd`)';
+}
+
+/**
+ * Expose both per-identity states as fixed result columns.
+ *
+ * Callers without those tables receive an empty string and their list shows
+ * the column as not maintained instead of guessing a table name.
+ */
+function estab_message_list_state_select_sql(
+    array $stateTables,
+    string $alias = 'm'
+): string {
+    if (!estab_message_list_has_state_tables($stateTables)) {
+        return '';
+    }
+    return estab_message_list_state_exists_sql(
+        $stateTables,
+        'read',
+        $alias,
+        true
+    ) . ' AS `estab_state_read`, '
+        . estab_message_list_state_exists_sql(
+            $stateTables,
+            'done',
+            $alias,
+            true
+        ) . ' AS `estab_state_done`';
+}
+
+/**
+ * Seconds the message has been resting at its current workflow station.
+ *
+ * `nv_nachrichten_nachweiskopf`.`updated_at` carries the recorded_at value of
+ * the last workflow event, written by the database trigger of migration 80.
+ * Both ends of the difference are therefore database time, exactly like
+ * estab_message_timeline_duration_seconds(), and never a browser clock.
+ */
+function estab_message_list_dwell_seconds_sql(string $alias = 'm'): string
+{
+    $alias = estab_message_list_alias($alias);
+    return '(SELECT TIMESTAMPDIFF(SECOND, estab_dwell_head.`updated_at`,'
+        . ' NOW(6)) FROM `nv_nachrichten_nachweiskopf` AS estab_dwell_head'
+        . ' WHERE estab_dwell_head.`message_id` = ' . $alias . '.`00_lfd`'
+        . ' AND estab_dwell_head.`einsatz_id` = '
+        . $alias . '.`einsatz_id`)';
+}
+
+/** Return the dwell time as the shared result alias. */
+function estab_message_list_dwell_select_sql(string $alias = 'm'): string
+{
+    return estab_message_list_dwell_seconds_sql($alias)
+        . ' AS `estab_dwell_seconds`';
+}
+
+/** Upper bound for a configured threshold: 30 days. */
+const ESTAB_MESSAGE_LIST_DWELL_MAX_THRESHOLD = 2592000;
+
+/**
+ * The single table of dwell deadlines, in seconds, per priority.
+ *
+ * Overdue is a property of the priority: Staatsnot and Blitz tolerate far
+ * less waiting than routine traffic. The values live here once instead of
+ * being spread over the views that display them.
+ *
+ * @return array<string, array{warn:int,overdue:int}>
+ */
+function estab_message_list_dwell_default_thresholds(): array
+{
+    return [
+        'aaa' => ['warn' => 300, 'overdue' => 600],
+        'bbb' => ['warn' => 600, 'overdue' => 1200],
+        'sss' => ['warn' => 1800, 'overdue' => 3600],
+        'eee' => ['warn' => 7200, 'overdue' => 14400],
+        '' => ['warn' => 7200, 'overdue' => 14400],
+    ];
+}
+
+/** Accept one configured threshold, or null for everything unusable. */
+function estab_message_list_dwell_threshold_value(mixed $value): ?int
+{
+    if (is_int($value)) {
+        $parsed = $value;
+    } elseif (
+        is_string($value)
+        && preg_match('/\A[1-9][0-9]{0,7}\z/D', $value) === 1
+    ) {
+        $parsed = (int) $value;
+    } else {
+        return null;
+    }
+    return $parsed >= 60
+        && $parsed <= ESTAB_MESSAGE_LIST_DWELL_MAX_THRESHOLD
+        ? $parsed
+        : null;
+}
+
+/**
+ * Merge the configured deadlines over the documented defaults.
+ *
+ * The deployment configures `$conf_4f['verweildauer']`. An entry which is not
+ * a usable pair keeps the documented default for that priority, so a broken
+ * configuration can never silently switch the overdue warning off.
+ *
+ * @return array<string, array{warn:int,overdue:int}>
+ */
+function estab_message_list_dwell_thresholds(
+    mixed $configuration = null
+): array {
+    $thresholds = estab_message_list_dwell_default_thresholds();
+    if ($configuration === null) {
+        $configuration = is_array($GLOBALS['conf_4f'] ?? null)
+            ? ($GLOBALS['conf_4f']['verweildauer'] ?? null)
+            : null;
+    }
+    if (!is_array($configuration)) {
+        return $thresholds;
+    }
+    foreach ($thresholds as $priority => $default) {
+        $candidate = $configuration[$priority] ?? null;
+        if (!is_array($candidate)) {
+            continue;
+        }
+        $warn = estab_message_list_dwell_threshold_value(
+            $candidate['warn'] ?? null
+        );
+        $overdue = estab_message_list_dwell_threshold_value(
+            $candidate['overdue'] ?? null
+        );
+        if ($warn === null || $overdue === null || $warn > $overdue) {
+            continue;
+        }
+        $thresholds[$priority] = ['warn' => $warn, 'overdue' => $overdue];
+    }
+    return $thresholds;
+}
+
+/** Return the deadlines that apply to one stored priority value. */
+function estab_message_list_dwell_limits(
+    mixed $priority,
+    mixed $configuration = null
+): array {
+    $thresholds = estab_message_list_dwell_thresholds($configuration);
+    $key = estab_message_priority_storage_value($priority);
+    // Malformed legacy data is not allowed to buy itself a longer deadline,
+    // so it falls back to the routine entry that always exists.
+    return $thresholds[$key ?? ''] ?? $thresholds[''];
+}
+
+/** Parse the database-supplied dwell time without numeric coercion. */
+function estab_message_list_dwell_seconds(mixed $value): ?int
+{
+    if (is_int($value)) {
+        return $value >= 0 ? $value : null;
+    }
+    if (
+        !is_string($value)
+        || preg_match('/\A(?:0|[1-9][0-9]{0,9})\z/D', $value) !== 1
+    ) {
+        return null;
+    }
+    return (int) $value;
+}
+
+/**
+ * Verdict for one row: closed, unknown, ok, warn or overdue.
+ *
+ * A finished message no longer accumulates dwell pressure; a row without an
+ * evidence head stays honestly unknown instead of pretending to be punctual.
+ */
+function estab_message_list_dwell_state(
+    mixed $priority,
+    mixed $seconds,
+    mixed $status = null,
+    mixed $configuration = null
+): string {
+    if (filter_var($status, FILTER_VALIDATE_INT) === 8) {
+        return 'closed';
+    }
+    $seconds = estab_message_list_dwell_seconds($seconds);
+    if ($seconds === null) {
+        return 'unknown';
+    }
+    $limits = estab_message_list_dwell_limits($priority, $configuration);
+    if ($seconds >= $limits['overdue']) {
+        return 'overdue';
+    }
+    return $seconds >= $limits['warn'] ? 'warn' : 'ok';
 }

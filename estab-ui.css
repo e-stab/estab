@@ -6953,6 +6953,19 @@ a.estab-message-list-chip:hover {
     z-index: 2;
 }
 
+/* Acht Spalten muessen in dieselbe Mindestbreite passen wie vorher sieben.
+   Deshalb bekommt jede Spalte ihren Anteil zugewiesen, statt gleich breit zu
+   sein: Inhalt und Beteiligte bekommen den Platz, Kenntnis und Aktion nur so
+   viel, wie ihr laengstes Wort braucht. */
+.estab-message-list-table thead th:nth-child(1) { width: 12%; }
+.estab-message-list-table thead th:nth-child(2) { width: 12%; }
+.estab-message-list-table thead th:nth-child(3) { width: 14%; }
+.estab-message-list-table thead th:nth-child(4) { width: 25%; }
+.estab-message-list-table thead th:nth-child(5) { width: 10%; }
+.estab-message-list-table thead th:nth-child(6) { width: 9%; }
+.estab-message-list-table thead th:nth-child(7) { width: 10%; }
+.estab-message-list-table thead th:nth-child(8) { width: 8%; }
+
 .estab-message-list-table tbody tr:last-child > * {
     border-bottom: 0;
 }
@@ -7071,6 +7084,148 @@ a.estab-message-list-chip:hover {
     background: #ebeef2;
     border-color: #a8b3c0;
     color: #3d4956;
+}
+
+/* Verweildauer und Faelligkeit. Die Zeile nennt die Bewertung im Klartext
+   ("ueberfaellig", "wird faellig", "in Frist"); die Farbe verstaerkt nur das
+   Wort, das ohnehin dasteht. Die Schwellen kommen aus
+   estab_message_list_dwell_thresholds() und haengen an der Vorrangstufe. */
+.estab-message-list-time {
+    display: block;
+    font-variant-numeric: tabular-nums;
+}
+
+.estab-message-list-dwell {
+    align-items: center;
+    background: #eef2f7;
+    border: 1px solid #b3c0cf;
+    border-radius: 999px;
+    box-sizing: border-box;
+    color: #3d4d60;
+    display: inline-flex;
+    font-size: 0.76rem;
+    font-variant-numeric: tabular-nums;
+    font-weight: 700;
+    line-height: 1.2;
+    margin-top: 0.25rem;
+    max-width: 100%;
+    padding: 0.16rem 0.45rem;
+}
+
+.estab-message-list-dwell--warn {
+    background: #fff3c7;
+    border-color: #c89516;
+    color: #654600;
+}
+
+.estab-message-list-dwell--overdue {
+    background: #ffe1e5;
+    border-color: #b52a3a;
+    border-width: 2px;
+    color: #7d1422;
+    font-weight: 800;
+}
+
+.estab-message-list-dwell--overdue::before {
+    background: currentColor;
+    content: "";
+    flex: 0 0 auto;
+    height: 0.5rem;
+    margin-right: 0.35rem;
+    transform: rotate(45deg);
+    width: 0.5rem;
+}
+
+.estab-message-list-dwell--closed,
+.estab-message-list-dwell--unknown {
+    background: #f1f4f8;
+    border-color: #bcc7d4;
+    color: #4a5768;
+}
+
+/* Kenntnisnahme und Erledigung. Beide Angaben stehen als Wort in der Zelle,
+   damit die Spalte auch einfarbig gedruckt lesbar bleibt. */
+.estab-message-list-awareness-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+    min-width: 0;
+}
+
+.estab-message-list-awareness {
+    align-items: center;
+    background: #ebeef2;
+    border: 1px solid #a8b3c0;
+    border-radius: 999px;
+    box-sizing: border-box;
+    color: #3d4956;
+    display: inline-flex;
+    font-size: 0.76rem;
+    font-weight: 700;
+    line-height: 1.2;
+    max-width: 100%;
+    padding: 0.16rem 0.45rem;
+}
+
+.estab-message-list-awareness--unread {
+    background: #fff3c7;
+    border-color: #c89516;
+    color: #654600;
+    font-weight: 800;
+}
+
+.estab-message-list-awareness--unread::before {
+    background: currentColor;
+    border-radius: 50%;
+    content: "";
+    flex: 0 0 auto;
+    height: 0.45rem;
+    margin-right: 0.35rem;
+    width: 0.45rem;
+}
+
+.estab-message-list-awareness--open {
+    background: #e3eefb;
+    border-color: #6f9ecd;
+    color: #12446f;
+}
+
+.estab-message-list-awareness--done {
+    background: #ddf5e6;
+    border-color: #58a374;
+    color: #145d35;
+}
+
+.estab-message-list-awareness--unknown {
+    background: #f1f4f8;
+    border-color: #bcc7d4;
+    color: #4a5768;
+}
+
+/* Gekuerzter Nachrichtentext in den Nachweisungen. Die Zeile bleibt niedrig,
+   der vollstaendige Text bleibt in derselben Zeile erreichbar. */
+.estab-message-list-clamp {
+    display: block;
+    overflow-wrap: anywhere;
+}
+
+.estab-message-list-clamp--empty {
+    color: #52657a;
+    font-style: italic;
+}
+
+.estab-message-list-fulltext > summary {
+    color: #17456f;
+    cursor: pointer;
+    font-size: 0.78rem;
+    font-weight: 700;
+    margin-top: 0.2rem;
+}
+
+.estab-message-list-fulltext > p {
+    margin: 0.3rem 0 0;
+    overflow-wrap: anywhere;
+    white-space: pre-line;
 }
 
 .estab-message-list-attachments {
@@ -7714,6 +7869,11 @@ a.estab-message-list-chip:hover {
     .estab-tool-panel {
         padding: clamp(0.7rem, 1.6vw, 1rem);
     }
+
+    .estab-message-list-table th,
+    .estab-message-list-table td {
+        padding: 0.62rem 0.6rem;
+    }
 }
 
 @media (max-height: 46rem) {
@@ -7786,6 +7946,16 @@ a.estab-message-list-chip:hover {
 
     .estab-tool-page h1 {
         font-size: 1.2rem;
+    }
+
+    .estab-message-list-table th,
+    .estab-message-list-table td {
+        padding: 0.45rem 0.5rem;
+    }
+
+    .estab-message-list-dwell,
+    .estab-message-list-awareness {
+        font-size: 0.72rem;
     }
 }
 
