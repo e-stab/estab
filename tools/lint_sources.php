@@ -87,17 +87,38 @@ if ($compiled) {
     // Fallback: one interpreter per file. Slower, but identical coverage.
     $binary = PHP_BINARY !== '' ? PHP_BINARY : 'php';
     foreach ($files as $path) {
-        $command = escapeshellarg($binary) . ' -l ' . escapeshellarg($path)
-            . ' 2>&1';
-        $output = [];
-        $status = 0;
-        exec($command, $output, $status);
-        $text = implode("\n", $output);
+        $descriptors = [
+            0 => ['file', '/dev/null', 'r'],
+            1 => ['pipe', 'w'],
+            2 => ['pipe', 'w'],
+        ];
+        $pipes = [];
+        // The interpreter comes from PHP_BINARY and the path from the
+        // repository-internal file walk above. proc_open receives an argv
+        // array, so no shell parses either value and nothing needs escaping.
+        // nosemgrep: semgrep.php-dangerous-dynamic-exec
+        $process = @proc_open(
+            [$binary, '-l', $path],
+            $descriptors,
+            $pipes
+        );
+        if (!is_resource($process)) {
+            $failures[] = $relative($path) . ': cannot start ' . $binary;
+            continue;
+        }
+        $text = (string) stream_get_contents($pipes[1])
+            . (string) stream_get_contents($pipes[2]);
+        foreach ($pipes as $pipe) {
+            if (is_resource($pipe)) {
+                fclose($pipe);
+            }
+        }
+        $status = proc_close($process);
         if ($status !== 0) {
             $failures[] = $relative($path) . ': ' . trim($text);
             continue;
         }
-        foreach ($output as $line) {
+        foreach (preg_split('~\R~', $text) ?: [] as $line) {
             if (str_starts_with($line, 'Deprecated:')) {
                 $failures[] = $relative($path) . ': ' . trim($line);
             }
