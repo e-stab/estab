@@ -2301,6 +2301,11 @@ ANTWORT % WEITERLEITUNG
             : "",
           is_array ($workflowSelectedIdentity)
             ? (string) ($workflowSelectedIdentity ["funktion"] ?? "")
+            : "",
+          // Die Nachrichtenart steht im Datensatz, nicht in der Anfrage:
+          // eine Gespraechsnotiz endet mit der Sichtung.
+          is_array ($objectMessage)
+            ? (string) ($objectMessage ["11_gesprnotiz"] ?? "")
             : ""
         ));
       }

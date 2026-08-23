@@ -601,7 +601,7 @@ HTML;
             ],
             12 => [
                 'title' => 'Gesprächsnotiz',
-                'text' => 'Kreuzen Sie Gesprächsnotiz an, wenn Sie ein Gespräch eigenständig übermittelt, aufgenommen oder notiert haben. Die oben gewählte Übermittlungsart dokumentiert dieses ursprüngliche Gespräch. Nach der formalen Sichtung ergänzt LdF Rufname und Beförderungsweg; der Fernmelder übernimmt anschließend den Beförderungsnachweis.',
+                'text' => 'Kreuzen Sie Gesprächsnotiz an, wenn Sie ein Gespräch eigenständig übermittelt, aufgenommen oder notiert haben. Die oben gewählte Übermittlungsart dokumentiert dieses ursprüngliche Gespräch. Die Notiz hält fest, was bereits gesprochen wurde: mit der formalen Sichtung ist sie abgeschlossen, eine Disposition durch den LdF und eine Beförderung finden nicht statt.',
             ],
             13 => [
                 'title' => 'Inhalt – Betreff',
@@ -2040,8 +2040,8 @@ HTML;
             echo '<div><span class="estab-section-kicker">Weiterer Nachrichtenlauf</span>'
                 . '<h2 id="estab-message-workflow-title">Gesprächsnotiz zur Sichtung geben</h2>'
                 . '<p>Die im Vordruck ausgewählte Übermittlungsart beschreibt das '
-                . 'ursprüngliche Gespräch. Rufname und Beförderungsweg werden erst '
-                . 'in den folgenden Bearbeitungsschritten ergänzt.</p></div>';
+                . 'ursprüngliche Gespräch. Die Sichtung schliesst die Notiz ab; '
+                . 'eine Disposition und eine Beförderung folgen nicht.</p></div>';
         } else {
             echo '<div><span class="estab-section-kicker">Digitale Bearbeitung</span>'
                 . '<h2 id="estab-message-workflow-title">Betriebliche Ergänzungen</h2>'

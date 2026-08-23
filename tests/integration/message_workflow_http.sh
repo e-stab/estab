@@ -100,7 +100,6 @@ outgoing_marker="E2EOUT_${identity_seed}_dv"
 outgoing_subject="E2E Ausgang ${identity_seed}"
 conversation_marker="E2ECONV_${identity_seed}_dv"
 conversation_subject="E2E Gesprächsnotiz ${identity_seed}"
-conversation_callsign="E2E-Gespräch-Rufname"
 mapping_incoming_marker="E2EMAPIN_${identity_seed}_dv"
 mapping_outgoing_marker="E2EMAPOUT_${identity_seed}_dv"
 reply_marker="E2EREPLY_${identity_seed}_dv"
@@ -4186,9 +4185,9 @@ load_dashboard "$s3_cookies" 'S3 list after outgoing completion'
 assert_body_absent "$outgoing_marker" 'S3 non-recipient outgoing list'
 
 # Conversation note: the staff member records how the original conversation
-# took place. It remains a regular outgoing form afterwards: Si checks it,
-# LdF adds the remote callsign and active S6 route, and A/W records the
-# transport before the row, TTB evidence and generated form become terminal.
+# took place. It has its own short route: Si checks it formally and that
+# closes it. Nothing is left to dispose and nothing is left to carry, so
+# neither LdF nor A/W ever see it.
 load_dashboard "$s1_cookies" 'S1 dashboard before conversation note'
 conversation_csrf=$(csrf_from_body)
 assert_status 200 'open S1 conversation-note draft' \
@@ -4400,128 +4399,31 @@ assert_db_equals \
 finish_viewer_outgoing \
     "$conversation_marker" "$conversation_id" \
     'Gesprächsnotiz formal geprüft'
+# Die Gespraechsnotiz haelt ein bereits gefuehrtes Gespraech fest. Mit der
+# formalen Sichtung ist ihr Laufweg beendet: es gibt nichts mehr zu
+# disponieren und nichts mehr zu befoerdern. Weder der LdF noch die
+# Fernmelder duerfen sie danach noch in ihrer Warteschlange sehen, und es
+# darf kein Befoerderungsnachweis entstehen.
 assert_message_state "$conversation_marker" \
-    "A|1|f|set|${si_code}|S2_rt,S1_gn,|f||f" \
-    'Si-approved conversation awaiting LdF'
-load_dashboard "$aw_cookies" 'A/W queue before conversation LdF disposition'
+    "A|8|t|set|${si_code}|S2_rt,S1_gn,|f||f" \
+    'Si review closes the conversation note'
+load_dashboard "$ldf_cookies" 'LdF queue after conversation Si review'
 assert_body_absent "$conversation_marker" \
-    'undisposed conversation hidden from A/W'
-
-# Rufname and the active S6 route are both genuine LdF decisions. Omitting
-# either one must keep the message at status 1 and out of the A/W queue.
-load_dashboard "$ldf_cookies" 'LdF queue for incomplete conversation disposition'
-assert_body "$conversation_marker" 'conversation visible to LdF after Si review'
-assert_route_control ldf meldung "$conversation_id" \
-    'conversation LdF disposition detail'
-conversation_ldf_csrf=$(csrf_from_body)
-assert_status 200 'open conversation LdF disposition' \
-    --cookie "$ldf_cookies" --cookie-jar "$ldf_cookies" \
-    --request POST \
-    --data-urlencode "csrf_token=$conversation_ldf_csrf" \
-    --data-urlencode 'ldf=meldung' \
-    --data-urlencode "00_lfd=$conversation_id" \
-    "$base_url/4fach/mainindex.php"
-assert_no_runtime_error 'conversation LdF disposition form'
-conversation_ldf_csrf=$(csrf_from_body)
-conversation_ldf_time=$(app_tactical_clock)
-assert_status 422 'reject conversation disposition without callsign' \
-    --cookie "$ldf_cookies" --cookie-jar "$ldf_cookies" \
-    --request POST \
-    --data-urlencode "csrf_token=$conversation_ldf_csrf" \
-    --data-urlencode 'absenden_x=1' \
-    --data-urlencode 'task=LdF-Ausgang' \
-    --data-urlencode "00_lfd=$conversation_id" \
-    --data-urlencode "02_zeit=$conversation_ldf_time" \
-    --data-urlencode "02_zeichen=$ldf_code" \
-    --data-urlencode '05_gegenstelle=' \
-    --data-urlencode "fernmeldeplan_eintrag_id=$telecom_route_b_id" \
-    "$base_url/4fach/mainindex.php"
-assert_no_runtime_error 'missing conversation callsign validation'
-assert_body 'name="task" value="LdF-Ausgang"' \
-    'missing callsign keeps LdF form open'
-assert_message_state "$conversation_marker" \
-    "A|1|f|set|${si_code}|S2_rt,S1_gn,|t|${ldf_code}|f" \
-    'missing callsign keeps conversation at LdF'
-assert_db_equals 0 'missing callsign creates no LdF evidence' \
-    "SELECT COUNT(*) FROM \`nv_nachrichten_ereignisse\` WHERE \`message_id\`=${conversation_id} AND \`event_type\`='ldf_dispatched';"
-assert_db_equals 'unset|unset|0|unset|unset' \
-    'missing callsign persists no partial LdF disposition' \
-    "SELECT CONCAT(IF(\`05_gegenstelle\` IS NULL OR \`05_gegenstelle\`='', 'unset', 'set'), '|', IF(\`06_befweg\` IS NULL OR \`06_befweg\`='', 'unset', 'set'), '|', COALESCE(\`estab_fernmeldeplan_eintrag_id\`, 0), '|', IF(\`02_zeit\` IS NULL, 'unset', 'set'), '|', IF(COALESCE(\`02_zeichen\`, '')='', 'unset', 'set')) FROM \`nv_nachrichten\` WHERE \`00_lfd\`=${conversation_id};"
-conversation_ldf_csrf=$(csrf_from_body)
-assert_status 422 'reject conversation disposition without S6 route' \
-    --cookie "$ldf_cookies" --cookie-jar "$ldf_cookies" \
-    --request POST \
-    --data-urlencode "csrf_token=$conversation_ldf_csrf" \
-    --data-urlencode 'absenden_x=1' \
-    --data-urlencode 'task=LdF-Ausgang' \
-    --data-urlencode "00_lfd=$conversation_id" \
-    --data-urlencode "02_zeit=$conversation_ldf_time" \
-    --data-urlencode "02_zeichen=$ldf_code" \
-    --data-urlencode "05_gegenstelle=$conversation_callsign" \
-    --data-urlencode 'fernmeldeplan_eintrag_id=' \
-    "$base_url/4fach/mainindex.php"
-assert_no_runtime_error 'missing conversation route validation'
-assert_body 'name="task" value="LdF-Ausgang"' \
-    'missing S6 route keeps LdF form open'
-assert_message_state "$conversation_marker" \
-    "A|1|f|set|${si_code}|S2_rt,S1_gn,|t|${ldf_code}|f" \
-    'missing route keeps conversation at LdF'
-assert_db_equals 0 'missing route creates no LdF evidence' \
-    "SELECT COUNT(*) FROM \`nv_nachrichten_ereignisse\` WHERE \`message_id\`=${conversation_id} AND \`event_type\`='ldf_dispatched';"
-assert_db_equals 'unset|unset|0|unset|unset' \
-    'missing route persists no partial LdF disposition' \
-    "SELECT CONCAT(IF(\`05_gegenstelle\` IS NULL OR \`05_gegenstelle\`='', 'unset', 'set'), '|', IF(\`06_befweg\` IS NULL OR \`06_befweg\`='', 'unset', 'set'), '|', COALESCE(\`estab_fernmeldeplan_eintrag_id\`, 0), '|', IF(\`02_zeit\` IS NULL, 'unset', 'set'), '|', IF(COALESCE(\`02_zeichen\`, '')='', 'unset', 'set')) FROM \`nv_nachrichten\` WHERE \`00_lfd\`=${conversation_id};"
-conversation_ldf_csrf=$(csrf_from_body)
-assert_status 200 'cancel incomplete conversation LdF disposition' \
-    --cookie "$ldf_cookies" --cookie-jar "$ldf_cookies" \
-    --request POST \
-    --data-urlencode "csrf_token=$conversation_ldf_csrf" \
-    --data-urlencode 'abbrechen_x=1' \
-    --data-urlencode 'task=LdF-Ausgang' \
-    --data-urlencode "00_lfd=$conversation_id" \
-    "$base_url/4fach/mainindex.php"
-assert_no_runtime_error 'cancelled incomplete conversation LdF disposition'
-assert_message_state "$conversation_marker" \
-    "A|1|f|set|${si_code}|S2_rt,S1_gn,|f||f" \
-    'cancel releases incomplete conversation LdF lock'
-load_dashboard "$aw_cookies" 'A/W queue after incomplete conversation disposition'
+    'closed conversation absent from LdF queue'
+load_dashboard "$aw_cookies" 'A/W queue after conversation Si review'
 assert_body_absent "$conversation_marker" \
-    'incompletely disposed conversation hidden from A/W'
-
-finish_ldf_outgoing \
-    "$conversation_marker" "$conversation_id" "$conversation_callsign" \
-    'Gesprächsnotiz-Nachweisweg' "$telecom_route_b_id" \
-    "$telecom_route_b_text"
-assert_message_state "$conversation_marker" \
-    "A|2|f|set|${si_code}|S2_rt,S1_gn,|f||f" \
-    'LdF-disposed conversation awaiting A/W'
-assert_db_equals \
-    "Fu|${conversation_callsign}|${telecom_route_b_text}|${telecom_route_b_id}" \
-    'LdF disposition of the conversation note is documented in Feld 1' \
-    "SELECT CONCAT(\`01_medium\`, '|', \`05_gegenstelle\`, '|', \`06_befweg\`, '|', \`estab_fernmeldeplan_eintrag_id\`) FROM \`nv_nachrichten\` WHERE \`00_lfd\`=${conversation_id};"
-assert_db_equals \
-    'Fe' \
-    'medium of the documented conversation stays in the immutable evidence' \
-    "SELECT JSON_UNQUOTE(JSON_EXTRACT(\`field_snapshot\`, '$.medium_before_disposition')) FROM \`nv_nachrichten_ereignisse\` WHERE \`message_id\`=${conversation_id} AND \`event_type\`='ldf_dispatched' ORDER BY \`event_id\` DESC LIMIT 1;"
-assert_db_equals 0 'LdF disposition creates no premature TTB evidence' \
+    'closed conversation absent from A/W queue'
+assert_db_equals 0 \
+    'closed conversation note creates no transport evidence' \
     "SELECT COUNT(*) FROM \`nv_tbb\` WHERE \`einsatz_id\`=${active_incident_id} AND \`estab_message_id\`=${conversation_id};"
-
-finish_fm_outgoing \
-    "$conversation_marker" "$conversation_id" "$conversation_callsign" \
-    "$telecom_route_b_text"
-assert_message_state "$conversation_marker" \
-    "A|8|t|set|${si_code}|S2_rt,S1_gn,|f||t" \
-    'A/W-completed conversation note'
-assert_db_equals 1 'conversation transport creates exactly one TTB entry' \
-    "SELECT COUNT(*) FROM \`nv_tbb\` WHERE \`einsatz_id\`=${active_incident_id} AND \`estab_message_id\`=${conversation_id} AND BINARY \`estab_entry_type\`=BINARY 'nachricht';"
 assert_db_equals \
-    'conversation_note_created,si_returned,author_resubmitted,si_approved,ldf_dispatched,aw_transported' \
+    'conversation_note_created,si_returned,author_resubmitted,conversation_note_closed' \
     'conversation-note DV transition event order' \
     "SELECT GROUP_CONCAT(\`event_type\` ORDER BY \`event_id\` SEPARATOR ',') FROM \`nv_nachrichten_ereignisse\` WHERE \`message_id\`=${conversation_id};"
 assert_db_equals \
-    "Fu|${telecom_route_b_text}|${telecom_route_b_id}|${aw_code}" \
-    'conversation completion preserves the disposed route evidence' \
-    "SELECT CONCAT(\`01_medium\`, '|', \`06_befweg\`, '|', \`estab_fernmeldeplan_eintrag_id\`, '|', \`03_zeichen\`) FROM \`nv_nachrichten\` WHERE \`00_lfd\`=${conversation_id};"
+    'unset|unset|0' \
+    'closed conversation note carries no disposition' \
+    "SELECT CONCAT(IF(\`06_befweg\` IS NULL OR \`06_befweg\`='', 'unset', 'set'), '|', IF(COALESCE(\`03_zeichen\`, '')='', 'unset', 'set'), '|', COALESCE(\`estab_fernmeldeplan_eintrag_id\`, 0)) FROM \`nv_nachrichten\` WHERE \`00_lfd\`=${conversation_id};"
 if ! generated_form_check present A "$conversation_number"; then
     echo 'Message workflow HTTP: conversation completion generated no form' >&2
     exit 1

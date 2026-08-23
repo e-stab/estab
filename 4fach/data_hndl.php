@@ -1474,8 +1474,10 @@ function check_and_save ($data, $activeCommandPostName, $expectedIncidentId){
            "01_medium" => $data ["01_medium"],
            "01_datum" => konv_taktime_datetime ($data ["01_datum"]),
            "01_zeichen" => $data ["01_zeichen"],
-           // Acceptance, disposition and transport belong to Si, LdF and
-           // A/W. Creating the note must not pre-populate their evidence.
+           // Acceptance belongs to Si, and there it ends: a conversation
+           // note records a talk that already happened, so no disposition
+           // and no transport follow. Creating it must not pre-populate
+           // the reviewer's evidence either.
            "02_zeit" => null,
            "02_zeichen" => "",
            "03_datum" => null,
@@ -1514,8 +1516,6 @@ function check_and_save ($data, $activeCommandPostName, $expectedIncidentId){
                "author_function" => $sessionFunction,
                "original_conversation_medium" => $data ["01_medium"],
                "review_required" => true,
-               "ldf_disposition_required" => true,
-               "transport_evidence_required" => true,
                "content_sha256" => hash ("sha256", $data ["12_inhalt"]),
              ),
              $messageActionToken,

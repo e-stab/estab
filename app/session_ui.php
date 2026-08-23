@@ -548,9 +548,13 @@ function estab_session_ui_message_outcome(
     string $task,
     array $request,
     string $direction = '',
-    string $actingFunction = ''
+    string $actingFunction = '',
+    string $kind = ''
 ): ?array {
     $direction = in_array($direction, ['E', 'A'], true) ? $direction : '';
+    // Die Nachrichtenart entscheidet über die nächste Station und wird vom
+    // Aufrufer aus dem Datensatz gelesen, nie aus der Anfrage.
+    $isConversationNote = $kind === 't';
     $actingFunction = preg_match(
         '/\A(?:A\/W|[A-Za-z0-9_]{1,10})\z/D',
         $actingFunction
@@ -725,6 +729,22 @@ function estab_session_ui_message_outcome(
                     'detail' => 'Die Durchschriften stehen den im Laufweg '
                         . 'angekreuzten Funktionen zur Verfügung. Der '
                         . 'Vordruck ist abgeschlossen.',
+                    'acting_function' => null,
+                    'actions' => $viewerNext,
+                ];
+            }
+            if ($isConversationNote) {
+                // Eine Gesprächsnotiz hält ein bereits geführtes Gespräch
+                // fest. Mit der Sichtung ist ihr Laufweg beendet; weder der
+                // LdF noch die Fernmelder kommen noch an die Reihe.
+                return [
+                    'tone' => 'completed',
+                    'title' => 'Gesprächsnotiz gesichtet',
+                    'destination' => 'Abgeschlossen und nachgewiesen',
+                    'detail' => 'Die Notiz hält ein bereits geführtes '
+                        . 'Gespräch fest. Ihr Laufweg endet mit der '
+                        . 'Sichtung; eine Disposition und eine Beförderung '
+                        . 'finden nicht statt.',
                     'acting_function' => null,
                     'actions' => $viewerNext,
                 ];

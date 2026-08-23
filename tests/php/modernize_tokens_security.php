@@ -34,6 +34,7 @@ $nestedLiteral = ['a' => [ESTAB_PROBE_ONE]];
 $argument = probe_call([ESTAB_PROBE_ONE]);
 $returned = static fn (): array => [ESTAB_PROBE_ONE];
 $quoted = $row['key'];
+$constantSubscript = $GLOBALS[ESTAB_PROBE_ONE];
 PROBE;
 
 $workspace = sys_get_temp_dir() . '/estab-modernize-' . bin2hex(random_bytes(8));
@@ -83,6 +84,14 @@ try {
     $rewritten = file_get_contents($workspace . '/4fach/probe.php');
     $assert(is_string($rewritten), 'The rewritten probe cannot be read');
     $rewritten = (string) $rewritten;
+
+    // Eine eigene Konstante als Index ist gemeint. Wuerde sie quotiert,
+    // stuende dort still ihr Name statt ihres Wertes, und der Zugriff ginge
+    // ins Leere, ohne dass irgendetwas auffaellt.
+    $assert(
+        str_contains($rewritten, '$GLOBALS[ESTAB_PROBE_ONE]'),
+        'Der Modernisierer quotiert eine eigene Konstante als Index.'
+    );
 
     foreach ([
         "\$row['key']" => 'the plain subscript',

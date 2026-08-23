@@ -158,9 +158,13 @@ $requiredGuideContent = [
     9 => ['Vorrangstufe', 'Sofort', 'Blitz', 'Staatsnot'],
     10 => ['Immer ausfüllen', 'Dienststellen-', 'Eigennamen'],
     11 => ['Rufnummer', 'Gesprächsnotizen'],
+    // Die Gesprächsnotiz hält ein bereits geführtes Gespräch fest. Der
+    // Hinweis nannte früher LdF, Rufname, Beförderungsweg und Fernmelder --
+    // Stationen, die dieser Laufweg gar nicht mehr hat. Er muss stattdessen
+    // sagen, dass die Sichtung sie abschliesst.
     12 => [
         'eigenständig', 'übermittelt', 'aufgenommen', 'notiert',
-        'ursprüngliche', 'LdF', 'Rufname', 'Beförderungsweg', 'Fernmelder',
+        'ursprüngliche', 'Sichtung', 'abgeschlossen',
     ],
     13 => ['Inhalt ist immer auszufüllen', 'Betreff'],
     14 => ['Inhalt ist immer auszufüllen', 'so kurz wie möglich', 'Blockschrift', 'Nachrichtentext'],

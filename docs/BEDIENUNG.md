@@ -73,13 +73,18 @@ werden. Das sollte nur in einem kontrollierten Netz geschehen.
 Die Anwendung führt Nachrichten durch feste Stationen:
 
 ```text
-Ausgang: Verfasser → Si → LdF → Fernmelder → abgeschlossen
-Eingang: Fernmelder → LdF → Si → Empfänger → abgeschlossen
+Ausgang:       Verfasser → Si → LdF → Fernmelder → abgeschlossen
+Eingang:       Fernmelder → LdF → Si → Empfänger → abgeschlossen
+Gesprächsnotiz: Verfasser → Si → abgeschlossen
 ```
 
 Eine zurückgegebene Nachricht geht zur korrigierenden Station zurück; die
 Statusleiste des Vordrucks zeigt auch wiederholte Durchläufe und Laufzeiten.
-Gesprächsnotizen durchlaufen denselben Ausgangsweg.
+
+Die Gesprächsnotiz hat einen eigenen, kurzen Laufweg: Sie hält ein bereits
+geführtes Gespräch fest, deshalb ist mit der Sichtung nichts mehr zu
+befördern. Eine Disposition durch den LdF und ein Beförderungsnachweis der
+Fernmelder entfallen.
 
 ### Nachricht anlegen
 

@@ -19,6 +19,10 @@ $excludedTopLevels = [
     '.git', 'app', 'docs', 'migration', 'tmp', 'tools', 'var', 'vendor',
 ];
 $constantKeys = ['MYSQL_ASSOC', 'MYSQL_NUM', 'MYSQL_BOTH'];
+// Eigene Konstanten dieser Anwendung tragen alle das Praefix ESTAB_.
+// Als Index sind sie gemeint, nicht vergessen zu setzen: sie zu
+// quotieren machte aus dem Wert stillschweigend seinen Namen.
+$constantKeyPattern = '~\\AESTAB_[A-Z0-9_]+\\z~D';
 $changedFiles = [];
 $changedKeys = [];
 
@@ -90,7 +94,8 @@ foreach ($iterator as $file) {
             && $isSubscript
             && significantToken($tokens, $index - 1, -1) === '['
             && significantToken($tokens, $index + 1, 1) === ']'
-            && !in_array($text, $constantKeys, true);
+            && !in_array($text, $constantKeys, true)
+            && preg_match($constantKeyPattern, $text) !== 1;
         if ($isBareArrayKey) {
             $rewritten .= "'" . str_replace(['\\', "'"], ['\\\\', "\\'"], $text) . "'";
             $fileChanges++;

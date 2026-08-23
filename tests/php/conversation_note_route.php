@@ -214,4 +214,47 @@ $assert(
     )
 );
 
+/*
+ * Die Erstellungsevidenz ist hashverkettet und unveraenderlich. Sie darf
+ * deshalb nichts behaupten, was der Laufweg nicht vorsieht: eine Gespraechs-
+ * notiz endet bei der Sichtung, es folgt weder eine Disposition durch den LdF
+ * noch eine Befoerderung durch die Fernmelder.
+ */
+$creation = $read('4fach/data_hndl.php');
+$assert(
+    !str_contains($creation, '"ldf_disposition_required" => true,')
+        && !str_contains($creation, '"transport_evidence_required" => true,'),
+    estab_dv_requirement(
+        'NV-GESPRAECHSNOTIZ-LAUFWEG',
+        'Die unveraenderliche Erstellungsevidenz schreibt der Gespraechsnotiz '
+            . 'Disposition und Befoerderung vor, die es nicht gibt'
+    )
+);
+
+/*
+ * Die Erfolgsbestaetigung nennt die naechste Station. Bei einer Gespraechs-
+ * notiz ist die Sichtung die letzte, danach ist die Nachricht abgeschlossen.
+ * Dafuer muss die Bestaetigung die Nachrichtenart kennen, und zwar aus dem
+ * Datensatz und nicht aus dem Browser.
+ */
+$sessionUi = $read('app/session_ui.php');
+$assert(
+    preg_match(
+        '~function estab_session_ui_message_outcome\([^)]*string \$kind~',
+        $sessionUi
+    ) === 1,
+    estab_dv_requirement(
+        'NV-GESPRAECHSNOTIZ-LAUFWEG',
+        'Die Erfolgsbestaetigung kennt die Nachrichtenart nicht und meldet '
+            . 'der Gespraechsnotiz eine Uebergabe an den LdF'
+    )
+);
+$assert(
+    str_contains($sessionUi, '$isConversationNote'),
+    estab_dv_requirement(
+        'NV-GESPRAECHSNOTIZ-LAUFWEG',
+        'Die Erfolgsbestaetigung unterscheidet die Gespraechsnotiz nicht'
+    )
+);
+
 printf("conversation note route: OK (%d assertions)\n", $assertions);
