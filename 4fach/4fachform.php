@@ -1380,7 +1380,7 @@ HTML;
   function showerrorinfo ($errorat)
   {   include ("../4fcfg/config.inc.php");
     echo "<a href=\"../language/german/helptext.php?Errorart=".$errorat.
-         "\" onclick=\"FensterOeffnen(this.href); return false\"><img src=\"".
+         "\" data-estab-help-window><img src=\"".
          $conf_design_path."/warning.gif\" alt=\"Fehler\" width=\"24\"height=\"24\" title=\"Fehler\"></a>";
   }
 

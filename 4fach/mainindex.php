@@ -1601,14 +1601,16 @@ if (
       $confirmationMarkup !== ""
     ); // Normaler Seitenaufbau mit Auffrischung
     if ($confirmationMarkup === "") {
-      echo "<body onload=\"".
-           estab_auth_html (estab_session_ui_frame_refresh_script ()).
-           "\">";
+      echo "<body>";
+      echo estab_session_ui_frame_refresh_markup (
+        estab_session_ui_frame_refresh_script ()
+      );
       return;
     }
-    echo "<body class=\"estab-tool-page\" onload=\"".
-         estab_auth_html (estab_session_ui_sidebar_refresh_script ()).
-         "\">";
+    echo "<body class=\"estab-tool-page\">";
+    echo estab_session_ui_frame_refresh_markup (
+      estab_session_ui_sidebar_refresh_script ()
+    );
     echo $confirmationMarkup;
   }
 

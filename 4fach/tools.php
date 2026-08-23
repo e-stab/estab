@@ -48,6 +48,18 @@ require_once __DIR__ . "/../app/session_ui.php";
         echo"<script".estab_csp_script_attribute()." type=\"text/javascript\">";
         echo "function FensterOeffnen (Adresse) {MeinFenster = window.open(Adresse, \"Zweitfenster\", \"width=700,height=650,left=100,top=100,menubar=no,location=no,resizable=yes,scrollbars=yes,status=no,toolbar=no\"); if (MeinFenster) { MeinFenster.focus(); }}";
         echo "</script>";
+        // Der Hilfeverweis trug einen onclick-Handler; den lehnt die
+        // Richtlinie ab. Die Bindung liegt jetzt am Datenattribut.
+        echo "<script".estab_csp_script_attribute()." data-estab-help-window-binding>";
+        echo "document.addEventListener(\"click\",function(event){";
+        echo "var target=event.target;";
+        echo "if(!target||typeof target.closest!==\"function\"){return;}";
+        echo "var link=target.closest(\"[data-estab-help-window]\");";
+        echo "if(!link){return;}";
+        echo "event.preventDefault();";
+        echo "FensterOeffnen(link.href);";
+        echo "});";
+        echo "</script>";
 
      break;
      case "status":
@@ -897,7 +909,9 @@ bersichtlich dargestellt werden.
       "function schedule(delay){window.setTimeout(function(){\n".
       "if(busy()){schedule(5000);return;}\n".
       "remember();window.location.reload();},delay);}\n".
-      "schedule(".$milliseconds.");\n".
+      "function start(){schedule(".$milliseconds.");}\n".
+      "if(document.readyState==='complete'){start();}\n".
+      "else{window.addEventListener('load',start);}\n".
       "})();\n".
       "</script>\n";
   }

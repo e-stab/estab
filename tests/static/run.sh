@@ -102,6 +102,7 @@ for test_name in \
     runtime_compatibility \
     config_security \
     csp_nonce_security \
+    csp_inline_handler_security \
     pipeline_workflow_contract \
     third_party_notice_contract \
     date_compatibility \

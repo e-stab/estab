@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/auth.php';
+require_once __DIR__ . '/csp.php';
 require_once __DIR__ . '/csrf.php';
 require_once __DIR__ . '/incident_ui.php';
 require_once __DIR__ . '/navigation.php';
@@ -505,6 +506,23 @@ function estab_session_ui_sidebar_refresh_script(): string
     );
 
     return 'FramesVeraendern(' . implode(',', $encoded) . ');';
+}
+
+/**
+ * Wrap a frame refresh in a script element the policy admits.
+ *
+ * The refresh used to sit in an onload attribute on the body. The policy
+ * sends a nonce and no `'unsafe-inline'`, and a nonce can never apply to an
+ * event-handler attribute -- the browser refused the attribute silently and
+ * no frame was ever refreshed again. A script element carries the nonce, and
+ * the load event keeps the original timing.
+ */
+function estab_session_ui_frame_refresh_markup(string $script): string
+{
+    return '<script' . estab_csp_script_attribute()
+        . ' data-estab-frame-refresh>'
+        . 'window.addEventListener("load",function(){' . $script . '});'
+        . '</script>';
 }
 
 /**

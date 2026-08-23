@@ -1161,8 +1161,16 @@ var_dump ($this->formdata); echo "<br>";
     echo "<h2 id=\"message-detail-title\">Nachrichtenvordruck</h2>\n";
     echo "<div class=\"estab-tool-actions\">\n";
     echo "<button class=\"estab-button\" type=\"button\" ";
-    echo "onclick=\"window.print()\">Diese Seite drucken</button>\n";
+    echo "data-estab-print>Diese Seite drucken</button>\n";
     echo "</div>\n</header>\n";
+    // window.print() lag als onclick am Knopf; die Richtlinie verwirft das.
+    echo "<script".estab_csp_script_attribute()." data-estab-print-binding>";
+    echo "document.addEventListener(\"click\",function(event){";
+    echo "var target=event.target;";
+    echo "if(target&&typeof target.closest===\"function\"";
+    echo "&&target.closest(\"[data-estab-print]\")){window.print();}";
+    echo "});";
+    echo "</script>\n";
     echo "<div class=\"estab-tool-legacy-content\">\n";
     echo "<form method=\"get\" action=\"".
          estab_message_html (estab_overview_url ()).
