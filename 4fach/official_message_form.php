@@ -883,6 +883,21 @@ HTML;
      *
      * @return list<string>
      */
+    /**
+     * Disponiert der LdF hier selbst Mittel und Weg?
+     *
+     * Ohne veröffentlichten S6-Plan gibt es keinen Weg zum Auswählen.
+     * Die Prüfung nimmt die unmittelbare Angabe aber nur an, solange
+     * kein Plan verlangt wird (4fach/vali_data.php, LdF-Ausgang). Im
+     * Modus STRENG ohne gültigen Plan böte die Maske sonst Felder an,
+     * verlangte sie und liesse sich anschliessend nie speichern.
+     */
+    function official_message_manual_disposition(): bool
+    {
+        return $this->activeTelecomRoutes === []
+            && !estab_permission_telecom_plan_required();
+    }
+
     function official_message_required_fields(): array
     {
         return match ((string) $this->task) {
@@ -926,7 +941,7 @@ HTML;
             ],
             // Ohne veröffentlichten S6-Plan gibt es keinen Auswahlkasten:
             // dann disponiert LdF Mittel und Weg unmittelbar.
-            'LdF-Ausgang' => $this->activeTelecomRoutes === []
+            'LdF-Ausgang' => $this->official_message_manual_disposition()
                 ? [
                     '02_zeit',
                     '02_zeichen',
@@ -2102,7 +2117,7 @@ HTML;
                     . estab_message_html($routeLabel) . '</option>';
             }
             echo '</select>';
-            if ($this->activeTelecomRoutes === []) {
+            if ($this->official_message_manual_disposition()) {
                 echo '<p class="estab-field-error">Kein aktuell gültiger, '
                     . 'freigegebener S6-Fernmeldeplan verfügbar.</p>'
                     . '<p>Ohne veröffentlichten Fernmeldeplan disponieren Sie '
@@ -2115,6 +2130,18 @@ HTML;
                     128,
                     'Beförderungsweg'
                 );
+            } elseif ($this->activeTelecomRoutes === []) {
+                // Modus STRENG verlangt den Plan. Ohne ihn nimmt die Prüfung
+                // auch eine unmittelbare Angabe nicht an, deshalb wird hier
+                // kein Feld angeboten, das sich nie speichern liesse.
+                echo '<p class="estab-field-error estab-message-plan-blocked">'
+                    . 'Kein aktuell gültiger, freigegebener '
+                    . 'S6-Fernmeldeplan verfügbar. In der Betriebsart '
+                    . '„streng“ ist der Plan verbindlich; eine Ausgangs'
+                    . 'nachricht lässt sich erst nach seiner Freigabe '
+                    . 'disponieren.</p>'
+                    . '<p>S6 veröffentlicht den Fernmeldeplan. Bis dahin '
+                    . 'bleibt die Nachricht beim LdF liegen.</p>';
             }
             echo '</fieldset>'
                 . '<fieldset data-estab-ldf-return>'
@@ -2774,7 +2801,7 @@ HTML;
         $actualMediumEditable = (bool)$this->feld[1]
             || $this->task === 'LdF-Eingang'
             || ($this->task === 'LdF-Ausgang'
-                && $this->activeTelecomRoutes === [])
+                && $this->official_message_manual_disposition())
             || $conversationDraft;
         $actualMediumEnabled = !$conversationDraft || $conversationSelected;
         $actualMediumRequired = $this->task === 'Stab_gesprnoti'

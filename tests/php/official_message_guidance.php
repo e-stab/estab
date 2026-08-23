@@ -208,9 +208,15 @@ $assert(
  *
  * @var array<string,list<array{routes:list<array<string,mixed>>,direction:string}>>
  */
+/*
+ * Die Betriebsart entscheidet mit: ohne Plan disponiert der LdF nur im Modus
+ * LOCKER unmittelbar. Im Modus STRENG nimmt die Prüfung das nicht an, deshalb
+ * darf die Maske dort auch nichts verlangen. Beide Fälle werden gefahren.
+ */
 $contexts = [
     'LdF-Ausgang' => [
-        ['routes' => [], 'direction' => 'A'],
+        ['routes' => [], 'direction' => 'A', 'mode' => 'LOOSE'],
+        ['routes' => [], 'direction' => 'A', 'mode' => 'STRICT'],
         [
             'routes' => [['fernmeldeplan_eintrag_id' => 7]],
             'direction' => 'A',
@@ -229,6 +235,15 @@ foreach ($derivedRequirement as $task => $expected) {
         $fixture->task = $task;
         $fixture->activeTelecomRoutes = $context['routes'];
         $fixture->formdata = ['04_richtung' => $context['direction']];
+        if (isset($context['mode'])) {
+            $GLOBALS[ESTAB_PERMISSION_CONTEXT_KEY] = [
+                'mode' => $context['mode'] === 'LOOSE'
+                    ? ESTAB_PERMISSION_MODE_LOOSE
+                    : ESTAB_PERMISSION_MODE_STRICT,
+            ];
+        } else {
+            unset($GLOBALS[ESTAB_PERMISSION_CONTEXT_KEY]);
+        }
         foreach ($fixture->official_message_required_fields() as $field) {
             if (!in_array($field, $announced, true)) {
                 $announced[] = $field;
@@ -548,6 +563,34 @@ $assert(
     $heightBlocks >= 2
         && substr_count($stylesheet, '.estab-message-error-summary {') >= 3,
     'Die Fehlerübersicht folgt den Dichtestufen flacher Bildschirme nicht.'
+);
+
+/*
+ * Ohne veröffentlichten S6-Plan darf das Formular die manuelle Disposition
+ * nur dort anbieten, wo die Prüfung sie auch annimmt: vali_data lässt sie
+ * ausschliesslich zu, solange kein Plan verlangt wird. Im Modus STRENG ohne
+ * gültigen Plan bot die Maske sonst Felder an, forderte deren Ausfüllung und
+ * wies das Speichern anschliessend zwingend ab.
+ */
+$assert(
+    str_contains(
+        $view,
+        'function official_message_manual_disposition(): bool'
+    )
+    && preg_match(
+        '~official_message_manual_disposition\(\)[\s\S]{0,400}?'
+        . 'estab_permission_telecom_plan_required~',
+        $view
+    ) === 1,
+    'Die Maske entscheidet ohne Plan nicht nach dem Berechtigungsmodus.'
+);
+$assert(
+    substr_count($view, '$this->official_message_manual_disposition()') >= 3,
+    'Nicht alle drei Stellen der manuellen Disposition fragen den Modus ab.'
+);
+$assert(
+    str_contains($view, 'estab-message-plan-blocked'),
+    'Im Modus STRENG ohne Plan fehlt der Sperrhinweis.'
 );
 
 echo 'Official message form guidance: OK (' . $assertions

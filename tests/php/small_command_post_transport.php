@@ -295,7 +295,7 @@ $assert(
     str_contains(
         $form,
         "            || (\$this->task === 'LdF-Ausgang'\n"
-            . "                && \$this->activeTelecomRoutes === [])"
+            . "                && \$this->official_message_manual_disposition())"
     )
         && str_contains(
             $form,
@@ -305,6 +305,29 @@ $assert(
     estab_dv_requirement(
         'FUEST-KLEIN-BEFOERDERUNG',
         'Der Vordruck bietet dem LdF ohne Plan kein Feld für Mittel und Weg'
+    )
+);
+
+/*
+ * Das Feld erscheint genau dort, wo die Prüfung es annimmt: in der Betriebs-
+ * art LOCKER, also der Führungsstelle ohne eigenes S6. In der Betriebsart
+ * STRENG bleibt der Plan verbindlich, und die Maske sagt das, statt eine
+ * Eingabe zu verlangen, die das Speichern anschliessend zurückweist.
+ */
+$assert(
+    str_contains(
+        $form,
+        'return $this->activeTelecomRoutes === []'
+    )
+        && str_contains(
+            $form,
+            '&& !estab_permission_telecom_plan_required();'
+        )
+        && str_contains($form, 'estab-message-plan-blocked'),
+    estab_dv_requirement(
+        'FUEST-KLEIN-BEFOERDERUNG',
+        'Der Vordruck unterscheidet die Führungsstelle ohne S6 nicht von '
+            . 'der strengen Betriebsart ohne freigegebenen Plan'
     )
 );
 $assert(
