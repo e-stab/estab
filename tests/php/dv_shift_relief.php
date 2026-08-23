@@ -269,6 +269,32 @@ $assert(
 );
 
 /*
+ * Welche Besetzung das Buch führt, entscheidet die Schicht und nicht der
+ * Name der Funktion: ohne eigene ETB-Station führt der angenommene S2. Ein
+ * Schutz, der nur auf die Zeichenfolge ETB sieht, lässt genau den häufigen
+ * Fall durch und unterbricht die Buchführung ohne Übergabe.
+ */
+$assert(
+    str_contains($relief, "\$designatedId === \$assignmentId"),
+    estab_dv_requirement(
+        'FUEST-KLEIN-ABLOESUNG',
+        'Die Einzelablösung vergleicht nicht mit der tatsächlich '
+            . 'bestimmten Buchführung'
+    )
+);
+$assert(
+    preg_match(
+        '~designated[\s\S]{0,600}?IN \(\x27ETB\x27,\x27S2\x27\)~',
+        $relief
+    ) === 1,
+    estab_dv_requirement(
+        'FUEST-KLEIN-ABLOESUNG',
+        'Die Einzelablösung ermittelt die bestimmte Buchführung nicht '
+            . 'nach derselben Regel wie das Logbuch'
+    )
+);
+
+/*
  * Weist die Datenbank die Nachbesetzung ab, bleibt die Schicht unverändert
  * und der Betrieb liest den Grund im Klartext statt eines Programmabbruchs.
  */

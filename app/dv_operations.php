@@ -1268,7 +1268,38 @@ function estab_dv_relieve_hat(
             // handover that closes and reopens the book. The acceptance rule
             // of the duty-assignment trigger enforces the same, so relieving
             // ETB here would strand the station with nobody able to accept.
-            if ($function === 'ETB') {
+            //
+            // Which assignment carries the book is decided by the shift, not
+            // by the name of a function: without a separate ETB station the
+            // accepted S2 keeps it. The same order the logbook uses is read
+            // here under the lock, so the common shift without an own ETB is
+            // protected as well.
+            $designated = $connection->prepare(
+                'SELECT assignment.`dienstbesetzung_id`'
+                . ' FROM `nv_dienstbesetzungen` AS assignment'
+                . ' WHERE assignment.`dienstschicht_id` = ?'
+                . " AND assignment.`status` = 'ANGENOMMEN'"
+                . " AND assignment.`funktion` IN ('ETB','S2')"
+                . ' ORDER BY CASE assignment.`funktion`'
+                . " WHEN 'ETB' THEN 0 ELSE 1 END,"
+                . ' assignment.`dienstbesetzung_id` LIMIT 1 FOR UPDATE'
+            );
+            if (!$designated) {
+                throw new RuntimeException(
+                    'Bestimmte ETB-Führung konnte nicht geprüft werden.'
+                );
+            }
+            try {
+                $designated->bind_param('i', $shiftId);
+                $designated->execute();
+                $designatedRow = $designated->get_result()->fetch_row();
+            } finally {
+                $designated->close();
+            }
+            $designatedId = $designatedRow === null
+                ? 0
+                : (int) $designatedRow[0];
+            if ($function === 'ETB' || $designatedId === $assignmentId) {
                 throw new EstabDvConflictException(
                     'Die bestimmte ETB-Führung wechselt ausschließlich über '
                     . 'eine dokumentierte und bestätigte Schichtübergabe. '
