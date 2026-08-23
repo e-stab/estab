@@ -2499,13 +2499,6 @@ HTML;
         echo <<<'HTML'
 (function () {
   "use strict";
-  document.addEventListener("click", function (event) {
-    var target = event.target;
-    if (target && typeof target.closest === "function"
-        && target.closest("[data-estab-print]")) {
-      window.print();
-    }
-  });
   if (window.location.hash) {
     return;
   }

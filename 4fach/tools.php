@@ -42,6 +42,20 @@ require_once __DIR__ . "/../app/session_ui.php";
     echo "//-->\n";
     echo "</script>\n";
 
+    // Der Druckknopf trug frueher onclick beziehungsweise eine
+    // Adresse mit javascript-Schema. Beides verwirft die Richtlinie. Die
+    // Bindung liegt jetzt zentral am Datenattribut und traegt eine Sperre
+    // gegen Mehrfachbindung, weil einzelne Seiten mehrere Formulare
+    // aufbauen.
+    echo "<script".estab_csp_script_attribute()." data-estab-print-binding>";
+    echo "if(!window.estabPrintBound){window.estabPrintBound=true;";
+    echo "document.addEventListener(\"click\",function(event){";
+    echo "var target=event.target;";
+    echo "if(!target||typeof target.closest!==\"function\"){return;}";
+    echo "if(!target.closest(\"[data-estab-print]\")){return;}";
+    echo "event.preventDefault();window.print();});}";
+    echo "</script>\n";
+
     echo "<meta http-equiv=\"Content-Type\" content=\"text/html; charset=UTF-8\">\n";
    switch ($art){
      case "N":

@@ -98,6 +98,33 @@ $assert(
         . "browser:\n  " . implode("\n  ", $offenders)
 );
 
+/**
+ * A `javascript:` URL is refused by the same policy, for the same reason: it is
+ * inline script, and a nonce cannot be attached to a URL. The control looks
+ * like a working link and does nothing when it is used.
+ */
+$scheme = [];
+foreach ($files as $file) {
+    $contents = file_get_contents($file);
+    if ($contents === false) {
+        throw new RuntimeException('Cannot read ' . $file);
+    }
+    $line = 0;
+    foreach (preg_split('~\R~', $contents) ?: [] as $text) {
+        $line++;
+        if (stripos($text, 'javascript:') === false) {
+            continue;
+        }
+        $scheme[] = substr($file, strlen($root) + 1) . ':' . $line
+            . ' -> ' . trim($text);
+    }
+}
+$assert(
+    $scheme === [],
+    "javascript: URLs are blocked by the policy and dead in a browser:\n  "
+        . implode("\n  ", $scheme)
+);
+
 printf(
     "csp inline handlers: OK (%d assertions, %d files scanned)\n",
     $assertions,

@@ -1123,7 +1123,7 @@ HTML;
       echo "<TBODY>\n";
       echo "<TD>\n";
         // Druckersymbol
-      echo "<a href=\"javascript:window.print()\">
+      echo "<a href=\"#\" data-estab-print>
             <img src=\"".$conf_design_path."/print.gif\" alt=\"Drucken\" width=\"32\"height=\"32\" border=\"0\" title=\"Drucken\"></a>\n";
       echo "</TD>\n";
 
