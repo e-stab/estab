@@ -153,6 +153,18 @@ async function createOutgoing(page, account) {
     content: contentMarker,
   });
   await submitLegacyMessageForm(content);
+  // Der Hauptrahmen laedt die Liste nicht mehr nach, sondern bestaetigt das
+  // Absetzen und nennt die naechste Station. Die Rueckmeldung soll stehen
+  // bleiben, bis sie gelesen ist -- deshalb steht hier nicht mehr der
+  // Meldungstext.
+  await expect(
+    content.locator('[data-estab-message-confirmation]')
+  ).toContainText('Nachrichtenvordruck abgesetzt');
+  // Die abgesetzte Meldung muss ueber den angebotenen Weg auffindbar bleiben.
+  await content
+    .getByRole('button', { name: 'Meldungen dieser Funktion' })
+    .first()
+    .click();
   await expect(content.locator('body')).toContainText(contentMarker);
   return contentMarker;
 }
