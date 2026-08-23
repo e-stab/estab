@@ -424,8 +424,9 @@ SELECT CONCAT(
        )")" \
     "logbook upgrade omitted immutable-ledger, locking, history, or attachment rules"
 
-# A running shift may gain a genuinely new function, but a function that was
-# already occupied in that shift cannot be replaced or reoccupied later.
+# A running shift may gain a genuinely new function. A function that is still
+# assigned or accepted cannot be occupied twice -- but once its holder was
+# relieved, Migration 120 frees it again. Both directions are checked below.
 database_query "$logbook_upgrade_database" "
 INSERT INTO nv_benutzer
   (benutzer, kuerzel, funktion, rolle, aktiv, password)
@@ -469,11 +470,7 @@ INSERT INTO nv_dienstbesetzungen
   (dienstschicht_id, benutzer_kuerzel, funktion, rolle, status,
    zugewiesen_von)
 VALUES
-  (@upgrade_shift_id, 'awb', 'A/W', 'Fernmelder', 'ZUGEWIESEN', 'schema-test');
-UPDATE nv_dienstbesetzungen
-   SET status = 'ABGELOEST', abgeloest_am = NOW(6)
- WHERE dienstschicht_id = @upgrade_shift_id
-   AND BINARY funktion = BINARY 'S2'"
+  (@upgrade_shift_id, 'awb', 'A/W', 'Fernmelder', 'ZUGEWIESEN', 'schema-test')"
 upgrade_shift_id=$(database_query "$logbook_upgrade_database" "
 SELECT dienstschicht_id FROM nv_dienstschichten
  WHERE bezeichnung = 'Upgrade shift'")
@@ -493,7 +490,26 @@ if ! grep -q 'Active duty shift function was already assigned' \
     sed -n '1,120p' "$failure_log" >&2
     exit 1
 fi
-assert_equal "AKTIV|8|1|0|1|2" "$(
+
+# Migration 120 loest die Einzelbesetzung ab: danach ist die Funktion frei,
+# sonst koennte eine Schicht nach einer Abloesung nie wieder besetzt werden.
+database_query "$logbook_upgrade_database" "
+UPDATE nv_dienstbesetzungen
+   SET status = 'ABGELOEST', abgeloest_am = NOW(6)
+ WHERE dienstschicht_id = $upgrade_shift_id
+   AND BINARY funktion = BINARY 'S2'"
+if ! database_query "$logbook_upgrade_database" "
+INSERT INTO nv_dienstbesetzungen
+  (dienstschicht_id, benutzer_kuerzel, funktion, rolle, status,
+   zugewiesen_von)
+VALUES
+  ($upgrade_shift_id, 's2b', 'S2', 'Stab', 'ZUGEWIESEN', 'schema-test')" \
+    >"$failure_log" 2>&1; then
+    echo "schema migrator test: relieved function was not free again" >&2
+    sed -n '1,120p' "$failure_log" >&2
+    exit 1
+fi
+assert_equal "AKTIV|9|1|1|1|2" "$(
     database_query "$logbook_upgrade_database" "
 SELECT CONCAT(
          shift_row.status, '|',
@@ -516,7 +532,7 @@ SELECT CONCAT(
   FROM nv_dienstschichten AS shift_row
  WHERE shift_row.bezeichnung = 'Upgrade shift'"
 )" \
-    "active-shift extension or no-replacement evidence is incomplete"
+    "active-shift extension or relief-reoccupation evidence is incomplete"
 
 if database_query "$logbook_upgrade_database" "
 INSERT INTO nv_etb
@@ -721,10 +737,10 @@ SET @estab_dv_target_assignment_id = NULL"
 # assigning LdF active and enforcing the durable account block.
 database_query "$fresh_database" "
 INSERT INTO nv_nachrichten
-  (\`04_richtung\`, \`06_befwegausw\`, \`12_betreff\`, \`12_inhalt\`,
-   \`x00_status\`, \`x01_abschluss\`)
+  (\`04_richtung\`, \`01_medium\`, \`06_befwegausw\`, \`12_betreff\`,
+   \`12_inhalt\`, \`x00_status\`, \`x01_abschluss\`)
 VALUES
-  ('A', 'Me', 'Migration 119 STRICT messenger target',
+  ('A', 'Me', 'Me', 'Migration 119 STRICT messenger target',
    'Inactive authorised messenger target fixture.', 2, 'f');
 SET @inactive_messenger_message_id = LAST_INSERT_ID();
 UPDATE nv_benutzer
@@ -1284,10 +1300,10 @@ VALUES
   (@authority_access_shift_id, 'ld118', 'schema-migrator-test'),
   (@authority_access_shift_id, 'aw119', 'schema-migrator-test');
 INSERT INTO nv_nachrichten
-  (\`04_richtung\`, \`06_befwegausw\`, \`12_betreff\`, \`12_inhalt\`,
-   \`x00_status\`, \`x01_abschluss\`)
+  (\`04_richtung\`, \`01_medium\`, \`06_befwegausw\`, \`12_betreff\`,
+   \`12_inhalt\`, \`x00_status\`, \`x01_abschluss\`)
 VALUES
-  ('A', 'Me', 'Migration 119 LOOSE messenger target',
+  ('A', 'Me', 'Me', 'Migration 119 LOOSE messenger target',
    'Inactive target with optional access-shift fixture.', 2, 'f')"
 if database_query "$fresh_database" "
 SET @estab_dv_actor_assignment_id = NULL;
@@ -3878,7 +3894,7 @@ SELECT GROUP_CONCAT(
        )
   FROM estab_schema_migrations
  WHERE version <> '114-self-registration-policy.sql'")"
-assert_equal "24|24" "$(fixture_query "
+assert_equal "26|26" "$(fixture_query "
 SELECT CONCAT(
          COUNT(*), '|',
          SUM(state = 'applied' AND checksum REGEXP BINARY '^[0-9a-f]{64}$')

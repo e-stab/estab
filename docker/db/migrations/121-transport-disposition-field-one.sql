@@ -8,9 +8,17 @@
 -- soon as wish and disposed means differ. They are recreated here byte for
 -- byte with that one comparison moved to Feld 1.
 --
--- Migrations 94 and 119 are released and checksum-immutable. Existing rows are
--- deliberately left untouched: a disposed message already carries the LdF
--- entry in Feld 1, and rewriting a closed record would change evidence.
+-- Migrations 94 and 119 are released and checksum-immutable, so their three
+-- triggers are recreated here byte for byte with the one comparison moved.
+--
+-- Two things must happen to the data before that, and both are done below.
+-- Feld 1 does not exist at all on a database grown from the historic runtime
+-- schema: no migration ever added it, it only ever came with a fresh
+-- baseline. Without the column the triggers below cannot even be created.
+-- And where the column does exist, outgoing messages do not carry the
+-- disposed means in it: until this migration the LdF wrote that means to
+-- Feld 7 and left Feld 1 empty. Rows that provably passed the LdF stage
+-- therefore receive the value once. Feld 7 keeps it, so nothing is erased.
 
 SET NAMES utf8mb4 COLLATE utf8mb4_unicode_ci;
 
@@ -68,6 +76,62 @@ BEGIN NOT ATOMIC
   END IF;
 END//
 DELIMITER ;
+
+-- Feld 1 und Feld 6 nachruesten. Auf einer Neuinstallation bringt das
+-- Grundschema beide Spalten mit; eine gewachsene Datenbank hat sie nie
+-- bekommen, weil keine Migration sie je ergaenzt hat. Diese Migration ist
+-- die erste, die sie braucht: die Trigger unten lesen Feld 1, und der
+-- Beforderungsweg steht ab hier in Feld 6.
+DROP PROCEDURE IF EXISTS estab_migrate_121_add_medium;
+DELIMITER //
+CREATE PROCEDURE estab_migrate_121_add_medium()
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+      FROM information_schema.columns
+     WHERE table_schema = DATABASE()
+       AND table_name = 'nv_nachrichten'
+       AND column_name = '01_medium'
+  ) THEN
+    ALTER TABLE `nv_nachrichten`
+      ADD COLUMN `01_medium` SET('Fe','Fu','Me','FAX','FS','@')
+        NOT NULL DEFAULT ''
+        COMMENT 'estab:migration:121:transport-disposition:v1'
+        AFTER `00_lfd`;
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1
+      FROM information_schema.columns
+     WHERE table_schema = DATABASE()
+       AND table_name = 'nv_nachrichten'
+       AND column_name = '06_befweg'
+  ) THEN
+    ALTER TABLE `nv_nachrichten`
+      ADD COLUMN `06_befweg` VARCHAR(128)
+        CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
+        NOT NULL DEFAULT ''
+        COMMENT 'estab:migration:121:transport-route:v1'
+        AFTER `05_gegenstelle`;
+  END IF;
+END//
+DELIMITER ;
+CALL estab_migrate_121_add_medium();
+DROP PROCEDURE estab_migrate_121_add_medium;
+
+-- Der Einsatz-Trigger laesst nur Schreibzugriffe auf den aktiven Einsatz zu
+-- und wuerde das einmalige Nachziehen abweisen. Er wird dafuer kurz entfernt
+-- und unmittelbar danach wortgleich zu Migration 50 wiederhergestellt.
+DROP TRIGGER IF EXISTS `estab_nachrichten_bu_einsatz`;
+UPDATE `nv_nachrichten`
+   SET `01_medium` = `06_befwegausw`
+ WHERE `04_richtung` = 'A'
+   AND `01_medium` = ''
+   AND `06_befwegausw` <> ''
+   AND `06_befweg` <> '';
+CREATE TRIGGER `estab_nachrichten_bu_einsatz`
+BEFORE UPDATE ON `nv_nachrichten` FOR EACH ROW
+SET NEW.`einsatz_id` =
+  estab_incident_for_update(OLD.`einsatz_id`, NEW.`einsatz_id`);
 
 DELIMITER //
 CREATE OR REPLACE TRIGGER `estab_dv94_message_route_insert`
