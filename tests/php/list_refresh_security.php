@@ -125,4 +125,21 @@ $assert(
     'The refresh schedules more than one timer and drifts'
 );
 
+// The timer may only start once the document has finished loading. The meta
+// refresh it replaced counted from the finished document; a timer started while
+// the frame was still loading reloads that frame before it is done, and a frame
+// that reloads before it is done keeps postponing the load event of the
+// frameset around it. On a slow answer the workspace then never finished
+// loading at all -- the page was readable, but the browser never called it
+// loaded, and everything waiting for that event waited forever.
+$assert(
+    str_contains($script, "if(document.readyState==='complete'){start();}")
+        && str_contains($script, "window.addEventListener('load',start);"),
+    'The refresh timer starts before the document has finished loading'
+);
+$assert(
+    !preg_match('~\n\s*schedule\(\d+\);\n~', $script),
+    'The refresh still schedules unconditionally at parse time'
+);
+
 printf("list refresh: OK (%d assertions)\n", $assertions);
