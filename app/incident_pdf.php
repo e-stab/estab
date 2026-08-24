@@ -3033,7 +3033,11 @@ final class EstabIncidentPdf extends vordruckaspdf
         // The executable is selected from the two fixed Poppler constants
         // above, absolute path arguments stay inside the private workspace,
         // and proc_open receives an argv array with shell expansion disabled.
-        // nosemgrep: semgrep.php-dangerous-dynamic-exec
+        // Die Regel heisst in .semgrep/suspicious.yml php-dangerous-
+        // dynamic-exec; das Praefix semgrep. haengt erst die Anzeige
+        // davor. Beide Schreibweisen stehen hier, damit die Ausnahme
+        // greift, egal wie der Bericht die Regel benennt.
+        // nosemgrep: php-dangerous-dynamic-exec,semgrep.php-dangerous-dynamic-exec
         $process = @proc_open(
             $arguments,
             $descriptors,

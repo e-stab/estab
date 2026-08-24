@@ -84,44 +84,26 @@ if ($compiled) {
     }
     restore_error_handler();
 } else {
-    // Fallback: one interpreter per file. Slower, but identical coverage.
-    $binary = PHP_BINARY !== '' ? PHP_BINARY : 'php';
+    // Rueckfall ohne opcache: die Syntax laesst sich auch im eigenen Prozess
+    // pruefen. token_get_all wirft mit TOKEN_PARSE denselben ParseError, den
+    // `php -l` meldet -- ohne einen einzigen Unterprozess, ohne Shell und
+    // ohne einen dynamischen Wert an eine Ausfuehrungsfunktion zu reichen.
+    //
+    // Was dieser Weg NICHT sieht, sind Verwerfungen zur Uebersetzungszeit:
+    // die entstehen erst beim Uebersetzen, und uebersetzt wird hier nichts.
+    // Die Abschlussmeldung sagt das offen, damit ein Lauf ohne opcache nicht
+    // als vollwertige Pruefung durchgeht.
     foreach ($files as $path) {
-        $descriptors = [
-            0 => ['file', '/dev/null', 'r'],
-            1 => ['pipe', 'w'],
-            2 => ['pipe', 'w'],
-        ];
-        $pipes = [];
-        // The interpreter comes from PHP_BINARY and the path from the
-        // repository-internal file walk above. proc_open receives an argv
-        // array, so no shell parses either value and nothing needs escaping.
-        // nosemgrep: semgrep.php-dangerous-dynamic-exec
-        $process = @proc_open(
-            [$binary, '-l', $path],
-            $descriptors,
-            $pipes
-        );
-        if (!is_resource($process)) {
-            $failures[] = $relative($path) . ': cannot start ' . $binary;
+        $source = file_get_contents($path);
+        if ($source === false) {
+            $failures[] = $relative($path) . ': cannot read';
             continue;
         }
-        $text = (string) stream_get_contents($pipes[1])
-            . (string) stream_get_contents($pipes[2]);
-        foreach ($pipes as $pipe) {
-            if (is_resource($pipe)) {
-                fclose($pipe);
-            }
-        }
-        $status = proc_close($process);
-        if ($status !== 0) {
-            $failures[] = $relative($path) . ': ' . trim($text);
-            continue;
-        }
-        foreach (preg_split('~\R~', $text) ?: [] as $line) {
-            if (str_starts_with($line, 'Deprecated:')) {
-                $failures[] = $relative($path) . ': ' . trim($line);
-            }
+        try {
+            token_get_all($source, TOKEN_PARSE);
+        } catch (ParseError | CompileError $error) {
+            $failures[] = $relative($path) . ':' . $error->getLine()
+                . ': ' . $error->getMessage();
         }
     }
 }
@@ -135,5 +117,7 @@ if ($failures !== []) {
 printf(
     "PHP source lint: OK (%d files, %s)\n",
     count($files),
-    $compiled ? 'single process' : 'per-file fallback'
+    $compiled
+        ? 'single process'
+        : 'syntax only, no opcache: deprecations not checked'
 );
