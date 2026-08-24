@@ -257,4 +257,28 @@ $assert(
     )
 );
 
+/*
+ * Das aeltere Protokoll waehlt seinen Eintrag getrennt von der
+ * unveraenderlichen Evidenz. Ohne eigenen Zweig faellt eine Gespraechsnotiz
+ * dort auf "Stab-formal-freigegeben" zurueck und behauptet eine foermliche
+ * Freigabe an den LdF -- einen Schritt, den dieser Laufweg gerade nicht hat.
+ */
+$assert(
+    preg_match(
+        '~\$reviewEvent = [\s\S]{0,400}?\$isConversationNote~',
+        $creation
+    ) === 1,
+    estab_dv_requirement(
+        'NV-GESPRAECHSNOTIZ-LAUFWEG',
+        'Das Protokoll unterscheidet die Gespraechsnotiz beim Abschluss nicht'
+    )
+);
+$assert(
+    str_contains($creation, '"Stab-gesprnoti-abgeschlossen"'),
+    estab_dv_requirement(
+        'NV-GESPRAECHSNOTIZ-LAUFWEG',
+        'Der Protokolleintrag der abgeschlossenen Gespraechsnotiz fehlt'
+    )
+);
+
 printf("conversation note route: OK (%d assertions)\n", $assertions);

@@ -2589,6 +2589,29 @@ INSERT INTO nv_masterkatego (lfd, kategorie, beschreibung) VALUES
   (41, 'Allgemein', 'Individuell beibehalten'),
   (77, 'EIGEN', 'Eigene Kategorie');
 INSERT INTO nv_masterkategolink (msg, katego) VALUES (900001, 77)"
+# Eine laufende Ausgangsnachricht aus dem Altbestand: der LdF hat disponiert
+# (Bearbeitungsstand 2, Annahme in Feld 2 gezeichnet), das Mittel steht im
+# historischen Feld 7. Feld 1 und Feld 6 gibt es hier noch gar nicht.
+# Migration 121 muss beide anlegen und die Angabe uebernehmen, sonst faellt
+# genau diese Nachricht aus der Fernmelder-Warteschlange und laesst sich
+# weder uebernehmen noch abschliessen.
+fixture_query "
+SET SESSION sql_mode = 'NO_ENGINE_SUBSTITUTION';
+INSERT INTO nv_nachrichten
+  (\`00_lfd\`, \`04_richtung\`, \`04_nummer\`, \`06_befwegausw\`,
+   \`01_datum\`, \`03_datum\`,
+   \`02_zeit\`, \`02_zeichen\`, \`05_gegenstelle\`, \`10_anschrift\`,
+   \`12_inhalt\`, \`13_abseinheit\`, \`14_zeichen\`,
+   \`15_quitdatum\`, \`15_quitzeichen\`,
+   \`x00_status\`, \`x01_abschluss\`)
+VALUES
+  (900042, 'A', 42, 'Fu',
+   '2026-01-02 08:00:00', '0000-00-00 00:00:00',
+   '2026-01-02 08:15:00', 'ldf', 'Altbestand-Gegenstelle', 'Altbestand-Ziel',
+   'Laufende Ausgangsnachricht aus dem Altbestand.', 'TZ', 's1',
+   '2026-01-02 08:05:00', 'si',
+   2, 'f')"
+
 legacy_category_snapshot="$(fixture_query "
 SELECT CONCAT(
          (SELECT GROUP_CONCAT(
@@ -2681,6 +2704,22 @@ SELECT GROUP_CONCAT(
        )
   FROM nv_nachrichten")"
 ESTAB_DB_NAME="$test_database" "$ESTAB_MIGRATOR_BIN"
+
+# Genau die vier Bedingungen, die die Fernmelderstufe abfragt, bevor sie
+# eine Nachricht anzeigt. Ohne die Uebernahme faellt die Zeile durch.
+assert_equal "Fu|Funk (aus Feld 7 uebernommen)|Fu|1" "$(fixture_query "
+SELECT CONCAT(
+         \`01_medium\`, '|',
+         \`06_befweg\`, '|',
+         \`06_befwegausw\`, '|',
+         (\`x00_status\` = 2
+           AND \`02_zeit\` IS NOT NULL
+           AND \`02_zeichen\` <> ''
+           AND \`01_medium\` <> ''
+           AND \`06_befweg\` <> '')
+       )
+  FROM nv_nachrichten WHERE \`00_lfd\` = 900042")" \
+    "legacy in-flight outgoing message lost its transport disposition"
 assert_equal "$legacy_category_snapshot" "$(fixture_query "
 SELECT CONCAT(
          (SELECT GROUP_CONCAT(
@@ -3524,7 +3563,7 @@ SELECT GROUP_CONCAT(
        )
   FROM nv_nachrichten")" \
     "official message field migration changed existing message data"
-assert_equal "1|1|10_anschrift,11_rufnummer,11_gesprnotiz,12_betreff,12_anhang:4|2|0" "$(fixture_query "
+assert_equal "1|1|10_anschrift,11_rufnummer,11_gesprnotiz,12_betreff,12_anhang:4|3|0" "$(fixture_query "
 SELECT CONCAT(
          (SELECT COUNT(*)
             FROM information_schema.columns

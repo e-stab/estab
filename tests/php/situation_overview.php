@@ -625,4 +625,60 @@ $assert(
     'Das Lagebild fragt die Datenbank mehr als einmal für seine Zählstände'
 );
 
+/*
+ * Bei Doppelfunktionen steht dieselbe Nachricht in mehreren
+ * Funktionswarteschlangen -- eine an "alle" gerichtete Nachricht passt auf
+ * jede wahrgenommene Funktion. Die einzelnen Zahlen stimmen, ihre Summe ist
+ * aber nicht die Zahl der Nachrichten. Der Satz darf deshalb keine Summe
+ * behaupten.
+ */
+$doubleHat = $snapshotOf([
+    'queues' => [
+        [
+            'key' => 'old_que_s2',
+            'label' => 'Bei S2',
+            'short_label' => 'S2',
+            'count' => 1,
+        ],
+        [
+            'key' => 'old_que_s3',
+            'label' => 'Bei S3',
+            'short_label' => 'S3',
+            'count' => 1,
+        ],
+    ],
+    'urgent_open' => 0,
+]);
+$doubleHatStep = estab_situation_next_step($doubleHat);
+$assert(
+    $doubleHatStep['state'] === 'arbeit'
+        && !str_contains($doubleHatStep['text'], '2 Nachrichten warten'),
+    'Das Lagebild summiert Warteschlangen und behauptet zu viele Nachrichten.'
+);
+$assert(
+    str_contains($doubleHatStep['text'], '2 Ihrer Funktionen'),
+    'Das Lagebild benennt bei Doppelfunktionen nicht die betroffenen Stationen.'
+);
+
+/*
+ * Wartet nur eine Funktion, ist die Zahl eindeutig und wird genannt --
+ * samt der Station, damit klar ist, wo zu arbeiten ist.
+ */
+$singleStep = estab_situation_next_step($snapshotOf([
+    'queues' => [
+        [
+            'key' => 'old_que_ldf',
+            'label' => 'Bei LdF',
+            'short_label' => 'LdF',
+            'count' => 3,
+        ],
+    ],
+    'urgent_open' => 0,
+]));
+$assert(
+    str_contains($singleStep['text'], '3 Nachrichten warten')
+        && str_contains($singleStep['text'], 'LdF'),
+    'Der Satz nennt bei einer einzelnen Warteschlange nicht Zahl und Station.'
+);
+
 printf("Situation overview: OK (%d assertions)\n", $assertions);

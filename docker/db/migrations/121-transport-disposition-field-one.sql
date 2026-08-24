@@ -122,12 +122,43 @@ DROP PROCEDURE estab_migrate_121_add_medium;
 -- und wuerde das einmalige Nachziehen abweisen. Er wird dafuer kurz entfernt
 -- und unmittelbar danach wortgleich zu Migration 50 wiederhergestellt.
 DROP TRIGGER IF EXISTS `estab_nachrichten_bu_einsatz`;
+-- Der Beweis, dass der LdF disponiert hat, ist der Bearbeitungsstand: 2 (in
+-- Befoerderung) und 8 (abgeschlossen) entstehen ausschliesslich durch seine
+-- Disposition. Auf einer Datenbank, die Feld 6 bereits kennt, genuegt
+-- zusaetzlich dessen Inhalt. Ein Entwurf mit blossem Wunsch in Feld 7 bleibt
+-- unangetastet: Feld 7 trug bis hierher beides, Wunsch und Disposition.
 UPDATE `nv_nachrichten`
    SET `01_medium` = `06_befwegausw`
  WHERE `04_richtung` = 'A'
    AND `01_medium` = ''
    AND `06_befwegausw` <> ''
-   AND `06_befweg` <> '';
+   AND (`06_befweg` <> '' OR `x00_status` IN (2, 8));
+
+-- Den Befoerderungsweg kennt ein gewachsener Bestand nicht: vor Feld 6 war
+-- das Mittel selbst die einzige Aussage ueber den Weg. Genau das wird
+-- eingetragen -- der Klarname des Mittels mit sichtbarem Vermerk seiner
+-- Herkunft. Es wird nichts erfunden, und wer den Nachweis liest, erkennt,
+-- woher die Angabe stammt. Ohne diesen Eintrag faende eine laufende
+-- Ausgangsnachricht weder die Fernmelder- noch die LdF-Warteschlange
+-- wieder: die Fernmelderstufe verlangt Feld 6, und der Weg zurueck zum LdF
+-- verlangt eine noch leere Feld-2-Annahme, die hier laengst steht.
+UPDATE `nv_nachrichten`
+   SET `06_befweg` = CONCAT(
+         CASE `01_medium`
+           WHEN 'Fe' THEN 'Fernsprecher'
+           WHEN 'Fu' THEN 'Funk'
+           WHEN 'Me' THEN 'Melder'
+           WHEN 'FAX' THEN 'Telefax'
+           WHEN 'FS' THEN 'Fernschreiber'
+           WHEN '@' THEN 'Datenuebertragung'
+           ELSE `01_medium`
+         END,
+         ' (aus Feld 7 uebernommen)'
+       )
+ WHERE `04_richtung` = 'A'
+   AND `06_befweg` = ''
+   AND `01_medium` <> ''
+   AND `x00_status` IN (2, 8);
 CREATE TRIGGER `estab_nachrichten_bu_einsatz`
 BEFORE UPDATE ON `nv_nachrichten` FOR EACH ROW
 SET NEW.`einsatz_id` =

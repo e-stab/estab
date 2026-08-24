@@ -2146,11 +2146,16 @@ function check_and_save ($data, $activeCommandPostName, $expectedIncidentId){
        if (!$reviewSaved) {
          throw new RuntimeException ("Message review status changed");
        }
+       // Die Gespraechsnotiz endet hier. "Freigegeben" hiesse an den
+       // LdF uebergeben -- diesen Schritt gibt es in ihrem Laufweg
+       // nicht, und das Protokoll darf ihn nicht behaupten.
        $reviewEvent = $reviewDirection === "E"
          ? "Stab-sichten-Eingang"
          : ($isFormalReturn
            ? "Stab-formal-zurueckgewiesen"
-           : "Stab-formal-freigegeben");
+           : ($isConversationNote
+             ? "Stab-gesprnoti-abgeschlossen"
+             : "Stab-formal-freigegeben"));
        protokolleintrag (
          $reviewEvent,
          "message_id=".estab_message_positive_id ($data ["00_lfd"])

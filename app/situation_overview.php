@@ -391,11 +391,21 @@ function estab_situation_next_step(array $snapshot): array
     $queues = is_array($snapshot['queues'] ?? null)
         ? $snapshot['queues']
         : [];
-    $waiting = 0;
+    /*
+     * Nicht summieren. Wer zwei Funktionen wahrnimmt, sieht dieselbe
+     * Nachricht in beiden Warteschlangen -- eine an "alle" gerichtete
+     * Nachricht passt auf jede wahrgenommene Funktion, und eine Nachricht
+     * kann ausdrücklich an zwei Funktionen derselben Person gehen. Die
+     * einzelnen Zahlen stimmen, ihre Summe waere aber nicht die Zahl der
+     * Nachrichten, sondern die der Eintraege. Ein Lagebild, das zwei
+     * Nachrichten meldet, wo eine liegt, verliert genau das Vertrauen, das
+     * es haben muss.
+     */
+    $waitingQueues = [];
     foreach ($queues as $queue) {
         $count = is_array($queue) ? ($queue['count'] ?? null) : null;
         if (is_int($count) && $count > 0) {
-            $waiting += $count;
+            $waitingQueues[] = $queue;
         }
     }
     $urgent = $snapshot['urgent_open'] ?? null;
@@ -417,13 +427,29 @@ function estab_situation_next_step(array $snapshot): array
                     . 'vor allem anderen bearbeitet.',
         ];
     }
-    if ($waiting > 0) {
+    if (count($waitingQueues) === 1) {
+        $only = $waitingQueues[0];
+        $count = (int) $only['count'];
+        $station = trim((string) (
+            $only['short_label'] ?? $only['label'] ?? ''
+        ));
         return [
             'state' => 'arbeit',
-            'text' => ($waiting === 1
+            'text' => ($count === 1
                 ? 'Eine Nachricht wartet'
-                : $waiting . ' Nachrichten warten')
-                . ' auf Ihre Funktion.',
+                : $count . ' Nachrichten warten')
+                . ' auf Ihre Funktion'
+                . ($station === '' ? '' : ' ' . $station) . '.',
+        ];
+    }
+    if ($waitingQueues !== []) {
+        // Mehrere Stationen: die Kacheln darunter nennen die Zahl je
+        // Funktion, hier steht nur, wie viele Stationen zu bedienen sind.
+        return [
+            'state' => 'arbeit',
+            'text' => 'Auf ' . count($waitingQueues)
+                . ' Ihrer Funktionen warten Nachrichten. Die Zahl je '
+                . 'Funktion steht in den Kacheln darunter.',
         ];
     }
     return [
