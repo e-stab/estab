@@ -1042,6 +1042,56 @@ HTML;
     }
 
     /**
+     * In welchem Zustand ist dieses Feld für den laufenden Arbeitsschritt?
+     *
+     * "pflicht" heisst: gehört mir und muss ausgefüllt werden. "zustaendig":
+     * gehört mir, darf frei bleiben. "fremd": gehört einer anderen Station
+     * und bleibt nur sichtbar, damit der Vordruck einer bleibt.
+     *
+     * Der Zustand steht als Merkmal am Feld und nicht nur als Farbe, weil
+     * eine Farbe im Sonnenlicht, bei Farbfehlsichtigkeit und auf einem
+     * Schwarzweissausdruck verschwindet -- und eine Fuehrungsstelle arbeitet
+     * in allen drei Lagen.
+     */
+    function official_message_field_state(string $field, bool $editable): string
+    {
+        if (!$editable) {
+            return 'fremd';
+        }
+        return $this->official_message_field_required($field)
+            ? 'pflicht'
+            : 'zustaendig';
+    }
+
+    /** Das Merkmal, das den Zustand traegt. */
+    function official_message_state_attribute(
+        string $field,
+        bool $editable
+    ): string {
+        return ' data-estab-field-state="'
+            . $this->official_message_field_state($field, $editable) . '"';
+    }
+
+    /**
+     * Die sichtbare Marke am Pflichtfeld.
+     *
+     * Ein Stern an jedem Feld benennt nichts mehr, deshalb steht er nur dort,
+     * wo dieser Arbeitsschritt wirklich etwas verlangt. Vorlesehilfen lesen
+     * ihn nicht mit -- fuer sie steht bereits aria-required am Feld, und ein
+     * vorgelesener Stern waere nur Laerm.
+     */
+    function official_message_required_mark(
+        string $field,
+        bool $editable
+    ): void {
+        if ($this->official_message_field_state($field, $editable) !== 'pflicht') {
+            return;
+        }
+        echo '<span class="estab-official-required-mark" aria-hidden="true">'
+            . '*</span>';
+    }
+
+    /**
      * Marke am Feld: kurz sichtbar, vollständig für die Vorlesehilfe.
      *
      * Die Marke meldet sich nicht selbst als Alarm. Bei acht offenen Feldern
@@ -1154,12 +1204,14 @@ HTML;
                 . 'maxlength="' . $maxlength . '" '
                 . 'aria-label="' . estab_message_html($label) . '"'
                 . $this->official_message_required_attributes($field, true)
+                . $this->official_message_state_attribute($field, true)
                 . ($invalid ? ' aria-invalid="true"' : '')
                 . $this->official_message_described_by(
                     $field,
                     $invalid,
                     $extraAttributes
                 ) . '>';
+            $this->official_message_required_mark($field, true);
             $this->official_message_error($field);
             return;
         }
@@ -1168,7 +1220,9 @@ HTML;
                 . 'name="' . $field . '" value="' . $value . '">';
         }
         echo '<span id="f_' . $field . '" class="estab-official-readonly" '
-            . 'data-estab-readonly="true" aria-label="'
+            . 'data-estab-readonly="true"'
+            . $this->official_message_state_attribute($field, false)
+            . ' aria-label="'
             . estab_message_html($label . ' schreibgeschützt') . '">'
             . ($displayValue === '' ? '&nbsp;' : $displayValue) . '</span>';
     }
@@ -1188,9 +1242,11 @@ HTML;
                 . 'aria-label="' . estab_message_html($label) . '"'
                 . ($maxlength > 0 ? ' maxlength="' . $maxlength . '"' : '')
                 . $this->official_message_required_attributes($field, true)
+                . $this->official_message_state_attribute($field, true)
                 . ($invalid ? ' aria-invalid="true"' : '')
                 . $this->official_message_described_by($field, $invalid, '')
                 . ' name="' . $field . '">' . $value . '</textarea>';
+            $this->official_message_required_mark($field, true);
             $this->official_message_error($field);
             return;
         }
@@ -1200,7 +1256,9 @@ HTML;
         }
         echo '<span id="f_' . $field . '" '
             . 'class="estab-official-readonly estab-official-readonly--multiline" '
-            . 'data-estab-readonly="true" aria-label="'
+            . 'data-estab-readonly="true"'
+            . $this->official_message_state_attribute($field, false)
+            . ' aria-label="'
             . estab_message_html($label . ' schreibgeschützt') . '">'
             . ($value === '' ? '&nbsp;' : nl2br($value)) . '</span>';
     }
@@ -2968,7 +3026,7 @@ HTML;
             . 'Das Symbol <strong>i</strong> öffnet die jeweilige Anleitung.'
             . ($this->official_message_required_fields() === []
                 ? ''
-                : ' Felder mit rotem Randstreifen gehören zu diesem '
+                : ' Felder mit Stern und Randstreifen gehören zu diesem '
                     . 'Arbeitsschritt und sind auszufüllen.')
             . '</p>'
             . '</div><div class="estab-message-header-badges">'

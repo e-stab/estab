@@ -93,6 +93,21 @@ function estab_ux_rules(): array
                 . 'Ein Katalog legt die wiederkehrenden Elemente fest, und '
                 . 'jede Oberfläche hält ihn ein.',
         ],
+        'UX-MEINE-FELDER' => [
+            'origin' => ESTAB_UX_ORIGIN_BETREIBER,
+            'reference' => 'Zuständigkeit am Feld',
+            'requirement' => 'Der Bedienende erkennt ohne Erklärung, welche '
+                . 'Felder er in seiner Funktion in diesem Schritt '
+                . 'auszufüllen hat. Fremde Felder bleiben sichtbar, sind '
+                . 'aber nicht bedienbar und als schreibgeschützt benannt.',
+        ],
+        'UX-MEINE-FELDER-OHNE-FARBE' => [
+            'origin' => ESTAB_UX_ORIGIN_BETREIBER,
+            'reference' => 'Zuständigkeit ohne Farbe',
+            'requirement' => 'Die Zuordnung läuft nicht allein über Farbe. '
+                . 'Ohne jede Farbinformation bleibt erkennbar, welche Felder '
+                . 'zuständig, welche fremd und welche Pflicht sind.',
+        ],
         'UX-INFOPOINTER' => [
             'origin' => ESTAB_UX_ORIGIN_BETREIBER,
             'reference' => 'Ausfüllhilfe am Feld',
