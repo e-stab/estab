@@ -217,6 +217,22 @@ function estab_dv_rules(): array
                 . 'der Fernmeldezentrale befördert und abgeschlossen. Keine '
                 . 'dieser Stationen darf übersprungen werden.',
         ],
+        'LW-NUR-BLAUER-TEIL' => [
+            'source' => ESTAB_DV_SOURCE_UNTERLAGE,
+            'reference' => 'Hinweis „Nur den blauen Teil ausfüllen!“',
+            'requirement' => 'Die Felder 1 bis 5 gehören dem '
+                . 'Fernmeldebetrieb; der Stab füllt allein den '
+                . 'Nachrichtenteil aus. Wer eine Nachricht abfasst, erhält '
+                . 'diese Felder nicht zur Eingabe.',
+        ],
+        'LW-KORREKTURSCHLEIFE' => [
+            'source' => ESTAB_DV_SOURCE_UNTERLAGE,
+            'reference' => 'Laufweg, Rückgabe zur Korrektur',
+            'requirement' => 'Eine zurückgewiesene Nachricht kehrt zu ihrem '
+                . 'Verfasser zurück und bleibt dabei dieselbe Nachricht. '
+                . 'Bei der Korrektur darf ihr Gegenstand nicht gewechselt '
+                . 'werden.',
+        ],
         'NV-GESPRAECHSNOTIZ-LAUFWEG' => [
             'source' => ESTAB_DV_SOURCE_UNTERLAGE,
             'reference' => 'Feld 12, Gesprächsnotiz',
