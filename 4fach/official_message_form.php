@@ -8,6 +8,7 @@
  * controller continues to receive the field names it already authorises.
  */
 require_once __DIR__ . '/../app/nv_field_numbers.php';
+require_once __DIR__ . '/../app/ui_elements.php';
 
 trait EstabOfficialMessageFormView
 {
@@ -1924,6 +1925,17 @@ HTML;
         echo '</div></section>';
     }
 
+    /**
+     * Die Aktionsleiste des Vordrucks.
+     *
+     * Der Arbeitsschritt sagt, welche Knoepfe es gibt; der Katalog in
+     * app/ui_elements.php sagt, wie sie aussehen und in welcher Reihenfolge
+     * sie stehen. Diese Trennung ist der Punkt: Frueher bestimmte die
+     * Reihenfolge, in der ein Zweig seine Knoepfe ausgab, auch ihre Stelle
+     * auf dem Bildschirm -- und so stand Abbrechen bei der Sichtung hinter
+     * der Rueckgabe und bei der Befoerderung davor. Jetzt kann ein Zweig
+     * einen Knopf weglassen, ohne die uebrigen zu verschieben.
+     */
     function official_message_actions(string $position): void
     {
         $isTop = $position === 'top';
@@ -1938,20 +1950,54 @@ HTML;
                 . '"';
         }
         echo '>';
+
+        $actions = [];
+        $outgoing = ($this->formdata['04_richtung'] ?? '') === 'A';
+
         // Ein Ereignisattribut im Markup laeuft unter der Richtlinie nicht
         // mehr; der Knopf traegt seine Absicht als Datenmerkmal.
-        echo '<button type="button" class="estab-button estab-button-secondary" '
-            . 'data-estab-print>Drucken</button>';
+        $actions[] = [
+            'role' => 'drucken',
+            'markup' => $this->official_message_action_button(
+                'drucken',
+                'Drucken',
+                'button',
+                '',
+                ' data-estab-print'
+            ),
+        ];
+
         switch ($this->task) {
             case 'Stab_lesen':
-                echo '<button type="submit" name="gelesen_x" value="1" '
-                    . 'class="estab-button estab-button-primary">Gelesen / OK</button>';
-                if (($this->formdata['04_richtung'] ?? '') === 'E') {
-                    echo '<button type="submit" name="antwort_x" value="1" '
-                        . 'class="estab-button estab-button-secondary">Antworten</button>';
+                if (!$outgoing) {
+                    $actions[] = [
+                        'role' => 'nebenaktion',
+                        'markup' => $this->official_message_action_button(
+                            'nebenaktion',
+                            'Antworten',
+                            'submit',
+                            'antwort_x'
+                        ),
+                    ];
                 }
-                echo '<button type="submit" name="weiterleiten_x" value="1" '
-                    . 'class="estab-button estab-button-secondary">Weiterleiten</button>';
+                $actions[] = [
+                    'role' => 'nebenaktion',
+                    'markup' => $this->official_message_action_button(
+                        'nebenaktion',
+                        'Weiterleiten',
+                        'submit',
+                        'weiterleiten_x'
+                    ),
+                ];
+                $actions[] = [
+                    'role' => 'hauptaktion',
+                    'markup' => $this->official_message_action_button(
+                        'hauptaktion',
+                        'Gelesen / OK',
+                        'submit',
+                        'gelesen_x'
+                    ),
+                ];
                 break;
             case 'FM-Eingang':
             case 'Stab_schreiben':
@@ -1961,81 +2007,192 @@ HTML;
                 $attachmentCount = count(
                     $this->official_message_attachment_references()
                 );
-                echo '<a href="#nachrichtenanlagen" '
-                    . 'class="estab-button estab-button-secondary '
-                    . 'estab-message-attachment-jump">'
-                    . ($attachmentCount > 0
-                        ? $attachmentCount . ' '
-                            . ($attachmentCount === 1 ? 'Anlage' : 'Anlagen')
-                        : 'Anlage hinzufügen')
-                    . '</a>';
-                echo '<button type="submit" name="absenden_x" value="1" '
-                    . 'class="estab-button estab-button-primary">'
-                    . ($this->task === 'Stab_gesprnoti'
-                        ? 'Zur Sichtung geben'
-                        : 'Absenden')
-                    . '</button>';
-                echo '<button type="submit" name="abbrechen_x" value="1" '
-                    . 'class="estab-button estab-button-ghost" formnovalidate>'
-                    . 'Abbrechen</button>';
+                $actions[] = [
+                    'role' => 'nebenaktion',
+                    'markup' => '<a href="#nachrichtenanlagen" '
+                        . 'data-estab-action-role="nebenaktion" '
+                        . 'class="estab-button estab-button-secondary '
+                        . 'estab-message-attachment-jump">'
+                        . ($attachmentCount > 0
+                            ? $attachmentCount . ' '
+                                . ($attachmentCount === 1 ? 'Anlage' : 'Anlagen')
+                            : 'Anlage hinzufügen')
+                        . '</a>',
+                ];
+                $actions[] = [
+                    'role' => 'hauptaktion',
+                    'markup' => $this->official_message_action_button(
+                        'hauptaktion',
+                        $this->task === 'Stab_gesprnoti'
+                            ? 'Zur Sichtung geben'
+                            : 'Absenden',
+                        'submit',
+                        'absenden_x'
+                    ),
+                ];
+                $actions[] = [
+                    'role' => 'abbrechen',
+                    'markup' => $this->official_message_action_button(
+                        'abbrechen',
+                        'Abbrechen',
+                        'submit',
+                        'abbrechen_x',
+                        ' formnovalidate'
+                    ),
+                ];
                 break;
             case 'FM-Ausgang':
             case 'LdF-Eingang':
             case 'LdF-Ausgang':
-                echo '<button type="submit" name="absenden_x" value="1" '
-                    . 'class="estab-button estab-button-primary">Bearbeitung abschließen</button>';
-                echo '<button type="submit" name="abbrechen_x" value="1" '
-                    . 'class="estab-button estab-button-ghost" formnovalidate>'
-                    . 'Abbrechen</button>';
+                $actions[] = [
+                    'role' => 'hauptaktion',
+                    'markup' => $this->official_message_action_button(
+                        'hauptaktion',
+                        'Bearbeitung abschließen',
+                        'submit',
+                        'absenden_x'
+                    ),
+                ];
                 if ($this->task === 'LdF-Ausgang') {
-                    echo '<button type="submit" '
-                        . 'name="ldf_zurueckweisen_x" value="1" '
-                        . 'class="estab-button estab-button-danger" formnovalidate>'
-                        . 'An Verfasser zurückgeben</button>';
+                    $actions[] = [
+                        'role' => 'rueckgabe',
+                        'markup' => $this->official_message_action_button(
+                            'rueckgabe',
+                            'An Verfasser zurückgeben',
+                            'submit',
+                            'ldf_zurueckweisen_x',
+                            ' formnovalidate'
+                        ),
+                    ];
                 }
                 if ($this->task === 'FM-Ausgang') {
-                    echo '<button type="submit" '
-                        . 'name="transport_nicht_moeglich_x" value="1" '
-                        . 'class="estab-button estab-button-danger" formnovalidate>'
-                        . 'Beförderung nicht möglich</button>';
-                    if (($this->formdata['04_richtung'] ?? '') === 'A') {
-                        echo '<button type="submit" name="antwort_x" value="1" '
-                            . 'class="estab-button estab-button-secondary">'
-                            . 'Antworten</button>';
+                    $actions[] = [
+                        'role' => 'rueckgabe',
+                        'markup' => $this->official_message_action_button(
+                            'rueckgabe',
+                            'Beförderung nicht möglich',
+                            'submit',
+                            'transport_nicht_moeglich_x',
+                            ' formnovalidate'
+                        ),
+                    ];
+                    if ($outgoing) {
+                        $actions[] = [
+                            'role' => 'nebenaktion',
+                            'markup' => $this->official_message_action_button(
+                                'nebenaktion',
+                                'Antworten',
+                                'submit',
+                                'antwort_x'
+                            ),
+                        ];
                     }
                 }
+                $actions[] = [
+                    'role' => 'abbrechen',
+                    'markup' => $this->official_message_action_button(
+                        'abbrechen',
+                        'Abbrechen',
+                        'submit',
+                        'abbrechen_x',
+                        ' formnovalidate'
+                    ),
+                ];
                 break;
             case 'Stab_sichten':
-                $outgoing = ($this->formdata['04_richtung'] ?? '') === 'A';
-                echo '<button type="submit" name="absenden_x" value="1" '
-                    . 'class="estab-button estab-button-primary">'
-                    . ($outgoing
-                        ? 'Formal geprüft – an FmZt'
-                        : 'Sichtung abschließen')
-                    . '</button>';
+                $actions[] = [
+                    'role' => 'hauptaktion',
+                    'markup' => $this->official_message_action_button(
+                        'hauptaktion',
+                        $outgoing
+                            ? 'Formal geprüft – an FmZt'
+                            : 'Sichtung abschließen',
+                        'submit',
+                        'absenden_x'
+                    ),
+                ];
                 if ($outgoing) {
-                    echo '<button type="submit" name="zurueckweisen_x" value="1" '
-                        . 'class="estab-button estab-button-danger">'
-                        . 'An Verfasser zurückgeben</button>';
+                    $actions[] = [
+                        'role' => 'rueckgabe',
+                        'markup' => $this->official_message_action_button(
+                            'rueckgabe',
+                            'An Verfasser zurückgeben',
+                            'submit',
+                            'zurueckweisen_x'
+                        ),
+                    ];
                 }
-                echo '<button type="submit" name="abbrechen_x" value="1" '
-                    . 'class="estab-button estab-button-ghost" formnovalidate>'
-                    . 'Abbrechen</button>';
+                $actions[] = [
+                    'role' => 'abbrechen',
+                    'markup' => $this->official_message_action_button(
+                        'abbrechen',
+                        'Abbrechen',
+                        'submit',
+                        'abbrechen_x',
+                        ' formnovalidate'
+                    ),
+                ];
                 break;
             case 'FM-Admin':
             case 'SI-Admin':
-                echo '<strong class="estab-message-readonly-badge">'
-                    . 'Abgeschlossener Nachweis – schreibgeschützt</strong>';
+                $actions[] = [
+                    'role' => 'hinweis',
+                    'markup' => '<strong '
+                        . 'data-estab-action-role="hinweis" '
+                        . 'class="estab-message-readonly-badge">'
+                        . 'Abgeschlossener Nachweis – schreibgeschützt</strong>',
+                ];
                 break;
         }
+
         if (!$isTop) {
-            echo '<a class="estab-button estab-button-ghost" href="#nachrichtenvordruck">'
-                . 'Zum Formularanfang</a>';
+            $actions[] = [
+                'role' => 'zurueck',
+                'markup' => '<a data-estab-action-role="zurueck" '
+                    . 'class="estab-button estab-button-ghost" '
+                    . 'href="#nachrichtenvordruck">'
+                    . 'Zum Formularanfang</a>',
+            ];
+        }
+
+        foreach (estab_ui_actions_in_order($actions) as $action) {
+            echo $action['markup'];
         }
         echo '</nav>';
         if ($isTop && $this->task === 'Stab_lesen') {
             $this->official_message_categories();
         }
+    }
+
+    /**
+     * Einen Knopf der Aktionsleiste setzen.
+     *
+     * Aussehen und Rolle kommen aus dem Katalog, nicht aus der Zeile, die ihn
+     * schreibt. Wer einen Knopf ergaenzt, kann ihn nicht versehentlich anders
+     * aussehen lassen als seinen Zwilling im naechsten Arbeitsschritt.
+     */
+    function official_message_action_button(
+        string $role,
+        string $label,
+        string $type = 'submit',
+        string $name = '',
+        string $extra = ''
+    ): string {
+        $definition = estab_ui_action_roles()[$role] ?? null;
+        if ($definition === null) {
+            throw new InvalidArgumentException(
+                'Unbekannte Rolle in der Aktionsleiste: ' . $role
+            );
+        }
+        return '<button type="' . estab_message_html($type) . '"'
+            . ($name === ''
+                ? ''
+                : ' name="' . estab_message_html($name) . '" value="1"')
+            . ' data-estab-action-role="' . estab_message_html($role) . '"'
+            . ' class="estab-button ' . $definition['klasse'] . '"'
+            . $extra . '>'
+            . estab_message_html($label)
+            . '</button>';
     }
 
     function official_message_categories(): void

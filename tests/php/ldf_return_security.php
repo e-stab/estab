@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 $root = dirname(__DIR__, 2);
+require_once $root . '/app/ui_elements.php';
 $previousDirectory = getcwd();
 if (!chdir($root . '/4fach')) {
     throw new RuntimeException('Could not enter the message controller directory');
@@ -397,11 +398,24 @@ $assert(
         && str_contains($formControllerSource, '"ldf_rueckgabegrund",'),
     'Outgoing LdF form lacks its bounded, escaped and rehydratable return-reason field'
 );
+/*
+ * Die Aktionsleiste setzt ihre Knoepfe ueber den Elementkatalog. Geprueft
+ * wird deshalb dieselbe Tatsache an ihrer neuen Stelle: genau eine Rueckgabe
+ * mit diesem Namen, in der Rolle "rueckgabe" -- der Katalog gibt ihr
+ * estab-button-danger -- und ohne Pflichtfeldpruefung, damit eine Rueckgabe
+ * nicht an einem leeren Feld scheitert.
+ */
 $assert(
-    substr_count($formSource, 'name="ldf_zurueckweisen_x"') === 1
-        && str_contains($formSource, 'An Verfasser zurückgeben</button>')
-        && str_contains($formSource, 'estab-button-danger')
-        && str_contains($formSource, 'formnovalidate'),
+    substr_count($formSource, "'ldf_zurueckweisen_x'") === 1
+        && str_contains($formSource, "'An Verfasser zurückgeben',")
+        && preg_match(
+            "~'rueckgabe',\s*\n\s*'An Verfasser zurückgeben',\s*\n"
+                . "\s*'submit',\s*\n\s*'ldf_zurueckweisen_x',\s*\n"
+                . "\s*' formnovalidate'~u",
+            $formSource
+        ) === 1
+        && estab_ui_action_roles()['rueckgabe']['klasse']
+            === 'estab-button-danger',
     'Outgoing LdF form lacks one explicit non-destructive return action'
 );
 

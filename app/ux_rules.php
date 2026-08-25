@@ -77,6 +77,14 @@ function estab_ux_rules(): array
                 . 'Laptopbildschirme mit etwa 600 nutzbaren Bildpunkten '
                 . 'Höhe. Die Bereichsnavigation bleibt dort erreichbar.',
         ],
+        'UX-ELEMENTKONSTANZ' => [
+            'origin' => ESTAB_UX_ORIGIN_BETREIBER,
+            'reference' => 'Wiederkehrende Bedienelemente',
+            'requirement' => 'Gleiche Bedeutung heisst gleiches '
+                . 'Bedienelement, gleiche Beschriftung und gleiche Stelle. '
+                . 'Ein Katalog legt die wiederkehrenden Elemente fest, und '
+                . 'jede Oberfläche hält ihn ein.',
+        ],
         'UX-INFOPOINTER' => [
             'origin' => ESTAB_UX_ORIGIN_BETREIBER,
             'reference' => 'Ausfüllhilfe am Feld',

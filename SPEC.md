@@ -386,7 +386,7 @@ Mehrwert, sondern der Grund, warum im Einsatz wieder Papier benutzt wird.
 
 | ID | Soll | Abnahme | Ist |
 | --- | --- | --- | --- |
-| `UX-ELEMENTKONSTANZ` | Gleiche Bedeutung heißt gleiches Bedienelement, gleiche Beschriftung, gleiche Stelle. Absenden, Abbrechen, Zurück und Hilfe sehen überall gleich aus und liegen überall gleich. | Ein Katalog der wiederkehrenden Elemente wird gegen alle Oberflächen gehalten. | `offen` |
+| `UX-ELEMENTKONSTANZ` | Gleiche Bedeutung heißt gleiches Bedienelement, gleiche Beschriftung, gleiche Stelle. Absenden, Abbrechen, Zurück und Hilfe sehen überall gleich aus und liegen überall gleich. | Ein Katalog der wiederkehrenden Elemente wird gegen alle Oberflächen gehalten. | `erfüllt` |
 | `UX-KEIN-BRUCH-IM-LAUFWEG` | Der Wechsel der Station ändert das **Bild** des Vordrucks nicht, sondern nur, welche Felder bedienbar sind. Wer die Nachricht als Fernmelder gesehen hat, erkennt sie als Sichter wieder. | Für alle Stationen desselben Vorgangs sind Feldfolge und Gruppierung identisch. | `teilweise` |
 
 #### E — Umfeld und Zugänglichkeit
