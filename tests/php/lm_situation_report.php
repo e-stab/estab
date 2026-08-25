@@ -217,4 +217,51 @@ $assert(
     )
 );
 
+/* --- Und wann sie ergeht --- */
+
+/*
+ * Eine Lagemeldung entsteht nicht von selbst. Sie ergeht auf Anforderung,
+ * regelmässig auf Anordnung, bei umfassender Lageänderung, als
+ * Lageinformation nach unten und als Lageorientierung zur Seite.
+ *
+ * Wer die Anlässe nicht kennt, meldet auf Zuruf -- und meldet damit zu
+ * selten. Der häufigste Fall in einer Führungsstelle ist nicht die
+ * angeforderte Lagemeldung, sondern die, die niemand angefordert hat, weil
+ * oben niemand ahnt, dass sich unten etwas geändert hat.
+ *
+ * Die Anwendung führt den Anlass nicht mit. Wer eine Lagemeldung abfasst,
+ * weiss, warum -- ein Pflichtfeld dafür wäre eine Angabe, die niemand liest.
+ */
+foreach (
+    [
+        'Anforderung' => 'auf Anforderung',
+        'Anordnung' => 'regelmässig auf Anordnung',
+        'Lageänderung' => 'bei umfassender Lageänderung',
+        'Lageinformation' => 'als Lageinformation nach unten',
+        'Lageorientierung' => 'als Lageorientierung zur Seite',
+    ] as $needle => $what
+) {
+    $assert(
+        str_contains($text, $needle),
+        estab_dv_requirement(
+            'LM-ANLASS',
+            'Die Ausfüllhilfe nennt den Anlass „' . $what . '“ nicht. Wer '
+                . 'die Anlässe nicht kennt, meldet auf Zuruf -- und damit zu '
+                . 'selten.'
+        )
+    );
+}
+
+// Und der Anlass wird nicht mitgeführt: kein Feld, keine Spalte.
+foreach (['lm_anlass', 'lagemeldung_anlass', 'meldeanlass'] as $invented) {
+    $assert(
+        !str_contains(mb_strtolower($view), $invented),
+        estab_dv_requirement(
+            'LM-ANLASS',
+            'Der Vordruck führt ein Merkmal „' . $invented . '“. Wer eine '
+                . 'Lagemeldung abfasst, weiss, warum.'
+        )
+    );
+}
+
 printf("Lagemeldung: OK (%d assertions)\n", $assertions);

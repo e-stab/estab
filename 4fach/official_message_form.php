@@ -649,7 +649,10 @@ HTML;
                     . 'passt. Eine Lagemeldung arbeitet die folgenden acht '
                     . 'Punkte ab, in dieser Reihenfolge, mit Angaben nur zu '
                     . 'zutreffenden Punkten. Sie nimmt denselben Laufweg wie '
-                    . 'jede andere Nachricht.',
+                    . 'jede andere Nachricht. Sie ergeht auf Anforderung, '
+                    . 'regelmäßig auf Anordnung, bei umfassender '
+                    . 'Lageänderung, als Lageinformation nach unten und als '
+                    . 'Lageorientierung zur Seite.',
                 'liste' => [
                     'Allgemeine Lage',
                     'Schaden- und Gefahrenlage',

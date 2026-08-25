@@ -245,6 +245,14 @@ function estab_dv_rules(): array
             'requirement' => 'Die Lagemeldung folgt denselben Meldewegen wie '
                 . 'jede andere Meldung und durchläuft denselben Laufweg.',
         ],
+        'LM-ANLASS' => [
+            'source' => ESTAB_DV_SOURCE_MELDEWESEN,
+            'reference' => 'Kapitel 4, Anlässe der Lagemeldung',
+            'requirement' => 'Eine Lagemeldung ergeht auf Anforderung, '
+                . 'regelmäßig auf Anordnung, bei umfassender Lageänderung, '
+                . 'als Lageinformation nach unten und als Lageorientierung '
+                . 'zur Seite. Die Ausfüllhilfe nennt die fünf Anlässe.',
+        ],
         'NV-14-5W' => [
             'source' => ESTAB_DV_SOURCE_MELDEWESEN,
             'reference' => 'Kapitel 3, Aufbau einer Meldung',

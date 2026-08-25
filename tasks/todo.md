@@ -123,7 +123,7 @@ Risiko: `·` niedrig · `!` mittel · `!!` hoch
 ## P8 — Lagemeldung
 
 - [x] **T38** `·` Acht Punkte als Merkhilfe — `LM-AUFBAU`, `LM-MELDEWEG` *(braucht T33)*
-- [ ] **T39** `·` Anlass der Lagemeldung — `LM-ANLASS` *(braucht T38)*
+- [x] **T39** `·` Anlass der Lagemeldung — `LM-ANLASS` *(braucht T38)*
 
 > **Prüfpunkt C8** — Ist der Acht-Punkte-Aufbau im Einsatz ausfüllbar?
 
