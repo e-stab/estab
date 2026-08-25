@@ -2845,6 +2845,80 @@ form[data-estab-incident-disabled="true"]::before {
     color: #f4ca70;
 }
 
+/* ---------------------------------------------------------------------
+   Kopfzeilen: Titel statt Banner.
+
+   Jede Seite trug oben einen grossen blauen Balken mit Kicker, Titel und
+   einem erklaerenden Satz. Auf einem flachen Bildschirm ass das ein Viertel
+   der Hoehe -- fuer eine Angabe, die nach dem zweiten Aufruf niemand mehr
+   liest, und einen Satz, der meist ohnehin danebensteht: Das
+   Einsatztagebuch schrieb "Ihre Funktion hat lesenden Zugriff" in den
+   Balken, und direkt darunter stand derselbe Hinweis noch einmal im
+   Warnkasten.
+
+   Der Titel bleibt -- er sagt, wo man ist. Der Satz geht.
+   --------------------------------------------------------------------- */
+.estab-tool-hero,
+.estab-message-page-header,
+.estab-bos-document-header,
+.estab-admin-dashboard-hero,
+.estab-export-hero {
+    align-items: baseline;
+    background: none;
+    border: 0;
+    border-bottom: 1px solid #c5d1dd;
+    border-radius: 0;
+    box-shadow: none;
+    color: #1f3a5a;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.2rem 0.6rem;
+    justify-content: flex-start;
+    margin: 0 0 0.6rem;
+    padding: 0 0 0.35rem;
+}
+
+.estab-message-page-header .estab-message-header-badges,
+.estab-tool-hero > .estab-tool-actions {
+    margin-left: auto;
+}
+
+.estab-tool-hero > h1,
+.estab-message-page-header h1,
+.estab-bos-document-header h1,
+.estab-admin-dashboard-hero h1,
+.estab-export-hero h1 {
+    color: #1f3a5a;
+    font-size: 1.25rem;
+    line-height: 1.2;
+    margin: 0;
+}
+
+.estab-tool-hero > .estab-tool-eyebrow,
+.estab-message-page-header .estab-section-kicker,
+.estab-bos-document-header .estab-bos-document-kicker,
+.estab-admin-dashboard-hero .estab-tool-eyebrow,
+.estab-export-hero .estab-tool-eyebrow {
+    color: #5d7692;
+    font-size: 0.68rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    margin: 0;
+    order: -1;
+    text-transform: uppercase;
+}
+
+/* Der erklaerende Satz. Er beschreibt, was der Bereich tut -- das weiss,
+   wer hier arbeitet. Bleibt der Satz ein Zustand ("darf schreiben"), steht
+   er ohnehin im Kasten darunter, wo er hingehoert. */
+.estab-tool-hero > p:not(.estab-tool-eyebrow),
+.estab-message-page-header p,
+.estab-bos-document-header p,
+.estab-admin-dashboard-hero > p:not(.estab-tool-eyebrow),
+.estab-export-hero > p:not(.estab-tool-eyebrow) {
+    display: none;
+}
+
 .estab-tool-panel,
 .estab-tool-card,
 .estab-tool-table-wrap {
@@ -2876,6 +2950,48 @@ form[data-estab-incident-disabled="true"]::before {
     color: #52657a;
     margin-bottom: 0;
     max-width: 62rem;
+}
+
+/* Tafelkoepfe tragen dieselbe Last wie die Seitenkoepfe: eine Ueberschrift
+   und darunter zwei Zeilen, die erklaeren, was das Formular darunter ohnehin
+   zeigt. Ueberschrift und Kicker stehen jetzt in einer Zeile; der Absatz
+   entfaellt. */
+.estab-tool-panel-heading {
+    align-items: baseline;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.15rem 0.55rem;
+    margin-bottom: 0.55rem;
+}
+
+.estab-tool-panel-heading h2 {
+    font-size: 1.05rem;
+    margin: 0;
+}
+
+.estab-tool-panel-heading .estab-tool-eyebrow,
+.estab-tool-panel-heading .estab-section-kicker {
+    margin: 0;
+    order: -1;
+}
+
+.estab-tool-panel-heading > p:not(.estab-tool-eyebrow):not(.estab-section-kicker) {
+    display: none;
+}
+
+/* Der Kasten "Aktiver Einsatz" nannte in fuenf Zeilen, was in eine passt.
+   Die Zusammenfassung der Fuehrungsstellenseite behaelt ihr Raster -- dort
+   sind es Spalten mit je eigener Ueberschrift. */
+.estab-tool-status:not(.estab-tool-status-summary) > div {
+    align-items: baseline;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.1rem 0.6rem;
+}
+
+.estab-tool-status:not(.estab-tool-status-summary) > div > span,
+.estab-tool-status:not(.estab-tool-status-summary) > div > strong {
+    display: inline;
 }
 
 .estab-tool-notice,
@@ -4275,40 +4391,172 @@ body.estab-message-form-body {
     padding: clamp(0.75rem, 2.5vw, 1.75rem);
 }
 
+/* Der Kopf des Vordrucks: eine Zeile, kein Banner. Er stand als blauer
+   Block mit Titel und drei Zeilen Erklaerung ueber dem Vordruck und ass auf
+   einem flachen Bildschirm ein Fuenftel der Hoehe. Was er sagte -- dass es
+   ein amtliches Raster mit Ausfuellhinweisen ist -- weiss, wer damit
+   arbeitet. Titel und Marken bleiben. */
 .estab-message-page-header {
-    align-items: center;
-    background: #173a5e;
-    border-left: 6px solid #e4b443;
-    border-radius: 10px;
-    box-shadow: 0 8px 24px rgba(17, 38, 63, 0.14);
-    color: #ffffff;
+    align-items: baseline;
+    background: none;
+    border: 0;
+    border-bottom: 1px solid #b9c8d7;
+    border-radius: 0;
+    box-shadow: none;
+    color: #1f3a5a;
     display: flex;
-    gap: 1rem;
-    justify-content: space-between;
-    margin-bottom: 1rem;
-    padding: clamp(1rem, 3vw, 1.5rem);
+    flex-wrap: wrap;
+    gap: 0.2rem 0.6rem;
+    justify-content: flex-start;
+    margin-bottom: 0.5rem;
+    padding: 0 0 0.3rem;
 }
 
 .estab-message-page-header h1 {
-    color: #ffffff;
-    font-size: clamp(1.55rem, 4vw, 2.2rem);
-    line-height: 1.1;
-    margin: 0.2rem 0 0.35rem;
+    color: #1f3a5a;
+    font-size: 1.2rem;
+    line-height: 1.2;
+    margin: 0;
 }
 
 .estab-message-page-header p {
-    color: #e7eff7;
-    margin: 0;
-    max-width: 52rem;
+    display: none;
+}
+
+.estab-message-page-header > div:first-child {
+    align-items: baseline;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.15rem 0.55rem;
+    min-width: 0;
+}
+
+.estab-message-page-header .estab-message-header-badges {
+    flex: 0 0 auto;
+    margin-left: auto;
 }
 
 .estab-message-page-header .estab-section-kicker,
 .estab-message-workflow-panel .estab-section-kicker {
-    color: #e4b443;
-    font-size: 0.72rem;
+    color: #5d7692;
+    font-size: 0.68rem;
     font-weight: 800;
-    letter-spacing: 0.11em;
+    letter-spacing: 0.08em;
     text-transform: uppercase;
+}
+
+.estab-message-page-header .estab-section-kicker {
+    order: -1;
+}
+
+/* ---------------------------------------------------------------------
+   Der Bearbeitungsweg neben dem Vordruck.
+
+   Er stand quer ueber dem Vordruck: eine Reihe grosser Karten, 247 Pixel
+   hoch auf einem breiten Bildschirm und 655 auf einem Laptop -- mehr als
+   ein flacher Bildschirm ueberhaupt hergibt. Wer den Vordruck sehen wollte,
+   musste erst daran vorbeiscrollen.
+
+   Er steht jetzt rechts daneben, sobald die Spalte breit genug ist: eine
+   schmale Liste, eine Zeile je Station. Der Vordruck faengt oben an. Was
+   die Karten sagten -- Station, Zustand, Zeitpunkt, Dauer, Grund eines
+   Ruecklaufs -- steht weiterhin da, nur untereinander statt nebeneinander.
+
+   Das gilt erst ab 70 rem Spaltenbreite, und das hat einen Grund: Das
+   amtliche Blatt ist 896 Pixel breit und schrumpft nicht -- es ist ein
+   Raster, kein fliessender Satz. Wer den Weg danebenstellt, nimmt dem Blatt
+   diese Breite weg, und auf einem Laptop sieht man dann weniger vom
+   Vordruck statt mehr. Ist der Platz nicht da, bleibt der Weg oben, aber
+   flach: eine Reihe kleiner Marken statt einer Reihe grosser Karten.
+   --------------------------------------------------------------------- */
+
+
+/* Kompakter wird der Weg ueberall, nicht nur neben dem Vordruck: Wo er
+   oben steht, steht er in einer Zeile -- Ueberschrift links, Stationen
+   daneben. Zwei Zeilen fuer eine Ueberschrift und eine Reihe sind eine zu
+   viel. */
+section.estab-message-timeline[data-estab-message-timeline] {
+    align-items: center;
+    display: flex;
+    /* Wird die Spalte zu schmal, rueckt die Ueberschrift ueber die
+       Stationen statt daneben -- sonst wird sie so weit zusammengedrueckt,
+       dass "Bearbeitungsweg" mitten durchbricht. */
+    flex-wrap: wrap;
+    gap: 0.35rem 0.7rem;
+    padding: 0.4rem 0.6rem;
+}
+
+section.estab-message-timeline[data-estab-message-timeline]
+    > .estab-message-timeline__header {
+    flex: 0 0 auto;
+    max-width: 12.5rem;
+    min-width: 8rem;
+}
+
+section.estab-message-timeline[data-estab-message-timeline]
+    > .estab-message-timeline__track {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.estab-message-timeline__header {
+    align-items: baseline;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.1rem 0.5rem;
+    margin-bottom: 0;
+}
+
+.estab-message-timeline__header h2 {
+    font-size: 0.9rem;
+    hyphens: auto;
+    min-width: 0;
+    overflow-wrap: break-word;
+    word-break: normal;
+}
+
+/* Der Satz erklaerte, dass jede Station sichtbar bleibt. Das sieht man. */
+.estab-message-timeline__summary {
+    display: none;
+}
+
+.estab-message-timeline__track {
+    gap: 1.4rem;
+    padding: 0.15rem 0.15rem 0.4rem;
+}
+
+.estab-message-timeline__step {
+    flex-basis: clamp(8.5rem, 14vw, 11rem);
+    gap: 0.15rem;
+    padding: 0.35rem 0.45rem;
+}
+
+.estab-message-timeline__step:not(:last-child)::after {
+    top: 1rem;
+    width: 1rem;
+    left: calc(100% + 0.2rem);
+}
+
+.estab-message-timeline__station {
+    font-size: 0.8rem;
+    hyphens: auto;
+    line-height: 1.15;
+    margin: 0;
+    overflow-wrap: anywhere;
+}
+
+.estab-message-timeline__state {
+    font-size: 0.7rem;
+}
+
+.estab-message-timeline__time,
+.estab-message-timeline__duration {
+    font-size: 0.68rem;
+}
+
+.estab-message-timeline__reason {
+    font-size: 0.7rem;
+    margin: 0.1rem 0 0;
 }
 
 /* Fehlerübersicht am Seitenkopf: eine Meldung, ein Sprung je Feld. */
@@ -6686,26 +6934,17 @@ section.estab-message-timeline[data-estab-message-timeline] * {
         grid-template-columns: minmax(0, 1fr);
     }
 
+    /* Untereinander gestapelt wurde der Weg 496 Pixel hoch -- mehr als ein
+       flacher Bildschirm ueberhaupt hat. Er bleibt deshalb eine Reihe und
+       laesst sich schieben; vier bis sechs kurze Marken sind dafuer die
+       richtige Form. */
     .estab-message-timeline__track {
-        display: grid;
-        gap: 1.8rem;
-        max-width: none;
-        overflow: visible;
-        padding: 0.2rem 0;
-        scroll-snap-type: none;
-        touch-action: auto;
+        gap: 1.1rem;
+        padding: 0.15rem 0.15rem 0.45rem;
     }
 
     .estab-message-timeline__step {
-        flex-basis: auto;
-        width: 100%;
-    }
-
-    .estab-message-timeline__step:not(:last-child)::after {
-        height: 1.2rem;
-        left: 1.35rem;
-        top: calc(100% + 0.3rem);
-        width: 3px;
+        flex-basis: clamp(7.5rem, 30vw, 9.5rem);
     }
 
     .estab-message-form-scroll::before {
@@ -6715,6 +6954,66 @@ section.estab-message-timeline[data-estab-message-timeline] * {
         font-size: 0.78rem;
         font-weight: 700;
         margin: 0 0 0.5rem;
+    }
+}
+
+@media (min-width: 70rem) {
+    .estab-message-form-page {
+        align-items: start;
+        column-gap: 0.9rem;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) clamp(11.5rem, 20%, 14rem);
+    }
+
+    .estab-message-form-page > .estab-message-page-header {
+        grid-column: 1 / -1;
+    }
+
+    .estab-message-form-page > section.estab-message-timeline {
+        display: block;
+        grid-column: 2;
+        grid-row: 2 / 4;
+        margin: 0;
+        position: sticky;
+        top: 0.5rem;
+    }
+
+    section.estab-message-timeline[data-estab-message-timeline]
+        > .estab-message-timeline__header {
+        margin-bottom: 0.4rem;
+        max-width: none;
+        min-width: 0;
+    }
+
+    .estab-message-timeline__header h2 {
+        font-size: 0.82rem;
+    }
+
+    .estab-message-form-page > form,
+    .estab-message-form-page > .estab-alert {
+        grid-column: 1;
+    }
+
+    section.estab-message-timeline[data-estab-message-timeline]
+        .estab-message-timeline__track {
+        display: grid;
+        gap: 0.3rem;
+        overflow-x: visible;
+        padding: 0;
+    }
+
+    section.estab-message-timeline[data-estab-message-timeline]
+        .estab-message-timeline__step {
+        flex: 0 0 auto;
+    }
+
+    /* Der Strich zwischen den Stationen faellt jetzt senkrecht. */
+    section.estab-message-timeline[data-estab-message-timeline]
+        .estab-message-timeline__step:not(:last-child)::after {
+        height: 0.3rem;
+        left: 1.1rem;
+        top: calc(100% + 0.02rem);
+        width: 3px;
     }
 }
 
