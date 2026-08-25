@@ -199,6 +199,24 @@ function estab_dv_rules(): array
                 . 'mit der Aushändigung der eingegangenen Nachricht ergänzt und '
                 . 'enthält keine anwendungsinternen Kennungen.',
         ],
+        'LW-EINGANG-STATIONEN' => [
+            'source' => ESTAB_DV_SOURCE_UNTERLAGE,
+            'reference' => 'Laufweg der eingehenden Nachricht',
+            'requirement' => 'Eine eingehende Nachricht wird von der '
+                . 'Fernmeldezentrale aufgenommen, vom Leiter des '
+                . 'Fernmeldebetriebes weitergegeben und vom Sichter '
+                . 'quittiert und abgeschlossen. Keine dieser Stationen '
+                . 'darf übersprungen werden.',
+        ],
+        'LW-AUSGANG-STATIONEN' => [
+            'source' => ESTAB_DV_SOURCE_UNTERLAGE,
+            'reference' => 'Laufweg der ausgehenden Nachricht',
+            'requirement' => 'Eine ausgehende Nachricht wird im Stab '
+                . 'abgefasst, vom Sichter geprüft, vom Leiter des '
+                . 'Fernmeldebetriebes zur Beförderung freigegeben und von '
+                . 'der Fernmeldezentrale befördert und abgeschlossen. Keine '
+                . 'dieser Stationen darf übersprungen werden.',
+        ],
         'NV-GESPRAECHSNOTIZ-LAUFWEG' => [
             'source' => ESTAB_DV_SOURCE_UNTERLAGE,
             'reference' => 'Feld 12, Gesprächsnotiz',

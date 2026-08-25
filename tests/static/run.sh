@@ -177,6 +177,7 @@ for test_name in \
     nv_reception_marks \
     nv_message_head_fields \
     nv_signature_and_receipt \
+    lw_route_stations \
     telecom_plan_security \
     upload_security \
     attachment_security \

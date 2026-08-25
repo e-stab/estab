@@ -283,8 +283,8 @@ Anforderungen aus M9 erfüllt.
 
 | ID | Quelle | Soll | Abnahme | Ist |
 | --- | --- | --- | --- | --- |
-| `LW-EINGANG-STATIONEN` | Q2 Laufweg Eingang | Fernmeldezentrale nimmt auf → Sichter quittiert und kennzeichnet → Verteilung an Bearbeiter, Lage und Betriebsbuch. | Der Eingang durchläuft A/W → LdF → Si → Abschluss; ein Überspringen ist nicht möglich. | `ohne Regel` |
-| `LW-AUSGANG-STATIONEN` | Q2 Laufweg Ausgang | Ausfüllen im Stab → Sichter → Beförderung → Verbleib im Betriebsbuch. | Der Ausgang durchläuft Verfasser → Si → LdF → Beförderung → A/W → Abschluss. | `ohne Regel` |
+| `LW-EINGANG-STATIONEN` | Q2 Laufweg Eingang | Fernmeldezentrale nimmt auf → Sichter quittiert und kennzeichnet → Verteilung an Bearbeiter, Lage und Betriebsbuch. | Der Eingang durchläuft A/W → LdF → Si → Abschluss; ein Überspringen ist nicht möglich. | `erfüllt` |
+| `LW-AUSGANG-STATIONEN` | Q2 Laufweg Ausgang | Ausfüllen im Stab → Sichter → Beförderung → Verbleib im Betriebsbuch. | Der Ausgang durchläuft Verfasser → Si → LdF → Beförderung → A/W → Abschluss. | `erfüllt` |
 | `LW-NUR-BLAUER-TEIL` | Q2 „Nur den blauen Teil ausfüllen!" | Der Stab füllt nur den Nachrichtenteil aus. Die Felder 1 bis 5 gehören der Fernmeldezentrale. | Der Verfasser erhält die Felder 1–5 nicht zur Eingabe. | `ohne Regel` |
 | `LW-KORREKTURSCHLEIFE` | Q2, Q4 Kap. 8.2 | Eine zurückgewiesene Nachricht bleibt dieselbe Nachricht und kehrt zu ihrem Verfasser zurück. | Der Stand „Zur Korrektur" führt zurück zum Verfasser, ohne den Objekttyp zu ändern. | `ohne Regel` |
 
