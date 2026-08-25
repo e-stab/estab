@@ -180,6 +180,7 @@ for test_name in \
     lw_route_stations \
     lw_field_ownership \
     nv_four_copies \
+    fuest_route_roles \
     telecom_plan_security \
     upload_security \
     attachment_security \

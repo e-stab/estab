@@ -250,6 +250,22 @@ function estab_dv_rules(): array
                 . 'abgeschlossen; eine Disposition und eine Beförderung finden '
                 . 'nicht statt.',
         ],
+        'FUEST-SICHTER-BINDEGLIED' => [
+            'source' => ESTAB_DV_SOURCE_DV_1_101,
+            'reference' => 'Kapitel 4.3.1.10',
+            'requirement' => 'Der Sichter ist Bindeglied zwischen Stab und '
+                . 'Fernmeldezentrale und dem Leiter des Stabes unterstellt. '
+                . 'Die Aufgabe darf in Doppelfunktion mit der Führung des '
+                . 'Einsatztagebuchs wahrgenommen werden.',
+        ],
+        'FUEST-LDF-BETRIEB' => [
+            'source' => ESTAB_DV_SOURCE_DV_1_101,
+            'reference' => 'Kapitel 4.3.1.12',
+            'requirement' => 'Der Leiter des Fernmeldebetriebes verantwortet '
+                . 'den Fernmeldebetrieb und die nachgeordnete '
+                . 'Betriebsleitung. Beförderung und Melderauftrag laufen '
+                . 'über ihn.',
+        ],
         'FUEST-KLEIN-BEFOERDERUNG' => [
             'source' => ESTAB_DV_SOURCE_DV_1_101,
             'reference' => 'Führungsstelle ohne Stab',

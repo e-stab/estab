@@ -242,9 +242,9 @@ Anforderungen aus M9 erfüllt.
 | `FUEST-AUFWUCHS` | Q4 Kap. 3.5, Führungsstufen A–D | Die Führungsstelle wächst im laufenden Einsatz von „ohne Stab" auf „mit Stab" auf; der Berechtigungsmodus folgt. | vorhandene Regel | `erfüllt` |
 | `FUEST-BESETZUNG-VOLLSTAENDIG` | Q4, Besetzung | Vor Freigabe des Einsatzes benennt die Anwendung unbesetzte Stationen des Nachrichtenlaufs. | vorhandene Regel | `erfüllt` |
 | `FUEST-DOPPELFUNKTION` | Q4, Mehrfachbesetzung | Trägt eine Person mehrere Funktionen, weist die Anwendung die Warteschlange jeder Funktion aus. | vorhandene Regel | `erfüllt` |
-| `FUEST-SICHTER-BINDEGLIED` | Q4 Kap. 4.3.1.10 | Der Sichter ist Bindeglied zwischen Stab und Fernmeldezentrale und dem Leiter Stab unterstellt. Die Aufgabe darf in Doppelfunktion mit der ETB-Führung wahrgenommen werden. | Station `Si` liegt im Laufweg zwischen FmZt und Sachgebieten; Doppelfunktion Sichter/ETB ist zulässig. | `ohne Regel` |
+| `FUEST-SICHTER-BINDEGLIED` | Q4 Kap. 4.3.1.10 | Der Sichter ist Bindeglied zwischen Stab und Fernmeldezentrale und dem Leiter Stab unterstellt. Die Aufgabe darf in Doppelfunktion mit der ETB-Führung wahrgenommen werden. | Station `Si` liegt im Laufweg zwischen FmZt und Sachgebieten; Doppelfunktion Sichter/ETB ist zulässig. | `erfüllt` |
 | `FUEST-SICHTER-AUSGANG-FORMAL` | Q4 Kap. 4.3.1.10 | Bei ausgehenden Nachrichten prüft der Sichter **nur** die formale Richtigkeit — Anschrift, Unterschrift, Funktion. „Eine inhaltliche Prüfung der Nachricht entfällt." | Die Rückweisung durch den Sichter im Ausgang benennt ausschließlich Feld 10, 15 und 17 als Grund. | `offen` |
-| `FUEST-LDF-BETRIEB` | Q4 Kap. 4.3.1.12 | Der LdF verantwortet den Fernmeldebetrieb und die nachgeordnete Betriebsleitung. | Beförderung und Melderauftrag laufen über die Station `LdF`. | `ohne Regel` |
+| `FUEST-LDF-BETRIEB` | Q4 Kap. 4.3.1.12 | Der LdF verantwortet den Fernmeldebetrieb und die nachgeordnete Betriebsleitung. | Beförderung und Melderauftrag laufen über die Station `LdF`. | `erfüllt` |
 
 ### 5.4 M3 — nachrichtenvordruck
 
