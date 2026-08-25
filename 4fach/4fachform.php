@@ -1431,7 +1431,7 @@ HTML;
     }
 
     pre_html ("N","Formular ".$this->task." ".$conf_4f ["Titelkurz"]." ".$conf_4f ["Version"], ""); // Normaler Seitenaufbau ohne Auffrischung
-    echo "<body style=\"text-align: left; background-color: rgb(220,220,255); \">\n"; //".$this->formbgcolor.";\">\n";
+    echo "<body class=\"estab-legacy-page\">\n";
     if ((string) $this->formdata ["estab_route_error"] !== "") {
       echo "<div class=\"estab-alert estab-alert--danger\" role=\"alert\">".
         estab_message_html ($this->formdata ["estab_route_error"]).

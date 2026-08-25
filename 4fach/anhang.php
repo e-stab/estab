@@ -422,8 +422,11 @@ class fileupload extends file_upload {
     echo "<head>";
     echo "<meta content=\"text/html; charset=UTF-8\" http-equiv=\"content-type\">\n";
     echo "<title>".estab_attachment_html ($titel)."</title>";
+    // Die Anhangseite trug bisher gar keine Gestaltung und stand deshalb als
+    // einzige Seite in der Schrift und den Farben des Browsers da.
+    echo estab_session_ui_stylesheet ()."\n";
     echo "</head>";
-    echo "<body>";
+    echo "<body class=\"estab-legacy-page\">";
   }
 
 

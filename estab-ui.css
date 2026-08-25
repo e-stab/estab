@@ -485,7 +485,7 @@
 }
 
 .estab-message-workspace {
-    background: #111516;
+    background: #eef2f6;
 }
 
 /* ------------------------------------------------------------------ *
@@ -740,7 +740,7 @@
 }
 
 .estab-message-content-frame {
-    background: #111516;
+    background: #eef2f6;
 }
 
 .estab-mobile-sidebar-return {
@@ -2843,6 +2843,94 @@ form[data-estab-incident-disabled="true"]::before {
 
 .estab-tool-hero .estab-tool-eyebrow {
     color: #f4ca70;
+}
+
+/* ---------------------------------------------------------------------
+   Uebernommene Seiten.
+
+   Die Meldungslisten und die Anhangseite stammen aus dem Bestand. Sie
+   bauen ihre Oberflaeche aus verschachtelten Tabellen und Bildknoepfen
+   und trugen bisher ihre eigene Farbe: lila Grund, Serifenschrift,
+   Rahmen aus dem Browser. Neben der uebrigen Anwendung sah das aus wie
+   ein anderes Programm.
+
+   Was sich ohne Eingriff in ihre Ausgabe erreichen laesst, steht hier:
+   dieselbe Flaeche, dieselbe Schrift, dieselben Abstaende. Die
+   Bildknoepfe -- die Reiter der Liste sind erzeugte Grafiken -- bleiben,
+   bis ihre Erzeugung ersetzt ist.
+   --------------------------------------------------------------------- */
+.estab-legacy-page {
+    background: #eef2f6;
+    color: #172033;
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 0.9rem;
+    margin: 0;
+    padding: 0.6rem 0.7rem;
+}
+
+.estab-legacy-page table {
+    border-collapse: collapse;
+    max-width: 100%;
+}
+
+.estab-legacy-page td,
+.estab-legacy-page th {
+    padding: 0.15rem 0.3rem;
+    vertical-align: top;
+}
+
+.estab-legacy-page big {
+    font-size: 1em;
+}
+
+.estab-legacy-page fieldset {
+    background: #ffffff;
+    border: 1px solid #c5d1dd;
+    border-radius: 10px;
+    margin: 0 0 0.7rem;
+    padding: 0.6rem 0.75rem;
+}
+
+.estab-legacy-page legend {
+    color: #1f3a5a;
+    font-size: 0.95rem;
+    font-weight: 700;
+    padding: 0 0.3rem;
+}
+
+.estab-legacy-page input[type="text"],
+.estab-legacy-page input[type="password"],
+.estab-legacy-page input:not([type]),
+.estab-legacy-page select,
+.estab-legacy-page textarea {
+    background: #ffffff;
+    border: 1px solid #7d94ad;
+    border-radius: 5px;
+    color: #172033;
+    font: inherit;
+    padding: 0.25rem 0.4rem;
+}
+
+.estab-legacy-page input[type="submit"],
+.estab-legacy-page button {
+    background: #1f4f7d;
+    border: 1px solid #1f4f7d;
+    border-radius: 6px;
+    color: #ffffff;
+    cursor: pointer;
+    font: inherit;
+    font-weight: 700;
+    padding: 0.3rem 0.7rem;
+}
+
+.estab-legacy-page a {
+    color: #1a4d7a;
+}
+
+/* Die Liste bringt ihre eigenen Rahmenfarben mit; auf hellem Grund sind
+   sie nicht mehr zu sehen und stoeren nur. */
+.estab-legacy-page div[style*="border"] {
+    border-color: #c5d1dd !important;
 }
 
 /* ---------------------------------------------------------------------

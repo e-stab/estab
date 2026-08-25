@@ -2706,7 +2706,7 @@ ul#topmenu li.active {
 
 
       pre_html ("stabliste", "Stab lesen ".$conf_4f ["Titelkurz"]." ".$conf_4f ["Version"], $csskatego); // Normaler Seitenaufbau mit Auffrischung
-      echo "<body bgcolor=\"#DCDCFF\">";
+      echo "<body class=\"estab-legacy-page\">";
       $list = new listen ("Stab_lesen", "");
       $list->createlist ();
    }
@@ -2803,7 +2803,7 @@ ul#topmenu li.active {
           "Sichterliste ".$conf_4f ["Titelkurz"]." ".$conf_4f ["Version"],
           $css
         ); // Normaler Seitenaufbau mit Auffrischung
-        echo "<body bgcolor=\"#DCDCFF\">";
+        echo "<body class=\"estab-legacy-page\">";
         $list = new listen ("Stab_sichten", "STSI", $workflowIncidentId);
         $list->createlist ();
    }
@@ -2845,7 +2845,7 @@ ul#topmenu li.active {
       "LdF-Disposition ".$conf_4f ["Titelkurz"]." ".$conf_4f ["Version"],
       $css
     );
-    echo "<body bgcolor=\"#DCDCFF\">";
+    echo "<body class=\"estab-legacy-page\">";
     $list = new listen ("LDF", "", $workflowIncidentId);
     $list->createlist ();
   }
@@ -2974,7 +2974,7 @@ ul#topmenu li.active {
           "a:active { color:#0000EE; background-color:#FFFF99; }\n".
           "a:focus { color:#0000EE; background-color:#FFFF99;  }";
     pre_html ("fmdliste","FMD Ausgang ".$conf_4f ["Titelkurz"]."".$conf_4f ["Version"],$css); // Normaler Seitenaufbau mit Auffrischung
-    echo "<body bgcolor=\"#DCDCFF\">";
+    echo "<body class=\"estab-legacy-page\">";
     $list = new listen ("FMA", "", $workflowIncidentId);
     $list->createlist ();
   }
@@ -3248,7 +3248,7 @@ Nachricht als Sichtung anzeigen
     echo "<script src=\"../estab-password-policy.js\" defer></script>\n";
     echo "<title>eStab – Anmeldung</title>\n";
     echo "</head>\n";
-    echo "<body bgcolor=\"#DCDCFF\">\n";
+    echo "<body class=\"estab-legacy-page\">\n";
     echo "<main class=\"estab-auth-shell\">\n";
     echo "<section class=\"estab-auth-card\" aria-labelledby=\"estab-auth-title\">\n";
     echo "<h1 id=\"estab-auth-title\">eStab-Funktionskonto</h1>\n";

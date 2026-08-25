@@ -25,7 +25,14 @@ require_once __DIR__ . "/../app/navigation.php";
 require_once __DIR__ . "/../app/self_registration.php";
 require_once __DIR__ . "/../app/session_ui.php";
 
-  function pre_html ($art, $titel, $cssstr, $sharedUi = false){
+  /*
+   * $sharedUi war frueher abgeschaltet, und kein Aufrufer schaltete es ein.
+   * Damit bekam keine der uebernommenen Seiten das gemeinsame Stylesheet --
+   * sie standen in der Schrift und den Farben des Browsers da, waehrend
+   * daneben die Huelle in der Gestaltung der Anwendung stand. Wer beides
+   * gleichzeitig sah, sah zwei Programme.
+   */
+  function pre_html ($art, $titel, $cssstr, $sharedUi = true){
     include ("../4fcfg/para.inc.php");
     include ("../4fcfg/config.inc.php");
     echo "<!DOCTYPE html PUBLIC \"-//W3C//DTD HTML 4.01 Transitional//EN\">\n";
