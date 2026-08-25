@@ -594,17 +594,24 @@ $assert(
         . 'verliert die bisherige Anmeldeseite oder benennt den Weg in die '
         . 'Arbeit anders als bisher'
 );
+/*
+ * Die Ziffern haengen weiterhin am Lagebild und greifen nicht auf die
+ * Servicekacheln ueber. Beide Aufrufe reichen zusaetzlich die angemeldete
+ * Identitaet durch, damit eine Kachel dasselbe sperrt wie das Menue.
+ */
 $assert(
     str_contains(
         $index,
-        'estab_root_menu_markup($menue, $authenticated, $situation !== null)'
+        'estab_root_menu_markup($menue, $authenticated, $situation !== null,'
+            . ' $rootIdentity)'
     )
         && str_contains(
             $index,
-            'estab_root_menu_markup($zusatz_menue, $authenticated)'
+            'estab_root_menu_markup($zusatz_menue, $authenticated, false,'
+                . ' $rootIdentity)'
         ),
-    'Die Ziffern hängen nicht am Lagebild oder greifen auf die '
-        . 'Servicekacheln über'
+    'Die Ziffern hängen nicht am Lagebild, greifen auf die Servicekacheln '
+        . 'über oder erreichen die angemeldete Funktion nicht'
 );
 $assert(
     substr_count($module, 'estab_read_require_operational_scope(') === 1

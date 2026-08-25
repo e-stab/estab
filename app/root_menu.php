@@ -29,7 +29,8 @@ function estab_root_menu_text(mixed $value): string
 function estab_root_menu_item_markup(
     array $item,
     bool $authenticated,
-    ?int $shortcut = null
+    ?int $shortcut = null,
+    ?array $identity = null
 ): string {
     if (($item['visible'] ?? false) !== true) {
         return '';
@@ -76,15 +77,27 @@ function estab_root_menu_item_markup(
     }
 
     $locked = $access === 'application' && !$authenticated;
+    /*
+     * Die Kachel und der Menueintrag fuehren in denselben Bereich. Sperrt das
+     * Menue, sperrt die Kachel -- sonst lernt der Bedienende zwei Regeln
+     * statt einer und traut am Ende keiner von beiden. Der Grund ist
+     * derselbe, damit er nicht zweimal formuliert und irgendwann
+     * unterschiedlich gepflegt wird.
+     */
+    $blockedReason = ($authenticated && !$locked && $navigationItem !== null)
+        ? estab_navigation_duty_access_reason($navigationItem, $identity)
+        : '';
     $href = $locked
         ? estab_navigation_login_url(
             $navigationItem === null ? null : $navigationItem['key']
         )
         : $configuredLink;
     $cardClass = 'estab-menu-card estab-menu-card-' . $access
-        . ($locked ? ' estab-menu-card-locked' : '');
+        . ($locked ? ' estab-menu-card-locked' : '')
+        . ($blockedReason === '' ? '' : ' estab-menu-card-blocked');
     $badge = match (true) {
         $locked => 'Anmeldung erforderlich',
+        $blockedReason !== '' => $blockedReason,
         $access === 'administration' => 'Separater Administrationszugang',
         default => '',
     };
@@ -104,17 +117,11 @@ function estab_root_menu_item_markup(
         ? ''
         : '<kbd class="estab-menu-shortcut">' . $shortcut . '</kbd>';
 
-    return '<li class="' . $cardClass . '">'
-        . '<a class="estab-menu-link" href="' . estab_auth_html($href) . '"'
-        . ($navigationItem === null
-            ? ''
-            : ' data-estab-nav-key="'
-                . estab_auth_html($navigationItem['key']) . '"')
-        . ($shortcut === null
-            ? ''
-            : ' data-estab-shortcut="' . $shortcut . '"')
-        . ' title="' . estab_auth_html($linkTitle) . '">'
-        . '<span class="estab-menu-icon" aria-hidden="true">'
+    $navigationAttribute = $navigationItem === null
+        ? ''
+        : ' data-estab-nav-key="'
+            . estab_auth_html($navigationItem['key']) . '"';
+    $inner = '<span class="estab-menu-icon" aria-hidden="true">'
         . '<img src="' . estab_auth_html($picture) . '" alt=""></span>'
         . '<span class="estab-menu-copy">'
         . '<span class="estab-menu-title">'
@@ -123,7 +130,29 @@ function estab_root_menu_item_markup(
         . '</span>'
         . $description
         . $badgeMarkup
-        . '</span></a></li>';
+        . '</span>';
+
+    // Eine gesperrte Kachel traegt kein href und verbraucht keine Ziffer:
+    // Eine sichtbare Taste, die nichts oeffnet, ist schlimmer als keine.
+    if ($blockedReason !== '') {
+        return '<li class="' . $cardClass . '">'
+            . '<span class="estab-menu-link estab-menu-link-blocked"'
+            . $navigationAttribute
+            . ' aria-disabled="true"'
+            . ' title="' . estab_auth_html($blockedReason) . '">'
+            . $inner
+            . '</span></li>';
+    }
+
+    return '<li class="' . $cardClass . '">'
+        . '<a class="estab-menu-link" href="' . estab_auth_html($href) . '"'
+        . $navigationAttribute
+        . ($shortcut === null
+            ? ''
+            : ' data-estab-shortcut="' . $shortcut . '"')
+        . ' title="' . estab_auth_html($linkTitle) . '">'
+        . $inner
+        . '</a></li>';
 }
 
 /**
@@ -136,7 +165,8 @@ function estab_root_menu_item_markup(
 function estab_root_menu_markup(
     array $items,
     bool $authenticated,
-    bool $shortcuts = false
+    bool $shortcuts = false,
+    ?array $identity = null
 ): string {
     $cards = '';
     $shortcut = 0;
@@ -146,8 +176,19 @@ function estab_root_menu_markup(
             continue;
         }
         $next = $shortcuts && $shortcut < 9 ? $shortcut + 1 : null;
-        $card = estab_root_menu_item_markup($item, $authenticated, $next);
-        if ($card !== '' && $next !== null) {
+        $card = estab_root_menu_item_markup(
+            $item,
+            $authenticated,
+            $next,
+            $identity
+        );
+        // Eine gesperrte Kachel verbraucht keine Ziffer: Die sichtbare Zahl
+        // muss den Bereich oeffnen, auf den sie zeigt.
+        if (
+            $card !== ''
+            && $next !== null
+            && !str_contains($card, 'estab-menu-card-blocked')
+        ) {
             $shortcut = $next;
         }
         $cards .= $card;

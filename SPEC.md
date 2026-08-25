@@ -360,7 +360,7 @@ Mehrwert, sondern der Grund, warum im Einsatz wieder Papier benutzt wird.
 | ID | Soll | Abnahme | Ist |
 | --- | --- | --- | --- |
 | `UX-MENUE-ORTSKONSTANZ` | Die Navigation steht auf jeder Seite an derselben Stelle, mit denselben Einträgen in derselben Reihenfolge. Ein Ziel, das die eigene Funktion gerade nicht ansteuern darf, bleibt **sichtbar und inaktiv mit Grund** — es verschwindet nicht. | Ein Test rendert die Navigation für jede Kombination aus Modus, Schicht und Funktion und hält Menge und Reihenfolge der Einträge konstant; unzulässige Einträge tragen einen Grund. | `erfüllt` — K1 aufgelöst: unzulässige Ziele bleiben sichtbar und inaktiv mit Grund |
-| `UX-MENUE-EIN-WEG` | Zu jedem Ziel führt genau ein Weg. Es gibt keine zwei Einstiege, die sich unterschiedlich verhalten. | Kein Ziel ist über zwei Wege mit abweichendem Verhalten erreichbar. | `offen` |
+| `UX-MENUE-EIN-WEG` | Zu jedem Ziel führt genau ein Weg. Es gibt keine zwei Einstiege, die sich unterschiedlich verhalten. | Kein Ziel ist über zwei Wege mit abweichendem Verhalten erreichbar. | `erfüllt` |
 | `UX-STANDORT` | Der Anwender erkennt auf jeder Seite, wo er ist, in welcher Funktion er handelt und für welchen Einsatz. | Jede Seite weist Einsatz, Funktion und aktuellen Bereich aus. | `erfüllt` |
 
 #### B — Der Vordruck als Papierbild

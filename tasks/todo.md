@@ -70,7 +70,7 @@ Risiko: `·` niedrig · `!` mittel · `!!` hoch
 - [x] **T21** `!!` Navigation bleibt stehen — `UX-MENUE-ORTSKONSTANZ`
       → Kollision K1: sichtbar und inaktiv mit Grund statt ausgeblendet
       → Test muss mitprüfen, dass Sichtbarkeit keine Freigabe ist
-- [ ] **T22** `!` Ein Weg je Ziel — `UX-MENUE-EIN-WEG`
+- [x] **T22** `!` Ein Weg je Ziel — `UX-MENUE-EIN-WEG`
 - [ ] **T23** `!` Katalog der wiederkehrenden Elemente — `UX-ELEMENTKONSTANZ`
 - [ ] **T24** `!` Kein Bruch beim Stationswechsel — `UX-KEIN-BRUCH-IM-LAUFWEG`
 

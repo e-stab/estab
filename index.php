@@ -151,13 +151,13 @@ $applicationUrl = estab_auth_html(estab_application_url('4fach/index.php'));
 
     <nav class="estab-menu-section" aria-labelledby="estab-modules-title">
       <h2 id="estab-modules-title">Bereiche</h2>
-      <?= estab_root_menu_markup($menue, $authenticated, $situation !== null) ?>
+      <?= estab_root_menu_markup($menue, $authenticated, $situation !== null, $rootIdentity) ?>
     </nav>
 
 <?php if (showmenue): ?>
     <nav class="estab-menu-section" aria-labelledby="estab-more-title">
       <h2 id="estab-more-title">Administration und Hilfe</h2>
-      <?= estab_root_menu_markup($zusatz_menue, $authenticated) ?>
+      <?= estab_root_menu_markup($zusatz_menue, $authenticated, false, $rootIdentity) ?>
     </nav>
 <?php endif; ?>
   </main>

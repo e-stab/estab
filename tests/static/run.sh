@@ -192,6 +192,7 @@ for test_name in \
     nv_message_text_guidance \
     nv_datetime_group \
     ux_navigation_constancy \
+    ux_single_route \
     telecom_plan_security \
     upload_security \
     attachment_security \

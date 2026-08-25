@@ -39,6 +39,13 @@ function estab_ux_rules(): array
                 . 'nicht ansteuern darf, bleibt sichtbar und inaktiv mit '
                 . 'einem Grund; es verschwindet nicht.',
         ],
+        'UX-MENUE-EIN-WEG' => [
+            'origin' => ESTAB_UX_ORIGIN_BETREIBER,
+            'reference' => 'Ein Weg je Ziel',
+            'requirement' => 'Zu jedem Ziel führt genau ein Weg. Mehrere '
+                . 'Einstiege in denselben Bereich verhalten sich gleich und '
+                . 'nennen denselben Grund, wenn sie gesperrt sind.',
+        ],
         'UX-STANDORT' => [
             'origin' => ESTAB_UX_ORIGIN_BETREIBER,
             'reference' => 'Standort auf jeder Seite',
