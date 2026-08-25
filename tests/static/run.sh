@@ -179,6 +179,7 @@ for test_name in \
     nv_signature_and_receipt \
     lw_route_stations \
     lw_field_ownership \
+    nv_four_copies \
     telecom_plan_security \
     upload_security \
     attachment_security \

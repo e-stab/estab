@@ -180,6 +180,15 @@ function estab_dv_rules(): array
                 . 'Laufwegs. Eine spätere Eintragung ergänzt die vorhandenen '
                 . 'Vermerke und löscht sie nicht.',
         ],
+        'NV-4FACH-VERTEILUNG' => [
+            'source' => ESTAB_DV_SOURCE_UNTERLAGE,
+            'reference' => 'Durchschriften des Vordrucks',
+            'requirement' => 'Der Vordruck wird vierfach geführt: Die blaue '
+                . 'Durchschrift geht an den Bearbeiter, die grüne an den '
+                . 'Verfasser, die rote an S 2 für Einsatztagebuch und Lage, '
+                . 'die gelbe in das Technische Betriebsbuch. Die rote und '
+                . 'die grüne Durchschrift sind nicht abwählbar.',
+        ],
         'NV-ZEIT-FORMAT' => [
             'source' => ESTAB_DV_SOURCE_AUSFUELLANLEITUNG,
             'reference' => 'Felder 2, 3, 4, 16 und 18',

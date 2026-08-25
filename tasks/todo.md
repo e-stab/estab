@@ -29,7 +29,7 @@ Risiko: `·` niedrig · `!` mittel · `!!` hoch
 - [x] **T06** `·` Beglaubigung und Quittung — `NV-17-ZEICHEN-FUNKTION`, `NV-18-QUITTUNG`
 - [x] **T07** `·` Stationen des Laufwegs — `LW-EINGANG-STATIONEN`, `LW-AUSGANG-STATIONEN`
 - [x] **T08** `·` Feldhoheit und Korrekturschleife — `LW-NUR-BLAUER-TEIL`, `LW-KORREKTURSCHLEIFE`
-- [ ] **T09** `·` Die vier Durchschriften — `NV-4FACH-VERTEILUNG`
+- [x] **T09** `·` Die vier Durchschriften — `NV-4FACH-VERTEILUNG`
       → belegen, dass rote und grüne Durchschrift auch bei Abwahlversuch entstehen
 - [ ] **T10** `·` Sichter und LdF im Laufweg — `FUEST-SICHTER-BINDEGLIED`, `FUEST-LDF-BETRIEB`
 - [ ] **T11** `·` Fortschreibung und Aufbewahrung — `ETB-APPEND-ONLY`, `ETB-AUFBEWAHRUNG`
