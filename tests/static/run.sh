@@ -202,6 +202,7 @@ for test_name in \
     fuest_formal_review \
     ux_guidance_on_screen_only \
     tkm_catalogue \
+    tkm_messenger_duties \
     telecom_plan_security \
     upload_security \
     attachment_security \

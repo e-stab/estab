@@ -1713,6 +1713,16 @@ foreach ($plans as $plan) {
           <?= estab_csrf_field() ?>
           <input type="hidden" name="operation_action"
             value="assign_messenger">
+          <p class="estab-tool-notice" data-estab-messenger-role-note>
+            <strong>Melder oder Kurier?</strong>
+            Ein <em>Melder</em> kennt den Inhalt der Nachricht und kann
+            Rückfragen der Gegenstelle beantworten. Ein <em>Kurier</em> kennt
+            ihn nicht; er überbringt einen verschlossenen Umschlag und kann
+            zum Inhalt nichts sagen. Wer mit Rückfragen rechnet, schickt
+            einen Melder und weist ihn ein. Der Vordruck unterscheidet die
+            beiden nicht — das Kästchen in Feld 1 heißt „Kurier/Melder“;
+            die Entscheidung treffen Sie hier.
+          </p>
           <label>Ausgangsnachricht mit Weg „Melder“
             <select name="nachricht_id" required>
               <?php foreach ($eligibleMessages as $message): ?>

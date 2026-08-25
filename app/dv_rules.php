@@ -367,6 +367,26 @@ function estab_dv_rules(): array
                 . 'alle; der Vordruck kreuzt nur an, wofür er ein Kästchen '
                 . 'hat, und der genaue Weg wird benannt.',
         ],
+        'TKM-MELDER-KURIER' => [
+            'source' => ESTAB_DV_SOURCE_MELDEWESEN,
+            'reference' => 'Kapitel 5.2, Melder und Kurier',
+            'requirement' => 'Melder und Kurier werden unterschieden: Der '
+                . 'Melder kennt den Inhalt und kann Rückfragen beantworten, '
+                . 'der Kurier kennt ihn nicht. Die Beauftragung nennt den '
+                . 'Unterschied.',
+            'verdraengt' => [
+                'source' => ESTAB_DV_SOURCE_DV_1_101,
+                'reference' => 'Kapitel 4.3.1.11',
+            ],
+        ],
+        'TKM-MELDER-PFLICHTEN' => [
+            'source' => ESTAB_DV_SOURCE_MELDEWESEN,
+            'reference' => 'Kapitel 5.2, Pflichten des Melders',
+            'requirement' => 'Der Melder ändert den Inhalt nicht, überbringt '
+                . 'schnellstmöglich, meldet sich beim Auftraggeber zurück und '
+                . 'teilt mit, wem er übergeben hat. Bis zur Rückkehr nimmt er '
+                . 'keinen weiteren Auftrag an.',
+        ],
         'TKM-FERNMELDEPLAN' => [
             'source' => ESTAB_DV_SOURCE_DV_1_101,
             'reference' => 'Kapitel 6.1.1',

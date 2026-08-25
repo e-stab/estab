@@ -97,9 +97,9 @@ Risiko: `·` niedrig · `!` mittel · `!!` hoch
 - [x] **T29** `!!` Sichtung im Ausgang auf die Form begrenzen — `FUEST-SICHTER-AUSGANG-FORMAL`
       → nimmt dem Sichter eine heute vorhandene Möglichkeit · nur nach Freigabe an C5
 - [x] **T30** `!` Übermittlungsmittel erweitern — `TKM-KATALOG` *(braucht T01)*
-- [ ] **T31** `!` Melder und Kurier trennen — `TKM-MELDER-KURIER` *(braucht T01, T02)*
+- [x] **T31** `!` Melder und Kurier trennen — `TKM-MELDER-KURIER` *(braucht T01, T02)*
       → Ankreuzfeld bleibt `Kurier/Melder`; Rolle wird zusätzlich geführt
-- [ ] **T32** `!` Pflichten des Melders — `TKM-MELDER-PFLICHTEN` *(braucht T31)*
+- [x] **T32** `!` Pflichten des Melders — `TKM-MELDER-PFLICHTEN` *(braucht T31)*
 
 > **Prüfpunkt C6** — Trägt die Rollentrennung im Betrieb?
 
