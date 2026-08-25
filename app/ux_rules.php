@@ -85,6 +85,14 @@ function estab_ux_rules(): array
                 . 'wo der Hintergrund die Farbe des amtlichen Vordrucks '
                 . 'trägt.',
         ],
+        'UX-TASTATUR' => [
+            'origin' => ESTAB_UX_ORIGIN_BETREIBER,
+            'reference' => 'Bedienung mit der Tastatur',
+            'requirement' => 'Die Anwendung ist vollständig mit der Tastatur '
+                . 'bedienbar, einschliesslich der Feldhilfen. Die Sprungfolge '
+                . 'folgt der Feldfolge des Vordrucks, und der Fokus ist '
+                . 'sichtbar.',
+        ],
         'UX-FLACHE-BILDSCHIRME' => [
             'origin' => ESTAB_UX_ORIGIN_BETREIBER,
             'reference' => 'Geräte der Führungsstelle',

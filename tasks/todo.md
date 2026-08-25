@@ -84,7 +84,7 @@ Risiko: `·` niedrig · `!` mittel · `!!` hoch
 
 - [x] **T25** `!` Zuständigkeit ohne Farbe — `UX-MEINE-FELDER`, `UX-MEINE-FELDER-OHNE-FARBE`
 - [x] **T26** `·` Kontrast im Vordruck — `UX-KONTRAST`
-- [ ] **T27** `!` Tastaturbedienung — `UX-TASTATUR`
+- [x] **T27** `!` Tastaturbedienung — `UX-TASTATUR`
 - [ ] **T28** `!` Laufweg ohne JavaScript — `UX-OHNE-JAVASCRIPT`
 
 > **Prüfpunkt C5** — **Freigabe für T29 erforderlich.** Ohne Bestätigung wird P6

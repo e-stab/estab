@@ -395,7 +395,7 @@ Mehrwert, sondern der Grund, warum im Einsatz wieder Papier benutzt wird.
 | --- | --- | --- | --- |
 | `UX-KONTRAST` | Text erfüllt WCAG AA gegen seinen tatsächlichen Hintergrund — auch dort, wo der Hintergrund die Farbe einer Durchschrift trägt. | Jede gerenderte Vorder-/Hintergrundpaarung erreicht das AA-Kontrastverhältnis. | `erfüllt` — Listen und Vordruck sind geprüft; jede Farbangabe des Vordrucks wird gegen ihren tatsächlichen Grund gemessen |
 | `UX-FLACHE-BILDSCHIRME` | Bedienbar auf den Geräten einer Führungsstelle, einschließlich flacher Laptopbildschirme mit etwa 600 nutzbaren Bildpunkten Höhe. | Höhenabhängige Regeln existieren, verkleinern die überschriebenen Werte tatsächlich, und die Bereichsnavigation bleibt erreichbar. | `erfüllt` |
-| `UX-TASTATUR` | Die Anwendung ist vollständig mit der Tastatur bedienbar, einschließlich der Feldhilfen. Im Stab wird getippt, nicht gezeigt. | Jedes Bedienelement ist per Tastatur erreichbar und auslösbar; die Reihenfolge folgt der Feldfolge des Vordrucks. | `offen` |
+| `UX-TASTATUR` | Die Anwendung ist vollständig mit der Tastatur bedienbar, einschließlich der Feldhilfen. Im Stab wird getippt, nicht gezeigt. | Jedes Bedienelement ist per Tastatur erreichbar und auslösbar; die Reihenfolge folgt der Feldfolge des Vordrucks. | `erfüllt` |
 | `UX-OHNE-JAVASCRIPT` | Aufnehmen, Sichten und Befördern einer Nachricht funktionieren ohne JavaScript. Komfort darf davon abhängen, der Nachrichtenlauf nicht. | Der vollständige Laufweg ist ohne JavaScript durchlaufbar. | `teilweise` |
 
 #### F — Einarbeitung
