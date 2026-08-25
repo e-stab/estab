@@ -203,6 +203,7 @@ for test_name in \
     ux_guidance_on_screen_only \
     tkm_catalogue \
     tkm_messenger_duties \
+    mw_message_kinds \
     telecom_plan_security \
     upload_security \
     attachment_security \

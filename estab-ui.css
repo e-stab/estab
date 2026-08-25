@@ -5072,6 +5072,11 @@ section.estab-message-timeline[data-estab-message-timeline] * {
     letter-spacing: 0.02em;
 }
 
+/* Die Arten der Nachricht: eine Zeile, kleiner als die Leitfragen. */
+.estab-official-text-kinds {
+    flex-basis: 100%;
+}
+
 /*
  * Worauf sich die Sichtung im Ausgang erstreckt. Steht beim Vermerk, weil
  * dort die Ruecknahme begruendet wird.

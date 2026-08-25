@@ -107,7 +107,7 @@ Risiko: `·` niedrig · `!` mittel · `!!` hoch
 
 ## P7 — Meldearten als Merkhilfe · keine Änderung am Vordruck
 
-- [ ] **T33** `·` Die drei Meldearten — `MW-MELDEART` *(braucht T01)*
+- [x] **T33** `·` Die drei Meldearten — `MW-MELDEART` *(braucht T01)*
       → keine Migration · kein neues Feld · kein Merkmal am Datensatz
 - [ ] **T34** `·` Richtung der Meldung — `MW-MELDEWEG-RICHTUNG` *(braucht T33)*
       → erinnern, nicht hindern: keine Zurückweisung, keine Umlenkung

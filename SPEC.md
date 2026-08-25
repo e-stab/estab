@@ -306,7 +306,7 @@ Antrag und Lagemeldung kommen im Code nicht vor.
 
 | ID | Quelle | Soll | Abnahme | Ist |
 | --- | --- | --- | --- | --- |
-| `MW-MELDEART` | Q3 Kap. 1–2, Q4 Kap. 8.2 | Eine Nachricht trägt ihre Art: Meldung, Orientierung oder Antrag. | Der Vordruck nennt am Nachrichtentext die drei Arten mit ihrem Unterschied. Die Art wird nicht gespeichert; sie steht im Text, wo sie hingehört. | `offen` |
+| `MW-MELDEART` | Q3 Kap. 1–2, Q4 Kap. 8.2 | Eine Nachricht trägt ihre Art: Meldung, Orientierung oder Antrag. | Der Vordruck nennt am Nachrichtentext die drei Arten mit ihrem Unterschied. Die Art wird nicht gespeichert; sie steht im Text, wo sie hingehört. | `erfüllt` |
 | `MW-MELDEWEG-RICHTUNG` | Q3 Kap. 1 | „Der Meldeweg führt immer von unten nach oben." | Die Merkhilfe sagt, dass der Meldeweg von unten nach oben führt, und ist auch dort sichtbar, wo Fernmelder und LdF rückfragen. | `offen` |
 | `MW-ORIENTIERUNG-RICHTUNG` | Q3 Kap. 2, Q4 Kap. 8.2.2 | Die Orientierung geht von oben nach unten oder wird zwischen Gleichgestellten ausgetauscht. | Die Merkhilfe nennt die Richtung der Orientierung: nach unten und zur Seite. | `offen` |
 | `MW-ANTRAG-RICHTUNG` | Q3 Kap. 2, Q4 Kap. 8.2.3 | Der Antrag geht von unten nach oben oder an Nachbarn. | Die Merkhilfe nennt die Richtung des Antrags: nach oben und zu Nachbarn. | `offen` |

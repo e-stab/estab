@@ -625,7 +625,18 @@ HTML;
             ],
             14 => [
                 'title' => 'Nachricht / Text',
-                'text' => 'Der Bereich Inhalt ist immer auszufüllen. Fassen Sie den Nachrichtentext so kurz wie möglich. Schreiben Sie klar und lesbar, bei Bedarf in Blockschrift; Zeilenumbrüche bleiben in der digitalen Fassung erhalten.',
+                'text' => 'Der Bereich Inhalt ist immer auszufüllen. Fassen '
+                    . 'Sie den Nachrichtentext so kurz wie möglich. Schreiben '
+                    . 'Sie klar und lesbar, bei Bedarf in Blockschrift; '
+                    . 'Zeilenumbrüche bleiben in der digitalen Fassung '
+                    . 'erhalten. Beantworten Sie wo, wann, was, wie und wer, '
+                    . 'und trennen Sie, was Sie selbst festgestellt haben, '
+                    . 'was Ihnen gemeldet wurde und was Sie vermuten. '
+                    . 'Eine Meldung berichtet an die vorgesetzte Stelle. Eine '
+                    . 'Orientierung unterrichtet nachgeordnete oder '
+                    . 'gleichgestellte Stellen. Ein Antrag fordert etwas an. '
+                    . 'Die Art steht im Text; die Anwendung führt sie nicht '
+                    . 'gesondert mit.',
             ],
             15 => [
                 'title' => 'Absender',
@@ -1573,7 +1584,7 @@ HTML;
      */
     function official_message_text_guidance(): void
     {
-        if (!$this->official_message_field_access(14)) {
+        if (!$this->official_message_text_guidance_visible()) {
             return;
         }
         echo '<p class="estab-official-text-guidance">'
@@ -1581,7 +1592,34 @@ HTML;
             . 'Wo? Wann? Was? Wie? Wer?</span>'
             . '<span class="estab-official-text-provenance">'
             . 'Trennen: selbst festgestellt, von anderen gemeldet, '
-            . 'vermutet.</span></p>';
+            . 'vermutet.</span>'
+            . '<span class="estab-official-text-kinds">'
+            . 'Meldung berichtet nach oben · Orientierung unterrichtet nach '
+            . 'unten oder zur Seite · Antrag fordert an.</span></p>';
+    }
+
+    /**
+     * Wer die Merkhilfe am Nachrichtentext sieht.
+     *
+     * Wer schreibt, braucht sie beim Ausfuellen. Fernmeldezentrale und
+     * Leiter des Fernmeldebetriebes lesen sie als passives Prueforgan: Wer
+     * weiss, wie eine vollstaendige Meldung aussieht, stellt die richtige
+     * Rueckfrage, bevor die Nachricht hinausgeht.
+     *
+     * Wo weder geschrieben noch befoerdert wird, steht sie nicht. Ein
+     * abgeschlossener Nachweis zeigt, was gemeldet wurde, nicht mehr, wie
+     * man meldet.
+     */
+    function official_message_text_guidance_visible(): bool
+    {
+        if ($this->official_message_field_access(14)) {
+            return true;
+        }
+        return in_array(
+            $this->task,
+            ['LdF-Eingang', 'LdF-Ausgang', 'FM-Ausgang'],
+            true
+        );
     }
 
     function official_message_priority(): void

@@ -171,10 +171,19 @@ $assert(
 );
 
 /*
- * Und er verschwindet, sobald niemand mehr schreibt: Ein gesichteter
- * Vordruck zeigt, was gemeldet wurde, nicht mehr, wie man meldet.
+ * Und er verschwindet dort, wo weder geschrieben noch befördert wird: Ein
+ * gesichteter oder abgeschlossener Vordruck zeigt, was gemeldet wurde, nicht
+ * mehr, wie man meldet.
+ *
+ * Beim Fernmeldebetrieb steht er dagegen sehr wohl. Das war in der ersten
+ * Fassung anders: Der Hinweis erschien nur, wo Feld 14 beschreibbar ist. Der
+ * Betreiber hat klargestellt, dass Fernmeldezentrale und Leiter des
+ * Fernmeldebetriebes ihn als passives Prüforgan lesen sollen -- wer weiss,
+ * wie eine vollständige Meldung aussieht, stellt die richtige Rückfrage,
+ * bevor die Nachricht hinausgeht. Nachgewiesen wird das in
+ * mw_message_kinds; hier bleibt die Gegenrichtung.
  */
-foreach (['Stab_sichten', 'Stab_lesen', 'FM-Ausgang'] as $task) {
+foreach (['Stab_sichten', 'Stab_lesen', 'FM-Admin'] as $task) {
     $reading = new MessageTextFixture();
     $reading->task = $task;
     $reading->feld = [12 => false];

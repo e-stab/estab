@@ -169,6 +169,14 @@ function estab_dv_rules(): array
                 . 'dort verlangt, wo die Nachricht abgefasst oder aufgenommen '
                 . 'wird.',
         ],
+        'MW-MELDEART' => [
+            'source' => ESTAB_DV_SOURCE_MELDEWESEN,
+            'reference' => 'Kapitel 1 und 2, Arten der Nachricht',
+            'requirement' => 'Eine Nachricht ist Meldung, Orientierung oder '
+                . 'Antrag. Der Vordruck nennt am Nachrichtentext, was die '
+                . 'drei unterscheidet -- auch dort, wo Fernmeldezentrale und '
+                . 'Leiter des Fernmeldebetriebes rückfragen können.',
+        ],
         'NV-14-5W' => [
             'source' => ESTAB_DV_SOURCE_MELDEWESEN,
             'reference' => 'Kapitel 3, Aufbau einer Meldung',
