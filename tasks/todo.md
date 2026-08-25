@@ -72,7 +72,7 @@ Risiko: `·` niedrig · `!` mittel · `!!` hoch
       → Test muss mitprüfen, dass Sichtbarkeit keine Freigabe ist
 - [x] **T22** `!` Ein Weg je Ziel — `UX-MENUE-EIN-WEG`
 - [x] **T23** `!` Katalog der wiederkehrenden Elemente — `UX-ELEMENTKONSTANZ`
-- [ ] **T24** `!` Kein Bruch beim Stationswechsel — `UX-KEIN-BRUCH-IM-LAUFWEG`
+- [x] **T24** `!` Kein Bruch beim Stationswechsel — `UX-KEIN-BRUCH-IM-LAUFWEG`
 
 > **Prüfpunkt C4** — **Erste Bedienprüfung** nach `UX-EINARBEITUNG`: drei Personen
 > ohne Anwendungskenntnis, je ein vollständiger Nachrichtenlauf. Jeder Abbruch

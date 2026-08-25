@@ -69,6 +69,14 @@ function estab_ux_rules(): array
                 . 'Teile -- oben die Vermerke der Fernmeldezentrale, in der '
                 . 'Mitte die Nachricht, unten der Laufzettel.',
         ],
+        'UX-KEIN-BRUCH-IM-LAUFWEG' => [
+            'origin' => ESTAB_UX_ORIGIN_BETREIBER,
+            'reference' => 'Stationswechsel ohne Bruch',
+            'requirement' => 'Der Wechsel der Station ändert das Bild des '
+                . 'Vordrucks nicht, sondern nur, welche Felder bedienbar '
+                . 'sind. Wer die Nachricht als Fernmelder gesehen hat, '
+                . 'erkennt sie als Sichter wieder.',
+        ],
         'UX-FLACHE-BILDSCHIRME' => [
             'origin' => ESTAB_UX_ORIGIN_BETREIBER,
             'reference' => 'Geräte der Führungsstelle',

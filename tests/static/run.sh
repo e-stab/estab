@@ -194,6 +194,7 @@ for test_name in \
     ux_navigation_constancy \
     ux_single_route \
     ux_element_catalogue \
+    ux_route_continuity \
     telecom_plan_security \
     upload_security \
     attachment_security \
