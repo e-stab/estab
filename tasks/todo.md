@@ -105,12 +105,12 @@ Risiko: `·` niedrig · `!` mittel · `!!` hoch
 
 ---
 
-## P7 — Meldearten · neues Modul M5 · größter Block
+## P7 — Meldearten als Merkhilfe · keine Änderung am Vordruck
 
-- [ ] **T33** `·` Die drei Meldearten am Nachrichtentext — `MW-MELDEART` *(braucht T01)*
-      → Migration ab Nummer 122 · Bestand erhält „Meldung" · nach Veröffentlichung unveränderbar
+- [ ] **T33** `·` Die drei Meldearten — `MW-MELDEART` *(braucht T01)*
+      → keine Migration · kein neues Feld · kein Merkmal am Datensatz
 - [ ] **T34** `·` Richtung der Meldung — `MW-MELDEWEG-RICHTUNG` *(braucht T33)*
-      → Vorschlag: umlenken mit Hinweis statt zurückweisen
+      → erinnern, nicht hindern: keine Zurückweisung, keine Umlenkung
 - [ ] **T35** `·` Richtung der Orientierung — `MW-ORIENTIERUNG-RICHTUNG` *(braucht T33)*
 - [ ] **T36** `·` Antrag: Richtung und Leitfragen — `MW-ANTRAG-RICHTUNG`, `MW-ANTRAG-SCHEMA` *(braucht T33)*
 - [ ] **T37** `·` Sofort und ohne Aufforderung — `MW-SOFORTMELDUNG` *(braucht T33)*

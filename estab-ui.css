@@ -6372,6 +6372,20 @@ section.estab-message-timeline[data-estab-message-timeline] * {
     }
 
     /*
+     * Die Merkhilfen stehen am Bildschirm, nicht auf dem Papier. Ein
+     * ausgedruckter Vordruck ist ein Nachweis; wer ihn neben ein
+     * Papierformular legt und Unterschiede findet, muss sich fragen, welches
+     * der beiden gilt. Die Hilfe beim Ausfuellen ist kein Bestandteil des
+     * Nachweises.
+     */
+    .estab-official-designation-hint,
+    .estab-official-text-guidance,
+    .estab-official-required-mark,
+    .estab-official-review-scope {
+        display: none !important;
+    }
+
+    /*
      * Eine Vorrangstufe, für die der amtliche Vordruck kein Kästchen hat,
      * wird als Vermerk gedruckt statt als Kreuz an erfundener Stelle.
      */

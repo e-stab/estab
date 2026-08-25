@@ -77,7 +77,7 @@ probeweise entfernt. Ein Test, der immer grün ist, sichert nichts.
 | `app/dv_rules.php` bzw. `app/ux_rules.php` | immer — die Regel |
 | `SPEC.md` Abschnitt 5 | immer — Ist-Stand auf `erfüllt` |
 | `docs/BEDIENUNG.md` | bei sichtbarer Änderung |
-| `docker/db/migrations/` | nur bei Schemaänderung, nächste freie Nummer ab 122 |
+| `docker/db/migrations/` | nur bei Schemaänderung, nächste freie Nummer ab 122 — in diesem Vorhaben nicht mehr vorgesehen |
 
 Die Registry findet abdeckende Tests selbst per Glob über `tests/php/*.php`;
 die Registrierung in `run.sh` ist davon unabhängig und sorgt dafür, dass der
@@ -449,10 +449,10 @@ aus M9 für jede berührte Oberfläche.
 | --- | --- | --- | --- |
 | R1 | Navigation ändert sich für alle Anwender gleichzeitig | T21 | Bedienprüfung an C4 unmittelbar danach; Rücknahme durch Umkehr einer abgegrenzten Änderung an der Navigation |
 | R2 | T29 nimmt dem Sichter eine Möglichkeit, die er heute nutzt | T29 | Freigabe an C5 abwarten; ohne Bestätigung entfällt die Aufgabe |
-| R3 | Schemaänderung ist nach Veröffentlichung nicht mehr änderbar | T33 | Migration vor der Veröffentlichung gegen echte Bestandsdaten prüfen; Bestandsnachrichten erhalten „Meldung" als Vorbelegung |
+| R3 | ~~Schemaänderung ist nach Veröffentlichung nicht mehr änderbar~~ | ~~T33~~ | **Entfallen an C5.** Die Grundlagen des Meldewesens erzeugen keine Schemaänderung; es wird keine Migration angelegt. |
 | R4 | Umbau der Feldnummern übersieht eine Stelle in einer Datei mit über 3000 Zeilen | T16 | erst nach P1 und P2 beginnen, damit das Verhalten des Vordrucks abgesichert ist |
 | R5 | Bedienprüfung braucht Menschen, die die Anwendung nicht kennen | C4, C7 | Teilnehmende früh anfragen; wer die Prüfung einmal gemacht hat, ist für die nächste ungeeignet |
-| R6 | Meldearten verdreifachen die Begriffe im Vordruck | P7 | Vorbelegung „Meldung", damit der gewohnte Fall ohne Zusatzentscheidung bleibt |
+| R6 | Meldearten verdreifachen die Begriffe | P7 | Am Vordruck ändert sich nichts; die Begriffe stehen allein in der Merkhilfe, die niemand öffnen muss |
 
 ---
 
