@@ -310,7 +310,7 @@ Antrag und Lagemeldung kommen im Code nicht vor.
 | `MW-MELDEWEG-RICHTUNG` | Q3 Kap. 1 | „Der Meldeweg führt immer von unten nach oben." | Die Merkhilfe sagt, dass der Meldeweg von unten nach oben führt, und ist auch dort sichtbar, wo Fernmelder und LdF rückfragen. | `erfüllt` |
 | `MW-ORIENTIERUNG-RICHTUNG` | Q3 Kap. 2, Q4 Kap. 8.2.2 | Die Orientierung geht von oben nach unten oder wird zwischen Gleichgestellten ausgetauscht. | Die Merkhilfe nennt die Richtung der Orientierung: nach unten und zur Seite. | `erfüllt` |
 | `MW-ANTRAG-RICHTUNG` | Q3 Kap. 2, Q4 Kap. 8.2.3 | Der Antrag geht von unten nach oben oder an Nachbarn. | Die Merkhilfe nennt die Richtung des Antrags: nach oben und zu Nachbarn. | `erfüllt` |
-| `MW-SOFORTMELDUNG` | Q3 Kap. 3, Q4 Kap. 8.2.1.1 | Sofort und ohne Aufforderung zu melden sind Gefahrstoffe und Gefahrgüter, der Abschluss des Auftrages und jede Abweichung vom Auftrag. | Die Merkhilfe nennt die drei Anlässe, die ohne Aufforderung zu melden sind, und verweist auf die Vorrangstufe in Feld 9. | `offen` |
+| `MW-SOFORTMELDUNG` | Q3 Kap. 3, Q4 Kap. 8.2.1.1 | Sofort und ohne Aufforderung zu melden sind Gefahrstoffe und Gefahrgüter, der Abschluss des Auftrages und jede Abweichung vom Auftrag. | Die Merkhilfe nennt die drei Anlässe, die ohne Aufforderung zu melden sind, und verweist auf die Vorrangstufe in Feld 9. | `erfüllt` |
 | `MW-ANTRAG-SCHEMA` | Q3 Kap. 3 | Ein Antrag beantwortet: wo, wann, was und warum, wie viele beziehungsweise wie beschaffen, wer fordert an. | Die Leitfragen des Antrags stehen am Nachrichtentext, wo der Antrag geschrieben wird. | `erfüllt` |
 
 ### 5.7 M6 — dokumentation

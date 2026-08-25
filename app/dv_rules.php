@@ -214,6 +214,18 @@ function estab_dv_rules(): array
                 . 'warum, wie viele beziehungsweise wie beschaffen und wer '
                 . 'anfordert. Die Ausfüllhilfe nennt diese Leitfragen.',
         ],
+        'MW-SOFORTMELDUNG' => [
+            'source' => ESTAB_DV_SOURCE_MELDEWESEN,
+            'reference' => 'Kapitel 3, sofort zu meldende Sachverhalte',
+            'requirement' => 'Sofort und ohne Aufforderung zu melden sind '
+                . 'Gefahrstoffe und Gefahrgüter, der Abschluss des Auftrages '
+                . 'und jede Abweichung vom Auftrag. Die Ausfüllhilfe nennt '
+                . 'die drei Anlässe und verweist auf die Vorrangstufe.',
+            'verdraengt' => [
+                'source' => ESTAB_DV_SOURCE_DV_1_101,
+                'reference' => 'Kapitel 8.2.1.1',
+            ],
+        ],
         'NV-14-5W' => [
             'source' => ESTAB_DV_SOURCE_MELDEWESEN,
             'reference' => 'Kapitel 3, Aufbau einer Meldung',

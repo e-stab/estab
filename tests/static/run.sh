@@ -205,6 +205,7 @@ for test_name in \
     tkm_messenger_duties \
     mw_message_kinds \
     mw_message_directions \
+    mw_immediate_report \
     telecom_plan_security \
     upload_security \
     attachment_security \

@@ -642,7 +642,11 @@ HTML;
                     . 'warum, wie viele beziehungsweise wie beschaffen, und '
                     . 'wer anfordert. Die Art steht im Text; die Anwendung '
                     . 'führt sie nicht gesondert mit und hindert Sie an '
-                    . 'keinem Weg.',
+                    . 'keinem Weg. Sofort und ohne Aufforderung zu melden '
+                    . 'sind: Gefahrstoffe und Gefahrgüter, der Abschluss des '
+                    . 'Auftrages und jede Abweichung vom Auftrag. Wählen Sie '
+                    . 'dafür eine Vorrangstufe in Feld 9, die zum Fall '
+                    . 'passt.',
             ],
             15 => [
                 'title' => 'Absender',

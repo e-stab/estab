@@ -113,7 +113,7 @@ Risiko: `·` niedrig · `!` mittel · `!!` hoch
       → erinnern, nicht hindern: keine Zurückweisung, keine Umlenkung
 - [x] **T35** `·` Richtung der Orientierung — `MW-ORIENTIERUNG-RICHTUNG` *(braucht T33)*
 - [x] **T36** `·` Antrag: Richtung und Leitfragen — `MW-ANTRAG-RICHTUNG`, `MW-ANTRAG-SCHEMA` *(braucht T33)*
-- [ ] **T37** `·` Sofort und ohne Aufforderung — `MW-SOFORTMELDUNG` *(braucht T33)*
+- [x] **T37** `·` Sofort und ohne Aufforderung — `MW-SOFORTMELDUNG` *(braucht T33)*
       → Gefahrstoffe und Gefahrgüter, Abschluss des Auftrages, Abweichung vom Auftrag
 
 > **Prüfpunkt C7** — **Zweite Bedienprüfung.** Größter Zuwachs an Begriffen.
