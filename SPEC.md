@@ -306,12 +306,12 @@ Antrag und Lagemeldung kommen im Code nicht vor.
 
 | ID | Quelle | Soll | Abnahme | Ist |
 | --- | --- | --- | --- | --- |
-| `MW-MELDEART` | Q3 Kap. 1–2, Q4 Kap. 8.2 | Eine Nachricht trägt ihre Art: Meldung, Orientierung oder Antrag. | Die Art ist am Vordruck sichtbar und in ETB und Betriebsbuch nachvollziehbar. | `offen` |
-| `MW-MELDEWEG-RICHTUNG` | Q3 Kap. 1 | „Der Meldeweg führt immer von unten nach oben." | Eine Meldung an eine nachgeordnete Stelle wird zurückgewiesen oder als Orientierung geführt. | `offen` |
-| `MW-ORIENTIERUNG-RICHTUNG` | Q3 Kap. 2, Q4 Kap. 8.2.2 | Die Orientierung geht von oben nach unten oder wird zwischen Gleichgestellten ausgetauscht. | Der Verteiler einer Orientierung lässt nachgeordnete und gleichgestellte Stellen zu. | `offen` |
-| `MW-ANTRAG-RICHTUNG` | Q3 Kap. 2, Q4 Kap. 8.2.3 | Der Antrag geht von unten nach oben oder an Nachbarn. | Ein Antrag erreicht die vorgesetzte Führungsstelle oder eine benachbarte Stelle. | `offen` |
-| `MW-SOFORTMELDUNG` | Q3 Kap. 3, Q4 Kap. 8.2.1.1 | Sofort und ohne Aufforderung zu melden sind Gefahrstoffe und Gefahrgüter, der Abschluss des Auftrages und jede Abweichung vom Auftrag. | Die Anwendung bietet für diese drei Anlässe einen unmittelbaren Weg, der die Vorrangstufe vorbelegt. | `offen` |
-| `MW-ANTRAG-SCHEMA` | Q3 Kap. 3 | Ein Antrag beantwortet: wo, wann, was und warum, wie viele beziehungsweise wie beschaffen, wer fordert an. | Die Leitfragen sind am Antrag sichtbar. | `offen` |
+| `MW-MELDEART` | Q3 Kap. 1–2, Q4 Kap. 8.2 | Eine Nachricht trägt ihre Art: Meldung, Orientierung oder Antrag. | Der Vordruck nennt am Nachrichtentext die drei Arten mit ihrem Unterschied. Die Art wird nicht gespeichert; sie steht im Text, wo sie hingehört. | `offen` |
+| `MW-MELDEWEG-RICHTUNG` | Q3 Kap. 1 | „Der Meldeweg führt immer von unten nach oben." | Die Merkhilfe sagt, dass der Meldeweg von unten nach oben führt, und ist auch dort sichtbar, wo Fernmelder und LdF rückfragen. | `offen` |
+| `MW-ORIENTIERUNG-RICHTUNG` | Q3 Kap. 2, Q4 Kap. 8.2.2 | Die Orientierung geht von oben nach unten oder wird zwischen Gleichgestellten ausgetauscht. | Die Merkhilfe nennt die Richtung der Orientierung: nach unten und zur Seite. | `offen` |
+| `MW-ANTRAG-RICHTUNG` | Q3 Kap. 2, Q4 Kap. 8.2.3 | Der Antrag geht von unten nach oben oder an Nachbarn. | Die Merkhilfe nennt die Richtung des Antrags: nach oben und zu Nachbarn. | `offen` |
+| `MW-SOFORTMELDUNG` | Q3 Kap. 3, Q4 Kap. 8.2.1.1 | Sofort und ohne Aufforderung zu melden sind Gefahrstoffe und Gefahrgüter, der Abschluss des Auftrages und jede Abweichung vom Auftrag. | Die Merkhilfe nennt die drei Anlässe, die ohne Aufforderung zu melden sind, und verweist auf die Vorrangstufe in Feld 9. | `offen` |
+| `MW-ANTRAG-SCHEMA` | Q3 Kap. 3 | Ein Antrag beantwortet: wo, wann, was und warum, wie viele beziehungsweise wie beschaffen, wer fordert an. | Die Leitfragen des Antrags stehen am Nachrichtentext, wo der Antrag geschrieben wird. | `offen` |
 
 ### 5.7 M6 — dokumentation
 
@@ -336,9 +336,13 @@ Antrag und Lagemeldung kommen im Code nicht vor.
 
 | ID | Quelle | Soll | Abnahme | Ist |
 | --- | --- | --- | --- | --- |
-| `LM-AUFBAU` | Q3 Kap. 4, Q4 Kap. 4.3.1.4 | Die Lagemeldung folgt acht Punkten: allgemeine Lage, Schaden- und Gefahrenlage, eigene Lage, Lageentwicklung, Presse- und Öffentlichkeitsarbeit, besondere Vorkommnisse, Anforderungen, Sonstiges. Angaben nur zu relevanten Punkten. | Die Lagemeldung bietet die acht Punkte in dieser Reihenfolge; leere Punkte entfallen im Ausdruck. | `offen` |
-| `LM-ANLASS` | Q3 Kap. 4 | Eine Lagemeldung ergeht auf Anforderung, regelmäßig auf Anordnung, bei umfassender Lageänderung, als Lageinformation nach unten und als Lageorientierung zur Seite. | Die Anwendung führt den Anlass mit. | `offen` |
-| `LM-MELDEWEG` | Q3 Kap. 4 | Die Lagemeldung folgt denselben Meldewegen wie eine Meldung. | Sie durchläuft denselben Laufweg. | `offen` |
+| `LM-AUFBAU` | Q3 Kap. 4, Q4 Kap. 4.3.1.4 | Die Lagemeldung folgt acht Punkten: allgemeine Lage, Schaden- und Gefahrenlage, eigene Lage, Lageentwicklung, Presse- und Öffentlichkeitsarbeit, besondere Vorkommnisse, Anforderungen, Sonstiges. Angaben nur zu relevanten Punkten. | Die acht Punkte stehen als Merkhilfe am Nachrichtentext, in dieser Reihenfolge, mit dem Hinweis, dass nur Zutreffendes ausgefüllt wird. | `offen` |
+| `LM-ANLASS` | Q3 Kap. 4 | Eine Lagemeldung ergeht auf Anforderung, regelmäßig auf Anordnung, bei umfassender Lageänderung, als Lageinformation nach unten und als Lageorientierung zur Seite. | Die Merkhilfe nennt die fünf Anlässe einer Lagemeldung. | `offen` |
+| `LM-MELDEWEG` | Q3 Kap. 4 | Die Lagemeldung folgt denselben Meldewegen wie eine Meldung. | Die Lagemeldung ist eine Nachricht wie jede andere und durchläuft denselben Laufweg; die Merkhilfe sagt das ausdrücklich. | `offen` |
+
+**Lesart des Meldewesens (Betreiberentscheidung an Prüfpunkt C5).** Die „Grundlagen des Meldewesens" beschreiben Abläufe und Inhalte einer Nachricht. Alles davon bildet sich **im Vordruck** ab; das Dokument beschreibt keinen eigenen Datenbestand. Seine Angaben gehören deshalb als **Ausfüll- und Merkhilfe an den Vordruck**, nicht als zusätzliches Merkmal in die Datenbank: für den Stab beim Ausfüllen, für Fernmeldezentrale und LdF als passives Prüforgan, damit sie sinnvolle Rückfragen stellen können und eine möglichst vollständige Meldung entsteht.
+
+Daraus folgt: Keine Anforderung aus Q3 erzeugt eine Schemaänderung, eine neue Objektart oder eine Zurückweisung. Die Meldeart steht im Nachrichtentext, wo sie hingehört; die Anwendung führt sie nicht mit. Wo eine Anforderung unten „Merkhilfe" sagt, ist genau das gemeint.
 
 ---
 

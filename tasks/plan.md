@@ -312,51 +312,74 @@ begonnen.
 
 > **Prüfpunkt C6**
 
-### P7 — Meldearten
+### P7 — Meldearten als Merkhilfe am Vordruck
 
-6 Anforderungen, neues Modul M5. Der größte geschlossene Block.
+6 Anforderungen. **Umgeschnitten nach der Betreiberentscheidung an Prüfpunkt
+C5** (siehe SPEC.md, „Lesart des Meldewesens"): Die Grundlagen des
+Meldewesens beschreiben keinen eigenen Datenbestand. Alles bildet sich im
+Vordruck ab. Ihre Angaben gehören als Ausfüll- und Merkhilfe an den Vordruck
+— für den Stab beim Ausfüllen, für Fernmeldezentrale und LdF als passives
+Prüforgan, damit sie sinnvolle Rückfragen stellen können.
 
-**T33 — Die Meldeart als Merkmal**
-Anforderung: `MW-MELDEART` · Risiko: **hoch** · hängt ab von T01
-Eine Nachricht trägt ihre Art. Umfasst Schemaänderung (neue Migration ab 122),
-Feld im Vordruck, Anzeige in Liste, ETB und Technischem Betriebsbuch.
-Bestandsnachrichten erhalten „Meldung"; die Migration ist nach der Regel des
-Repositorys nach Veröffentlichung nicht mehr änderbar.
-*Abnahme:* Jede Nachricht trägt eine Art; die Art ist am Vordruck sichtbar und
-in beiden Büchern nachvollziehbar; `schema_migration_contract` bleibt grün.
-*Vertikaler Schnitt:* Diese Aufgabe liefert den vollständigen Weg für **eine**
-Art — die Meldung. Orientierung und Antrag folgen als eigene Wege.
+**Was damit entfällt:** Migration 122, ein Meldeart-Merkmal am Datensatz, die
+Anzeige der Art in Liste, ETB und Betriebsbuch, jede Zurückweisung wegen der
+Meldeart, jede Umlenkung zwischen den Arten. Das Risiko von T33 fällt damit
+von **hoch** auf **niedrig**: Es wird nichts Unumkehrbares angelegt.
+
+**T33 — Die drei Meldearten am Nachrichtentext**
+Anforderung: `MW-MELDEART` · Risiko: niedrig
+Der Vordruck nennt am Nachrichtentext, was eine Meldung, eine Orientierung und
+einen Antrag unterscheidet. Die Art wird nicht gespeichert; sie steht im Text.
+*Abnahme:* Die drei Arten sind am Feld 14 benannt, mit dem Unterschied in
+einem Satz. Kein neues Feld, keine Migration, keine Änderung an Liste, ETB
+oder Betriebsbuch.
+*Vertikaler Schnitt:* Diese Aufgabe liefert die Merkhilfe; T34 bis T37
+ergänzen sie um die Richtungen und die Anlässe.
 
 | ID | Aufgabe | Anforderungen | Risiko |
 | --- | --- | --- | --- |
-| T34 | Meldung läuft nach oben | `MW-MELDEWEG-RICHTUNG` | mittel |
-| T35 | Orientierung | `MW-ORIENTIERUNG-RICHTUNG` | mittel |
-| T36 | Antrag | `MW-ANTRAG-RICHTUNG`, `MW-ANTRAG-SCHEMA` | mittel |
-| T37 | Sofortmeldung ohne Aufforderung | `MW-SOFORTMELDUNG` | mittel |
+| T34 | Richtung der Meldung | `MW-MELDEWEG-RICHTUNG` | niedrig |
+| T35 | Richtung der Orientierung | `MW-ORIENTIERUNG-RICHTUNG` | niedrig |
+| T36 | Antrag: Richtung und Leitfragen | `MW-ANTRAG-RICHTUNG`, `MW-ANTRAG-SCHEMA` | niedrig |
+| T37 | Sofort und ohne Aufforderung | `MW-SOFORTMELDUNG` | niedrig |
 
-Alle vier hängen von T33 ab, untereinander sind sie unabhängig.
+Alle vier hängen von T33 ab, untereinander sind sie unabhängig. T34 bis T36
+sind zusammen ein Text — sie werden als eine Merkhilfe gebaut und einzeln
+nachgewiesen.
 
-- **T34** schränkt bestehendes Verhalten ein: Eine Meldung an eine
-  nachgeordnete Stelle ist keine Meldung. Der Zuschnitt muss entscheiden, ob
-  die Anwendung zurückweist oder in die Orientierung umlenkt — Vorschlag:
-  umlenken mit Hinweis, weil eine Zurückweisung im Einsatz Zeit kostet und der
-  Anwender die Unterscheidung nicht kennen muss.
-- **T37** belegt drei Anlässe, die ohne Aufforderung zu melden sind:
+- **T34** schränkt kein Verhalten mehr ein. Die Merkhilfe sagt, dass der
+  Meldeweg von unten nach oben führt; wer eine Nachricht nach unten schickt,
+  wird nicht gehindert, sondern erinnert.
+- **T37** benennt die drei Anlässe, die ohne Aufforderung zu melden sind —
   Gefahrstoffe und Gefahrgüter, Abschluss des Auftrages, Abweichung vom
-  Auftrag.
+  Auftrag — und verweist auf die Vorrangstufe in Feld 9. Es belegt sie nicht
+  vor: Welche Stufe angemessen ist, entscheidet der Verfasser.
+
+**Sichtbar auch für den Fernmeldebetrieb.** Die Merkhilfe erscheint nicht nur
+dort, wo geschrieben wird, sondern auch bei `LdF-Eingang`, `LdF-Ausgang` und
+`FM-Ausgang` — dort liest sie das passive Prüforgan. T19 hatte sie auf die
+schreibenden Schritte begrenzt; das wird in T33 nachgezogen.
 
 > **Prüfpunkt C7**
 
 ### P8 — Lagemeldung
 
+Ebenfalls umgeschnitten nach der Entscheidung an C5. Die Lagemeldung ist keine
+eigene Objektart, sondern eine Nachricht, deren Text acht Punkte abarbeitet.
+Die Anwendung stellt den Aufbau als Merkhilfe bereit — sie erzeugt kein
+Formular, das jemand füllt, und speichert die Punkte nicht einzeln.
+
 | ID | Aufgabe | Anforderungen | Risiko | hängt ab von |
 | --- | --- | --- | --- | --- |
-| T38 | Lagemeldung mit Acht-Punkte-Aufbau | `LM-AUFBAU`, `LM-MELDEWEG` | mittel | T33 |
+| T38 | Acht Punkte als Merkhilfe | `LM-AUFBAU`, `LM-MELDEWEG` | niedrig | T33 |
 | T39 | Anlass der Lagemeldung | `LM-ANLASS` | niedrig | T38 |
 
-- **T38** setzt die acht Punkte in der vorgeschriebenen Reihenfolge um; leere
-  Punkte entfallen im Ausdruck, weil die Vorschrift Angaben „nur zu relevanten
-  Punkten" verlangt.
+- **T38** nennt die acht Punkte in der vorgeschriebenen Reihenfolge und sagt
+  dazu, dass Angaben nur zu zutreffenden Punkten gehören — ein leerer Punkt
+  gehört nicht in den Text. Und dass die Lagemeldung denselben Laufweg
+  durchläuft wie jede andere Nachricht; sie ist keine Ausnahme.
+- **T39** nennt die fünf Anlässe. Die Anwendung führt den Anlass nicht mit;
+  wer eine Lagemeldung abfasst, weiß, warum.
 
 > **Prüfpunkt C8**
 
@@ -384,8 +407,8 @@ die Fragen beantwortet hat.
 | **C4** | P4 | Navigation geändert | **Erste Bedienprüfung nach `UX-EINARBEITUNG`:** drei Personen ohne Anwendungskenntnis, je ein vollständiger Nachrichtenlauf. Protokoll über Abbrüche, Rückfragen, Griffe zum Handbuch. Jeder Abbruch ist ein Mangel und wird vor C5 behoben. |
 | **C5** | P5 | Zugänglichkeit | Freigabe für **T29** — nimmt dem Sichter eine heute vorhandene Möglichkeit. Ohne ausdrückliche Bestätigung wird P6 ohne T29 begonnen. |
 | **C6** | P6 | Melder/Kurier getrennt | Trägt die Rollentrennung im Betrieb, oder erzeugt sie eine Frage, die im Einsatz niemand beantworten will? |
-| **C7** | P7 | Meldearten vollständig | Zweite Bedienprüfung. Die Meldearten sind der größte Zuwachs an Begriffen — genau hier droht der Rückgriff aufs Papier. |
-| **C8** | P8 | Lagemeldung | Ist der Acht-Punkte-Aufbau im Einsatz ausfüllbar, oder ist er ein Formular, das niemand füllt? |
+| **C7** | P7 | Meldearten als Merkhilfe | Zweite Bedienprüfung. Die Meldearten sind der größte Zuwachs an Begriffen — genau hier droht der Rückgriff aufs Papier. Zusatzfrage nach dem Umschnitt an C5: Ist die Merkhilfe eine Hilfe oder eine Textwand? |
+| **C8** | P8 | Lagemeldung | Ist der Acht-Punkte-Aufbau im Einsatz brauchbar, oder ist er eine Liste, die niemand liest? |
 | **Abschluss** | P9 | 81 von 81 | Bedienprüfung, vollständiger Testlauf, Spec ohne offene Zeile. |
 
 ---

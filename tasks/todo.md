@@ -107,13 +107,13 @@ Risiko: `·` niedrig · `!` mittel · `!!` hoch
 
 ## P7 — Meldearten · neues Modul M5 · größter Block
 
-- [ ] **T33** `!!` Die Meldeart als Merkmal — `MW-MELDEART` *(braucht T01)*
+- [ ] **T33** `·` Die drei Meldearten am Nachrichtentext — `MW-MELDEART` *(braucht T01)*
       → Migration ab Nummer 122 · Bestand erhält „Meldung" · nach Veröffentlichung unveränderbar
-- [ ] **T34** `!` Meldung läuft nach oben — `MW-MELDEWEG-RICHTUNG` *(braucht T33)*
+- [ ] **T34** `·` Richtung der Meldung — `MW-MELDEWEG-RICHTUNG` *(braucht T33)*
       → Vorschlag: umlenken mit Hinweis statt zurückweisen
-- [ ] **T35** `!` Orientierung — `MW-ORIENTIERUNG-RICHTUNG` *(braucht T33)*
-- [ ] **T36** `!` Antrag — `MW-ANTRAG-RICHTUNG`, `MW-ANTRAG-SCHEMA` *(braucht T33)*
-- [ ] **T37** `!` Sofortmeldung ohne Aufforderung — `MW-SOFORTMELDUNG` *(braucht T33)*
+- [ ] **T35** `·` Richtung der Orientierung — `MW-ORIENTIERUNG-RICHTUNG` *(braucht T33)*
+- [ ] **T36** `·` Antrag: Richtung und Leitfragen — `MW-ANTRAG-RICHTUNG`, `MW-ANTRAG-SCHEMA` *(braucht T33)*
+- [ ] **T37** `·` Sofort und ohne Aufforderung — `MW-SOFORTMELDUNG` *(braucht T33)*
       → Gefahrstoffe und Gefahrgüter, Abschluss des Auftrages, Abweichung vom Auftrag
 
 > **Prüfpunkt C7** — **Zweite Bedienprüfung.** Größter Zuwachs an Begriffen.
@@ -122,7 +122,7 @@ Risiko: `·` niedrig · `!` mittel · `!!` hoch
 
 ## P8 — Lagemeldung
 
-- [ ] **T38** `!` Lagemeldung mit Acht-Punkte-Aufbau — `LM-AUFBAU`, `LM-MELDEWEG` *(braucht T33)*
+- [ ] **T38** `·` Acht Punkte als Merkhilfe — `LM-AUFBAU`, `LM-MELDEWEG` *(braucht T33)*
 - [ ] **T39** `·` Anlass der Lagemeldung — `LM-ANLASS` *(braucht T38)*
 
 > **Prüfpunkt C8** — Ist der Acht-Punkte-Aufbau im Einsatz ausfüllbar?
