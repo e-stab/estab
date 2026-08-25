@@ -131,6 +131,21 @@ function estab_dv_rules(): array
             'requirement' => 'Feld 7 nimmt das gewünschte Übermittlungsmittel '
                 . 'auf. Wer die Nachricht verfasst, muss es ausfüllen können.',
         ],
+        'NV-08-DURCHSAGE-SPRUCH' => [
+            'source' => ESTAB_DV_SOURCE_AUSFUELLANLEITUNG,
+            'reference' => 'Feld 8',
+            'requirement' => 'Der Verfasser bestimmt die Form der Nachricht. '
+                . 'Der Spruch ist ausdrücklich die Ausnahme; die Durchsage '
+                . 'ist deshalb vorbelegt.',
+        ],
+        'NV-09-VORRANGSTUFE' => [
+            'source' => ESTAB_DV_SOURCE_AUSFUELLANLEITUNG,
+            'reference' => 'Feld 9',
+            'requirement' => 'Feld 9 nimmt die gewünschte oder erhaltene '
+                . 'Vorrangstufe auf und bleibt ohne besondere Stufe frei. '
+                . 'Eine Stufe, für die der amtliche Vordruck kein Kästchen '
+                . 'hat, wird im Ausdruck als Vermerk geführt.',
+        ],
         'NV-10-ANSCHRIFT-DIENSTSTELLE' => [
             'source' => ESTAB_DV_SOURCE_AUSFUELLANLEITUNG,
             'reference' => 'Feld 10',

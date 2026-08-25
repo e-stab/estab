@@ -4985,6 +4985,10 @@ section.estab-message-timeline[data-estab-message-timeline] * {
     color: #405a72;
 }
 
+.estab-official-priority-note {
+    display: none;
+}
+
 .estab-official-address-block {
     border-bottom: 1.5px solid var(--estab-official-line);
     display: grid;
@@ -6214,8 +6218,17 @@ section.estab-message-timeline[data-estab-message-timeline] * {
     .estab-official-help-anchor,
     .estab-official-field-error,
     .estab-message-error-summary,
-    .estab-official-priority-clear {
+    .estab-official-priority-clear,
+    .estab-official-priority-extra {
         display: none !important;
+    }
+
+    /*
+     * Eine Vorrangstufe, für die der amtliche Vordruck kein Kästchen hat,
+     * wird als Vermerk gedruckt statt als Kreuz an erfundener Stelle.
+     */
+    .estab-official-priority-note {
+        display: inline;
     }
 
     .estab-message-form-page,

@@ -1457,6 +1457,29 @@ HTML;
             . $number . '</span></section>';
     }
 
+    /**
+     * Feld 8: die Durchsage ist die Regel, der Spruch die Ausnahme.
+     *
+     * Die Ausfüllanleitung nennt den Spruch ausdrücklich die Ausnahme. Vor
+     * einem Vordruck ohne Vorbelegung wird die Ausnahme aber so oft
+     * angekreuzt wie die Regel, und die Regel steht nur noch auf dem Papier.
+     * Wer die Nachricht abfasst, findet deshalb die Durchsage vorbelegt.
+     *
+     * Vorbelegt wird allein beim Abfassen. Ein eingegangener Vordruck ohne
+     * Eintrag hatte keinen; ihn nachträglich zur Durchsage zu erklären wäre
+     * eine Angabe, die niemand gemacht hat.
+     */
+    function official_message_preselect_form_type(): void
+    {
+        if (!$this->official_message_field_access(8)) {
+            return;
+        }
+        if ((string)($this->formdata['07_durchspruch'] ?? '') !== '') {
+            return;
+        }
+        $this->formdata['07_durchspruch'] = 'D';
+    }
+
     function official_message_priority(): void
     {
         $editable = $this->official_message_field_access(9);
@@ -1476,6 +1499,7 @@ HTML;
                 'id' => 'keine',
                 'warning' => '',
                 'clear' => true,
+                'extra' => false,
             ],
         ];
         foreach (estab_message_priority_options() as $option) {
@@ -1493,6 +1517,10 @@ HTML;
                 },
                 'warning' => $option['warning'],
                 'clear' => false,
+                // Der amtliche Vordruck hat zwei Kästchen: Sofort und Blitz.
+                // Staatsnot ist wählbar, weil eine eingegangene Nachricht sie
+                // tragen kann -- ein gedrucktes Kästchen dafür wäre erfunden.
+                'extra' => !in_array($option['value'], ['sss', 'bbb'], true),
             ];
         }
         foreach ($options as $option) {
@@ -1500,10 +1528,14 @@ HTML;
                 && $option['clear'];
             $isSelected = $isNone
                 || (!$option['clear'] && $current === $option['value']);
+            $labelClasses = array_values(array_filter([
+                $option['clear'] ? 'estab-official-priority-clear' : '',
+                $option['extra'] ? 'estab-official-priority-extra' : '',
+            ], static fn (string $part): bool => $part !== ''));
             echo '<label'
-                . ($option['clear']
-                    ? ' class="estab-official-priority-clear"'
-                    : '')
+                . ($labelClasses === []
+                    ? ''
+                    : ' class="' . implode(' ', $labelClasses) . '"')
                 . ' for="f_09_vorrangstufe_' . $option['id'] . '">'
                 . '<input id="f_09_vorrangstufe_' . $option['id'] . '" '
                 . 'class="estab-official-box-choice" type="radio" '
@@ -1517,6 +1549,23 @@ HTML;
                         . estab_message_html($option['warning']) . '"'
                     : '')
                 . '><span>' . $option['label'] . '</span></label>';
+        }
+        /*
+         * Eine Stufe ohne Kästchen darf im Ausdruck nicht verschwinden. Sie
+         * wird als Vermerk gesetzt: kein Kreuz an einer Stelle, an der der
+         * Vordruck keine vorsieht, aber auch keine verlorene Angabe.
+         */
+        $documented = estab_message_priority_document_label($current);
+        if (
+            $documented !== ''
+            && !in_array(
+                estab_message_priority_storage_value($current),
+                ['sss', 'bbb'],
+                true
+            )
+        ) {
+            echo '<span class="estab-official-priority-note">Vorrangstufe: '
+                . estab_message_html($documented) . '</span>';
         }
         echo '</span>';
     }
@@ -2978,6 +3027,7 @@ HTML;
         echo '<section class="estab-official-type-priority">'
             . '<div class="estab-official-type">';
         $this->official_message_help(8);
+        $this->official_message_preselect_form_type();
         $this->official_message_radio_group(
             '07_durchspruch',
             [
