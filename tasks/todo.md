@@ -67,7 +67,7 @@ Risiko: `·` niedrig · `!` mittel · `!!` hoch
 
 ## P4 — Konstanz der Bedienung · größte sichtbare Wirkung
 
-- [ ] **T21** `!!` Navigation bleibt stehen — `UX-MENUE-ORTSKONSTANZ`
+- [x] **T21** `!!` Navigation bleibt stehen — `UX-MENUE-ORTSKONSTANZ`
       → Kollision K1: sichtbar und inaktiv mit Grund statt ausgeblendet
       → Test muss mitprüfen, dass Sichtbarkeit keine Freigabe ist
 - [ ] **T22** `!` Ein Weg je Ziel — `UX-MENUE-EIN-WEG`

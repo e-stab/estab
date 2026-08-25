@@ -128,7 +128,19 @@ $assert(
         )
         && str_contains($sidebarMarkup, '<h2>Bereiche</h2>')
         && str_contains($sidebarMarkup, '>Führungsstelle</span>')
-        && !str_contains($sidebarMarkup, '>Nachrichten</span>')
+        /*
+         * Ohne angenommene Dienstfunktion bleibt der Nachrichtenbereich
+         * sichtbar -- das Menue steht still -, fuehrt aber nirgendwohin.
+         * Geprueft wird deshalb die Abwesenheit des Weges, nicht die
+         * Abwesenheit der Beschriftung.
+         */
+        && str_contains($sidebarMarkup, '>Nachrichten</span>')
+        && !str_contains($sidebarMarkup, 'href="/4fach/index.php"')
+        && preg_match(
+            '~data-estab-navigation-key="messages"[^>]*'
+                . 'data-estab-navigation-blocked~',
+            $sidebarMarkup
+        ) === 1
         && str_contains($sidebarMarkup, 'data-estab-user-code="ada001"')
         && str_contains($sidebarMarkup, 'data-estab-logout-form')
         && !str_contains($sidebarMarkup, '<details')

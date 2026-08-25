@@ -30,6 +30,15 @@ const ESTAB_UX_ORIGIN_BETREIBER =
 function estab_ux_rules(): array
 {
     return [
+        'UX-MENUE-ORTSKONSTANZ' => [
+            'origin' => ESTAB_UX_ORIGIN_BETREIBER,
+            'reference' => 'Ortskonstanz der Navigation',
+            'requirement' => 'Die Navigation steht auf jeder Seite an '
+                . 'derselben Stelle, mit denselben Einträgen in derselben '
+                . 'Reihenfolge. Ein Ziel, das die eigene Funktion gerade '
+                . 'nicht ansteuern darf, bleibt sichtbar und inaktiv mit '
+                . 'einem Grund; es verschwindet nicht.',
+        ],
         'UX-STANDORT' => [
             'origin' => ESTAB_UX_ORIGIN_BETREIBER,
             'reference' => 'Standort auf jeder Seite',

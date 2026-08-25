@@ -432,8 +432,14 @@ foreach ($expectedLabels as $label) {
     );
     $lastPosition = is_int($position) ? $position : $lastPosition;
 }
+/*
+ * Das Menue steht still: Alle elf Eintraege sind immer da. Ansteuerbar sind
+ * fuer S1 neun davon; die beiden fremden Bereiche stehen sichtbar, aber ohne
+ * Weg. Geprueft wird beides -- die Zahl der Eintraege und die Zahl der Wege.
+ */
 $assert(
-    substr_count($authenticated, 'data-estab-navigation-item') === 9
+    substr_count($authenticated, 'data-estab-navigation-item') === 11
+        && substr_count($authenticated, 'data-estab-navigation-blocked') === 2
         && substr_count($authenticated, 'target="_top"') === 9
         && substr_count($authenticated, 'aria-current="page"') === 1
         && str_contains(
@@ -545,8 +551,11 @@ $strictWithHat = estab_navigation_markup(
         'duty_assignment_id' => 73,
     ]
 );
+// Ohne angetretenen Dienst bleiben ebenfalls alle Eintraege stehen; sechs
+// von ihnen fuehren nirgendwohin, bis eine Funktion angenommen ist.
 $assert(
-    substr_count($strictWithoutHat, 'data-estab-navigation-item') === 5
+    substr_count($strictWithoutHat, 'data-estab-navigation-item') === 11
+        && substr_count($strictWithoutHat, 'data-estab-navigation-blocked') === 6
         && str_contains(
             $strictWithoutHat,
             'href="/4fach/fuehrungsstelle.php"'
@@ -572,7 +581,11 @@ $assert(
     substr_count(
         $accountNavigation,
         'data-estab-navigation-item'
-    ) === 9
+    ) === 11
+        && substr_count(
+            $accountNavigation,
+            'data-estab-navigation-blocked'
+        ) === 2
         && str_contains(
             $accountNavigation,
             'href="/4fach/fuehrungsstelle.php"'
@@ -684,23 +697,29 @@ $assert(
         && str_contains($sidebar, 'data-estab-navigation-mode="sidebar"')
         && str_contains($sidebar, '<h2>Bereiche</h2>')
         && str_contains($sidebar, '<p>Arbeitsbereich wechseln</p>')
-        && substr_count($sidebar, 'data-estab-navigation-item') === 9
+        && substr_count($sidebar, 'data-estab-navigation-item') === 11
+        && substr_count($sidebar, 'data-estab-navigation-blocked') === 2
         && substr_count($sidebar, 'target="_top"') === 9
         && substr_count($sidebar, 'aria-current="page"') === 1
         && !str_contains($sidebar, '<details')
         && !str_contains($sidebar, '<summary'),
     'always-visible sidebar navigation contract is incomplete'
 );
+/*
+ * Auch der gesperrte Eintrag traegt kurze Beschriftung und vollen Namen: Er
+ * steht sichtbar im Menue, also muss ein Vorleseprogramm ihn benennen
+ * koennen. Die Meldungsuebersicht ist fuer S1 gesperrt und trotzdem da.
+ */
 $assert(
     str_contains($sidebar, '>Nachrichten</span>')
-        && !str_contains($sidebar, '>Meldungen</span>')
+        && str_contains($sidebar, '>Meldungen</span>')
         && str_contains($sidebar, '>ETB</span>')
         && str_contains($sidebar, '>TBB</span>')
         && str_contains(
             $sidebar,
             'aria-label="Nachrichtenvordruck" title="Nachrichtenvordruck"'
         )
-        && !str_contains($sidebar, 'aria-label="Meldungsübersicht"')
+        && str_contains($sidebar, 'aria-label="Meldungsübersicht"')
         && str_contains(
             $sidebar,
             'aria-label="Einsatztagebuch (ETB)"'

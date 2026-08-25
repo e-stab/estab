@@ -331,6 +331,52 @@
     font-size: 0.7rem;
 }
 
+/*
+ * Ein Ziel, das die eigene Funktion gerade nicht ansteuern darf, bleibt an
+ * seinem Platz stehen. Es ist erkennbar gedaempft, reagiert nicht auf den
+ * Zeiger und nennt seinen Grund, sobald man mit Zeiger oder Tastatur bei ihm
+ * ist. Wer den Weg von gestern kennt, findet ihn heute an derselben Stelle.
+ */
+.estab-navigation-item-blocked .estab-navigation-link {
+    color: #93a7bd;
+    cursor: default;
+    position: relative;
+}
+
+.estab-navigation-item-blocked .estab-navigation-label::after {
+    content: "  —";
+    font-size: 0.7rem;
+}
+
+.estab-navigation-blocked-reason {
+    background: #16283c;
+    border: 1px solid #45627f;
+    border-radius: 0.25rem;
+    color: #e6edf5;
+    display: none;
+    font-size: 0.72rem;
+    font-weight: 400;
+    left: 0;
+    max-width: 18rem;
+    padding: 0.3rem 0.45rem;
+    position: absolute;
+    top: 100%;
+    white-space: normal;
+    z-index: 20;
+}
+
+.estab-navigation-item-blocked:hover .estab-navigation-blocked-reason,
+.estab-navigation-item-blocked:focus-within .estab-navigation-blocked-reason {
+    display: block;
+}
+
+/* In der Seitenleiste ist Platz: Dort steht der Grund ohnehin. */
+.estab-navigation-sidebar .estab-navigation-blocked-reason {
+    display: block;
+    position: static;
+    max-width: none;
+}
+
 .estab-navigation-login-hint {
     border: 0;
     clip: rect(0 0 0 0);

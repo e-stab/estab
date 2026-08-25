@@ -536,42 +536,76 @@ function estab_navigation_validated_item(array $item): array
  * the fixed/additional LOOSE functions. Access-shift membership never grants
  * operational permissions.
  */
-function estab_navigation_duty_access_allowed(
+/**
+ * Why this destination is closed to the signed-in identity right now.
+ *
+ * An empty string means it is open. Anything else is shown at the entry, in
+ * words the person in front of the screen can act on: a destination that
+ * silently disappears is indistinguishable from one that never existed, and
+ * whoever saw it yesterday will look for it instead of working.
+ *
+ * This is a reason, not a barrier. Navigation has never been a security
+ * boundary and does not become one here -- every endpoint checks its own
+ * authorization, which is what keeps a typed-in address from being an open
+ * door.
+ */
+function estab_navigation_duty_access_reason(
     array $item,
     ?array $identity
-): bool {
+): string {
     $item = estab_navigation_validated_item($item);
     if ($item['access'] === 'public') {
-        return true;
+        return '';
     }
     if ($identity === null) {
-        return false;
+        return '';
     }
     if (estab_navigation_strict_duty_selection_required($identity)) {
-        return $item['key'] === 'command-post';
+        return $item['key'] === 'command-post'
+            ? ''
+            : 'Erst im Führungsstellenbetrieb eine Funktion annehmen; '
+                . 'in der Betriebsart „streng“ arbeitet nur, wer im '
+                . 'Dienst steht.';
     }
     if ($item['duty_access'] === '') {
-        return true;
+        return '';
     }
     return match ($item['duty_access']) {
         'LAGE_DOKUMENTATION' => estab_auth_identity_has_function(
             $identity,
             'S2',
             'Stab'
-        ),
+        )
+            ? ''
+            : 'Dieser Bereich gehört zur Lage und Dokumentation und steht '
+                . 'der Funktion S 2 offen.',
         'FERNMELDE_NACHWEIS' =>
-            estab_auth_identity_has_function(
-                $identity,
-                'LdF',
-                'Fernmelder'
-            )
-            || estab_auth_identity_has_function(
-                $identity,
-                'A/W',
-                'Fernmelder'
-            ),
-        default => false,
+            estab_auth_identity_has_function($identity, 'LdF', 'Fernmelder')
+            || estab_auth_identity_has_function($identity, 'A/W', 'Fernmelder')
+                ? ''
+                : 'Dieser Bereich gehört zum Fernmeldebetrieb und steht dem '
+                    . 'LdF und der Fernmeldezentrale offen.',
+        default => 'Für diesen Bereich ist keine Zuständigkeit hinterlegt; '
+            . 'bitte an die Administration wenden.',
     };
+}
+
+/**
+ * May the signed-in identity steer this destination right now?
+ *
+ * The answer is derived from the reason, so the two can never disagree: an
+ * entry that is closed always has something to say, and an entry that says
+ * nothing is open.
+ */
+function estab_navigation_duty_access_allowed(
+    array $item,
+    ?array $identity
+): bool {
+    $item = estab_navigation_validated_item($item);
+    if ($item['access'] !== 'public' && $identity === null) {
+        return false;
+    }
+    return estab_navigation_duty_access_reason($item, $identity) === '';
 }
 
 /**
@@ -721,12 +755,9 @@ function estab_navigation_item_markup(
     ?array $identity = null
 ): string {
     $item = estab_navigation_validated_item($item);
-    if (
-        $authenticated
-        && !estab_navigation_duty_access_allowed($item, $identity)
-    ) {
-        return '';
-    }
+    $blockedReason = $authenticated
+        ? estab_navigation_duty_access_reason($item, $identity)
+        : '';
     $locked = $item['access'] === 'protected' && !$authenticated;
     $url = $locked
         ? estab_navigation_login_url($item['key'])
@@ -757,22 +788,45 @@ function estab_navigation_item_markup(
             . ' title="' . estab_auth_html($item['label']) . '"'
         : '';
 
-    return '<li class="estab-navigation-item"'
+    $body = $blockedReason === ''
+        ? '<a class="estab-navigation-link" href="'
+            . estab_auth_html($url) . '" target="_top"'
+            . ' data-estab-nav-key="' . estab_auth_html($item['key']) . '"'
+            . $accessibleLabel
+            . $current . '>'
+            . '<span class="estab-navigation-label">'
+            . estab_auth_html($label) . '</span>'
+            . $hint . $loginHint
+            . '</a>'
+        /*
+         * Ein gesperrtes Ziel trägt kein href. Es bleibt sichtbar, damit der
+         * gemerkte Weg stimmt, und es sagt, woran es liegt -- aber es führt
+         * nirgendwohin, und ein Vorleseprogramm nennt es gesperrt.
+         */
+        : '<span class="estab-navigation-link'
+            . ' estab-navigation-link-blocked"'
+            . $accessibleLabel . '>'
+            . '<span class="estab-navigation-label">'
+            . estab_auth_html($label) . '</span>'
+            . $hint
+            . '<span class="estab-navigation-blocked-reason">'
+            . estab_auth_html($blockedReason) . '</span>'
+            . '</span>';
+
+    return '<li class="estab-navigation-item'
+        . ($blockedReason === '' ? '' : ' estab-navigation-item-blocked')
+        . '"'
         . ' data-estab-navigation-item'
         . ' data-estab-navigation-key="' . estab_auth_html($item['key']) . '"'
         . ' data-estab-navigation-access="'
         . estab_auth_html($item['access']) . '"'
+        . ($blockedReason === ''
+            ? ''
+            : ' data-estab-navigation-blocked aria-disabled="true"')
         . $lockedAttribute
         . $dutyAccessAttribute . '>'
-        . '<a class="estab-navigation-link" href="'
-        . estab_auth_html($url) . '" target="_top"'
-        . ' data-estab-nav-key="' . estab_auth_html($item['key']) . '"'
-        . $accessibleLabel
-        . $current . '>'
-        . '<span class="estab-navigation-label">'
-        . estab_auth_html($label) . '</span>'
-        . $hint . $loginHint
-        . '</a></li>';
+        . $body
+        . '</li>';
 }
 
 /** Render an escaped list while enforcing unique keys in one group. */

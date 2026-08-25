@@ -359,7 +359,7 @@ Mehrwert, sondern der Grund, warum im Einsatz wieder Papier benutzt wird.
 
 | ID | Soll | Abnahme | Ist |
 | --- | --- | --- | --- |
-| `UX-MENUE-ORTSKONSTANZ` | Die Navigation steht auf jeder Seite an derselben Stelle, mit denselben Einträgen in derselben Reihenfolge. Ein Ziel, das die eigene Funktion gerade nicht ansteuern darf, bleibt **sichtbar und inaktiv mit Grund** — es verschwindet nicht. | Ein Test rendert die Navigation für jede Kombination aus Modus, Schicht und Funktion und hält Menge und Reihenfolge der Einträge konstant; unzulässige Einträge tragen einen Grund. | `offen` — die Navigation blendet unzulässige Ziele heute aus (siehe K1) |
+| `UX-MENUE-ORTSKONSTANZ` | Die Navigation steht auf jeder Seite an derselben Stelle, mit denselben Einträgen in derselben Reihenfolge. Ein Ziel, das die eigene Funktion gerade nicht ansteuern darf, bleibt **sichtbar und inaktiv mit Grund** — es verschwindet nicht. | Ein Test rendert die Navigation für jede Kombination aus Modus, Schicht und Funktion und hält Menge und Reihenfolge der Einträge konstant; unzulässige Einträge tragen einen Grund. | `erfüllt` — K1 aufgelöst: unzulässige Ziele bleiben sichtbar und inaktiv mit Grund |
 | `UX-MENUE-EIN-WEG` | Zu jedem Ziel führt genau ein Weg. Es gibt keine zwei Einstiege, die sich unterschiedlich verhalten. | Kein Ziel ist über zwei Wege mit abweichendem Verhalten erreichbar. | `offen` |
 | `UX-STANDORT` | Der Anwender erkennt auf jeder Seite, wo er ist, in welcher Funktion er handelt und für welchen Einsatz. | Jede Seite weist Einsatz, Funktion und aktuellen Bereich aus. | `erfüllt` |
 
@@ -415,6 +415,13 @@ Bedienentscheidung, die gegen P1 steht. Auflösung: Die Einträge bleiben
 sichtbar und werden inaktiv mit Grund geführt. Das erhält die Ortskenntnis und
 erklärt zugleich, warum ein Ziel gerade nicht offensteht — was heute niemand
 erfährt.
+
+**K1 ist aufgelöst (T21).** Die Navigation blendet kein Ziel mehr aus. Jeder
+Eintrag steht immer an derselben Stelle; was die eigene Funktion gerade nicht
+ansteuern darf, trägt kein `href`, ist als gesperrt ausgezeichnet und nennt
+den Grund. Die Sicherheitslage bleibt unverändert: Die Navigation war nie eine
+Sicherheitsgrenze, und jeder Endpunkt prüft Anmeldung, angetretenen Dienst und
+Bereichsberechtigung weiterhin selbst.
 
 ---
 
