@@ -701,6 +701,12 @@ $navigationStatusPosition = is_string($navigationSource)
 $navigationWorkflowPosition = is_string($navigationSource)
     ? strpos($navigationSource, 'data-estab-workflow-menu')
     : false;
+$navigationActionsPosition = is_string($navigationSource)
+    ? strpos($navigationSource, 'estab-actions-page')
+    : false;
+$navigationCockpitPosition = is_string($navigationSource)
+    ? strpos($navigationSource, 'estab-cockpit-page')
+    : false;
 /*
  * Die Bereichsnavigation steht nicht mehr im Cockpit, sondern links in der
  * Huelle -- auf jeder Seite an derselben Stelle. Stuende sie hier weiterhin,
@@ -742,9 +748,29 @@ $assert(
             $navigationSource,
             'estab_sidebar_fetch_configured_positions'
         )
-        && is_int($navigationStatusPosition)
+        /*
+         * Die Arbeitsschritte stehen links unter den Zielen, nicht rechts
+         * unter Anmeldung, Einsatz und Besetzung. Auf einem flachen
+         * Bildschirm hiess das bisher: scrollen, um an den naechsten Schritt
+         * zu kommen.
+         *
+         * Aufgebaut werden sie weiterhin hier, denn dafuer braucht es den
+         * aufgeloesten Einsatzbezug und die wirksamen Funktionen. Sie sind
+         * ein eigenes Fragment; die Reihenfolge im Quelltext haelt fest,
+         * dass sie im Aktionsdokument stehen und nicht mehr im Cockpit --
+         * stuenden sie in beiden, saehe der Bedienende dieselben Schritte
+         * zweimal.
+         */
+        && str_contains($navigationSource, "'aktionen'")
+        && is_int($navigationActionsPosition)
+        && is_int($navigationCockpitPosition)
         && is_int($navigationWorkflowPosition)
-        && $navigationStatusPosition < $navigationWorkflowPosition,
+        && $navigationActionsPosition < $navigationWorkflowPosition
+        && $navigationWorkflowPosition < $navigationCockpitPosition
+        && str_contains($shellSource, 'estab-shell-actions')
+        && str_contains($shellSource, 'fragment=aktionen')
+        && is_int($navigationStatusPosition)
+        && $navigationStatusPosition > $navigationCockpitPosition,
     'persistent navigation does not render a resilient unified live sidebar'
 );
 $mainSource = file_get_contents($root . '/4fach/mainindex.php');
@@ -818,25 +844,32 @@ $bosNavigationSource = file_get_contents($root . '/stabinfo/l_index.php');
 $bosDocumentsSource = file_get_contents($root . '/stabinfo/documents.php');
 $bosWelcomeSource = file_get_contents($root . '/stabinfo/f_info.php');
 $bosStylesheetSource = file_get_contents($root . '/estab-ui.css');
+/*
+ * Die Infosammlung stellte ihre Dokumentliste als eigene Spalte in den
+ * Inhalt -- ein zweites Menue neben dem der Huelle, mit eigener Breite und
+ * eigenem Aussehen. Die Auswahl steht jetzt links unter den Zielen, im
+ * selben Bild wie sie, und in der Mitte bleibt genau ein Rahmen: das
+ * gewaehlte Dokument.
+ */
 $assert(
     is_string($bosWorkspaceSource)
-        && substr_count($bosWorkspaceSource, '<iframe') === 2
-        && substr_count($bosWorkspaceSource, 'name="status"') === 1
+        && substr_count($bosWorkspaceSource, '<iframe') === 1
         && substr_count($bosWorkspaceSource, 'name="mainframe"') === 1
+        && !str_contains($bosWorkspaceSource, 'name="status"')
+        && !str_contains($bosWorkspaceSource, 'src="./l_index.php"')
         && str_contains($bosWorkspaceSource, 'data-estab-bos-workspace')
-        && str_contains($bosWorkspaceSource, 'src="./l_index.php"')
         && str_contains($bosWorkspaceSource, 'src="./f_info.php"')
+        && str_contains(
+            $bosWorkspaceSource,
+            'estab_shell_context_markup('
+        )
         && str_contains(
             $bosWorkspaceSource,
             'data-estab-mobile-menu-return'
         )
         && str_contains(
             $bosWorkspaceSource,
-            "event.data === 'estab:show-content'"
-        )
-        && str_contains(
-            $bosWorkspaceSource,
-            'event.source === sidebar.contentWindow'
+            "querySelector('[data-estab-shell-context]')"
         )
         && str_contains(
             $bosWorkspaceSource,
@@ -847,7 +880,8 @@ $assert(
             "body.classList.add('estab-bos-embedded-content')"
         )
         && !str_contains(strtolower($bosWorkspaceSource), '<frameset'),
-    'BOS workspace is not the responsive two-frame application workspace'
+    'BOS workspace does not stand in the shell with one content frame and'
+        . ' its document choice in the menu'
 );
 /*
  * Die Dokumentenliste der Infosammlung ist deren Inhalt, nicht deren Huelle.

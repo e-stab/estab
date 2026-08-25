@@ -85,7 +85,9 @@ $mainFrameUrl = './mainindex.php'
   <div class="estab-shell" data-estab-shell data-estab-message-workspace>
     <?= estab_shell_menu_markup(
         estab_auth_session_identity($_SESSION),
-        $_SERVER
+        $_SERVER,
+        null,
+        true
     ) ?>
     <main class="estab-shell-content estab-shell-content--frame"
       data-estab-shell-content>

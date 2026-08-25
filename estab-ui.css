@@ -538,7 +538,7 @@
    der mittleren Spalte, nicht neben der Huelle. */
 .estab-bos-panes {
     display: grid;
-    grid-template-columns: clamp(14.5rem, 22%, 20rem) minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr);
     height: 100%;
     min-height: 0;
     min-width: 0;
@@ -571,6 +571,79 @@
     flex-direction: column;
     gap: 0.5rem;
     padding: 0.6rem 0.5rem;
+}
+
+/* Die Arbeitsschritte fuellen, was das Menue uebrig laesst, und scrollen
+   fuer sich. Bleibt kein Platz, scrollt der Rahmen -- nicht die Spalte, und
+   die Ziele darueber bleiben stehen. */
+.estab-shell-context {
+    border-top: 1px solid #45627f;
+    margin-top: 0.15rem;
+    padding-top: 0.1rem;
+}
+
+.estab-shell-context-list {
+    display: grid;
+    gap: 0.25rem;
+    list-style: none;
+    margin: 0;
+    padding: 0 0.5rem 0.4rem;
+}
+
+.estab-shell-context-item {
+    display: block;
+    min-width: 0;
+}
+
+.estab-shell-context-link {
+    align-items: center;
+    background: #183654;
+    border: 1px solid #45627f;
+    border-left: 4px solid transparent;
+    border-radius: 5px;
+    box-sizing: border-box;
+    color: #ffffff;
+    display: flex;
+    font-size: 0.72rem;
+    font-weight: 700;
+    hyphens: auto;
+    line-height: 1.15;
+    min-height: 1.9rem;
+    min-width: 0;
+    overflow-wrap: anywhere;
+    padding: 0.3rem 0.4rem;
+    text-decoration: none;
+}
+
+.estab-shell-context-link:hover,
+.estab-shell-context-link:focus-visible {
+    background: #294b70;
+    outline: 3px solid #ffffff;
+    outline-offset: -3px;
+}
+
+.estab-shell-context-link[aria-current="page"] {
+    background: #294b70;
+    border-left-color: #e5b247;
+}
+
+.estab-shell-actions {
+    background: transparent;
+    border: 0;
+    display: block;
+    flex: 1 1 auto;
+    min-height: 8rem;
+    width: 100%;
+}
+
+.estab-actions-page {
+    background: #0b1d31;
+    margin: 0;
+}
+
+.estab-shell-actions-inner {
+    box-sizing: border-box;
+    padding: 0 0.5rem 0.5rem;
 }
 
 .estab-shell-brand {

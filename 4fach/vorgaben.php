@@ -35,17 +35,32 @@ foreach (array_keys($_GET) as $requestKey) {
     }
 }
 /*
- * Zwei Fragmente. "status" ist das kleine, das sich im Takt selbst erneuert;
- * "cockpit" ist die ganze rechte Spalte der Huelle. Beide enthalten kein
- * Menue mehr -- das steht links in der Huelle und gehoert dorthin, damit es
- * auf jeder Seite an derselben Stelle steht.
+ * Drei Fragmente. "status" ist das kleine, das sich im Takt selbst erneuert;
+ * "cockpit" ist die rechte Spalte der Huelle; "aktionen" sind die
+ * Arbeitsschritte, die unten in der Menuespalte stehen.
+ *
+ * Die Arbeitsschritte kommen aus dieser Datei und nicht aus der Huelle,
+ * obwohl sie links erscheinen: Wer sie aufbauen will, braucht den
+ * aufgeloesten Einsatzbezug, die wirksamen Funktionen und die
+ * Korrekturzaehler -- alles, was hier ohnehin schon steht. Dasselbe in der
+ * Huelle noch einmal zu ermitteln waere eine zweite Verbindung zur Datenbank
+ * je Seitenaufbau und eine zweite Stelle, an der dieselbe Regel gepflegt
+ * werden muesste.
+ *
+ * Kein Fragment enthaelt ein Menue -- das steht links in der Huelle und
+ * gehoert dorthin, damit es auf jeder Seite an derselben Stelle steht.
  */
 $cockpitFragment = false;
+$actionsFragment = false;
 if (array_key_exists('fragment', $_GET)) {
     if (
         count($_GET) !== 1
         || !is_string($_GET['fragment'])
-        || !in_array($_GET['fragment'], ['status', 'cockpit'], true)
+        || !in_array(
+            $_GET['fragment'],
+            ['status', 'cockpit', 'aktionen'],
+            true
+        )
     ) {
         http_response_code(400);
         header('Content-Type: text/plain; charset=UTF-8');
@@ -54,6 +69,7 @@ if (array_key_exists('fragment', $_GET)) {
     }
     $statusFragment = $_GET['fragment'] === 'status';
     $cockpitFragment = $_GET['fragment'] === 'cockpit';
+    $actionsFragment = $_GET['fragment'] === 'aktionen';
 } elseif (array_key_exists('next', $_GET)) {
     $loginDestination = estab_navigation_login_destination_key(
         $_GET['next']
@@ -403,47 +419,18 @@ $refreshScript = $selectedIdentity === null
         estab_application_url('4fach/vorgaben.php?fragment=status'),
         $refreshInterval
     );
+if ($actionsFragment):
 ?>
 <!doctype html>
 <html lang="de">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>eStab Navigation</title>
+  <title>Arbeitsschritte</title>
   <?= estab_session_ui_stylesheet() ?>
 </head>
-<body class="estab-navigation-frame estab-cockpit-page">
-  <div class="estab-message-sidebar" data-estab-sidebar-root>
-    <?= $statusMarkup ?>
-    <?php
-    /*
-     * Die Anmeldeleiste stand hier als eigenes Feld. Sie steht jetzt oben in
-     * der Statuszeile: Wer angemeldet ist, die Glocke und der Weg hinaus sind
-     * drei kurze Angaben, und ein eigener Kasten dafuer kostete mehr Platz
-     * als sie selbst.
-     */
-    ?>
-    <?= estab_sidebar_account_function_markup($_SESSION, $selectedIdentity) ?>
-    <?php if ($identity !== null && $selectedIdentity === null): ?>
-      <aside
-        class="estab-sidebar-duty-required"
-        role="alert"
-      >
-        <strong>Operativer Zugriff nicht verfügbar</strong>
-        <p>
-          <?= estab_auth_html($readGateMessage !== ''
-              ? $readGateMessage
-              : 'Aktivieren Sie zuerst einen Einsatz.') ?>
-        </p>
-        <a
-          class="estab-button estab-button-primary"
-          href="<?= estab_auth_html(
-              estab_navigation_url_for_key('command-post')
-          ) ?>"
-          target="_top"
-        >Status und Hinweise öffnen</a>
-      </aside>
-    <?php endif; ?>
+<body class="estab-navigation-frame estab-actions-page">
+  <div class="estab-shell-actions-inner" data-estab-actions-root>
     <?php if ($selectedIdentity !== null): ?>
       <main class="estab-sidebar-workflow" data-estab-workflow-menu>
         <div class="estab-sidebar-section-heading">
@@ -511,6 +498,64 @@ $refreshScript = $selectedIdentity === null
           </p>
         <?php endif; ?>
       </main>
+    <?php endif; ?>
+  </div>
+  <script<?= estab_csp_script_attribute() ?> data-estab-sidebar-workspace-link>
+    document.addEventListener('submit', function (event) {
+      if (
+        event.target instanceof HTMLFormElement
+        && event.target.matches('.estab-sidebar-action-form')
+        && window.parent !== window
+      ) {
+        window.parent.postMessage('estab:show-content', window.location.origin);
+      }
+    });
+  </script>
+</body>
+</html>
+<?php
+    exit;
+endif;
+?>
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>eStab Navigation</title>
+  <?= estab_session_ui_stylesheet() ?>
+</head>
+<body class="estab-navigation-frame estab-cockpit-page">
+  <div class="estab-message-sidebar" data-estab-sidebar-root>
+    <?= $statusMarkup ?>
+    <?php
+    /*
+     * Die Anmeldeleiste stand hier als eigenes Feld. Sie steht jetzt oben in
+     * der Statuszeile: Wer angemeldet ist, die Glocke und der Weg hinaus sind
+     * drei kurze Angaben, und ein eigener Kasten dafuer kostete mehr Platz
+     * als sie selbst.
+     */
+    ?>
+    <?= estab_sidebar_account_function_markup($_SESSION, $selectedIdentity) ?>
+    <?php if ($identity !== null && $selectedIdentity === null): ?>
+      <aside
+        class="estab-sidebar-duty-required"
+        role="alert"
+      >
+        <strong>Operativer Zugriff nicht verfügbar</strong>
+        <p>
+          <?= estab_auth_html($readGateMessage !== ''
+              ? $readGateMessage
+              : 'Aktivieren Sie zuerst einen Einsatz.') ?>
+        </p>
+        <a
+          class="estab-button estab-button-primary"
+          href="<?= estab_auth_html(
+              estab_navigation_url_for_key('command-post')
+          ) ?>"
+          target="_top"
+        >Status und Hinweise öffnen</a>
+      </aside>
     <?php endif; ?>
   </div>
   <?= estab_sidebar_audio_markup($soundUrl) ?>
