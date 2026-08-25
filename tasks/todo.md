@@ -54,7 +54,7 @@ Risiko: `·` niedrig · `!` mittel · `!!` hoch
 
 - [x] **T16** `!` Feldnummern auf eine Brücke ziehen — `NV-NUMMERNBRUECKE`
       → zuerst in dieser Phase; danach arbeitet T17–T20 mit einer Zählung
-- [ ] **T17** `!` Dienststelle statt Eigenname — `NV-10-ANSCHRIFT-DIENSTSTELLE`, `NV-15-ABSENDER`
+- [x] **T17** `!` Dienststelle statt Eigenname — `NV-10-ANSCHRIFT-DIENSTSTELLE`, `NV-15-ABSENDER`
       → Führung statt Zurückweisung; Entscheidung an C3
 - [ ] **T18** `!` Form und Vorrangstufe — `NV-08-DURCHSAGE-SPRUCH`, `NV-09-VORRANGSTUFE`
       → Stufen jenseits des Vordrucks dürfen kein Ankreuzfeld vortäuschen

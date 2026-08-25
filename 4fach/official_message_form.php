@@ -796,7 +796,8 @@ HTML;
                 'label' => 'Absender',
                 'hint' => 'Absender fehlt',
                 'reason' => 'Absender als Dienststellen-, Teileinheits- oder '
-                    . 'Einheitsbezeichnung eintragen, höchstens 128 Zeichen.',
+                    . 'Einheitsbezeichnung eintragen, kein Eigenname, '
+                    . 'höchstens 128 Zeichen.',
             ],
             '12_abfzeit' => [
                 'number' => 16,
@@ -2994,7 +2995,8 @@ HTML;
 
         echo '<section class="estab-official-address-block">'
             . '<div class="estab-official-address-label">'
-            . '<div class="estab-official-cell-heading">Anschrift:';
+            . '<div class="estab-official-cell-heading">Anschrift:'
+            . '<br><span>Dienststelle, Teileinheit oder Einheit</span>';
         $this->official_message_help(10);
         echo '</div><span class="estab-official-print-number">10</span></div>'
             . '<div class="estab-official-address-value">';
@@ -3071,7 +3073,8 @@ HTML;
         );
         echo '<section class="estab-official-sender">'
             . '<div class="estab-official-sender-label">'
-            . '<div class="estab-official-cell-heading">Absender:';
+            . '<div class="estab-official-cell-heading">Absender:'
+            . '<br><span>Dienststelle, Teileinheit oder Einheit</span>';
         $this->official_message_help(15);
         echo '</div></div><div class="estab-official-sender-value">';
         if ($senderAssignedByLead) {

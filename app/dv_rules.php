@@ -131,6 +131,14 @@ function estab_dv_rules(): array
             'requirement' => 'Feld 7 nimmt das gewünschte Übermittlungsmittel '
                 . 'auf. Wer die Nachricht verfasst, muss es ausfüllen können.',
         ],
+        'NV-10-ANSCHRIFT-DIENSTSTELLE' => [
+            'source' => ESTAB_DV_SOURCE_AUSFUELLANLEITUNG,
+            'reference' => 'Feld 10',
+            'requirement' => 'Die Anschrift nennt eine Dienststellen-, '
+                . 'Teileinheits- oder Einheitsbezeichnung, keinen '
+                . 'Eigennamen. Beschriftung, Ausfüllhilfe und '
+                . 'Rückweisungsgrund benennen diese Bezeichnungsart.',
+        ],
         'NV-11-RUFNUMMER' => [
             'source' => ESTAB_DV_SOURCE_AUSFUELLANLEITUNG,
             'reference' => 'Feld 11',
@@ -145,6 +153,14 @@ function estab_dv_rules(): array
                 . 'ausführlichen Text. Beide sind eigene Felder und werden '
                 . 'dort verlangt, wo die Nachricht abgefasst oder aufgenommen '
                 . 'wird.',
+        ],
+        'NV-15-ABSENDER' => [
+            'source' => ESTAB_DV_SOURCE_AUSFUELLANLEITUNG,
+            'reference' => 'Feld 15',
+            'requirement' => 'Der Absender nennt eine Dienststellen-, '
+                . 'Teileinheits- oder Einheitsbezeichnung, keinen '
+                . 'Eigennamen. Beschriftung, Ausfüllhilfe und '
+                . 'Rückweisungsgrund benennen diese Bezeichnungsart.',
         ],
         'NV-16-ABFASSUNGSZEIT' => [
             'source' => ESTAB_DV_SOURCE_AUSFUELLANLEITUNG,

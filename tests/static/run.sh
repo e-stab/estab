@@ -187,6 +187,7 @@ for test_name in \
     ux_help_and_feedback \
     ux_location_awareness \
     nv_field_number_bridge \
+    nv_designation_guidance \
     telecom_plan_security \
     upload_security \
     attachment_security \
