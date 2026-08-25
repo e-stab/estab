@@ -336,9 +336,9 @@ Antrag und Lagemeldung kommen im Code nicht vor.
 
 | ID | Quelle | Soll | Abnahme | Ist |
 | --- | --- | --- | --- | --- |
-| `LM-AUFBAU` | Q3 Kap. 4, Q4 Kap. 4.3.1.4 | Die Lagemeldung folgt acht Punkten: allgemeine Lage, Schaden- und Gefahrenlage, eigene Lage, Lageentwicklung, Presse- und Öffentlichkeitsarbeit, besondere Vorkommnisse, Anforderungen, Sonstiges. Angaben nur zu relevanten Punkten. | Die acht Punkte stehen als Merkhilfe am Nachrichtentext, in dieser Reihenfolge, mit dem Hinweis, dass nur Zutreffendes ausgefüllt wird. | `offen` |
+| `LM-AUFBAU` | Q3 Kap. 4, Q4 Kap. 4.3.1.4 | Die Lagemeldung folgt acht Punkten: allgemeine Lage, Schaden- und Gefahrenlage, eigene Lage, Lageentwicklung, Presse- und Öffentlichkeitsarbeit, besondere Vorkommnisse, Anforderungen, Sonstiges. Angaben nur zu relevanten Punkten. | Die acht Punkte stehen als Merkhilfe am Nachrichtentext, in dieser Reihenfolge, mit dem Hinweis, dass nur Zutreffendes ausgefüllt wird. | `erfüllt` |
 | `LM-ANLASS` | Q3 Kap. 4 | Eine Lagemeldung ergeht auf Anforderung, regelmäßig auf Anordnung, bei umfassender Lageänderung, als Lageinformation nach unten und als Lageorientierung zur Seite. | Die Merkhilfe nennt die fünf Anlässe einer Lagemeldung. | `offen` |
-| `LM-MELDEWEG` | Q3 Kap. 4 | Die Lagemeldung folgt denselben Meldewegen wie eine Meldung. | Die Lagemeldung ist eine Nachricht wie jede andere und durchläuft denselben Laufweg; die Merkhilfe sagt das ausdrücklich. | `offen` |
+| `LM-MELDEWEG` | Q3 Kap. 4 | Die Lagemeldung folgt denselben Meldewegen wie eine Meldung. | Die Lagemeldung ist eine Nachricht wie jede andere und durchläuft denselben Laufweg; die Merkhilfe sagt das ausdrücklich. | `erfüllt` |
 
 **Lesart des Meldewesens (Betreiberentscheidung an Prüfpunkt C5).** Die „Grundlagen des Meldewesens" beschreiben Abläufe und Inhalte einer Nachricht. Alles davon bildet sich **im Vordruck** ab; das Dokument beschreibt keinen eigenen Datenbestand. Seine Angaben gehören deshalb als **Ausfüll- und Merkhilfe an den Vordruck**, nicht als zusätzliches Merkmal in die Datenbank: für den Stab beim Ausfüllen, für Fernmeldezentrale und LdF als passives Prüforgan, damit sie sinnvolle Rückfragen stellen können und eine möglichst vollständige Meldung entsteht.
 

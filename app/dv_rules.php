@@ -226,6 +226,25 @@ function estab_dv_rules(): array
                 'reference' => 'Kapitel 8.2.1.1',
             ],
         ],
+        'LM-AUFBAU' => [
+            'source' => ESTAB_DV_SOURCE_MELDEWESEN,
+            'reference' => 'Kapitel 4, Aufbau der Lagemeldung',
+            'requirement' => 'Die Lagemeldung folgt acht Punkten: allgemeine '
+                . 'Lage, Schaden- und Gefahrenlage, eigene Lage, '
+                . 'Lageentwicklung, Presse- und Öffentlichkeitsarbeit, '
+                . 'besondere Vorkommnisse, Anforderungen, Sonstiges. Angaben '
+                . 'gehören nur zu zutreffenden Punkten.',
+            'verdraengt' => [
+                'source' => ESTAB_DV_SOURCE_DV_1_101,
+                'reference' => 'Kapitel 4.3.1.4',
+            ],
+        ],
+        'LM-MELDEWEG' => [
+            'source' => ESTAB_DV_SOURCE_MELDEWESEN,
+            'reference' => 'Kapitel 4, Meldeweg der Lagemeldung',
+            'requirement' => 'Die Lagemeldung folgt denselben Meldewegen wie '
+                . 'jede andere Meldung und durchläuft denselben Laufweg.',
+        ],
         'NV-14-5W' => [
             'source' => ESTAB_DV_SOURCE_MELDEWESEN,
             'reference' => 'Kapitel 3, Aufbau einer Meldung',

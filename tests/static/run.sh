@@ -206,6 +206,7 @@ for test_name in \
     mw_message_kinds \
     mw_message_directions \
     mw_immediate_report \
+    lm_situation_report \
     telecom_plan_security \
     upload_security \
     attachment_security \

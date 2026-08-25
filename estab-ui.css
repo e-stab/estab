@@ -5693,6 +5693,17 @@ section.estab-message-timeline[data-estab-message-timeline] * {
     z-index: 1000;
 }
 
+/* Eine Aufzaehlung in der Ausfuellhilfe: nummeriert, damit der dritte Punkt
+   als dritter zu finden ist. */
+.estab-official-help-list {
+    margin: 0.35rem 0 0;
+    padding-left: 1.2rem;
+}
+
+.estab-official-help-list li {
+    margin: 0.1rem 0;
+}
+
 .estab-official-help-dialog[hidden] {
     display: none !important;
 }

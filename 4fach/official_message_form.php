@@ -646,7 +646,20 @@ HTML;
                     . 'sind: Gefahrstoffe und Gefahrgüter, der Abschluss des '
                     . 'Auftrages und jede Abweichung vom Auftrag. Wählen Sie '
                     . 'dafür eine Vorrangstufe in Feld 9, die zum Fall '
-                    . 'passt.',
+                    . 'passt. Eine Lagemeldung arbeitet die folgenden acht '
+                    . 'Punkte ab, in dieser Reihenfolge, mit Angaben nur zu '
+                    . 'zutreffenden Punkten. Sie nimmt denselben Laufweg wie '
+                    . 'jede andere Nachricht.',
+                'liste' => [
+                    'Allgemeine Lage',
+                    'Schaden- und Gefahrenlage',
+                    'Eigene Lage',
+                    'Lageentwicklung',
+                    'Presse- und Öffentlichkeitsarbeit',
+                    'Besondere Vorkommnisse',
+                    'Anforderungen',
+                    'Sonstiges',
+                ],
             ],
             15 => [
                 'title' => 'Absender',
@@ -699,6 +712,18 @@ HTML;
             . '</strong>';
         echo '<span id="' . $descriptionId . '">'
             . estab_message_html($definition['text']) . '</span>';
+        /*
+         * Eine Aufzaehlung gehoert in eine Liste. Acht Punkte in einem
+         * Fliesstext sind acht Punkte, die niemand zaehlt -- und wer in
+         * einer Lagemeldung den dritten sucht, findet ihn dort nicht.
+         */
+        if (($definition['liste'] ?? []) !== []) {
+            echo '<ol class="estab-official-help-list">';
+            foreach ($definition['liste'] as $entry) {
+                echo '<li>' . estab_message_html((string) $entry) . '</li>';
+            }
+            echo '</ol>';
+        }
         echo '<button type="button" class="estab-official-help-close" '
             . 'data-estab-form-help-close="' . $number . '">Schließen</button>';
         echo '</span></span>';
