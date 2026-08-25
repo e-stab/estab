@@ -184,6 +184,7 @@ for test_name in \
     etb_append_only_and_retention \
     tkm_telecom_plan \
     ux_paper_image \
+    ux_help_and_feedback \
     telecom_plan_security \
     upload_security \
     attachment_security \

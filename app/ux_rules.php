@@ -45,6 +45,20 @@ function estab_ux_rules(): array
                 . 'Teile -- oben die Vermerke der Fernmeldezentrale, in der '
                 . 'Mitte die Nachricht, unten der Laufzettel.',
         ],
+        'UX-INFOPOINTER' => [
+            'origin' => ESTAB_UX_ORIGIN_BETREIBER,
+            'reference' => 'Ausfüllhilfe am Feld',
+            'requirement' => 'Jedes Feld trägt eine abrufbare Hilfe, die '
+                . 'sagt, was einzutragen ist -- nicht, wie das Bedienelement '
+                . 'zu benutzen ist.',
+        ],
+        'UX-RUECKMELDUNG' => [
+            'origin' => ESTAB_UX_ORIGIN_BETREIBER,
+            'reference' => 'Rückmeldung nach der Handlung',
+            'requirement' => 'Nach jeder abgeschlossenen Handlung sagt die '
+                . 'Anwendung, was geschehen ist, wohin die Nachricht gegangen '
+                . 'ist und was als Nächstes ansteht.',
+        ],
         'UX-SPRACHE-VORSCHRIFT' => [
             'origin' => ESTAB_UX_ORIGIN_BETREIBER,
             'reference' => 'Begriffe der Vorschrift',
