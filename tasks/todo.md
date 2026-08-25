@@ -32,7 +32,7 @@ Risiko: `·` niedrig · `!` mittel · `!!` hoch
 - [x] **T09** `·` Die vier Durchschriften — `NV-4FACH-VERTEILUNG`
       → belegen, dass rote und grüne Durchschrift auch bei Abwahlversuch entstehen
 - [x] **T10** `·` Sichter und LdF im Laufweg — `FUEST-SICHTER-BINDEGLIED`, `FUEST-LDF-BETRIEB`
-- [ ] **T11** `·` Fortschreibung und Aufbewahrung — `ETB-APPEND-ONLY`, `ETB-AUFBEWAHRUNG`
+- [x] **T11** `·` Fortschreibung und Aufbewahrung — `ETB-APPEND-ONLY`, `ETB-AUFBEWAHRUNG`
       → Untergrenze ein Jahr prüfen, nicht die zehn Jahre des Bestands
 - [ ] **T12** `·` Fernmeldeplan — `TKM-FERNMELDEPLAN`
 

@@ -308,8 +308,8 @@ Antrag und Lagemeldung kommen im Code nicht vor.
 | --- | --- | --- | --- | --- |
 | `ETB-FBFUE2-NACHRICHTENBEZUG` | Q5 Fb Fü 2 | Der ETB-Ausdruck weist zu jedem Eintrag den zugehörigen Nachrichtenvordruck aus. | vorhandene Regel | `erfüllt` |
 | `TBB-QUITTUNG-AUSHAENDIGUNG` | Q5 Fb Fü 44 Spalte 7 | Die Spalte Quittung/Empfänger/Ausgehändigt wird mit der Aushändigung ergänzt und enthält keine anwendungsinternen Kennungen. | vorhandene Regel | `erfüllt` |
-| `ETB-APPEND-ONLY` | Q4 Kap. 8.4 | ETB und Betriebsbuch werden fortschreibend geführt. Eine Korrektur erzeugt einen neuen, referenzierten Eintrag. | Kein Pfad ändert oder löscht einen bestehenden Eintrag. | `ohne Regel` |
-| `ETB-AUFBEWAHRUNG` | Q4 Kap. 4.3.1.4 | „Das ETB ist 1 Jahr lang aufzubewahren." | Die Aufbewahrungsfrist eines abgeschlossenen Einsatzes unterschreitet ein Jahr nicht. | `ohne Regel` — der Bestand hält zehn Jahre und übererfüllt damit |
+| `ETB-APPEND-ONLY` | Q4 Kap. 8.4 | ETB und Betriebsbuch werden fortschreibend geführt. Eine Korrektur erzeugt einen neuen, referenzierten Eintrag. | Kein Pfad ändert oder löscht einen bestehenden Eintrag. | `erfüllt` |
+| `ETB-AUFBEWAHRUNG` | Q4 Kap. 4.3.1.4 | „Das ETB ist 1 Jahr lang aufzubewahren." | Die Aufbewahrungsfrist eines abgeschlossenen Einsatzes unterschreitet ein Jahr nicht. | `erfüllt` — der Bestand hält zehn Jahre und übererfüllt damit |
 | `ETB-ENTSCHEIDUNGEN` | Q4 Kap. 4.3.1.4 | Entscheidungen sind als Eintrag oder als Anlage zum ETB zu dokumentieren. | Eine Entscheidung im Nachrichtenlauf erzeugt einen ETB-Eintrag. | `teilweise` |
 
 ### 5.8 M7 — fuehrungsmittel

@@ -195,6 +195,21 @@ function estab_dv_rules(): array
             'requirement' => 'Uhrzeiten werden vierstellig geführt, Datumsangaben '
                 . 'mindestens zweistellig.',
         ],
+        'ETB-APPEND-ONLY' => [
+            'source' => ESTAB_DV_SOURCE_DV_1_101,
+            'reference' => 'Kapitel 8.4',
+            'requirement' => 'Einsatztagebuch und Technisches Betriebsbuch '
+                . 'werden fortschreibend geführt. Ein gebuchter Eintrag wird '
+                . 'weder geändert noch gelöscht; eine Korrektur entsteht als '
+                . 'neuer Eintrag, der den berichtigten benennt.',
+        ],
+        'ETB-AUFBEWAHRUNG' => [
+            'source' => ESTAB_DV_SOURCE_DV_1_101,
+            'reference' => 'Kapitel 4.3.1.4',
+            'requirement' => 'Das Einsatztagebuch ist mindestens ein Jahr '
+                . 'lang aufzubewahren. Vor Ablauf der Frist darf der Bestand '
+                . 'nicht gelöscht werden.',
+        ],
         'ETB-FBFUE2-NACHRICHTENBEZUG' => [
             'source' => ESTAB_DV_SOURCE_HANDBUCH,
             'reference' => 'Fb Fü 2',
