@@ -198,6 +198,7 @@ for test_name in \
     ux_own_fields \
     ux_form_contrast \
     ux_keyboard \
+    ux_without_javascript \
     telecom_plan_security \
     upload_security \
     attachment_security \

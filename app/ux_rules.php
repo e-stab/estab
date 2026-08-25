@@ -93,6 +93,13 @@ function estab_ux_rules(): array
                 . 'folgt der Feldfolge des Vordrucks, und der Fokus ist '
                 . 'sichtbar.',
         ],
+        'UX-OHNE-JAVASCRIPT' => [
+            'origin' => ESTAB_UX_ORIGIN_BETREIBER,
+            'reference' => 'Laufweg ohne JavaScript',
+            'requirement' => 'Aufnehmen, Sichten und Befördern einer '
+                . 'Nachricht funktionieren ohne JavaScript. Der Komfort darf '
+                . 'davon abhängen, der Nachrichtenlauf nicht.',
+        ],
         'UX-FLACHE-BILDSCHIRME' => [
             'origin' => ESTAB_UX_ORIGIN_BETREIBER,
             'reference' => 'Geräte der Führungsstelle',
