@@ -250,6 +250,13 @@ function estab_dv_rules(): array
                 . 'die gelbe in das Technische Betriebsbuch. Die rote und '
                 . 'die grüne Durchschrift sind nicht abwählbar.',
         ],
+        'NV-DATUM-MONATSKUERZEL' => [
+            'source' => ESTAB_DV_SOURCE_DV_1_101,
+            'reference' => 'Kapitel 8.2.1.3',
+            'requirement' => 'Droht eine Verwechslung des Datums, wird die '
+                . 'zweistellige Tagesangabe mit dem Monatskürzel verbunden. '
+                . 'Die Kürzel folgen der englischen Schreibweise.',
+        ],
         'NV-ZEIT-FORMAT' => [
             'source' => ESTAB_DV_SOURCE_AUSFUELLANLEITUNG,
             'reference' => 'Felder 2, 3, 4, 16 und 18',

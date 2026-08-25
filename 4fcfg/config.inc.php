@@ -164,40 +164,17 @@ require_once __DIR__ . '/../app/bootstrap.php';
 
 
 
-    $tak_monate = array (
-         "01" => 'jan',
-         "02" => 'feb',
-         "03" => 'mar',
-         "04" => 'apr',
-         "05" => 'mai',
-         "06" => 'jun',
-         "07" => 'jul',
-         "08" => 'aug',
-         "09" => 'sep',
-         "10" => 'oct',
-         "11" => 'nov',
-         "12" => 'dec'
-    );
+    /*
+     * Die Monatskuerzel der Datum-Uhrzeit-Gruppe. Geschrieben wird nach
+     * englischer Schreibweise, gelesen zusaetzlich die im Bestand
+     * vorhandenen deutschen Kuerzel. Beide Tabellen kommen aus
+     * app/nv_datetime_group.php -- zwei Tabellen, die dasselbe sagen sollen,
+     * sagen es irgendwann nicht mehr.
+     */
+    require_once __DIR__ . "/../app/nv_datetime_group.php";
 
-
-
-    $rew_tak_monate = array (
-         "jan" => '01',
-         "feb" => '02',
-         "mar" => '03',
-         "apr" => '04',
-         "mai" => '05',
-         "may" => '05',
-         "jun" => '06',
-         "jul" => '07',
-         "aug" => '08',
-         "sep" => '09',
-         "okt" => '10',
-         "oct" => '10',
-         "nov" => '11',
-         "dez" => '12',
-         "dec" => '12'
-    );
+    $tak_monate = estab_nv_month_abbreviations ();
+    $rew_tak_monate = estab_nv_month_numbers ();
 /*****************************************************************/
 //    Verweildauer je Vorrangstufe
 //

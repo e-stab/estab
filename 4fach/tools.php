@@ -1,5 +1,7 @@
 <?php
 
+require_once __DIR__ . "/../app/nv_datetime_group.php";
+
 //define ("debug", false);              // true = gibt debuginformationen aus
 
 /*****************************************************************************\
@@ -208,35 +210,10 @@ require_once __DIR__ . "/../app/session_ui.php";
   | Formatausgang: YYYY-MM-TT hh:mm:ss
   \****************************************************************************/
   function conv_time_datetime($data){
-    $tak_monate = array (
-         "01" => 'jan',
-         "02" => 'feb',
-         "03" => 'mar',
-         "04" => 'apr',
-         "05" => 'mai',
-         "06" => 'jun',
-         "07" => 'jul',
-         "08" => 'aug',
-         "09" => 'sep',
-         "10" => 'oct',
-         "11" => 'nov',
-         "12" => 'dec' );
-    $rew_tak_monate = array (
-         "jan" => '01',
-         "feb" => '02',
-         "mar" => '03',
-         "apr" => '04',
-         "mai" => '05',
-         "may" => '05',
-         "jun" => '06',
-         "jul" => '07',
-         "aug" => '08',
-         "sep" => '09',
-         "okt" => '10',
-         "oct" => '10',
-         "nov" => '11',
-         "dez" => '12',
-         "dec" => '12' );
+    // Beide Tabellen kommen aus app/nv_datetime_group.php: geschrieben wird
+    // englisch, gelesen zusaetzlich die deutschen Kuerzel des Bestands.
+    $tak_monate = estab_nv_month_abbreviations ();
+    $rew_tak_monate = estab_nv_month_numbers ();
 
     $laenge = strlen ($data);
     /* Ausfuellanleitung Nachrichtenvordruck: Uhrzeiten werden vierstellig

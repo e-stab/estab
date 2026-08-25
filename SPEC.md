@@ -287,7 +287,7 @@ Anforderungen aus M9 erfüllt.
 | `NV-19-VERTEILER-AUSGANG` | Q2 Feld 19 | Der Verteiler gilt auch im Ausgang und ist vom Verfasser ausfüllbar. | vorhandene Regel | `erfüllt` |
 | `NV-20-VERMERKE-ERHALT` | Q2 Feld 20 | Eine spätere Eintragung ergänzt die vorhandenen Vermerke und löscht sie nicht. | vorhandene Regel | `erfüllt` |
 | `NV-ZEIT-FORMAT` | Q1 Felder 2, 3, 4, 16, 18 | Uhrzeiten vierstellig, Datumsangaben mindestens zweistellig. | vorhandene Regel | `erfüllt` |
-| `NV-DATUM-MONATSKUERZEL` | Q4 Kap. 8.2.1.3 | Droht eine Verwechslung des Datums, wird es zweistellig mit dem Monatskürzel verbunden (`021234jan`), Kürzel nach englischer Schreibweise. | Die Anwendung stellt diese Datum-Uhrzeit-Gruppe dort her, wo sie einsatzübergreifend gelesen wird. | `offen` |
+| `NV-DATUM-MONATSKUERZEL` | Q4 Kap. 8.2.1.3 | Droht eine Verwechslung des Datums, wird es zweistellig mit dem Monatskürzel verbunden (`021234jan`), Kürzel nach englischer Schreibweise. | Die Anwendung stellt diese Datum-Uhrzeit-Gruppe dort her, wo sie einsatzübergreifend gelesen wird. | `erfüllt` |
 | `NV-4FACH-VERTEILUNG` | Q4 Kap. 4.1.2.1, Q2 Blattfarben | Ab Stufe 2 ist der Vordruck vierfach zu führen. Digital heißt das: jede Nachricht erreicht die vier Empfänger der Durchschriften. | Blau und grün gehen an Verfasser bzw. Sachgebiet, rot an S 2 für ETB und Lage, gelb an das Technische Betriebsbuch — rot und grün unabwählbar. | `erfüllt` |
 
 ### 5.5 M4 — laufweg

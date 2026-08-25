@@ -59,7 +59,7 @@ Risiko: `·` niedrig · `!` mittel · `!!` hoch
 - [x] **T18** `!` Form und Vorrangstufe — `NV-08-DURCHSAGE-SPRUCH`, `NV-09-VORRANGSTUFE`
       → Stufen jenseits des Vordrucks dürfen kein Ankreuzfeld vortäuschen
 - [x] **T19** `!` Leitfragen und Tatsachenkennzeichnung — `NV-14-5W`, `NV-14-TATSACHE-VERMUTUNG` *(braucht T01)*
-- [ ] **T20** `·` Datum-Uhrzeit-Gruppe mit Monatskürzel — `NV-DATUM-MONATSKUERZEL`
+- [x] **T20** `·` Datum-Uhrzeit-Gruppe mit Monatskürzel — `NV-DATUM-MONATSKUERZEL`
 
 > **Prüfpunkt C3** — Reicht Führung bei Anschrift und Absender, oder zurückweisen?
 

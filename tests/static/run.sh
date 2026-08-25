@@ -190,6 +190,7 @@ for test_name in \
     nv_designation_guidance \
     nv_form_and_priority \
     nv_message_text_guidance \
+    nv_datetime_group \
     telecom_plan_security \
     upload_security \
     attachment_security \
