@@ -347,6 +347,15 @@ function estab_dv_rules(): array
             'requirement' => 'Uhrzeiten werden vierstellig geführt, Datumsangaben '
                 . 'mindestens zweistellig.',
         ],
+        'ETB-ENTSCHEIDUNGEN' => [
+            'source' => ESTAB_DV_SOURCE_DV_1_101,
+            'reference' => 'Kapitel 4.3.1.4',
+            'requirement' => 'Entscheidungen werden als Eintrag oder als '
+                . 'Anlage zum Einsatztagebuch dokumentiert. Jede '
+                . 'Entscheidung des Nachrichtenlaufs wird mit ihrem Urheber '
+                . 'und dem Stand davor und danach festgehalten und ist im '
+                . 'Einsatztagebuch auffindbar.',
+        ],
         'ETB-APPEND-ONLY' => [
             'source' => ESTAB_DV_SOURCE_DV_1_101,
             'reference' => 'Kapitel 8.4',

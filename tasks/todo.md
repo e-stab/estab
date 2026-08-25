@@ -131,7 +131,7 @@ Risiko: `·` niedrig · `!` mittel · `!!` hoch
 
 ## P9 — Rest
 
-- [ ] **T40** `!` Entscheidungen im ETB — `ETB-ENTSCHEIDUNGEN`
+- [x] **T40** `!` Entscheidungen im ETB — `ETB-ENTSCHEIDUNGEN`
 
 > **Abschlussprüfpunkt** — Bedienprüfung, vollständiger Testlauf, `SPEC.md` ohne
 > offene Zeile.
