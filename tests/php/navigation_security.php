@@ -433,14 +433,14 @@ foreach ($expectedLabels as $label) {
     $lastPosition = is_int($position) ? $position : $lastPosition;
 }
 /*
- * Das Menue steht still: Alle elf Eintraege sind immer da. Ansteuerbar sind
- * fuer S1 neun davon; die beiden fremden Bereiche stehen sichtbar, aber ohne
- * Weg. Geprueft wird beides -- die Zahl der Eintraege und die Zahl der Wege.
+ * Das Menue steht still: Alle elf Eintraege sind immer da, und alle elf sind
+ * anklickbar. Ob ein Bereich der eigenen Funktion offensteht, sagt der
+ * Bereich selbst -- ein Menue ist zum Hingehen da.
  */
 $assert(
     substr_count($authenticated, 'data-estab-navigation-item') === 11
-        && substr_count($authenticated, 'data-estab-navigation-blocked') === 2
-        && substr_count($authenticated, 'target="_top"') === 9
+        && substr_count($authenticated, 'data-estab-navigation-blocked') === 0
+        && substr_count($authenticated, 'target="_top"') === 11
         && substr_count($authenticated, 'aria-current="page"') === 1
         && str_contains(
             $authenticated,
@@ -453,13 +453,21 @@ $assert(
         && !str_contains($authenticated, 'target="_blank"'),
     'full navigation markers, targets, or active state are incomplete'
 );
+/*
+ * Das Menue fuehrt jedes Ziel, auch die Bereiche fremder Funktionen. Das ist
+ * keine Freigabe: Die Navigation war nie eine Sicherheitsgrenze, und jeder
+ * dieser Endpunkte prueft Anmeldung, angetretenen Dienst und
+ * Bereichsberechtigung selbst -- nachgewiesen in ux_navigation_constancy.
+ * Was hier zaehlt, ist die Adresse: Sie muss die kanonische sein, damit der
+ * Bereich sich wiedererkennt und seine Auskunft geben kann.
+ */
 $assert(
     str_contains($authenticated, 'href="/"')
-        && !str_contains(
+        && str_contains(
             $authenticated,
             'href="/4fach/nachwea.php?nwalle"'
         )
-        && !str_contains($authenticated, 'href="/4fueltg/ue_ltg.php"')
+        && str_contains($authenticated, 'href="/4fueltg/ue_ltg.php"')
         && str_contains($authenticated, 'href="/4fadm/admin.php"')
         && str_contains(
             $authenticated,
@@ -489,13 +497,20 @@ $ldfNavigation = estab_navigation_markup(
     false,
     $ldfNavigationIdentity
 );
+/*
+ * Beide Funktionen sehen dasselbe Menue mit denselben Adressen. Die
+ * Zustaendigkeit steht weiterhin am Eintrag -- als Merkmal, nicht als Sperre
+ * -- damit Oberflaeche und Auswertung dieselbe Auskunft haben. Wer den
+ * fremden Bereich anlaeuft, wird dort abgewiesen und erfaehrt dort auch,
+ * warum.
+ */
 $assert(
     str_contains($s2Navigation, 'href="/4fueltg/ue_ltg.php"')
         && str_contains(
             $s2Navigation,
             'data-estab-navigation-duty-access="LAGE_DOKUMENTATION"'
         )
-        && !str_contains(
+        && str_contains(
             $s2Navigation,
             'href="/4fach/nachwea.php?nwalle"'
         )
@@ -507,11 +522,11 @@ $assert(
             $ldfNavigation,
             'data-estab-navigation-duty-access="FERNMELDE_NACHWEIS"'
         )
-        && !str_contains(
+        && str_contains(
             $ldfNavigation,
             'href="/4fueltg/ue_ltg.php"'
         ),
-    'account-function navigation exposes a foreign privileged area'
+    'account-function navigation lost a canonical area target'
 );
 $additionalNavigation = estab_navigation_markup(
     true,
@@ -522,11 +537,11 @@ $additionalNavigation = estab_navigation_markup(
 );
 $assert(
     str_contains($additionalNavigation, 'href="/4fueltg/ue_ltg.php"')
-        && !str_contains(
+        && str_contains(
             $additionalNavigation,
             'href="/4fach/nachwea.php?nwalle"'
         ),
-    'LOOSE navigation ignored an explicit S2 grant or exposed an ungranted area'
+    'LOOSE navigation lost a canonical area target'
 );
 $strictWithoutHat = estab_navigation_markup(
     true,
@@ -551,25 +566,50 @@ $strictWithHat = estab_navigation_markup(
         'duty_assignment_id' => 73,
     ]
 );
-// Ohne angetretenen Dienst bleiben ebenfalls alle Eintraege stehen; sechs
-// von ihnen fuehren nirgendwohin, bis eine Funktion angenommen ist.
+// Ohne angetretenen Dienst bleiben ebenfalls alle Eintraege stehen und alle
+// anklickbar. Wer einen Bereich ohne angenommene Funktion anlaeuft, erfaehrt
+// das dort.
 $assert(
     substr_count($strictWithoutHat, 'data-estab-navigation-item') === 11
-        && substr_count($strictWithoutHat, 'data-estab-navigation-blocked') === 6
+        && substr_count($strictWithoutHat, 'data-estab-navigation-blocked') === 0
         && str_contains(
             $strictWithoutHat,
             'href="/4fach/fuehrungsstelle.php"'
         )
-        && !str_contains($strictWithoutHat, 'href="/4fach/index.php"')
-        && !str_contains($strictWithoutHat, 'href="/4fueltg/ue_ltg.php"')
+        && str_contains($strictWithoutHat, 'href="/4fach/index.php"')
+        && str_contains($strictWithoutHat, 'href="/4fueltg/ue_ltg.php"')
         && str_contains($strictWithHat, 'href="/4fach/index.php"')
         && str_contains($strictWithHat, 'href="/4fueltg/ue_ltg.php"')
-        && !str_contains(
+        && str_contains(
             $strictWithHat,
             'href="/4fach/nachwea.php?nwalle"'
         ),
-    'STRICT navigation does not require an explicitly selected duty assignment'
+    'STRICT navigation lost a canonical area target'
 );
+/*
+ * Dass die Betriebsart "streng" einen angetretenen Dienst verlangt, steht
+ * damit nicht mehr im Menue -- es steht dort, wo es hingehoert: Die
+ * Endpunkte rufen estab_navigation_require_selected_duty() und weisen ohne
+ * angenommene Funktion ab. Die Auskunft daraus liest der Bedienende an der
+ * Stelle, an der er sie braucht.
+ */
+foreach (
+    ['4fueltg/ue_ltg.php', '4fach/nachwea.php', '4fach/vordrucke.php']
+    as $guardedEndpoint
+) {
+    $guardedSource = file_get_contents(
+        dirname(__DIR__, 2) . '/' . $guardedEndpoint
+    );
+    $assert(
+        is_string($guardedSource)
+            && str_contains(
+                $guardedSource,
+                'estab_navigation_require_selected_duty'
+            ),
+        'endpoint does not require a selected duty assignment itself: '
+            . $guardedEndpoint
+    );
+}
 $accountNavigation = estab_navigation_markup(
     true,
     ['SCRIPT_NAME' => '/4fach/fuehrungsstelle.php'],
@@ -585,7 +625,7 @@ $assert(
         && substr_count(
             $accountNavigation,
             'data-estab-navigation-blocked'
-        ) === 2
+        ) === 0
         && str_contains(
             $accountNavigation,
             'href="/4fach/fuehrungsstelle.php"'
@@ -595,8 +635,8 @@ $assert(
         && str_contains($accountNavigation, 'href="/4fach/index.php"')
         && str_contains($accountNavigation, 'href="/stabetb/etb.php"')
         && str_contains($accountNavigation, 'href="/fmtbb/tbb.php"')
-        && !str_contains($accountNavigation, 'href="/4fueltg/ue_ltg.php"')
-        && !str_contains(
+        && str_contains($accountNavigation, 'href="/4fueltg/ue_ltg.php"')
+        && str_contains(
             $accountNavigation,
             'href="/4fach/nachwea.php?nwalle"'
         ),
@@ -698,8 +738,8 @@ $assert(
         && str_contains($sidebar, '<h2>Bereiche</h2>')
         && str_contains($sidebar, '<p>Arbeitsbereich wechseln</p>')
         && substr_count($sidebar, 'data-estab-navigation-item') === 11
-        && substr_count($sidebar, 'data-estab-navigation-blocked') === 2
-        && substr_count($sidebar, 'target="_top"') === 9
+        && substr_count($sidebar, 'data-estab-navigation-blocked') === 0
+        && substr_count($sidebar, 'target="_top"') === 11
         && substr_count($sidebar, 'aria-current="page"') === 1
         && !str_contains($sidebar, '<details')
         && !str_contains($sidebar, '<summary'),

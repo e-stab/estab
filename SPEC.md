@@ -363,9 +363,9 @@ Mehrwert, sondern der Grund, warum im Einsatz wieder Papier benutzt wird.
 
 | ID | Soll | Abnahme | Ist |
 | --- | --- | --- | --- |
-| `UX-MENUE-ORTSKONSTANZ` | Die Navigation steht auf jeder Seite an derselben Stelle, mit denselben Einträgen in derselben Reihenfolge. Ein Ziel, das die eigene Funktion gerade nicht ansteuern darf, bleibt **sichtbar und inaktiv mit Grund** — es verschwindet nicht. | Ein Test rendert die Navigation für jede Kombination aus Modus, Schicht und Funktion und hält Menge und Reihenfolge der Einträge konstant; unzulässige Einträge tragen einen Grund. | `erfüllt` — K1 aufgelöst: unzulässige Ziele bleiben sichtbar und inaktiv mit Grund |
+| `UX-MENUE-ORTSKONSTANZ` | Die Navigation steht auf jeder Seite an derselben Stelle, mit denselben Einträgen in derselben Reihenfolge. **Jeder Eintrag ist anklickbar.** Ein Ziel, das die eigene Funktion gerade nicht ansteuern darf, erklärt das auf seiner eigenen Seite — nicht im Menü: Ein Menü ist zum Hingehen da, nicht zum Erklären, und ein Satz passt nicht in eine Menüspalte. | Ein Test rendert die Navigation für jede Kombination aus Modus, Schicht und Funktion und hält Menge, Reihenfolge und Anklickbarkeit konstant; die abweisenden Ziele nennen ihren Grund selbst. | `erfüllt` — K1 aufgelöst: das Menü steht still, die Begründung steht am Ziel |
 | `UX-MENUE-EIN-WEG` | Zu jedem Ziel führt genau ein Weg. Es gibt keine zwei Einstiege, die sich unterschiedlich verhalten. | Kein Ziel ist über zwei Wege mit abweichendem Verhalten erreichbar. | `erfüllt` |
-| `UX-STANDORT` | Der Anwender erkennt auf jeder Seite, wo er ist, in welcher Funktion er handelt und für welchen Einsatz. | Jede Seite weist Einsatz, Funktion und aktuellen Bereich aus. | `erfüllt` |
+| `UX-STANDORT` | Der Anwender erkennt auf jeder Seite, wo er ist, in welcher Funktion er handelt und für welche Führungsstelle. Angaben, die sich während eines Einsatzes nicht ändern — Kennung, Beginn, Ort, Betriebsart — stehen nicht dauerhaft im Blick: Eine Spalte, die immer offensteht, wird bei jedem Blick mitgelesen. | Jede Seite weist Führungsstelle, Funktion und aktuellen Bereich sichtbar aus; Kennung und Einsatzname bleiben als Merkmale für Auswertung und Vorleseprogramme erhalten. | `erfüllt` |
 
 #### B — Der Vordruck als Papierbild
 
@@ -420,10 +420,17 @@ sichtbar und werden inaktiv mit Grund geführt. Das erhält die Ortskenntnis und
 erklärt zugleich, warum ein Ziel gerade nicht offensteht — was heute niemand
 erfährt.
 
-**K1 ist aufgelöst (T21).** Die Navigation blendet kein Ziel mehr aus. Jeder
-Eintrag steht immer an derselben Stelle; was die eigene Funktion gerade nicht
-ansteuern darf, trägt kein `href`, ist als gesperrt ausgezeichnet und nennt
-den Grund. Die Sicherheitslage bleibt unverändert: Die Navigation war nie eine
+**K1 ist aufgelöst.** Die Navigation blendet kein Ziel mehr aus. Jeder
+Eintrag steht immer an derselben Stelle und ist immer anklickbar; was die
+eigene Funktion gerade nicht ansteuern darf, sagt das auf seiner eigenen
+Seite.
+
+Der erste Anlauf hatte den Eintrag stattdessen im Menü gesperrt und den Grund
+dort hingeschrieben. Im Betrieb zeigte sich beides als falsch: Ein
+erklärender Satz sprengt eine schmale Menüspalte, und ein Menü ist zum
+Hingehen da, nicht zum Erklären. Wer wissen will, warum ein Bereich ihm
+verschlossen ist, geht hin und liest es dort — an der Stelle, die ihn
+betrifft, und wo Platz für einen ganzen Satz ist. Die Sicherheitslage bleibt unverändert: Die Navigation war nie eine
 Sicherheitsgrenze, und jeder Endpunkt prüft Anmeldung, angetretenen Dienst und
 Bereichsberechtigung weiterhin selbst.
 

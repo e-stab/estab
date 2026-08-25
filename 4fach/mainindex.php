@@ -31,7 +31,9 @@ require_once __DIR__ . "/../app/self_registration.php";
 require_once __DIR__ . "/../4fcfg/config.inc.php";
 require_once __DIR__ . "/../4fcfg/dbcfg.inc.php";
 require_once __DIR__ . "/../4fcfg/fkt_rolle.inc.php";
-estab_session_ui_start ($_SESSION);
+// Diese Seite ist der Inhalt der Huelle, nicht die Huelle selbst.
+// Menue und Cockpit stehen aussen; hier waeren sie ein Menue im Menue.
+estab_session_ui_start ($_SESSION, false, false, false);
 
 if (estab_attachment_upload_post_body_exceeded (
   $_SERVER,

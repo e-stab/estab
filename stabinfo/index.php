@@ -5,6 +5,14 @@ declare(strict_types=1);
 header('Content-Type: text/html; charset=UTF-8');
 header('Cache-Control: private, no-store, max-age=0');
 
+require_once __DIR__ . '/../app/app_shell.php';
+
+// Die Infosammlung steht auch ohne Anmeldung offen. Das Menue links soll
+// aber wissen, ob jemand angemeldet ist -- sonst zeigt es einer angemeldeten
+// Kraft lauter gesperrte Ziele.
+if (session_status() !== PHP_SESSION_ACTIVE) {
+    session_start();
+}
 $documents = require __DIR__ . '/documents.php';
 $documentMetadata = [];
 foreach ($documents as $document) {
@@ -24,34 +32,37 @@ $documentMetadataJson = json_encode(
 );
 
 ?>
-<!doctype html>
-<html lang="de" class="estab-message-workspace-document">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="author" content="Hajo Landmesser">
-  <link rel="shortcut icon" href="../favicon.ico">
-  <link rel="stylesheet" href="../estab-ui.css">
-  <title>Infosammlung BOS</title>
-</head>
-<body class="estab-message-workspace">
-  <main
-    class="estab-message-workspace-grid"
-    data-estab-bos-workspace
-  >
-    <iframe
-      class="estab-message-sidebar-frame"
-      name="status"
-      title="eStab Navigation und BOS-Dokumente"
-      src="./l_index.php"
-    ></iframe>
-    <iframe
-      class="estab-message-content-frame"
-      name="mainframe"
-      title="BOS-Informationsbereich"
-      src="./f_info.php"
-    ></iframe>
-  </main>
+<?= estab_shell_head('Infosammlung BOS') ?>
+<body class="estab-shell-body">
+  <div class="estab-shell" data-estab-shell>
+    <?= estab_shell_menu_markup(
+        estab_auth_session_identity($_SESSION),
+        $_SERVER
+    ) ?>
+    <main class="estab-shell-content estab-shell-content--frame"
+      data-estab-shell-content>
+      <!--
+        Die beiden Rahmen der Infosammlung sind ihr Inhalt, nicht die Huelle:
+        links die Liste der Dokumente, rechts das gewaehlte. Menue und
+        Cockpit stehen aussen und sehen hier aus wie ueberall.
+      -->
+      <div class="estab-bos-panes" data-estab-bos-workspace>
+        <iframe
+          class="estab-bos-list-frame"
+          name="status"
+          title="BOS-Dokumente"
+          src="./l_index.php"
+        ></iframe>
+        <iframe
+          class="estab-bos-content-frame"
+          name="mainframe"
+          title="BOS-Informationsbereich"
+          src="./f_info.php"
+        ></iframe>
+      </div>
+    </main>
+    <?= estab_shell_cockpit_markup() ?>
+  </div>
   <button
     class="estab-mobile-sidebar-return"
     type="button"
@@ -63,8 +74,8 @@ $documentMetadataJson = json_encode(
   </button>
   <script<?= estab_csp_script_attribute() ?> data-estab-mobile-workspace-navigation>
     (function () {
-      var sidebar = document.querySelector('.estab-message-sidebar-frame');
-      var content = document.querySelector('.estab-message-content-frame');
+      var sidebar = document.querySelector('.estab-bos-list-frame');
+      var content = document.querySelector('.estab-bos-content-frame');
       var returnButton = document.querySelector(
         '[data-estab-mobile-menu-return]'
       );

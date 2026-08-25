@@ -123,7 +123,18 @@ $assert(
     )
 );
 
-/* --- Und die Kachel sperrt, was das Menü sperrt --- */
+/* --- Und die Kachel verhält sich wie der Menüeintrag --- */
+
+/*
+ * Beide sind anklickbar, auch dorthin, wo die eigene Funktion nichts zu
+ * suchen hat. Der erste Anlauf hatte beide gesperrt und den Grund
+ * hingeschrieben; im Betrieb sprengte der Satz die schmale Menuespalte, und
+ * ein Menue ist ohnehin zum Hingehen da. Wer wissen will, warum, klickt und
+ * liest es am Ziel.
+ *
+ * Entscheidend bleibt, dass sich beide Einstiege gleich verhalten -- zwei
+ * Einstiege, die sich unterschiedlich verhalten, lehren zwei Regeln.
+ */
 
 /** Eine Kachel, so wie menue.inc.php sie beschreibt. */
 $tile = static function (string $key): array {
@@ -142,78 +153,73 @@ $tile = static function (string $key): array {
     ];
 };
 
-$s1 = ['funktion' => 'S1', 'rolle' => 'Stab', 'estab_permission_mode' => 'LOOSE'];
-$s2 = ['funktion' => 'S2', 'rolle' => 'Stab', 'estab_permission_mode' => 'LOOSE'];
-$ldf = ['funktion' => 'LdF', 'rolle' => 'Fernmelder', 'estab_permission_mode' => 'LOOSE'];
-$strict = ['funktion' => 'S2', 'rolle' => 'Stab', 'estab_permission_mode' => 'STRICT'];
+$identities = [
+    'S1 · Stab' => ['funktion' => 'S1', 'rolle' => 'Stab',
+        'estab_permission_mode' => 'LOOSE'],
+    'S2 · Stab' => ['funktion' => 'S2', 'rolle' => 'Stab',
+        'estab_permission_mode' => 'LOOSE'],
+    'LdF · Fernmelder' => ['funktion' => 'LdF', 'rolle' => 'Fernmelder',
+        'estab_permission_mode' => 'LOOSE'],
+    'S2 ohne Dienst' => ['funktion' => 'S2', 'rolle' => 'Stab',
+        'estab_permission_mode' => 'STRICT'],
+];
 
-foreach (
-    [
-        'S1 · Stab' => [$s1, ['message-overview', 'tracking']],
-        'S2 · Stab' => [$s2, ['tracking']],
-        'LdF · Fernmelder' => [$ldf, ['message-overview']],
-        'S2 ohne Dienst' => [
-            $strict,
-            ['messages', 'message-overview', 'forms', 'incident-log',
-                'technical-log', 'tracking'],
-        ],
-    ] as $situation => [$identity, $blockedKeys]
-) {
+foreach ($identities as $situation => $identity) {
+    $menu = estab_navigation_markup(
+        true,
+        ['SCRIPT_NAME' => '/4fach/vordrucke.php'],
+        false,
+        false,
+        $identity
+    );
     foreach ($items as $item) {
         $key = (string) $item['key'];
         $markup = estab_root_menu_item_markup($tile($key), true, null, $identity);
-        $shouldBlock = in_array($key, $blockedKeys, true);
-        $blocked = str_contains($markup, 'estab-menu-card-blocked');
+
         $assert(
-            $blocked === $shouldBlock,
+            !str_contains($markup, 'estab-menu-card-blocked')
+                && !str_contains($markup, 'aria-disabled'),
             estab_ux_requirement(
                 'UX-MENUE-EIN-WEG',
                 'Die Kachel ' . $key . ' ist für ' . $situation
-                    . ($blocked ? ' gesperrt' : ' offen')
-                    . ', das Menü sagt das Gegenteil.'
+                    . ' gesperrt. Beide Einstiege sind anklickbar; ob dort '
+                    . 'jemand hineindarf, sagt das Ziel.'
             )
         );
-        if (!$shouldBlock) {
-            $assert(
-                str_contains($markup, 'href="./' . $item['path'] . '"'),
-                estab_ux_requirement(
-                    'UX-MENUE-EIN-WEG',
-                    'Die offene Kachel ' . $key . ' führt für ' . $situation
-                        . ' nicht an ihr Ziel.'
-                )
-            );
-            continue;
-        }
         $assert(
-            !str_contains($markup, 'href='),
+            str_contains($markup, 'href="./' . $item['path'] . '"'),
             estab_ux_requirement(
                 'UX-MENUE-EIN-WEG',
-                'Die gesperrte Kachel ' . $key . ' ist für ' . $situation
-                    . ' trotzdem anklickbar; über das Menü ginge es nicht.'
+                'Die Kachel ' . $key . ' führt für ' . $situation
+                    . ' nicht an ihr Ziel.'
             )
         );
-        $reason = estab_navigation_duty_access_reason($item, $identity);
+
+        // Und der Menüeintrag führt an dieselbe Adresse.
         $assert(
-            $reason !== '' && str_contains($markup, estab_auth_html($reason)),
+            str_contains(
+                $menu,
+                'data-estab-nav-key="' . $key . '"'
+            ),
             estab_ux_requirement(
                 'UX-MENUE-EIN-WEG',
-                'Die gesperrte Kachel ' . $key . ' nennt für ' . $situation
-                    . ' nicht denselben Grund wie das Menü.'
+                'Das Menü führt den Eintrag ' . $key . ' für ' . $situation
+                    . ' nicht; die Kachel täte es. Zwei Einstiege, zwei '
+                    . 'Regeln.'
             )
         );
     }
 }
 
 /*
- * Ohne Anmeldung bleibt es beim bisherigen Weg: Die Kachel führt in die
- * Anmeldung und sagt das. Eine Sperre mit fachlichem Grund wäre dort
- * irreführend -- es fehlt nicht die Zuständigkeit, sondern die Anmeldung.
+ * Ohne Anmeldung führen beide in die Anmeldung und sagen das. Das ist kein
+ * Widerspruch zur Anklickbarkeit: Es fehlt nicht die Zuständigkeit, sondern
+ * die Anmeldung, und der Weg dorthin ist der Sinn des Verweises.
  */
 $anonymous = estab_root_menu_item_markup($tile('messages'), false);
 $assert(
     str_contains($anonymous, 'Anmeldung erforderlich')
-        && str_contains($anonymous, 'login_flow=existing')
-        && !str_contains($anonymous, 'estab-menu-card-blocked'),
+        && str_contains($anonymous, 'login_flow=existing'),
     estab_ux_requirement(
         'UX-MENUE-EIN-WEG',
         'Ohne Anmeldung führt die Kachel nicht mehr in die Anmeldung.'

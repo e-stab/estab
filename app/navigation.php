@@ -755,9 +755,6 @@ function estab_navigation_item_markup(
     ?array $identity = null
 ): string {
     $item = estab_navigation_validated_item($item);
-    $blockedReason = $authenticated
-        ? estab_navigation_duty_access_reason($item, $identity)
-        : '';
     $locked = $item['access'] === 'protected' && !$authenticated;
     $url = $locked
         ? estab_navigation_login_url($item['key'])
@@ -788,44 +785,38 @@ function estab_navigation_item_markup(
             . ' title="' . estab_auth_html($item['label']) . '"'
         : '';
 
-    $body = $blockedReason === ''
-        ? '<a class="estab-navigation-link" href="'
-            . estab_auth_html($url) . '" target="_top"'
-            . ' data-estab-nav-key="' . estab_auth_html($item['key']) . '"'
-            . $accessibleLabel
-            . $current . '>'
-            . '<span class="estab-navigation-label">'
-            . estab_auth_html($label) . '</span>'
-            . $hint . $loginHint
-            . '</a>'
-        /*
-         * Ein gesperrtes Ziel trägt kein href. Es bleibt sichtbar, damit der
-         * gemerkte Weg stimmt, und es sagt, woran es liegt -- aber es führt
-         * nirgendwohin, und ein Vorleseprogramm nennt es gesperrt.
-         */
-        : '<span class="estab-navigation-link'
-            . ' estab-navigation-link-blocked"'
-            . $accessibleLabel . '>'
-            . '<span class="estab-navigation-label">'
-            . estab_auth_html($label) . '</span>'
-            . $hint
-            . '<span class="estab-navigation-blocked-reason">'
-            . estab_auth_html($blockedReason) . '</span>'
-            . '</span>';
-
-    return '<li class="estab-navigation-item'
-        . ($blockedReason === '' ? '' : ' estab-navigation-item-blocked')
-        . '"'
+    /*
+     * Jeder Eintrag ist anklickbar -- auch der, den die eigene Funktion
+     * gerade nicht ansteuern darf.
+     *
+     * Vorher stand der Grund im Menue, und der Eintrag fuehrte nirgendwohin.
+     * Das hatte zwei Fehler. Der sichtbare: Ein erklaerender Satz passt nicht
+     * in eine schmale Menuespalte, er zerlegte sie. Der tiefere: Ein Menue
+     * ist zum Hingehen da, nicht zum Erklaeren. Wer wissen will, warum ein
+     * Bereich ihm verschlossen ist, klickt ihn an und liest es dort -- an
+     * der Stelle, an der es ihn betrifft und wo Platz fuer einen ganzen Satz
+     * ist.
+     *
+     * Die Sicherheitslage bleibt unveraendert. Die Navigation war nie eine
+     * Sicherheitsgrenze; jeder Endpunkt prueft Anmeldung, angetretenen
+     * Dienst und Bereichsberechtigung selbst und weist ohne sie ab.
+     */
+    return '<li class="estab-navigation-item"'
         . ' data-estab-navigation-item'
         . ' data-estab-navigation-key="' . estab_auth_html($item['key']) . '"'
         . ' data-estab-navigation-access="'
         . estab_auth_html($item['access']) . '"'
-        . ($blockedReason === ''
-            ? ''
-            : ' data-estab-navigation-blocked aria-disabled="true"')
         . $lockedAttribute
         . $dutyAccessAttribute . '>'
-        . $body
+        . '<a class="estab-navigation-link" href="'
+        . estab_auth_html($url) . '" target="_top"'
+        . ' data-estab-nav-key="' . estab_auth_html($item['key']) . '"'
+        . $accessibleLabel
+        . $current . '>'
+        . '<span class="estab-navigation-label">'
+        . estab_auth_html($label) . '</span>'
+        . $hint . $loginHint
+        . '</a>'
         . '</li>';
 }
 

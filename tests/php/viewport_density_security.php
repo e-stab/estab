@@ -191,27 +191,64 @@ $assert(
     )
 );
 
-// The area navigation must stay reachable without scrolling the sidebar.
+/*
+ * Die Bereichsnavigation muss auf einem flachen Bildschirm erreichbar
+ * bleiben. Frueher klebte sie dafuer mit `position: sticky` am unteren Rand
+ * einer mitscrollenden Seitenleiste -- und legte sich dabei ueber ihre
+ * Nachbarn.
+ *
+ * Die Huelle loest das anders und besser: Das Menue hat eine eigene Spalte
+ * mit eigenem Scrollbereich, und die Navigation steht darin oben. Sie ist
+ * damit ohne jedes Scrollen erreichbar, unabhaengig davon, wie hoch der
+ * Inhalt daneben ist. Geprueft wird deshalb die Spalte, nicht der Klebstoff.
+ */
 $assert(
     preg_match(
-        '~\.estab-message-sidebar\s*>\s*\.estab-navigation\s*\{[^}]*position:\s*sticky~',
+        '~\.estab-shell\s*\{[^}]*grid-template-columns:~s',
         $stylesheet
     ) === 1,
     estab_ux_requirement(
         'UX-FLACHE-BILDSCHIRME',
-        'The area navigation is not pinned inside the sidebar and therefore'
-            . ' stays below the fold on a flat screen'
+        'Die Huelle teilt den Bildschirm nicht in feste Spalten; das Menue'
+            . ' haette dann keinen eigenen Platz'
     )
 );
 $assert(
     preg_match(
-        '~\.estab-message-sidebar\s*\{[^}]*display:\s*flex~',
+        '~\.estab-shell-menu,\s*\.estab-shell-content,\s*'
+            . '\.estab-shell-cockpit\s*\{[^}]*overflow-y:\s*auto~s',
         $stylesheet
     ) === 1,
     estab_ux_requirement(
         'UX-FLACHE-BILDSCHIRME',
-        'The sidebar is not a flex column, so a sticky child has no'
-            . ' containing block to stick within'
+        'Die drei Spalten scrollen nicht fuer sich. Dann scrollt wieder alles'
+            . ' gemeinsam, und die Navigation rutscht unter den Rand'
+    )
+);
+$assert(
+    preg_match(
+        '~\.estab-shell\s*\{[^}]*height:\s*100dvh~s',
+        $stylesheet
+    ) === 1,
+    estab_ux_requirement(
+        'UX-FLACHE-BILDSCHIRME',
+        'Die Huelle nimmt nicht die Hoehe des Fensters ein; die Spalten'
+            . ' haetten dann keinen eigenen Scrollbereich'
+    )
+);
+// Und die Navigation klebt nirgends mehr -- was nicht klebt, ueberlagert
+// auch nichts.
+$assert(
+    preg_match(
+        '~\.estab-shell-menu\s*>\s*\.estab-navigation\s*\{[^}]*'
+            . 'position:\s*static~s',
+        $stylesheet
+    ) === 1,
+    estab_ux_requirement(
+        'UX-FLACHE-BILDSCHIRME',
+        'Die Navigation klebt in der Menuespalte. In einem eigenen'
+            . ' Scrollbereich braucht sie das nicht, und Klebstoff war der'
+            . ' Grund, aus dem sich Elemente beim Scrollen ueberlagerten'
     )
 );
 

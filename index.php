@@ -6,6 +6,7 @@ define('showmenue', true);
 
 require_once __DIR__ . '/app/session_ui.php';
 require_once __DIR__ . '/app/root_menu.php';
+require_once __DIR__ . '/app/app_shell.php';
 require_once __DIR__ . '/app/self_registration.php';
 if (session_status() !== PHP_SESSION_ACTIVE) {
     session_start();
@@ -97,23 +98,19 @@ $registrationUrl = estab_auth_html(
 $applicationUrl = estab_auth_html(estab_application_url('4fach/index.php'));
 
 ?>
-<!doctype html>
-<html lang="de">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <link rel="shortcut icon" href="favicon.ico">
-  <link rel="stylesheet" href="./estab-ui.css">
-  <title><?= $pageTitle ?></title>
-</head>
-<body class="estab-root-page<?= $situation === null ? '' : ' estab-root-page-situation' ?>" style="background-color:<?= $background ?>">
+<?= estab_shell_head((string) $conf_menue['titel']) ?>
+<body class="estab-shell-body estab-root-page<?= $situation === null ? '' : ' estab-root-page-situation' ?>">
+  <div class="estab-shell" data-estab-shell>
+    <?= estab_shell_menu_markup($rootIdentity, $_SERVER) ?>
+    <main class="estab-shell-content estab-root-shell-content"
+      data-estab-shell-content style="background-color:<?= $background ?>">
   <header class="estab-root-header" style="--estab-menu-background:<?= $foreground ?>">
     <img src="<?= $leftSymbol ?>" alt="Taktisches Zeichen Einsatzleitung">
     <p><?= $organisation ?></p>
     <img src="<?= $rightSymbol ?>" alt="Taktisches Zeichen Information und Kommunikation">
   </header>
 
-  <main class="estab-root-main<?= $situation === null ? '' : ' estab-root-main-situation' ?>">
+  <div class="estab-root-main<?= $situation === null ? '' : ' estab-root-main-situation' ?>">
 <?php if ($situation !== null): ?>
     <?= estab_situation_markup($situation) ?>
 <?php else: ?>
@@ -160,9 +157,12 @@ $applicationUrl = estab_auth_html(estab_application_url('4fach/index.php'));
       <?= estab_root_menu_markup($zusatz_menue, $authenticated, false, $rootIdentity) ?>
     </nav>
 <?php endif; ?>
-  </main>
+  </div>
 <?php if ($situation !== null): ?>
   <?= estab_situation_shortcut_script() ?>
 <?php endif; ?>
+    </main>
+    <?= estab_shell_cockpit_markup() ?>
+  </div>
 </body>
 </html>

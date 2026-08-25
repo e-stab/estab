@@ -51,20 +51,23 @@ $active = estab_incident_ui_state_from_status([
     'ort' => '<Leitstelle>',
 ]);
 $activeMarkup = estab_incident_ui_markup($active, true, true);
+/*
+ * Der Kasten steht dauerhaft offen und nennt genau eines: welche
+ * Fuehrungsstelle gerade arbeitet. Kennung, Name und Betriebsart bleiben als
+ * Merkmale am Element -- sie stehen fuer die Auswertung und fuer
+ * Vorleseprogramme bereit, ohne Platz zu nehmen.
+ */
 $assert(
     str_contains($activeMarkup, 'data-estab-incident-state="active"')
         && str_contains($activeMarkup, 'data-estab-incident-id="7"')
-        && str_contains($activeMarkup, 'EL-2026-007')
+        && str_contains(
+            $activeMarkup,
+            'data-estab-incident-code="EL-2026-007"'
+        )
         && str_contains(
             $activeMarkup,
             'data-estab-incident-permission-mode="STRICT"'
         )
-        && str_contains(
-            $activeMarkup,
-            'Berechtigungsmodus: <strong>Streng</strong>'
-        )
-        && str_contains($activeMarkup, '29.07.2026 12:34')
-        && str_contains($activeMarkup, '&lt;Leitstelle&gt;')
         && str_contains(
             $activeMarkup,
             'data-estab-command-post-name="FüSt &quot;Nord&quot; '
@@ -79,6 +82,38 @@ $assert(
         && !str_contains($activeMarkup, '<script>alert(1)</script>')
         && !str_contains($activeMarkup, 'incident-input-guard'),
     'Active incident banner is incomplete or unsafe'
+);
+
+/*
+ * Der Einsatzkasten steht dauerhaft offen. Er nennt deshalb nur, was
+ * dauerhaft gebraucht wird: Fuehrungsstelle, Kennung, Name und die
+ * Betriebsart als Wort. Beginn und Ort aendern sich waehrend eines Einsatzes
+ * nicht und stehen im Fuehrungsstellenbetrieb; was die Betriebsart bedeutet,
+ * sagt der Titel.
+ */
+/*
+ * Geprueft wird der sichtbare Text, nicht die Auszeichnung: Kennung, Name
+ * und Betriebsart stehen weiterhin als Merkmale und in der Beschriftung fuer
+ * Vorleseprogramme -- sie sollen nur keinen Platz mehr nehmen.
+ */
+$activeVisible = preg_replace('~\s+~u', ' ', html_entity_decode(
+    (string) preg_replace('~<[^>]*>~', ' ', $activeMarkup),
+    ENT_QUOTES | ENT_HTML5,
+    'UTF-8'
+));
+$assert(
+    is_string($activeVisible)
+        && !str_contains($activeVisible, '29.07.2026 12:34')
+        && !str_contains($activeVisible, 'Leitstelle')
+        && !str_contains($activeVisible, 'Berechtigungsmodus')
+        && !str_contains($activeVisible, 'EL-2026-007'),
+    'incident banner carries detail nobody needs permanently'
+);
+$assert(
+    is_string($activeVisible)
+        && str_contains($activeVisible, 'Aktive Führungsstelle')
+        && str_contains($activeVisible, 'FüSt "Nord"'),
+    'incident banner no longer names the command post that is working'
 );
 $looseStatus = [
     'active_einsatz_id' => 9,
@@ -99,17 +134,13 @@ $assert(
             $looseMarkup,
             'data-estab-incident-permission-mode="LOOSE"'
         )
-        && str_contains(
-            $looseMarkup,
-            'Berechtigungsmodus: <strong>Locker</strong>'
-        )
-        && str_contains(
-            $looseMarkup,
-            'Rechte folgen fester Kontofunktion und ausdrücklich '
-                . 'vergebenen Zusatzfunktionen; eine formale Dienstschicht '
-                . 'ist nicht erforderlich.'
-        ),
-    'LOOSE mode is not visibly and unambiguously identified'
+        /*
+         * Die Betriebsart bleibt als Merkmal erkennbar -- der Kasten selbst
+         * nennt sie nicht mehr, weil sie sich waehrend eines Einsatzes nicht
+         * aendert und im Fuehrungsstellenbetrieb steht.
+         */
+        && !str_contains($looseMarkup, 'Berechtigungsmodus'),
+    'LOOSE mode is not unambiguously identified'
 );
 $assert(
     str_contains($activeMarkup, 'estab-incident-indicator-compact')

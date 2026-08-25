@@ -1106,6 +1106,26 @@ function estab_sidebar_account_function_markup(
 }
 
 /**
+ * Die Glocke am Knopf fuer die Hinweistoene.
+ *
+ * Gezeichnet statt gesetzt: ein Sonderzeichen sieht auf jedem Geraet anders
+ * aus und behaelt seine eigene Farbe. Der Schraegstrich gehoert zum Bild und
+ * wird ausgeblendet, sobald die Toene an sind -- durchgestrichen heisst stumm.
+ */
+function estab_sidebar_bell_markup(): string
+{
+    return '<svg class="estab-sidebar-sound-bell" viewBox="0 0 24 24"'
+        . ' width="18" height="18" aria-hidden="true" focusable="false"'
+        . ' fill="none" stroke="currentColor" stroke-width="2"'
+        . ' stroke-linecap="round" stroke-linejoin="round">'
+        . '<path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"></path>'
+        . '<path d="M13.7 21a2 2 0 0 1-3.4 0"></path>'
+        . '<line class="estab-sidebar-sound-bell-slash"'
+        . ' x1="3" y1="21" x2="21" y2="3"></line>'
+        . '</svg>';
+}
+
+/**
  * Render queue, server time and account activity by occupied function.
  *
  * $secondaryQueues carries every further worn function beyond the primary one
@@ -1126,7 +1146,8 @@ function estab_sidebar_status_markup(
     string $incidentMarkup = '',
     ?array $operationalIdentity = null,
     array $secondaryQueues = [],
-    array $dutyFunctions = []
+    array $dutyFunctions = [],
+    string $identityMarkup = ''
 ): string {
     $identity = estab_auth_session_identity($session);
     if ($identity === null) {
@@ -1439,19 +1460,30 @@ function estab_sidebar_status_markup(
         'unavailable' => 'Statusdaten nicht verfügbar',
         default => 'Status aktuell',
     };
+    /*
+     * Die Hinweistoene sind ein Knopf mit einer Glocke, nicht ein Satz.
+     *
+     * Durchgestrichen heisst stumm, offen heisst hoerbar -- das ist dasselbe
+     * Zeichen, das jedes Geraet dafuer benutzt, und es braucht keine
+     * Uebersetzung. Der Zustand steht zusaetzlich in aria-pressed und im
+     * Titel, damit Vorleseprogramme und der Mauszeiger ihn ebenfalls
+     * bekommen; die Rueckmeldung bleibt fuer sie erhalten, nimmt aber keine
+     * Zeile mehr.
+     */
     $soundControl = $soundUrl === null
         ? ''
-        : '<div class="estab-sidebar-sound-control">'
-            . '<button class="estab-sidebar-sound-toggle" type="button"'
+        : '<button class="estab-sidebar-sound-toggle" type="button"'
             . ' data-estab-sound-toggle'
             . ' data-estab-sound-url="' . estab_auth_html($soundUrl) . '"'
-            . ' aria-pressed="false">'
-            . '<span data-estab-sound-label>Hinweistöne aktivieren</span>'
+            . ' aria-pressed="false"'
+            . ' title="Hinweistöne aktivieren">'
+            . estab_sidebar_bell_markup()
+            . '<span class="estab-visually-hidden" data-estab-sound-label>'
+            . 'Hinweistöne aktivieren</span>'
             . '</button>'
-            . '<span class="estab-sidebar-sound-feedback"'
+            . '<span class="estab-sidebar-sound-feedback estab-visually-hidden"'
             . ' data-estab-sound-feedback role="status"'
-            . ' aria-live="polite">Hinweistöne sind ausgeschaltet.</span>'
-            . '</div>';
+            . ' aria-live="polite">Hinweistöne sind ausgeschaltet.</span>';
     $notificationText = $notificationSoundUrl === null
         ? ''
         : '<span class="estab-visually-hidden"'
@@ -1478,6 +1510,21 @@ function estab_sidebar_status_markup(
         . '<span>' . estab_auth_html($now->format('d.m.Y')) . '</span>'
         . '</time>'
         . '</div>'
+        /*
+         * Wer angemeldet ist, die Glocke und der Weg hinaus stehen in einer
+         * Zeile unter Warteschlange und Uhr -- nicht in einem eigenen Feld
+         * darunter. Es sind drei kurze Angaben; ein eigener Kasten dafuer
+         * kostete mehr Platz als sie selbst.
+         */
+        . ($identityMarkup === '' && $soundControl === ''
+            ? ''
+            : '<div class="estab-sidebar-identity-row">'
+                . $identityMarkup
+                . ($soundControl === ''
+                    ? ''
+                    : '<div class="estab-sidebar-identity-actions">'
+                        . $soundControl . '</div>')
+                . '</div>')
         . $queueStrip
         . $incidentMarkup
         . '<div class="estab-sidebar-freshness"'
@@ -1488,6 +1535,14 @@ function estab_sidebar_status_markup(
         . '<span data-estab-sidebar-freshness-text>'
         . estab_auth_html($freshnessText) . '</span>'
         . '</div>'
+        /*
+         * Wer gerade besetzt ist, steht offen. Ein zugeklapptes Raster spart
+         * Platz, kostet aber den Blick, um dessentwillen die Spalte da ist:
+         * Man sieht dann nicht mehr, ob eine Station unbesetzt ist, sondern
+         * muss danach fragen.
+         */
+        . '<div class="estab-sidebar-presence-block"'
+        . ' data-estab-sidebar-presence>'
         . '<div class="estab-sidebar-presence-heading">'
         . '<h2>Aktivität nach ' . $presenceScope . '</h2>'
         . '<span data-estab-online-count="' . $onlineUsers . '">'
@@ -1504,7 +1559,7 @@ function estab_sidebar_status_markup(
         . estab_auth_html($currentFunctionText) . '</span>'
         . '<span><i class="offline" aria-hidden="true"></i>Abgemeldet</span>'
         . '</div>'
-        . $soundControl
+        . '</div>'
         . $notificationText
         . '</section>';
 }

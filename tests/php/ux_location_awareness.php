@@ -201,18 +201,47 @@ $active = estab_incident_ui_markup([
         'estab_permission_mode' => 'STRICT',
     ],
 ]);
+/*
+ * Sichtbar steht die Führungsstelle -- und nur sie.
+ *
+ * Anfangs standen dort auch Kennung, Name, Beginn, Ort und ein Absatz über
+ * die Betriebsart. Der Betreiber hat das im Betrieb verworfen: Es ist eine
+ * Spalte, die dauerhaft offensteht, und alles darin wird bei jedem Blick
+ * mitgelesen. Für die Frage „für welchen Einsatz arbeite ich gerade" genügt
+ * der Name der Führungsstelle; er wird je Einsatz vergeben. Wer Kennung und
+ * Namen braucht, findet sie im Führungsstellenbetrieb.
+ */
 $activeText = $visibleText($active);
+$assert(
+    str_contains($activeText, 'Führungsstelle Heinsberg'),
+    estab_ux_requirement(
+        'UX-STANDORT',
+        'Die Einsatzanzeige nennt die Führungsstelle nicht sichtbar; im '
+            . 'Markup zu stehen genügt nicht.'
+    )
+);
+$assert(
+    !str_contains($activeText, 'HS-2026-04')
+        && !str_contains($activeText, 'Berechtigungsmodus'),
+    estab_ux_requirement(
+        'UX-STANDORT',
+        'Die Einsatzanzeige trägt wieder Angaben, die sich während eines '
+            . 'Einsatzes nicht ändern. Eine Spalte, die immer offensteht, '
+            . 'wird bei jedem Blick mitgelesen.'
+    )
+);
+// Für die Auswertung und für Vorleseprogramme bleiben sie erhalten.
 foreach (
-    ['HS-2026-04' => 'die Einsatzkennung',
-        'Übung Rheinhochwasser' => 'den Einsatznamen',
-        'Führungsstelle Heinsberg' => 'die Führungsstelle'] as $value => $what
+    ['data-estab-incident-code="HS-2026-04"' => 'die Einsatzkennung',
+        'data-estab-incident-name="Übung Rheinhochwasser"' => 'den Einsatznamen']
+    as $marker => $what
 ) {
     $assert(
-        str_contains($activeText, $value),
+        str_contains($active, $marker),
         estab_ux_requirement(
             'UX-STANDORT',
-            'Die Einsatzanzeige nennt ' . $what . ' nicht sichtbar; im '
-                . 'Markup zu stehen genügt nicht.'
+            'Die Einsatzanzeige führt ' . $what . ' nicht mehr als Merkmal; '
+                . 'damit ginge die Angabe ganz verloren.'
         )
     );
 }

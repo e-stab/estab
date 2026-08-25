@@ -111,8 +111,15 @@ foreach ($situations as $situation => $identity) {
     }
 }
 
-/* --- Jeder gesperrte Eintrag trägt einen Grund --- */
+/* --- Und jeder Eintrag ist anklickbar --- */
 
+/*
+ * Auch der, den die eigene Funktion gerade nicht ansteuern darf. Der erste
+ * Anlauf hatte solche Eintraege im Menue gesperrt und den Grund dort
+ * hingeschrieben; im Betrieb sprengte der Satz die schmale Spalte. Ein Menue
+ * ist zum Hingehen da. Wer wissen will, warum ein Bereich ihm verschlossen
+ * ist, geht hin und liest es dort.
+ */
 foreach ($situations as $situation => $identity) {
     $markup = estab_navigation_markup(
         true,
@@ -136,122 +143,72 @@ foreach ($situations as $situation => $identity) {
         )
     );
     foreach ($items as [$whole, $key, $body]) {
-        $blocked = str_contains($whole, 'data-estab-navigation-blocked');
-        if (!$blocked) {
-            $assert(
-                str_contains($body, '<a '),
-                estab_ux_requirement(
-                    'UX-MENUE-ORTSKONSTANZ',
-                    'Der Eintrag ' . $key . ' ist in der Lage ' . $situation
-                        . ' weder ansteuerbar noch als gesperrt gekennzeichnet.'
-                )
-            );
-            continue;
-        }
         $assert(
-            !str_contains($body, '<a ') && !str_contains($body, 'href='),
+            str_contains($body, '<a ') && str_contains($body, 'href='),
             estab_ux_requirement(
                 'UX-MENUE-ORTSKONSTANZ',
-                'Der gesperrte Eintrag ' . $key . ' ist in der Lage '
-                    . $situation . ' trotzdem anklickbar.'
+                'Der Eintrag ' . $key . ' ist in der Lage ' . $situation
+                    . ' nicht anklickbar. Jeder Eintrag führt an sein Ziel; '
+                    . 'ob dort jemand hineindarf, sagt das Ziel.'
             )
         );
         $assert(
-            str_contains($body, 'estab-navigation-blocked-reason'),
+            !str_contains($whole, 'aria-disabled'),
             estab_ux_requirement(
                 'UX-MENUE-ORTSKONSTANZ',
-                'Der gesperrte Eintrag ' . $key . ' sagt in der Lage '
-                    . $situation . ' nicht, warum er gesperrt ist.'
+                'Der Eintrag ' . $key . ' ist in der Lage ' . $situation
+                    . ' als gesperrt ausgezeichnet.'
             )
         );
-        if (
-            preg_match(
-                '~estab-navigation-blocked-reason[^>]*>([^<]+)<~',
-                $body,
-                $reason
-            ) === 1
-        ) {
-            $assert(
-                mb_strlen(trim($reason[1])) >= 20,
-                estab_ux_requirement(
-                    'UX-MENUE-ORTSKONSTANZ',
-                    'Der Grund am Eintrag ' . $key . ' lautet „'
-                        . trim($reason[1]) . '“ und erklärt nichts.'
-                )
-            );
-        }
         $assert(
-            str_contains($whole, 'aria-disabled="true"'),
+            !str_contains($body, 'estab-navigation-blocked-reason'),
             estab_ux_requirement(
                 'UX-MENUE-ORTSKONSTANZ',
-                'Der gesperrte Eintrag ' . $key . ' ist für '
-                    . 'Vorleseprogramme nicht als gesperrt erkennbar.'
+                'Der Eintrag ' . $key . ' trägt seinen Grund im Menü. Ein '
+                    . 'erklärender Satz passt nicht in eine Menüspalte -- er '
+                    . 'gehört an das Ziel.'
             )
         );
     }
 }
 
-/* --- Und es wird wirklich gesperrt, wo es zu sperren gibt --- */
+/* --- Und das Ziel sagt selbst, wer hineindarf --- */
 
 /*
- * Ein Menü, das nie sperrt, bestünde diesen Test ebenfalls. Deshalb wird
- * geprüft, dass die geschützten Bereiche für eine fremde Funktion tatsächlich
- * gesperrt und für die zuständige offen sind.
+ * Ohne diesen Nachweis waere die Umstellung ein Verlust: Wer auf einen
+ * fremden Bereich klickt, bekaeme eine leere Abweisung statt einer Auskunft.
  */
-$blockedKeysFor = static function (array $identity) use ($entries): array {
-    $markup = estab_navigation_markup(
-        true,
-        ['SCRIPT_NAME' => '/4fach/vordrucke.php'],
-        false,
-        false,
-        $identity
+foreach (
+    [
+        '4fueltg/ue_ltg.php' => 'Lage',
+        '4fach/nachwea.php' => 'Fernmelder',
+    ] as $endpoint => $whoMayEnter
+) {
+    $source = file_get_contents($root . '/' . $endpoint);
+    $assert(
+        is_string($source),
+        'Der Endpunkt ' . $endpoint . ' ist nicht lesbar.'
     );
-    preg_match_all(
-        '~<li[^>]*data-estab-navigation-key="([a-z0-9-]+)"[^>]*'
-            . 'data-estab-navigation-blocked~s',
-        $markup,
-        $keys
+    if (!is_string($source)) {
+        continue;
+    }
+    $assert(
+        str_contains($source, 'Keine Berechtigung'),
+        estab_ux_requirement(
+            'UX-MENUE-ORTSKONSTANZ',
+            'Der Endpunkt ' . $endpoint . ' weist ohne Auskunft ab.'
+        )
     );
-    return $keys[1];
-};
-
-$s2 = ['funktion' => 'S2', 'rolle' => 'Stab', 'estab_permission_mode' => 'LOOSE'];
-$ldf = ['funktion' => 'LdF', 'rolle' => 'Fernmelder', 'estab_permission_mode' => 'LOOSE'];
-
-$assert(
-    in_array('tracking', $blockedKeysFor($s2), true)
-        && !in_array('message-overview', $blockedKeysFor($s2), true),
-    estab_ux_requirement(
-        'UX-MENUE-ORTSKONSTANZ',
-        'S 2 findet die Nachweisung offen oder die Meldungsübersicht '
-            . 'gesperrt.'
-    )
-);
-$assert(
-    in_array('message-overview', $blockedKeysFor($ldf), true)
-        && !in_array('tracking', $blockedKeysFor($ldf), true),
-    estab_ux_requirement(
-        'UX-MENUE-ORTSKONSTANZ',
-        'Der Leiter des Fernmeldebetriebes findet die Meldungsübersicht '
-            . 'offen oder die Nachweisung gesperrt.'
-    )
-);
-
-// Und im Modus STRENG ohne angenommenen Dienst führt nur ein Weg weiter.
-$strict = [
-    'funktion' => 'S2', 'rolle' => 'Stab', 'estab_permission_mode' => 'STRICT',
-];
-$strictBlocked = $blockedKeysFor($strict);
-$assert(
-    !in_array('command-post', $strictBlocked, true)
-        && in_array('messages', $strictBlocked, true),
-    estab_ux_requirement(
-        'UX-MENUE-ORTSKONSTANZ',
-        'Ohne angetretenen Dienst führt entweder kein Weg zum '
-            . 'Führungsstellenbetrieb oder der Nachrichtenvordruck steht '
-            . 'offen.'
-    )
-);
+    $assert(
+        str_contains($source, $whoMayEnter),
+        estab_ux_requirement(
+            'UX-MENUE-ORTSKONSTANZ',
+            'Der Endpunkt ' . $endpoint . ' sagt nicht, welcher Funktion er '
+                . 'offensteht. Eine Abweisung ohne Grund schickt den '
+                . 'Bedienenden auf die Suche.'
+        )
+    );
+}
 
 /* --- Das Menü ist keine Sicherheitsgrenze --- */
 

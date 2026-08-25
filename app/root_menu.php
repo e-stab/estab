@@ -78,15 +78,13 @@ function estab_root_menu_item_markup(
 
     $locked = $access === 'application' && !$authenticated;
     /*
-     * Die Kachel und der Menueintrag fuehren in denselben Bereich. Sperrt das
-     * Menue, sperrt die Kachel -- sonst lernt der Bedienende zwei Regeln
-     * statt einer und traut am Ende keiner von beiden. Der Grund ist
-     * derselbe, damit er nicht zweimal formuliert und irgendwann
-     * unterschiedlich gepflegt wird.
+     * Die Kachel und der Menueintrag fuehren in denselben Bereich und
+     * verhalten sich gleich: Beide sind anklickbar, auch dorthin, wo die
+     * eigene Funktion nichts zu suchen hat. Wer wissen will, warum, klickt
+     * und liest es am Ziel -- dort ist Platz fuer einen ganzen Satz, und
+     * dort betrifft es ihn.
      */
-    $blockedReason = ($authenticated && !$locked && $navigationItem !== null)
-        ? estab_navigation_duty_access_reason($navigationItem, $identity)
-        : '';
+    $blockedReason = '';
     $href = $locked
         ? estab_navigation_login_url(
             $navigationItem === null ? null : $navigationItem['key']

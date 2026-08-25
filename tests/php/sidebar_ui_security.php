@@ -580,6 +580,7 @@ $assert(
         )
         && str_contains($markup, '>Status aktuell</span>')
         && str_contains($markup, '<h2>Aktivität nach Primärfunktion</h2>')
+        && str_contains($markup, 'data-estab-sidebar-presence')
         && str_contains(
             $markup,
             'aria-label="Anmeldeaktivität nach Primärfunktion"'
@@ -753,9 +754,31 @@ $assert(
             'data-estab-sound-url="/4fach/audio/notify_aw.wav"'
         )
         && str_contains($notificationMarkup, 'aria-pressed="false"')
+        /*
+         * Der Knopf zeigt eine Glocke: offen heisst hoerbar, durchgestrichen
+         * heisst stumm. Sie wird gezeichnet und nicht als Sonderzeichen
+         * gesetzt -- ein Sonderzeichen sieht auf jedem Geraet anders aus und
+         * behaelt seine eigene Farbe. Der Schraegstrich muss im Bild stecken,
+         * sonst gibt es den stummen Zustand nur in der Beschriftung. Die
+         * bleibt fuer Vorleseprogramme erhalten, der Titel fuer den Mauszeiger.
+         */
         && str_contains(
             $notificationMarkup,
-            '<span data-estab-sound-label>Hinweistöne aktivieren</span>'
+            '<svg class="estab-sidebar-sound-bell"'
+        )
+        && str_contains($notificationMarkup, 'aria-hidden="true"')
+        && str_contains(
+            $notificationMarkup,
+            'class="estab-sidebar-sound-bell-slash"'
+        )
+        && str_contains(
+            $notificationMarkup,
+            'title="Hinweistöne aktivieren"'
+        )
+        && str_contains(
+            $notificationMarkup,
+            '<span class="estab-visually-hidden" data-estab-sound-label>'
+                . 'Hinweistöne aktivieren</span>'
         ),
     'notification status omitted its signal or accessible sound toggle'
 );

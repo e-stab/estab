@@ -35,9 +35,9 @@ function estab_ux_rules(): array
             'reference' => 'Ortskonstanz der Navigation',
             'requirement' => 'Die Navigation steht auf jeder Seite an '
                 . 'derselben Stelle, mit denselben Einträgen in derselben '
-                . 'Reihenfolge. Ein Ziel, das die eigene Funktion gerade '
-                . 'nicht ansteuern darf, bleibt sichtbar und inaktiv mit '
-                . 'einem Grund; es verschwindet nicht.',
+                . 'Reihenfolge. Jeder Eintrag ist anklickbar; ein Ziel, das '
+                . 'die eigene Funktion nicht ansteuern darf, erklärt das auf '
+                . 'seiner eigenen Seite und nicht im Menü.',
         ],
         'UX-MENUE-EIN-WEG' => [
             'origin' => ESTAB_UX_ORIGIN_BETREIBER,
@@ -49,10 +49,11 @@ function estab_ux_rules(): array
         'UX-STANDORT' => [
             'origin' => ESTAB_UX_ORIGIN_BETREIBER,
             'reference' => 'Standort auf jeder Seite',
-            'requirement' => 'Auf jeder Seite ist erkennbar, für welchen '
-                . 'Einsatz gearbeitet wird, in welcher Funktion der '
+            'requirement' => 'Auf jeder Seite ist erkennbar, für welche '
+                . 'Führungsstelle gearbeitet wird, in welcher Funktion der '
                 . 'Bedienende handelt und in welchem Bereich er sich '
-                . 'befindet.',
+                . 'befindet. Angaben, die sich während eines Einsatzes nicht '
+                . 'ändern, stehen nicht dauerhaft im Blick.',
         ],
         'UX-EINE-SEITE' => [
             'origin' => ESTAB_UX_ORIGIN_BETREIBER,

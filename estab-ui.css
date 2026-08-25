@@ -331,51 +331,10 @@
     font-size: 0.7rem;
 }
 
-/*
- * Ein Ziel, das die eigene Funktion gerade nicht ansteuern darf, bleibt an
- * seinem Platz stehen. Es ist erkennbar gedaempft, reagiert nicht auf den
- * Zeiger und nennt seinen Grund, sobald man mit Zeiger oder Tastatur bei ihm
- * ist. Wer den Weg von gestern kennt, findet ihn heute an derselben Stelle.
- */
-.estab-navigation-item-blocked .estab-navigation-link {
-    color: #93a7bd;
-    cursor: default;
-    position: relative;
-}
-
-.estab-navigation-item-blocked .estab-navigation-label::after {
-    content: "  —";
-    font-size: 0.7rem;
-}
-
-.estab-navigation-blocked-reason {
-    background: #16283c;
-    border: 1px solid #45627f;
-    border-radius: 0.25rem;
-    color: #e6edf5;
-    display: none;
-    font-size: 0.72rem;
-    font-weight: 400;
-    left: 0;
-    max-width: 18rem;
-    padding: 0.3rem 0.45rem;
-    position: absolute;
-    top: 100%;
-    white-space: normal;
-    z-index: 20;
-}
-
-.estab-navigation-item-blocked:hover .estab-navigation-blocked-reason,
-.estab-navigation-item-blocked:focus-within .estab-navigation-blocked-reason {
-    display: block;
-}
-
-/* In der Seitenleiste ist Platz: Dort steht der Grund ohnehin. */
-.estab-navigation-sidebar .estab-navigation-blocked-reason {
-    display: block;
-    position: static;
-    max-width: none;
-}
+/* Hier stand die Darstellung gesperrter Menueeintraege: gedaempft, nicht
+   anklickbar, mit dem Grund als Blase darunter. Im Betrieb sprengte der Satz
+   die schmale Spalte -- ein Menue ist zum Hingehen da, nicht zum Erklaeren.
+   Jeder Eintrag ist jetzt anklickbar, und das Ziel gibt die Auskunft. */
 
 .estab-navigation-login-hint {
     border: 0;
@@ -529,6 +488,142 @@
     background: #111516;
 }
 
+/* ------------------------------------------------------------------ *
+ * Die Huelle: links Menue, mitte Inhalt, rechts Cockpit.
+ *
+ * Zwei Spalten stehen still, eine aendert sich. Wer sich einen Weg gemerkt
+ * hat, findet ihn auf jeder Seite an derselben Stelle -- das war vorher
+ * nicht so: Die Startseite trug ihr Menue oben als Kacheln, der
+ * Nachrichtenbereich links in einem Rahmen, die Werkzeugseiten gar keines.
+ *
+ * Jede Spalte scrollt fuer sich. Das ist der eigentliche Grund fuer diese
+ * Bauweise: Solange alles in einem Scrollbereich lag, musste die Navigation
+ * mit `position: sticky` am Rand festgehalten werden, und geriet dabei ueber
+ * ihre Nachbarn. Drei eigene Scrollbereiche brauchen kein Kleben, und was
+ * nicht klebt, ueberlagert auch nichts.
+ * ------------------------------------------------------------------ */
+.estab-shell-body {
+    background: #0b1d31;
+    /* Dieselbe Schrift wie ueberall sonst. Ohne diese Zeile faellt die
+       Huelle auf die Vorgabe des Browsers zurueck, und das Menue saehe
+       anders aus als der Vordruck daneben. */
+    font-family: Arial, Helvetica, sans-serif;
+    margin: 0;
+    min-height: 100dvh;
+    overflow: hidden;
+}
+
+.estab-shell {
+    display: grid;
+    grid-template-columns:
+        clamp(13rem, 15vw, 16rem)
+        minmax(0, 1fr)
+        clamp(15rem, 19vw, 20rem);
+    height: 100dvh;
+    min-height: 0;
+    min-width: 0;
+}
+
+.estab-shell-menu,
+.estab-shell-content,
+.estab-shell-cockpit {
+    min-height: 0;
+    min-width: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+
+/* Die Infosammlung bringt ihre eigene Zweiteilung mit: links die Liste der
+   Dokumente, rechts das gewaehlte. Das ist ihr Inhalt und steht deshalb in
+   der mittleren Spalte, nicht neben der Huelle. */
+.estab-bos-panes {
+    display: grid;
+    grid-template-columns: clamp(14.5rem, 22%, 20rem) minmax(0, 1fr);
+    height: 100%;
+    min-height: 0;
+    min-width: 0;
+}
+
+.estab-bos-list-frame,
+.estab-bos-content-frame {
+    border: 0;
+    display: block;
+    height: 100%;
+    min-height: 0;
+    min-width: 0;
+    width: 100%;
+}
+
+.estab-bos-list-frame {
+    background: #16283c;
+    border-right: 1px solid #45627f;
+}
+
+.estab-bos-content-frame {
+    background: #ffffff;
+}
+
+.estab-shell-menu {
+    background: #0b1d31;
+    border-right: 2px solid #45627f;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    padding: 0.6rem 0.5rem;
+}
+
+.estab-shell-brand {
+    color: #ffffff;
+    font-size: 1.05rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    padding: 0.2rem 0.35rem 0.4rem;
+    text-decoration: none;
+}
+
+.estab-shell-brand:hover,
+.estab-shell-brand:focus-visible {
+    text-decoration: underline;
+}
+
+.estab-shell-content {
+    background: #eef2f6;
+    box-sizing: border-box;
+}
+
+/* Der Nachrichtenbereich setzt in die Mitte einen Rahmen; er soll die
+   Spalte fuellen und keinen zweiten Scrollbalken erzeugen. */
+.estab-shell-content--frame {
+    overflow: hidden;
+    padding: 0;
+}
+
+.estab-shell-content--frame > iframe {
+    border: 0;
+    display: block;
+    height: 100%;
+    width: 100%;
+}
+
+.estab-shell-cockpit {
+    background: #0b1d31;
+    border: 0;
+    border-left: 2px solid #45627f;
+    display: block;
+    height: 100%;
+    width: 100%;
+}
+
+/* Die Navigation steht in der Menuespalte und braucht dort weder eigenen
+   Grund noch Klebstoff -- die Spalte ist ihr Platz. */
+.estab-shell-menu > .estab-navigation {
+    background: transparent;
+    bottom: auto;
+    margin-top: 0;
+    position: static;
+}
+
 .estab-message-workspace-grid {
     display: grid;
     grid-template-columns: clamp(17rem, 20vw, 19rem) minmax(0, 1fr);
@@ -566,7 +661,10 @@
     display: none;
 }
 
-.estab-message-sidebar-page {
+/* Das Cockpit und die Dokumentenliste der Infosammlung stehen beide in einem
+   eigenen Dokument und teilen sich deshalb den dunklen Grund der Huelle. */
+.estab-cockpit-page,
+.estab-bos-list-page {
     background: #0b1d31;
     color: #ffffff;
     font-family: Arial, Helvetica, sans-serif;
@@ -582,16 +680,12 @@
     padding: 0.75rem;
 }
 
-/* Die Bereichsnavigation ist der einzige Weg aus dem aktuellen Arbeitsschritt
-   heraus und stand bisher am Ende einer rund 1500 px hohen Spalte. Als
-   letztes Element einer Flex-Spalte bleibt sie am unteren Rand sichtbar,
-   ohne die Seitenleiste bis zum Ende scrollen zu muessen. */
-.estab-message-sidebar > .estab-navigation {
-    background: #102641;
-    bottom: 0;
-    margin-top: auto;
-    position: sticky;
-}
+/* Hier klebte die Bereichsnavigation mit `position: sticky` am unteren Rand
+   der mitscrollenden Seitenleiste, damit sie erreichbar blieb. Genau das war
+   der Grund, aus dem sich beim Scrollen Elemente ueberlagerten: Ein klebendes
+   Element mit eigenem Grund und ohne Stapelangabe legt sich ueber seine
+   Nachbarn. Die Navigation steht jetzt in der Menuespalte der Huelle, die
+   fuer sich scrollt -- sie muss nirgends mehr kleben. */
 
 .estab-sidebar-status,
 .estab-session-bar-sidebar,
@@ -821,6 +915,14 @@
     background: #f2c966;
 }
 
+/* Der Rahmen um das Aktivitaetsraster. Er hiess frueher wie eine einzelne
+   Zelle und uebernahm deren Zeilenlayout -- Ueberschrift, Zaehler, Raster und
+   Legende standen dann nebeneinander statt untereinander. */
+.estab-sidebar-presence-block {
+    display: block;
+    min-width: 0;
+}
+
 .estab-sidebar-presence-heading {
     align-items: baseline;
     border-top: 1px solid #45627f;
@@ -830,6 +932,82 @@
     margin-top: 0.7rem;
     padding-top: 0.65rem;
 }
+
+/* Anmeldung, Glocke und Abmelden stehen in einer Zeile unter Warteschlange
+   und Uhr. Drei kurze Angaben brauchen keinen eigenen Kasten. */
+.estab-sidebar-identity-row {
+    align-items: center;
+    border-top: 1px solid #2c4a68;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    justify-content: space-between;
+    margin-top: 0.5rem;
+    padding-top: 0.5rem;
+}
+
+.estab-sidebar-identity-row .estab-session-bar {
+    background: transparent;
+    border: 0;
+    box-shadow: none;
+    flex: 1 1 auto;
+    margin: 0;
+    min-width: 0;
+    padding: 0;
+}
+
+.estab-sidebar-identity-row .estab-session-topline {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    justify-content: space-between;
+}
+
+.estab-sidebar-identity-actions {
+    align-items: center;
+    display: flex;
+    flex: 0 0 auto;
+    gap: 0.3rem;
+}
+
+/* Die Glocke: offen heisst hoerbar, durchgestrichen heisst stumm. Dasselbe
+   Zeichen benutzt jedes Geraet dafuer, und es braucht keine Uebersetzung. */
+.estab-sidebar-sound-toggle {
+    align-items: center;
+    background: #16283c;
+    border: 1px solid #45627f;
+    border-radius: 7px;
+    color: #e6edf5;
+    cursor: pointer;
+    display: inline-flex;
+    justify-content: center;
+    min-height: 2.2rem;
+    min-width: 2.2rem;
+    padding: 0.25rem;
+}
+
+.estab-sidebar-sound-toggle:hover,
+.estab-sidebar-sound-toggle:focus-visible {
+    background: #1f3a5a;
+}
+
+.estab-sidebar-sound-bell {
+    display: block;
+}
+
+/* Stumm: der Strich liegt ueber der Glocke. Laut: er ist weg. Mehr Zustaende
+   gibt es nicht, und beide sind aus einem Meter Abstand zu unterscheiden. */
+.estab-sidebar-sound-toggle[aria-pressed="true"] .estab-sidebar-sound-bell-slash {
+    display: none;
+}
+
+.estab-sidebar-sound-toggle[aria-pressed="true"] {
+    background: #1d4b2f;
+    border-color: #67d5aa;
+    color: #8ce8bd;
+}
+
 
 .estab-sidebar-presence-heading h2 {
     font-size: 0.86rem;
@@ -845,7 +1023,7 @@
 .estab-sidebar-presence-grid {
     display: grid;
     gap: 0.3rem;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(5.6rem, 1fr));
     list-style: none;
     margin: 0.55rem 0 0;
     padding: 0;
@@ -868,8 +1046,12 @@
 }
 
 .estab-sidebar-presence-label {
+    font-size: 0.7rem;
+    hyphens: auto;
     min-width: 0;
-    overflow-wrap: anywhere;
+    overflow-wrap: break-word;
+    text-align: center;
+    word-break: normal;
 }
 
 .estab-sidebar-presence-has-note {
@@ -1105,8 +1287,8 @@ audio[data-estab-sidebar-audio] {
 
 .estab-navigation-sidebar .estab-navigation-list {
     display: grid;
-    gap: 0.35rem;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.3rem;
+    grid-template-columns: minmax(0, 1fr);
     margin: 0;
     padding: 0;
 }
@@ -1126,11 +1308,12 @@ audio[data-estab-sidebar-audio] {
     font-size: 0.82rem;
     justify-content: flex-start;
     line-height: 1.2;
-    min-height: 3rem;
+    min-height: 2.4rem;
     min-width: 0;
-    overflow-wrap: anywhere;
-    padding: 0.45rem 0.5rem;
+    overflow-wrap: break-word;
+    padding: 0.4rem 0.55rem;
     white-space: normal;
+    word-break: normal;
 }
 
 .estab-navigation-sidebar .estab-navigation-link:hover,
@@ -1371,7 +1554,9 @@ audio[data-estab-sidebar-audio] {
 }
 
 .estab-menu-section {
+    box-sizing: border-box;
     margin: 2rem auto;
+    width: 100%;
 }
 
 .estab-menu-section h2 {
@@ -1384,7 +1569,7 @@ audio[data-estab-sidebar-audio] {
 .estab-root-menu {
     display: grid;
     gap: 1rem;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(22rem, 1fr));
     list-style: none;
     margin: 0;
     padding: 0;
@@ -1437,6 +1622,9 @@ audio[data-estab-sidebar-audio] {
 .estab-menu-title {
     font-size: 1.15rem;
     font-weight: 700;
+    hyphens: auto;
+    overflow-wrap: anywhere;
+    word-break: normal;
 }
 
 .estab-menu-description {
@@ -1461,23 +1649,6 @@ audio[data-estab-sidebar-audio] {
     border-style: dashed;
 }
 
-/*
- * Eine Kachel, die das Menue gerade sperrt, sperrt hier ebenso. Sie bleibt an
- * ihrem Platz, damit die Uebersicht dieselbe bleibt, fuehrt aber nirgendwohin
- * und nennt im Abzeichen den Grund.
- */
-.estab-menu-card-blocked {
-    opacity: 0.72;
-}
-
-.estab-menu-link-blocked {
-    cursor: default;
-}
-
-.estab-menu-card-blocked .estab-menu-badge {
-    background: #e8edf3;
-    color: #3d5771;
-}
 
 .estab-menu-card-locked .estab-menu-link {
     color: #4d5968;
@@ -6618,8 +6789,17 @@ section.estab-message-timeline[data-estab-message-timeline] * {
 }
 
 /* Responsive BOS information workspace and its persistent document sidebar. */
+/* Die Dokumentenliste stand frueher in der gemeinsamen Seitenleiste und
+   erbte deren Aufbau. Jetzt steht sie fuer sich in der linken Haelfte des
+   Infosammlungs-Inhalts und bringt ihren Abstand selbst mit. */
 .estab-bos-sidebar {
     align-content: start;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    min-height: 100%;
+    padding: 0.75rem;
 }
 
 .estab-bos-document-navigation {
@@ -6638,9 +6818,11 @@ section.estab-message-timeline[data-estab-message-timeline] * {
 
 .estab-bos-document-link {
     border-left: 4px solid transparent;
+    hyphens: auto;
     min-width: 0;
     overflow-wrap: anywhere;
     text-decoration: none;
+    word-break: normal;
 }
 
 .estab-bos-document-link[aria-current="page"] {
@@ -8616,7 +8798,7 @@ a.estab-message-list-chip:hover {
 
     .estab-root-page-situation .estab-root-menu {
         gap: 0.4rem;
-        grid-template-columns: repeat(4, minmax(0, 1fr));
+        grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
     }
 
     .estab-root-page-situation .estab-menu-link {

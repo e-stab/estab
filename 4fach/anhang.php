@@ -782,7 +782,9 @@ if (is_array ($attachmentPageError)) {
     "messages"
   );
 }
-estab_session_ui_start ($_SESSION);
+// Diese Seite ist der Inhalt der Huelle, nicht die Huelle selbst.
+// Menue und Cockpit stehen aussen; hier waeren sie ein Menue im Menue.
+estab_session_ui_start ($_SESSION, false, false, false);
 
 if (!defined ("debug")) { define ("debug", false); }
 

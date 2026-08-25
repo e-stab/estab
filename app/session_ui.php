@@ -7,6 +7,7 @@ require_once __DIR__ . '/csp.php';
 require_once __DIR__ . '/csrf.php';
 require_once __DIR__ . '/incident_ui.php';
 require_once __DIR__ . '/navigation.php';
+require_once __DIR__ . '/app_shell.php';
 
 /** Return the configured browser root used by shared session controls. */
 function estab_session_ui_root(): string
@@ -67,7 +68,8 @@ function estab_session_ui_markup(
     bool $popup = false,
     bool $sidebar = false,
     bool $includeNavigation = true,
-    ?array $incidentState = null
+    ?array $incidentState = null,
+    bool $includeBrand = true
 ): string {
     $identity = estab_auth_session_identity($session);
     if ($identity === null) {
@@ -127,9 +129,15 @@ function estab_session_ui_markup(
         . ($popup ? ' data-estab-popup-ui' : '')
         . ' aria-label="Aktuelle Anmeldung">'
         . '<div class="estab-session-topline">'
-        . '<a class="estab-session-brand" href="'
-        . estab_auth_html($homeUrl) . '" target="_top"'
-        . ' aria-label="eStab-Übersicht">eStab</a>'
+        /*
+         * Die Marke fuehrt zur Uebersicht. In der Huelle steht dieser Weg
+         * links im Menue; ein zweiter daneben waere derselbe Weg zweimal.
+         */
+        . ($includeBrand
+            ? '<a class="estab-session-brand" href="'
+                . estab_auth_html($homeUrl) . '" target="_top"'
+                . ' aria-label="eStab-Übersicht">eStab</a>'
+            : '')
         . '<div class="estab-session-identity">'
         . '<span class="estab-session-prefix">Angemeldet als</span>'
         . '<strong data-estab-user-name="' . $name . '">' . $name . '</strong>'
@@ -457,7 +465,9 @@ function estab_session_ui_dirty_guard_script(bool $popup = false): string
 function estab_session_ui_frame_refresh_script(): string
 {
     $arguments = [
-        estab_application_url('4fach/vorgaben.php'),
+        // Der Rahmen "vorgaben" traegt das Cockpit. Ohne das Fragment kaeme
+        // die alte kombinierte Seitenleiste zurueck, die es nicht mehr gibt.
+        estab_application_url('4fach/vorgaben.php') . '?fragment=cockpit',
         'vorgaben',
         estab_application_url('4fach/mainindex.php'),
         'mainframe',
@@ -489,7 +499,7 @@ function estab_session_ui_frame_refresh_script(): string
 function estab_session_ui_sidebar_refresh_script(): string
 {
     $arguments = [
-        estab_application_url('4fach/vorgaben.php'),
+        estab_application_url('4fach/vorgaben.php') . '?fragment=cockpit',
         'vorgaben',
     ];
     $encoded = array_map(
@@ -892,7 +902,8 @@ function estab_session_ui_current_markup(
     bool $sidebar = false,
     bool $includeNavigation = true,
     bool $includeIncident = true,
-    ?array $incidentState = null
+    ?array $incidentState = null,
+    bool $includeBrand = true
 ): string
 {
     if (session_status() !== PHP_SESSION_ACTIVE) {
@@ -939,13 +950,23 @@ function estab_session_ui_current_markup(
         $popup,
         $sidebar,
         $includeNavigation,
-        $includeIncident ? $incidentState : null
+        $includeIncident ? $incidentState : null,
+        $includeBrand
     );
 }
 
 /** Detect the actual shared element without colliding with escaped user text. */
 function estab_session_ui_document_has_bar(string $html): bool
 {
+    /*
+     * Eine Seite, die in der Huelle steht, bringt ihre Leiste selbst mit --
+     * links das Menue, rechts das Cockpit. Ohne diese Ausnahme haenge der
+     * Puffer eine zweite Navigation an, und der Bedienende haette zwei
+     * Menues nebeneinander, die dasselbe tun.
+     */
+    if (preg_match('/<[^>]*\bdata-estab-shell\b[^>]*>/i', $html) === 1) {
+        return true;
+    }
     return preg_match(
         '/<aside\b[^>]*\bdata-estab-(?:session|public)-bar\b[^>]*>/i',
         $html
@@ -1151,7 +1172,8 @@ function estab_session_ui_inject_document(string $html, string $markup): string
 function estab_session_ui_start(
     array $session,
     bool $compact = false,
-    bool $popup = false
+    bool $popup = false,
+    bool $shell = true
 ): void
 {
     static $started = false;
@@ -1166,10 +1188,42 @@ function estab_session_ui_start(
         header('Cache-Control: private, no-store, max-age=0');
     }
 
-    ob_start(static function (string $html) use ($compact, $popup): string {
+    ob_start(static function (string $html) use ($compact, $popup, $shell): string {
         $status = http_response_code();
         $status = is_int($status) ? $status : 200;
         if (!estab_session_ui_response_is_html(headers_list(), $status)) {
+            return $html;
+        }
+
+        /*
+         * Eine Seite fuer sich bekommt die Huelle: links das Menue, rechts
+         * das Cockpit, in der Mitte das, was sie selbst ausgibt. Das ist der
+         * Unterschied zu frueher, als hier eine Leiste oben angehaengt wurde
+         * -- und damit jeder Bereich sein Menue woanders hatte als der
+         * Nachrichtenvordruck.
+         *
+         * Seiten, die in einem Rahmen oder in einem eigenen Fenster stehen,
+         * bekommen sie nicht: Sie sind bereits der Inhalt einer Huelle, und
+         * eine zweite darin waere ein Menue im Menue.
+         */
+        if ($shell && !$popup) {
+            return estab_session_ui_wrap_in_shell($html);
+        }
+
+        /*
+         * Rahmeninhalt bekommt gar keine Leiste.
+         *
+         * Frueher hing hier auch fuer ihn eine Leiste samt Navigation dran,
+         * und ein Skript entfernte sie nachtraeglich wieder, wenn es sich im
+         * Rahmen "mainframe" wiederfand. Das war ein Umweg mit zwei Fehlern:
+         * Ohne Skript blieb sie stehen, und in jedem anderen Rahmen -- etwa
+         * der Dokumentenliste der Infosammlung -- blieb sie ohnehin stehen
+         * und stand dann als zweites Menue neben dem der Huelle.
+         *
+         * Ein eigenes Fenster ist etwas anderes: Es hat keine Huelle um sich
+         * und braucht seinen eigenen Weg zurueck.
+         */
+        if (!$shell && !$popup) {
             return $html;
         }
 
@@ -1183,4 +1237,80 @@ function estab_session_ui_start(
             )
         );
     });
+}
+
+/**
+ * Ein fertiges Dokument in die dreispaltige Huelle legen.
+ *
+ * Gearbeitet wird am fertigen Text und nicht an der Seite selbst: So kommen
+ * auch die Seiten in die Huelle, die ihren Rumpf noch mit echo zusammensetzen
+ * -- und das sind die meisten. Wer die Huelle bereits selbst setzt, wird
+ * nicht angefasst.
+ */
+function estab_session_ui_wrap_in_shell(string $html): string
+{
+    if (
+        $html === ''
+        || preg_match('/<[^>]*\bdata-estab-shell\b[^>]*>/i', $html) === 1
+    ) {
+        return $html;
+    }
+    if (
+        preg_match('/<body\b[^>]*>/i', $html, $bodyOpen, PREG_OFFSET_CAPTURE)
+            !== 1
+    ) {
+        return $html;
+    }
+    $bodyEnd = strripos($html, '</body>');
+    if ($bodyEnd === false) {
+        return $html;
+    }
+    $contentStart = $bodyOpen[0][1] + strlen($bodyOpen[0][0]);
+    if ($contentStart > $bodyEnd) {
+        return $html;
+    }
+
+    $identity = estab_auth_session_identity($_SESSION);
+    $head = substr($html, 0, $contentStart);
+    $body = substr($html, $contentStart, $bodyEnd - $contentStart);
+    $tail = substr($html, $bodyEnd);
+
+    // Der Koerper traegt die Klasse der Huelle, damit er nicht selbst
+    // scrollt -- das tun die drei Spalten.
+    $head = preg_replace(
+        '/(<body\b)([^>]*)\bclass="([^"]*)"/i',
+        '$1$2class="estab-shell-body $3"',
+        $head,
+        1,
+        $classReplaced
+    ) ?? $head;
+    if (($classReplaced ?? 0) === 0) {
+        $head = preg_replace(
+            '/<body\b/i',
+            '<body class="estab-shell-body"',
+            $head,
+            1
+        ) ?? $head;
+    }
+
+    if (!estab_session_ui_document_has_stylesheet($head . $tail)) {
+        $headEnd = stripos($head, '</head>');
+        if ($headEnd !== false) {
+            $head = substr($head, 0, $headEnd)
+                . '<link rel="stylesheet" href="'
+                . estab_auth_html(estab_application_url('estab-ui.css'))
+                . '">'
+                . substr($head, $headEnd);
+        }
+    }
+
+    return $head
+        . '<div class="estab-shell" data-estab-shell>'
+        . estab_shell_menu_markup($identity, $_SERVER)
+        . '<main class="estab-shell-content" data-estab-shell-content>'
+        . $body
+        . '</main>'
+        . estab_shell_cockpit_markup()
+        . '</div>'
+        . $tail;
 }

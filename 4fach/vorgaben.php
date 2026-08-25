@@ -34,18 +34,26 @@ foreach (array_keys($_GET) as $requestKey) {
         exit;
     }
 }
+/*
+ * Zwei Fragmente. "status" ist das kleine, das sich im Takt selbst erneuert;
+ * "cockpit" ist die ganze rechte Spalte der Huelle. Beide enthalten kein
+ * Menue mehr -- das steht links in der Huelle und gehoert dorthin, damit es
+ * auf jeder Seite an derselben Stelle steht.
+ */
+$cockpitFragment = false;
 if (array_key_exists('fragment', $_GET)) {
     if (
         count($_GET) !== 1
         || !is_string($_GET['fragment'])
-        || $_GET['fragment'] !== 'status'
+        || !in_array($_GET['fragment'], ['status', 'cockpit'], true)
     ) {
         http_response_code(400);
         header('Content-Type: text/plain; charset=UTF-8');
         echo 'Ungültige Statusauswahl.';
         exit;
     }
-    $statusFragment = true;
+    $statusFragment = $_GET['fragment'] === 'status';
+    $cockpitFragment = $_GET['fragment'] === 'cockpit';
 } elseif (array_key_exists('next', $_GET)) {
     $loginDestination = estab_navigation_login_destination_key(
         $_GET['next']
@@ -325,7 +333,20 @@ function estab_vorgaben_status_markup(
         estab_incident_ui_markup($incidentState, true, true),
         $identity,
         $secondaryQueues,
-        $dutyFunctions
+        $dutyFunctions,
+        // Anmeldung und Abmelden stehen oben mit in der Statuszeile. Die
+        // Marke faellt weg: Sie steht links im Menue der Huelle.
+        estab_session_ui_current_markup(
+            $session,
+            true,
+            null,
+            false,
+            true,
+            false,
+            false,
+            null,
+            false
+        )
     );
 }
 
@@ -391,22 +412,16 @@ $refreshScript = $selectedIdentity === null
   <title>eStab Navigation</title>
   <?= estab_session_ui_stylesheet() ?>
 </head>
-<body class="estab-navigation-frame estab-message-sidebar-page">
+<body class="estab-navigation-frame estab-cockpit-page">
   <div class="estab-message-sidebar" data-estab-sidebar-root>
     <?= $statusMarkup ?>
     <?php
-    // The renderer returns a complete trusted HTML component and escapes every
-    // session-derived text/attribute value at its own context boundary.
-    // nosemgrep: php.lang.security.injection.echoed-request.echoed-request
-    echo estab_session_ui_current_markup(
-        $_SESSION,
-        true,
-        $loginDestination,
-        false,
-        true,
-        false,
-        false
-    );
+    /*
+     * Die Anmeldeleiste stand hier als eigenes Feld. Sie steht jetzt oben in
+     * der Statuszeile: Wer angemeldet ist, die Glocke und der Weg hinaus sind
+     * drei kurze Angaben, und ein eigener Kasten dafuer kostete mehr Platz
+     * als sie selbst.
+     */
     ?>
     <?= estab_sidebar_account_function_markup($_SESSION, $selectedIdentity) ?>
     <?php if ($identity !== null && $selectedIdentity === null): ?>
@@ -497,13 +512,6 @@ $refreshScript = $selectedIdentity === null
         <?php endif; ?>
       </main>
     <?php endif; ?>
-    <?= estab_navigation_markup(
-        $identity !== null,
-        $_SERVER,
-        true,
-        true,
-        $navigationIdentity
-    ) ?>
   </div>
   <?= estab_sidebar_audio_markup($soundUrl) ?>
   <?= $refreshScript ?>
