@@ -688,6 +688,23 @@
     width: 100%;
 }
 
+/* Die Huelle gehoert nicht der Seite, die in ihr steht.
+   Das Handbuch faerbt alle Verweise auf seiner Seite blau -- eine
+   vernuenftige Regel fuer seinen eigenen Text, aber sie traf auch das Menue
+   und machte es dort fast unlesbar: Blau auf Dunkelblau. Die Huelle setzt
+   ihre Beschriftung deshalb mit einer Stelle mehr Gewicht, damit keine
+   Seite sie versehentlich uebermalt. */
+.estab-shell-menu .estab-navigation-link,
+.estab-shell-menu .estab-shell-brand,
+.estab-shell-menu .estab-shell-context-link {
+    color: #ffffff;
+}
+
+.estab-shell-menu .estab-navigation-services-label,
+.estab-shell-menu .estab-navigation-sidebar-heading h2 {
+    color: #c5d6e8;
+}
+
 /* Die Navigation steht in der Menuespalte und braucht dort weder eigenen
    Grund noch Klebstoff -- die Spalte ist ihr Platz. */
 .estab-shell-menu > .estab-navigation {
@@ -2752,9 +2769,17 @@ form[data-estab-incident-disabled="true"]::before {
     box-sizing: border-box;
     display: grid;
     gap: 1.25rem;
+    /* Ohne diese Spalte waere die Spur "auto", und eine Auto-Spur waechst
+       mit ihrem breitesten Kind. Eine breite Tabelle schoebe dann die ganze
+       Seite auseinander, statt in ihrem eigenen Kasten zu rollen. */
+    grid-template-columns: minmax(0, 1fr);
     margin: 0 auto;
     max-width: 82rem;
     padding: 2rem 1rem 3rem;
+}
+
+.estab-tool-main > * {
+    min-width: 0;
 }
 
 .estab-tool-main-wide {
@@ -2794,9 +2819,11 @@ form[data-estab-incident-disabled="true"]::before {
 }
 
 .estab-tool-hero h1 {
-    font-size: clamp(1.8rem, 4vw, 2.8rem);
+    font-size: clamp(1.5rem, 3.2vw, 2.8rem);
+    hyphens: auto;
     line-height: 1.1;
     margin-bottom: 0.7rem;
+    overflow-wrap: break-word;
 }
 
 .estab-tool-hero > p:last-child {
@@ -3034,8 +3061,21 @@ form[data-estab-incident-disabled="true"]::before {
     grid-template-columns: minmax(0, 1fr) auto;
 }
 
+/* Drei feste Spalten reichten fuer "Berechtigungsmodus" nicht mehr, seit
+   die Mitte schmaler ist -- das Wort lief in die Nachbarspalte. Die Zahl der
+   Spalten richtet sich jetzt nach dem Platz. */
 .estab-tool-status-summary {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+}
+
+.estab-tool-status > div {
+    min-width: 0;
+}
+
+.estab-tool-status span,
+.estab-tool-status strong {
+    hyphens: auto;
+    overflow-wrap: break-word;
 }
 
 .estab-tool-status-active {
@@ -4971,11 +5011,16 @@ section.estab-message-timeline[data-estab-message-timeline] * {
     height: 100%;
 }
 
+/* Fuenf Uebermittlungsmittel teilen sich die Zeile. "Kurier/Melder" ist das
+   laengste und passte um wenige Pixel nicht mehr -- es wurde am Rand
+   abgeschnitten. Etwas kleiner gesetzt und mit knapperem Abstand steht es
+   ganz da; die Reihenfolge und die Ankreuzfelder bleiben wie im Vordruck. */
 .estab-official-actual-medium .estab-official-choice-group label,
 .estab-official-desired-medium .estab-official-choice-group label {
     align-items: center;
     display: flex;
-    gap: 0.4rem;
+    font-size: 0.92rem;
+    gap: 0.3rem;
     min-width: 0;
     white-space: nowrap;
 }
@@ -5170,6 +5215,21 @@ section.estab-message-timeline[data-estab-message-timeline] * {
     box-sizing: border-box;
     grid-column: 2;
     min-height: 2.2rem;
+}
+
+/* Die Zeile ist im Raster 2,2 rem hoch -- so hoch ist sie auf dem Papier.
+   "noch kein TBB-Nachweis" brauchte in voller Schriftgroesse drei Zeilen und
+   stand dann quer ueber dem Rahmen. Kleiner gesetzt passt der Hinweis hinein,
+   und das Raster bleibt, wie der Vordruck es vorgibt. */
+.estab-official-ttb > .estab-official-readonly {
+    align-items: center;
+    display: flex;
+    font-size: 0.78rem;
+    justify-content: center;
+    line-height: 1.05;
+    overflow-wrap: break-word;
+    padding: 0.1rem 0.25rem;
+    text-align: center;
 }
 
 .estab-official-ttb > .estab-official-choice-group {
@@ -5371,6 +5431,19 @@ section.estab-message-timeline[data-estab-message-timeline] * {
  * Die Leitfragen des Vordrucks stehen als Merke am Textfeld, so klein wie
  * auf dem Papier und so gross, dass sie noch zu lesen sind.
  */
+/* Die Erlaeuterung unter "Anschrift:" und "Absender:" nennt, was dort
+   hineingehoert. In voller Schriftgroesse brauchte sie vier Zeilen, die
+   Zelle hat aber nur Platz fuer zwei -- der Text legte sich dann quer ueber
+   "Ruf Nr." darunter. Klein gesetzt steht er in seiner Zelle, wie die
+   uebrigen Ausfuellhinweise auch. */
+.estab-official-designation-hint {
+    color: #405a72;
+    display: inline-block;
+    font-size: 0.6rem;
+    font-weight: 400;
+    line-height: 1.1;
+}
+
 .estab-official-text-guidance {
     color: #405a72;
     display: flex;
