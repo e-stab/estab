@@ -83,7 +83,7 @@ Risiko: `·` niedrig · `!` mittel · `!!` hoch
 ## P5 — Zugänglichkeit
 
 - [x] **T25** `!` Zuständigkeit ohne Farbe — `UX-MEINE-FELDER`, `UX-MEINE-FELDER-OHNE-FARBE`
-- [ ] **T26** `·` Kontrast im Vordruck — `UX-KONTRAST`
+- [x] **T26** `·` Kontrast im Vordruck — `UX-KONTRAST`
 - [ ] **T27** `!` Tastaturbedienung — `UX-TASTATUR`
 - [ ] **T28** `!` Laufweg ohne JavaScript — `UX-OHNE-JAVASCRIPT`
 

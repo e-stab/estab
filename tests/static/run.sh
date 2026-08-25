@@ -196,6 +196,7 @@ for test_name in \
     ux_element_catalogue \
     ux_route_continuity \
     ux_own_fields \
+    ux_form_contrast \
     telecom_plan_security \
     upload_security \
     attachment_security \

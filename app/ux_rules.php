@@ -77,6 +77,14 @@ function estab_ux_rules(): array
                 . 'sind. Wer die Nachricht als Fernmelder gesehen hat, '
                 . 'erkennt sie als Sichter wieder.',
         ],
+        'UX-KONTRAST' => [
+            'origin' => ESTAB_UX_ORIGIN_BETREIBER,
+            'reference' => 'Lesbarkeit auf farbigem Grund',
+            'requirement' => 'Text erfüllt das AA-Kontrastverhältnis der '
+                . 'WCAG gegen seinen tatsächlichen Hintergrund -- auch dort, '
+                . 'wo der Hintergrund die Farbe des amtlichen Vordrucks '
+                . 'trägt.',
+        ],
         'UX-FLACHE-BILDSCHIRME' => [
             'origin' => ESTAB_UX_ORIGIN_BETREIBER,
             'reference' => 'Geräte der Führungsstelle',
