@@ -15,7 +15,7 @@ Risiko: `·` niedrig · `!` mittel · `!!` hoch
 - [x] **T01** `·` Quelle „Grundlagen des Meldewesens" aufnehmen — `REG-QUELLE-MELDEWESEN`
       → Konstante in `app/dv_rules.php` **und** Positivliste in `tests/php/dv_rule_registry.php`
 - [x] **T02** `·` Verdrängungsvermerk einführen — `REG-VORRANGVERMERK`
-- [ ] **T03** `·` Bedienkatalog anlegen — Apparat
+- [x] **T03** `·` Bedienkatalog anlegen — Apparat
       → `app/ux_rules.php`, `tests/php/ux_rule_registry.php`, Eintrag in `run.sh`
 
 > **Prüfpunkt C0** — Trägt der Apparat? Ist die Trennung an den Kennungen erkennbar?

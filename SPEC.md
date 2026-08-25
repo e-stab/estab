@@ -502,8 +502,8 @@ nicht zu verwenden.
 | --- | --- |
 | `app/dv_rules.php` | **Vorschriftenkatalog** (Q1–Q5). Einzige Stelle für Quelle, Fundstelle und Anforderung. |
 | `tests/php/dv_rule_registry.php` | erzwingt, dass keine Vorschriftenregel ohne Test bleibt |
-| `app/ux_rules.php` | **Bedienkatalog** (P1) — anzulegen, siehe Abschnitt 10 |
-| `tests/php/ux_rule_registry.php` | erzwingt dasselbe für Bedienregeln — anzulegen |
+| `app/ux_rules.php` | **Bedienkatalog** (P1). Einzige Stelle für Herkunft, Fundstelle und Anforderung. |
+| `tests/php/ux_rule_registry.php` | erzwingt dasselbe für Bedienregeln |
 | `app/dv_operations.php` | Regelanwendung im Betrieb |
 | `4fach/official_message_form.php` | Vordruck: Felder, Ausfüllhilfen, Rückweisungsgründe |
 | `4fach/4fachform.php` | Feldfreigabe je Arbeitsschritt, Durchschriften |
