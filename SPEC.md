@@ -319,7 +319,7 @@ Antrag und Lagemeldung kommen im Code nicht vor.
 | `TKM-KATALOG` | Q3 Kap. 5.1, Q1 Felder 1 und 7 | Der Katalog der Übermittlungsmittel umfasst Funk, Telefon, Telefax, DFÜ, Kurier/Melder sowie Internet, E-Mail und Messenger. | Alle Mittel sind wählbar; die über den Vordruck hinausgehenden erscheinen im Ausdruck nicht als dessen Ankreuzfeld. | `teilweise` |
 | `TKM-MELDER-KURIER` | Q3 Kap. 5.2 (verdrängt Q4 Kap. 4.3.1.11) | Melder und Kurier werden unterschieden: der Melder kennt den Inhalt und kann Rückfragen beantworten, der Kurier kennt ihn nicht. | Der Melderauftrag führt die Rolle; eine Rückfrage wird nur an einen Melder gerichtet. | `offen` |
 | `TKM-MELDER-PFLICHTEN` | Q3 Kap. 5.2, Q4 Kap. 4.3.1.11 | Der Melder ändert den Inhalt nicht, überbringt schnellstmöglich, meldet sich beim Auftraggeber zurück und teilt mit, wem er übergeben hat. Bis zur Rückkehr nimmt er keine anderen Aufträge an. | Der Melderauftrag verlangt die Rückmeldung mit Empfänger; ein zweiter Auftrag ist vor der Rückkehr nicht übernehmbar. | `teilweise` |
-| `TKM-FERNMELDEPLAN` | Q4 Kap. 6.1.1 | Führungskräfte müssen über die zur Verfügung stehenden Verbindungen informiert sein. | Der Fernmeldeplan ist versioniert und für die Besetzung einsehbar. | `ohne Regel` |
+| `TKM-FERNMELDEPLAN` | Q4 Kap. 6.1.1 | Führungskräfte müssen über die zur Verfügung stehenden Verbindungen informiert sein. | Der Fernmeldeplan ist versioniert und für die Besetzung einsehbar. | `erfüllt` |
 
 ### 5.9 M8 — lagemeldung
 

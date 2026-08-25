@@ -182,6 +182,7 @@ for test_name in \
     nv_four_copies \
     fuest_route_roles \
     etb_append_only_and_retention \
+    tkm_telecom_plan \
     telecom_plan_security \
     upload_security \
     attachment_security \

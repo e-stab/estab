@@ -281,6 +281,14 @@ function estab_dv_rules(): array
                 . 'Betriebsleitung. Beförderung und Melderauftrag laufen '
                 . 'über ihn.',
         ],
+        'TKM-FERNMELDEPLAN' => [
+            'source' => ESTAB_DV_SOURCE_DV_1_101,
+            'reference' => 'Kapitel 6.1.1',
+            'requirement' => 'Führungskräfte müssen über die zur Verfügung '
+                . 'stehenden Verbindungen unterrichtet sein. Der '
+                . 'Fernmeldeplan trägt deshalb einen erkennbaren Stand und '
+                . 'ist dort einsehbar, wo ein Weg ausgewählt wird.',
+        ],
         'FUEST-KLEIN-BEFOERDERUNG' => [
             'source' => ESTAB_DV_SOURCE_DV_1_101,
             'reference' => 'Führungsstelle ohne Stab',

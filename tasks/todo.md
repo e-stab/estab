@@ -34,7 +34,7 @@ Risiko: `·` niedrig · `!` mittel · `!!` hoch
 - [x] **T10** `·` Sichter und LdF im Laufweg — `FUEST-SICHTER-BINDEGLIED`, `FUEST-LDF-BETRIEB`
 - [x] **T11** `·` Fortschreibung und Aufbewahrung — `ETB-APPEND-ONLY`, `ETB-AUFBEWAHRUNG`
       → Untergrenze ein Jahr prüfen, nicht die zehn Jahre des Bestands
-- [ ] **T12** `·` Fernmeldeplan — `TKM-FERNMELDEPLAN`
+- [x] **T12** `·` Fernmeldeplan — `TKM-FERNMELDEPLAN`
 
 > **Prüfpunkt C1** — Stichprobe an drei Tests: Verhalten entfernen, Test muss rot werden.
 
