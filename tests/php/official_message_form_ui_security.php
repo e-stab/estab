@@ -1157,7 +1157,25 @@ $assert(
 );
 $assert(
     str_contains($css, '@media (max-width: 56rem)')
-        && str_contains(
+        /*
+         * Das Blatt ist 56 rem breit; das ist das Raster des Vordrucks und
+         * daran wird nicht gerueckt. Passt es nicht in die Spalte, wird es
+         * als Ganzes kleiner gezogen -- wie ein Blatt Papier, das man weiter
+         * weghaelt. Alle Verhaeltnisse bleiben, kein Feld wandert, nichts
+         * wird abgeschnitten.
+         *
+         * Vorher stand es in voller Groesse da und der Kasten trug den
+         * Hinweis "horizontal wischen". Wer auf einem Laptop arbeitete, sah
+         * die rechte Haelfte des Vordrucks erst nach dem Schieben -- und
+         * beim Ausfuellen nie beide Haelften zugleich.
+         *
+         * Der Faktor muss aus der Breite des Kastens kommen und darf eins
+         * nicht ueberschreiten, sonst wird das Blatt auf grossen Schirmen
+         * aufgeblasen.
+         */
+        && str_contains($css, 'container-type: inline-size;')
+        && str_contains($css, 'zoom: min(1, calc(100cqw / 56rem));')
+        && !str_contains(
             $css,
             'content: "Zum vollständigen Vordruck horizontal wischen"'
         )

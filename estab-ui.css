@@ -4559,93 +4559,6 @@ body.estab-message-form-body {
    --------------------------------------------------------------------- */
 
 
-/* Kompakter wird der Weg ueberall, nicht nur neben dem Vordruck: Wo er
-   oben steht, steht er in einer Zeile -- Ueberschrift links, Stationen
-   daneben. Zwei Zeilen fuer eine Ueberschrift und eine Reihe sind eine zu
-   viel. */
-section.estab-message-timeline[data-estab-message-timeline] {
-    align-items: center;
-    display: flex;
-    /* Wird die Spalte zu schmal, rueckt die Ueberschrift ueber die
-       Stationen statt daneben -- sonst wird sie so weit zusammengedrueckt,
-       dass "Bearbeitungsweg" mitten durchbricht. */
-    flex-wrap: wrap;
-    gap: 0.35rem 0.7rem;
-    padding: 0.4rem 0.6rem;
-}
-
-section.estab-message-timeline[data-estab-message-timeline]
-    > .estab-message-timeline__header {
-    flex: 0 0 auto;
-    max-width: 12.5rem;
-    min-width: 8rem;
-}
-
-section.estab-message-timeline[data-estab-message-timeline]
-    > .estab-message-timeline__track {
-    flex: 1 1 auto;
-    min-width: 0;
-}
-
-.estab-message-timeline__header {
-    align-items: baseline;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.1rem 0.5rem;
-    margin-bottom: 0;
-}
-
-.estab-message-timeline__header h2 {
-    font-size: 0.9rem;
-    hyphens: auto;
-    min-width: 0;
-    overflow-wrap: break-word;
-    word-break: normal;
-}
-
-/* Der Satz erklaerte, dass jede Station sichtbar bleibt. Das sieht man. */
-.estab-message-timeline__summary {
-    display: none;
-}
-
-.estab-message-timeline__track {
-    gap: 1.4rem;
-    padding: 0.15rem 0.15rem 0.4rem;
-}
-
-.estab-message-timeline__step {
-    flex-basis: clamp(8.5rem, 14vw, 11rem);
-    gap: 0.15rem;
-    padding: 0.35rem 0.45rem;
-}
-
-.estab-message-timeline__step:not(:last-child)::after {
-    top: 1rem;
-    width: 1rem;
-    left: calc(100% + 0.2rem);
-}
-
-.estab-message-timeline__station {
-    font-size: 0.8rem;
-    hyphens: auto;
-    line-height: 1.15;
-    margin: 0;
-    overflow-wrap: anywhere;
-}
-
-.estab-message-timeline__state {
-    font-size: 0.7rem;
-}
-
-.estab-message-timeline__time,
-.estab-message-timeline__duration {
-    font-size: 0.68rem;
-}
-
-.estab-message-timeline__reason {
-    font-size: 0.7rem;
-    margin: 0.1rem 0 0;
-}
 
 /* Fehlerübersicht am Seitenkopf: eine Meldung, ein Sprung je Feld. */
 .estab-message-error-summary {
@@ -5256,14 +5169,17 @@ section.estab-message-timeline[data-estab-message-timeline] * {
     margin-bottom: 0;
 }
 
+/* Der Kasten misst sich selbst, damit das Blatt darin wissen kann, wie
+   viel Platz es hat. */
 .estab-message-form-scroll {
     background: #cfd8e1;
     border: 1px solid #a6b5c4;
     border-radius: 10px;
+    container-type: inline-size;
     max-width: 100%;
     overflow: auto;
     overscroll-behavior-inline: contain;
-    padding: clamp(0.55rem, 2vw, 1.25rem);
+    padding: clamp(0.4rem, 1.4vw, 0.9rem);
     scrollbar-color: #496a8a #e7edf3;
 }
 
@@ -5272,6 +5188,17 @@ section.estab-message-timeline[data-estab-message-timeline] * {
     outline-offset: 2px;
 }
 
+/* Das Blatt bleibt 56 rem breit -- das ist das Raster des Vordrucks, und
+   daran wird nicht gerueckt. Passt es nicht in die Spalte, wird es als
+   Ganzes kleiner gezogen, so wie man ein Blatt Papier weiter weghaelt: Alle
+   Verhaeltnisse bleiben, kein Feld wandert, nichts wird abgeschnitten.
+   Frueher stand es in voller Groesse da und man musste seitwaerts schieben,
+   um die rechte Haelfte zu sehen.
+
+   Der Faktor kommt aus der Breite des umgebenden Kastens; groesser als
+   eins wird er nie, damit das Blatt auf einem grossen Schirm nicht
+   aufgeblasen wird. Auf Papier gilt er nicht: Der Druckblock weiter unten
+   setzt den Massstab, mit dem der Vordruck auf ein A4-Blatt passt. */
 .estab-official-message-form {
     --estab-official-blue: #a2d9f7;
     --estab-official-line: #000000;
@@ -5284,7 +5211,9 @@ section.estab-message-timeline[data-estab-message-timeline] * {
     min-width: 56rem;
     position: relative;
     width: 56rem;
+    zoom: min(1, calc(100cqw / 56rem));
 }
+
 
 .estab-official-message-form h2,
 .estab-official-message-form h3,
@@ -6989,6 +6918,127 @@ section.estab-message-timeline[data-estab-message-timeline] * {
     display: none;
 }
 
+/* Kompakter wird der Weg ueberall, nicht nur neben dem Vordruck: Wo er
+   oben steht, steht er in einer Zeile -- Ueberschrift links, Stationen
+   daneben. Zwei Zeilen fuer eine Ueberschrift und eine Reihe sind eine zu
+   viel. */
+section.estab-message-timeline[data-estab-message-timeline] {
+    align-items: center;
+    display: flex;
+    /* Wird die Spalte zu schmal, rueckt die Ueberschrift ueber die
+       Stationen statt daneben -- sonst wird sie so weit zusammengedrueckt,
+       dass "Bearbeitungsweg" mitten durchbricht. */
+    flex-wrap: wrap;
+    gap: 0.25rem 0.6rem;
+    padding: 0.3rem 0.45rem;
+}
+
+section.estab-message-timeline[data-estab-message-timeline]
+    > .estab-message-timeline__header {
+    flex: 0 0 auto;
+    max-width: none;
+    min-width: 0;
+}
+
+section.estab-message-timeline[data-estab-message-timeline]
+    > .estab-message-timeline__track {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.estab-message-timeline__header {
+    align-items: baseline;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.1rem 0.5rem;
+    margin-bottom: 0;
+}
+
+.estab-message-timeline__header h2 {
+    font-size: 0.75rem;
+    hyphens: auto;
+    min-width: 0;
+    overflow-wrap: break-word;
+    white-space: nowrap;
+    word-break: normal;
+}
+
+/* Der Satz erklaerte, dass jede Station sichtbar bleibt. Das sieht man. */
+.estab-message-timeline__summary {
+    display: none;
+}
+
+.estab-message-timeline__track {
+    align-items: center;
+    gap: 0.8rem;
+    padding: 0.1rem 0.1rem 0.25rem;
+}
+
+/* Eine Station ist eine Zeile: Name, Zustand, gegebenenfalls ein Wort dazu.
+   Als Karte mit drei gestapelten Zeilen war jede 115 Pixel hoch und der
+   halbe Kasten leer. Die Angaben stehen in einem eigenen Kasten innerhalb
+   der Station -- der muss die Zeile bilden, nicht die Station selbst. */
+/* Eine Station ist eine kleine Marke: oben der Name, darunter klein der
+   Zustand und der Vermerk dazu. Als Karte mit drei gestapelten Zeilen war
+   jede 115 Pixel hoch, alle so hoch wie die hoechste, und der halbe Kasten
+   stand leer. Jetzt ist jede so breit wie ihr Inhalt und zwei knappe Zeilen
+   hoch; passen nicht alle nebeneinander, laesst sich die Leiste schieben. */
+.estab-message-timeline__content {
+    align-items: baseline;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0 0.3rem;
+    min-width: 0;
+}
+
+.estab-message-timeline__step {
+    align-content: center;
+    border-radius: 6px;
+    border-width: 1px;
+    display: block;
+    flex: 0 0 auto;
+    padding: 0.15rem 0.4rem;
+}
+
+.estab-message-timeline__step:not(:last-child)::after {
+    height: 2px;
+    top: 50%;
+    width: 0.55rem;
+    left: calc(100% + 0.15rem);
+}
+
+.estab-message-timeline__station {
+    flex: 0 0 100%;
+    font-size: 0.68rem;
+    line-height: 1.2;
+    margin: 0;
+    min-width: 0;
+    white-space: nowrap;
+}
+
+/* Zustand und Vermerk stehen klein unter dem Namen -- sie ordnen ein, sie
+   rufen nicht. */
+.estab-message-timeline__state {
+    font-size: 0.56rem;
+    line-height: 1.2;
+    padding: 0 0.2rem;
+    white-space: nowrap;
+}
+
+.estab-message-timeline__time,
+.estab-message-timeline__duration {
+    font-size: 0.56rem;
+    line-height: 1.2;
+    white-space: nowrap;
+}
+
+.estab-message-timeline__reason {
+    flex: 0 0 100%;
+    font-size: 0.56rem;
+    line-height: 1.2;
+    margin: 0;
+}
+
 @media (max-width: 56rem) {
     .estab-message-form-page {
         padding: 0.5rem;
@@ -7032,16 +7082,14 @@ section.estab-message-timeline[data-estab-message-timeline] * {
     }
 
     .estab-message-timeline__step {
-        flex-basis: clamp(7.5rem, 30vw, 9.5rem);
+        flex-basis: auto;
     }
 
+    /* Der Hinweis "horizontal wischen" stand hier, solange das Blatt in
+       voller Groesse ueber den Rand lief. Es passt sich jetzt der Spalte
+       an; zu schieben gibt es nichts mehr. */
     .estab-message-form-scroll::before {
-        color: #34495e;
-        content: "Zum vollständigen Vordruck horizontal wischen";
-        display: block;
-        font-size: 0.78rem;
-        font-weight: 700;
-        margin: 0 0 0.5rem;
+        content: none;
     }
 }
 
