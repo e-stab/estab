@@ -11,9 +11,14 @@ declare(strict_types=1);
  * below the fold. This test proves that height-based rules exist, that they
  * actually shrink the values they override, and that the navigation stays
  * reachable.
+ *
+ * Die Prüfung bestand bereits, bevor der Bedienkatalog sie benannte. Sie
+ * trägt jetzt die Kennung UX-FLACHE-BILDSCHIRME, damit ein Leser des
+ * Katalogs sie findet und ein Entfernen der Regel auffällt.
  */
 
 $root = dirname(__DIR__, 2);
+require_once $root . '/app/ux_rules.php';
 
 $assertions = 0;
 $assert = static function (bool $condition, string $message) use (&$assertions): void {
@@ -94,18 +99,24 @@ while (
 
 $assert(
     count($heightBlocks) >= 2,
-    'The stylesheet has fewer than two height-based breakpoints, so a flat'
-        . ' screen is not treated differently from a tall one'
+    estab_ux_requirement(
+        'UX-FLACHE-BILDSCHIRME',
+        'The stylesheet has fewer than two height-based breakpoints, so a flat'
+            . ' screen is not treated differently from a tall one'
+    )
 );
 
 // One breakpoint must actually cover the 768-pixel laptop after browser chrome.
 $smallest = min(array_column($heightBlocks, 'limit'));
 $assert(
     $smallest <= 740.0,
-    sprintf(
-        'The lowest height breakpoint is %.0f px and therefore never applies'
-            . ' on a 768-pixel laptop',
-        $smallest
+    estab_ux_requirement(
+        'UX-FLACHE-BILDSCHIRME',
+        sprintf(
+            'The lowest height breakpoint is %.0f px and therefore never'
+                . ' applies on a 768-pixel laptop',
+            $smallest
+        )
     )
 );
 
@@ -156,14 +167,17 @@ foreach ($heightBlocks as $block) {
             $comparisons++;
             $assert(
                 $compactFirst <= $baseFirst,
-                sprintf(
-                    'At most %.0f px height, %s { %s } grows from %s to %s'
-                        . ' instead of shrinking',
-                    $block['limit'],
-                    $selector,
-                    $property,
-                    $base[$property],
-                    $value
+                estab_ux_requirement(
+                    'UX-FLACHE-BILDSCHIRME',
+                    sprintf(
+                        'At most %.0f px height, %s { %s } grows from %s to'
+                            . ' %s instead of shrinking',
+                        $block['limit'],
+                        $selector,
+                        $property,
+                        $base[$property],
+                        $value
+                    )
                 )
             );
         }
@@ -171,7 +185,10 @@ foreach ($heightBlocks as $block) {
 }
 $assert(
     $comparisons >= 5,
-    'The height-based rules override almost nothing measurable'
+    estab_ux_requirement(
+        'UX-FLACHE-BILDSCHIRME',
+        'The height-based rules override almost nothing measurable'
+    )
 );
 
 // The area navigation must stay reachable without scrolling the sidebar.
@@ -180,16 +197,22 @@ $assert(
         '~\.estab-message-sidebar\s*>\s*\.estab-navigation\s*\{[^}]*position:\s*sticky~',
         $stylesheet
     ) === 1,
-    'The area navigation is not pinned inside the sidebar and therefore stays'
-        . ' below the fold on a flat screen'
+    estab_ux_requirement(
+        'UX-FLACHE-BILDSCHIRME',
+        'The area navigation is not pinned inside the sidebar and therefore'
+            . ' stays below the fold on a flat screen'
+    )
 );
 $assert(
     preg_match(
         '~\.estab-message-sidebar\s*\{[^}]*display:\s*flex~',
         $stylesheet
     ) === 1,
-    'The sidebar is not a flex column, so a sticky child has no containing'
-        . ' block to stick within'
+    estab_ux_requirement(
+        'UX-FLACHE-BILDSCHIRME',
+        'The sidebar is not a flex column, so a sticky child has no'
+            . ' containing block to stick within'
+    )
 );
 
 printf(

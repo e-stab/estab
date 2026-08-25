@@ -350,7 +350,7 @@ Mehrwert, sondern der Grund, warum im Einsatz wieder Papier benutzt wird.
 | --- | --- | --- | --- |
 | `UX-MENUE-ORTSKONSTANZ` | Die Navigation steht auf jeder Seite an derselben Stelle, mit denselben Einträgen in derselben Reihenfolge. Ein Ziel, das die eigene Funktion gerade nicht ansteuern darf, bleibt **sichtbar und inaktiv mit Grund** — es verschwindet nicht. | Ein Test rendert die Navigation für jede Kombination aus Modus, Schicht und Funktion und hält Menge und Reihenfolge der Einträge konstant; unzulässige Einträge tragen einen Grund. | `offen` — die Navigation blendet unzulässige Ziele heute aus (siehe K1) |
 | `UX-MENUE-EIN-WEG` | Zu jedem Ziel führt genau ein Weg. Es gibt keine zwei Einstiege, die sich unterschiedlich verhalten. | Kein Ziel ist über zwei Wege mit abweichendem Verhalten erreichbar. | `offen` |
-| `UX-STANDORT` | Der Anwender erkennt auf jeder Seite, wo er ist, in welcher Funktion er handelt und für welchen Einsatz. | Jede Seite weist Einsatz, Funktion und aktuellen Bereich aus. | `ohne Regel` |
+| `UX-STANDORT` | Der Anwender erkennt auf jeder Seite, wo er ist, in welcher Funktion er handelt und für welchen Einsatz. | Jede Seite weist Einsatz, Funktion und aktuellen Bereich aus. | `erfüllt` |
 
 #### B — Der Vordruck als Papierbild
 
@@ -383,7 +383,7 @@ Mehrwert, sondern der Grund, warum im Einsatz wieder Papier benutzt wird.
 | ID | Soll | Abnahme | Ist |
 | --- | --- | --- | --- |
 | `UX-KONTRAST` | Text erfüllt WCAG AA gegen seinen tatsächlichen Hintergrund — auch dort, wo der Hintergrund die Farbe einer Durchschrift trägt. | Jede gerenderte Vorder-/Hintergrundpaarung erreicht das AA-Kontrastverhältnis. | `teilweise` — für die Nachrichtenlisten geprüft, für den Vordruck nicht |
-| `UX-FLACHE-BILDSCHIRME` | Bedienbar auf den Geräten einer Führungsstelle, einschließlich flacher Laptopbildschirme mit etwa 600 nutzbaren Bildpunkten Höhe. | Höhenabhängige Regeln existieren, verkleinern die überschriebenen Werte tatsächlich, und die Bereichsnavigation bleibt erreichbar. | `ohne Regel` |
+| `UX-FLACHE-BILDSCHIRME` | Bedienbar auf den Geräten einer Führungsstelle, einschließlich flacher Laptopbildschirme mit etwa 600 nutzbaren Bildpunkten Höhe. | Höhenabhängige Regeln existieren, verkleinern die überschriebenen Werte tatsächlich, und die Bereichsnavigation bleibt erreichbar. | `erfüllt` |
 | `UX-TASTATUR` | Die Anwendung ist vollständig mit der Tastatur bedienbar, einschließlich der Feldhilfen. Im Stab wird getippt, nicht gezeigt. | Jedes Bedienelement ist per Tastatur erreichbar und auslösbar; die Reihenfolge folgt der Feldfolge des Vordrucks. | `offen` |
 | `UX-OHNE-JAVASCRIPT` | Aufnehmen, Sichten und Befördern einer Nachricht funktionieren ohne JavaScript. Komfort darf davon abhängen, der Nachrichtenlauf nicht. | Der vollständige Laufweg ist ohne JavaScript durchlaufbar. | `teilweise` |
 

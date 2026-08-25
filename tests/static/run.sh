@@ -185,6 +185,7 @@ for test_name in \
     tkm_telecom_plan \
     ux_paper_image \
     ux_help_and_feedback \
+    ux_location_awareness \
     telecom_plan_security \
     upload_security \
     attachment_security \

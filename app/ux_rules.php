@@ -30,6 +30,14 @@ const ESTAB_UX_ORIGIN_BETREIBER =
 function estab_ux_rules(): array
 {
     return [
+        'UX-STANDORT' => [
+            'origin' => ESTAB_UX_ORIGIN_BETREIBER,
+            'reference' => 'Standort auf jeder Seite',
+            'requirement' => 'Auf jeder Seite ist erkennbar, für welchen '
+                . 'Einsatz gearbeitet wird, in welcher Funktion der '
+                . 'Bedienende handelt und in welchem Bereich er sich '
+                . 'befindet.',
+        ],
         'UX-EINE-SEITE' => [
             'origin' => ESTAB_UX_ORIGIN_BETREIBER,
             'reference' => 'Eine Seite je Arbeitsschritt',
@@ -44,6 +52,14 @@ function estab_ux_rules(): array
                 . 'auf Papier aussieht: dieselbe Feldfolge und dieselben drei '
                 . 'Teile -- oben die Vermerke der Fernmeldezentrale, in der '
                 . 'Mitte die Nachricht, unten der Laufzettel.',
+        ],
+        'UX-FLACHE-BILDSCHIRME' => [
+            'origin' => ESTAB_UX_ORIGIN_BETREIBER,
+            'reference' => 'Geräte der Führungsstelle',
+            'requirement' => 'Die Anwendung ist auf den Geräten einer '
+                . 'Führungsstelle bedienbar, einschließlich flacher '
+                . 'Laptopbildschirme mit etwa 600 nutzbaren Bildpunkten '
+                . 'Höhe. Die Bereichsnavigation bleibt dort erreichbar.',
         ],
         'UX-INFOPOINTER' => [
             'origin' => ESTAB_UX_ORIGIN_BETREIBER,

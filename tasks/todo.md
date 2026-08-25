@@ -44,7 +44,7 @@ Risiko: `·` niedrig · `!` mittel · `!!` hoch
 
 - [x] **T13** `·` Das Papierbild des Vordrucks — `UX-EINE-SEITE`, `UX-PAPIERBILD`, `UX-SPRACHE-VORSCHRIFT`
 - [x] **T14** `·` Ausfüllhilfen und Rückmeldung — `UX-INFOPOINTER`, `UX-RUECKMELDUNG`
-- [ ] **T15** `·` Standort und flache Bildschirme — `UX-STANDORT`, `UX-FLACHE-BILDSCHIRME`
+- [x] **T15** `·` Standort und flache Bildschirme — `UX-STANDORT`, `UX-FLACHE-BILDSCHIRME`
 
 > **Prüfpunkt C2** — Beschreiben die Bedienregeln, was der Anwender erlebt?
 
