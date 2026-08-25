@@ -20,6 +20,34 @@ const ESTAB_DV_SOURCE_HANDBUCH =
     'Handbuch ETB/TBB, Führung in der THW-Führungsstelle, Stand März 2022';
 const ESTAB_DV_SOURCE_DV_1_101 =
     'Dienstvorschrift 1-101 Führen im THW, Stand 01.01.2006';
+const ESTAB_DV_SOURCE_MELDEWESEN =
+    'Grundlagen des Meldewesens, THW-Ausbildungszentrum, Stand Mai 2024';
+
+/**
+ * Every document a rule may cite, keyed by its short name.
+ *
+ * The registry validates rule sources against this list. It used to keep its
+ * own copy, so a newly declared document was rejected until someone repeated
+ * it there, and the error named the innocent rule rather than the missing
+ * entry. Naming the documents here makes adding one a single edit.
+ *
+ * Where the documents contradict each other, the more recent one governs its
+ * own subject: the training material of 2024 and the form instructions of
+ * 2022 precede the service regulation of 2006, which applies wherever they
+ * are silent.
+ *
+ * @return array<string, string>
+ */
+function estab_dv_sources(): array
+{
+    return [
+        'ausfuellanleitung' => ESTAB_DV_SOURCE_AUSFUELLANLEITUNG,
+        'unterlage' => ESTAB_DV_SOURCE_UNTERLAGE,
+        'handbuch' => ESTAB_DV_SOURCE_HANDBUCH,
+        'dv-1-101' => ESTAB_DV_SOURCE_DV_1_101,
+        'meldewesen' => ESTAB_DV_SOURCE_MELDEWESEN,
+    ];
+}
 
 /**
  * @return array<string, array{source:string,reference:string,requirement:string}>

@@ -73,7 +73,7 @@ ausdrücklich als besondere Form der Meldung, die denselben Meldewegen folgt.
 | --- | --- | --- | --- |
 | Q1 | Ausfüllanleitung Nachrichtenvordruck | April 2022 | `ESTAB_DV_SOURCE_AUSFUELLANLEITUNG` |
 | Q2 | Unterlage Nachrichtenvordruck, Ausfüllanweisungen für den Stab | April 2022 | `ESTAB_DV_SOURCE_UNTERLAGE` |
-| Q3 | Grundlagen des Meldewesens, Version 1.1 | Mai 2024 | *fehlt — siehe REG-QUELLE-MELDEWESEN* |
+| Q3 | Grundlagen des Meldewesens, Version 1.1 | Mai 2024 | `ESTAB_DV_SOURCE_MELDEWESEN` |
 | Q4 | THW-DV 1-101, Handbuch Führen im THW | 01.01.2006 | `ESTAB_DV_SOURCE_DV_1_101` |
 | Q5 | Handbuch ETB/TBB, Führung in der THW-Führungsstelle | März 2022 | `ESTAB_DV_SOURCE_HANDBUCH` |
 | P1 | Bedienanforderungen des Betreibers, Abschnitt 5.10 dieses Dokuments | — | eigener Katalog, siehe Abschnitt 10 |
@@ -230,7 +230,7 @@ Anforderungen aus M9 erfüllt.
 | --- | --- | --- | --- | --- |
 | `REG-NACHWEISPFLICHT` | dieses Dokument | Keine Regel im Katalog ohne Test. | `tests/php/dv_rule_registry.php` schlägt fehl, sobald eine Regel ohne Test existiert. | `erfüllt` |
 | `REG-UNBEKANNTE-REGEL` | dieses Dokument | Eine unbekannte Regel-ID schlägt laut fehl, statt still durchzugehen. | `estab_dv_rule()` wirft bei unbekannter Kennung. | `erfüllt` |
-| `REG-QUELLE-MELDEWESEN` | Q3 | Der Katalog kennt die Lernunterlage „Grundlagen des Meldewesens" als eigene Quelle. | Konstante `ESTAB_DV_SOURCE_MELDEWESEN` existiert und wird von mindestens einer Regel benutzt. | `offen` |
+| `REG-QUELLE-MELDEWESEN` | Q3 | Der Katalog kennt die Lernunterlage „Grundlagen des Meldewesens" als eigene Quelle. | `estab_dv_sources()` führt die Quelle; die Registry weist eine Regel mit unbekannter Quelle weiterhin ab. | `erfüllt` |
 | `REG-VORRANGVERMERK` | Abschnitt 2.2 | Eine Regel, die eine ältere Quelle verdrängt, nennt die verdrängte Fundstelle. | Regeln mit Feld `verdraengt` tragen Quelle und Fundstelle der verdrängten Aussage. | `offen` |
 
 ### 5.3 M2 — fuehrungsorganisation

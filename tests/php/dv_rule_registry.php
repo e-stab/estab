@@ -43,15 +43,35 @@ foreach ($rules as $id => $rule) {
         'Rule ' . $id . ' does not state its requirement as a sentence'
     );
     $assert(
-        in_array($rule['source'], [
-            ESTAB_DV_SOURCE_AUSFUELLANLEITUNG,
-            ESTAB_DV_SOURCE_UNTERLAGE,
-            ESTAB_DV_SOURCE_HANDBUCH,
-            ESTAB_DV_SOURCE_DV_1_101,
-        ], true),
+        in_array($rule['source'], estab_dv_sources(), true),
         'Rule ' . $id . ' cites a document outside the catalogue'
     );
 }
+
+// The catalogue names its own sources, so adding one is a single edit. A
+// hand-kept second list here used to reject every rule whose source someone
+// had declared but forgotten to repeat, and the message blamed the rule.
+$sources = estab_dv_sources();
+$assert($sources !== [], 'The catalogue names no source document');
+foreach ($sources as $key => $label) {
+    $assert(
+        is_string($key) && $key !== '',
+        'A source document has no short name'
+    );
+    $assert(
+        is_string($label) && trim($label) !== '',
+        'Source ' . (string) $key . ' has no designation'
+    );
+}
+$assert(
+    count(array_unique($sources)) === count($sources),
+    'Two source documents carry the same designation'
+);
+$assert(
+    in_array(ESTAB_DV_SOURCE_MELDEWESEN, $sources, true),
+    'The catalogue does not know the training document '
+        . '"Grundlagen des Meldewesens"'
+);
 
 $assert(
     estab_dv_rule(array_key_first($rules)) !== [],
