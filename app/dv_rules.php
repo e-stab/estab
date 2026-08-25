@@ -358,6 +358,15 @@ function estab_dv_rules(): array
                 . 'Betriebsleitung. Beförderung und Melderauftrag laufen '
                 . 'über ihn.',
         ],
+        'TKM-KATALOG' => [
+            'source' => ESTAB_DV_SOURCE_MELDEWESEN,
+            'reference' => 'Kapitel 5.1, Übermittlungsmittel',
+            'requirement' => 'Der Katalog der Übermittlungsmittel umfasst '
+                . 'Funk, Telefon, Telefax, Datenübertragung und Melder sowie '
+                . 'Internet, E-Mail und Messenger. Die Ausfüllhilfe nennt '
+                . 'alle; der Vordruck kreuzt nur an, wofür er ein Kästchen '
+                . 'hat, und der genaue Weg wird benannt.',
+        ],
         'TKM-FERNMELDEPLAN' => [
             'source' => ESTAB_DV_SOURCE_DV_1_101,
             'reference' => 'Kapitel 6.1.1',

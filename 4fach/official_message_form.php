@@ -560,7 +560,15 @@ HTML;
         return [
             1 => [
                 'title' => 'Tatsächlich verwendetes Übermittlungsmittel',
-                'text' => 'Geben Sie an, über welches TK-Mittel die Nachricht tatsächlich empfangen oder gesendet wurde: Funk, Telefon, Telefax, DFÜ oder Kurier/Melder. Feld 1 dokumentiert den tatsächlichen Weg; Feld 7 enthält nur den gewünschten Weg.',
+                'text' => 'Geben Sie an, über welches TK-Mittel die Nachricht '
+                    . 'tatsächlich empfangen oder gesendet wurde. Der Vordruck '
+                    . 'kennt fünf: Funk, Telefon, Telefax, DFÜ und '
+                    . 'Kurier/Melder. Internet, E-Mail und Messenger sind '
+                    . 'DFÜ; kreuzen Sie dieses Kästchen an und benennen Sie '
+                    . 'den genauen Weg im Beförderungsweg (Feld 6). Ein '
+                    . 'Fernschreiben teilt sich das Kästchen der DFÜ. Feld 1 '
+                    . 'dokumentiert den tatsächlichen Weg; Feld 7 enthält nur '
+                    . 'den gewünschten.',
             ],
             2 => [
                 'title' => 'Aufnahmevermerk',
@@ -584,7 +592,12 @@ HTML;
             ],
             7 => [
                 'title' => 'Gewünschtes TK-Mittel',
-                'text' => 'Sie können hier einen Hinweis geben, über welches TK-Mittel die Nachricht befördert werden soll. Der tatsächlich benutzte Weg wird in Feld 1 nachgewiesen.',
+                'text' => 'Sie können hier einen Hinweis geben, über welches '
+                    . 'Mittel die Nachricht befördert werden soll: Funk, '
+                    . 'Telefon, Telefax, DFÜ oder Kurier/Melder. Internet, '
+                    . 'E-Mail und Messenger sind DFÜ; den genauen Weg benennt '
+                    . 'der Beförderungsweg (Feld 6). Der tatsächlich benutzte '
+                    . 'Weg wird in Feld 1 nachgewiesen.',
             ],
             8 => [
                 'title' => 'DURCHSAGE / Spruch',
