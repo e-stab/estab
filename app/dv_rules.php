@@ -170,6 +170,55 @@ function estab_dv_rules(): array
 }
 
 /**
+ * Read the displacement note of a rule, failing loudly on a malformed one.
+ *
+ * Where the sources contradict each other the more recent one governs, and
+ * the rule that follows it departs from a sentence that is still printed in
+ * an older document. Naming that sentence keeps the departure reviewable:
+ * whoever reads the rule later can check the decision instead of rediscovering
+ * the contradiction.
+ *
+ * The note is optional. A malformed one is rejected rather than ignored,
+ * because a half-filled note looks like provenance and carries none.
+ *
+ * @param array<string, mixed> $rule
+ * @return array{source:string,reference:string}|null
+ */
+function estab_dv_rule_displacement(array $rule): ?array
+{
+    if (!array_key_exists('verdraengt', $rule)) {
+        return null;
+    }
+
+    $note = $rule['verdraengt'];
+    if (!is_array($note)) {
+        throw new InvalidArgumentException(
+            'A displacement note must name a source and a reference'
+        );
+    }
+
+    $displaced = [];
+    foreach (['source', 'reference'] as $field) {
+        $value = $note[$field] ?? null;
+        if (!is_string($value) || trim($value) === '') {
+            throw new InvalidArgumentException(
+                'A displacement note has no ' . $field
+            );
+        }
+        $displaced[$field] = $value;
+    }
+
+    if (!in_array($displaced['source'], estab_dv_sources(), true)) {
+        throw new InvalidArgumentException(
+            'A displacement note cites a document outside the catalogue: '
+                . $displaced['source']
+        );
+    }
+
+    return $displaced;
+}
+
+/**
  * Resolve one rule, failing loudly on an identifier that does not exist.
  *
  * @return array{source:string,reference:string,requirement:string}

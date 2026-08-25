@@ -14,7 +14,7 @@ Risiko: `·` niedrig · `!` mittel · `!!` hoch
 
 - [x] **T01** `·` Quelle „Grundlagen des Meldewesens" aufnehmen — `REG-QUELLE-MELDEWESEN`
       → Konstante in `app/dv_rules.php` **und** Positivliste in `tests/php/dv_rule_registry.php`
-- [ ] **T02** `·` Verdrängungsvermerk einführen — `REG-VORRANGVERMERK`
+- [x] **T02** `·` Verdrängungsvermerk einführen — `REG-VORRANGVERMERK`
 - [ ] **T03** `·` Bedienkatalog anlegen — Apparat
       → `app/ux_rules.php`, `tests/php/ux_rule_registry.php`, Eintrag in `run.sh`
 

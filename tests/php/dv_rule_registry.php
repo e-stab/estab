@@ -73,6 +73,53 @@ $assert(
         . '"Grundlagen des Meldewesens"'
 );
 
+// A rule that departs from an older source must name what it displaces, or
+// the reason for the departure is lost the moment the author leaves. The
+// note is optional, but a malformed one is worse than none: it looks like
+// provenance and carries none.
+foreach ($rules as $id => $rule) {
+    estab_dv_rule_displacement($rule);
+    $assertions++;
+}
+
+$rejects = static function (mixed $note) use ($assert): void {
+    $rejected = false;
+    try {
+        estab_dv_rule_displacement(['verdraengt' => $note]);
+    } catch (InvalidArgumentException) {
+        $rejected = true;
+    }
+    $assert(
+        $rejected,
+        'A malformed displacement note is accepted: '
+            . var_export($note, true)
+    );
+};
+
+$rejects('Dienstvorschrift 1-101, Kapitel 4.3.1.11');
+$rejects([]);
+$rejects(['source' => ESTAB_DV_SOURCE_DV_1_101]);
+$rejects(['reference' => 'Kapitel 4.3.1.11']);
+$rejects(['source' => ESTAB_DV_SOURCE_DV_1_101, 'reference' => '   ']);
+$rejects(['source' => 'Erfundenes Dokument', 'reference' => 'Kapitel 1']);
+
+$assert(
+    estab_dv_rule_displacement(['requirement' => 'x']) === null,
+    'A rule without a displacement note is treated as displacing something'
+);
+$assert(
+    estab_dv_rule_displacement([
+        'verdraengt' => [
+            'source' => ESTAB_DV_SOURCE_DV_1_101,
+            'reference' => 'Kapitel 4.3.1.11',
+        ],
+    ]) === [
+        'source' => ESTAB_DV_SOURCE_DV_1_101,
+        'reference' => 'Kapitel 4.3.1.11',
+    ],
+    'A well-formed displacement note is not returned unchanged'
+);
+
 $assert(
     estab_dv_rule(array_key_first($rules)) !== [],
     'A catalogued rule cannot be resolved'

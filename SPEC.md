@@ -231,7 +231,7 @@ Anforderungen aus M9 erfüllt.
 | `REG-NACHWEISPFLICHT` | dieses Dokument | Keine Regel im Katalog ohne Test. | `tests/php/dv_rule_registry.php` schlägt fehl, sobald eine Regel ohne Test existiert. | `erfüllt` |
 | `REG-UNBEKANNTE-REGEL` | dieses Dokument | Eine unbekannte Regel-ID schlägt laut fehl, statt still durchzugehen. | `estab_dv_rule()` wirft bei unbekannter Kennung. | `erfüllt` |
 | `REG-QUELLE-MELDEWESEN` | Q3 | Der Katalog kennt die Lernunterlage „Grundlagen des Meldewesens" als eigene Quelle. | `estab_dv_sources()` führt die Quelle; die Registry weist eine Regel mit unbekannter Quelle weiterhin ab. | `erfüllt` |
-| `REG-VORRANGVERMERK` | Abschnitt 2.2 | Eine Regel, die eine ältere Quelle verdrängt, nennt die verdrängte Fundstelle. | Regeln mit Feld `verdraengt` tragen Quelle und Fundstelle der verdrängten Aussage. | `offen` |
+| `REG-VORRANGVERMERK` | Abschnitt 2.2 | Eine Regel, die eine ältere Quelle verdrängt, nennt die verdrängte Fundstelle. | `estab_dv_rule_displacement()` gibt eine vollständige Angabe zurück und weist jede unvollständige laut ab. | `erfüllt` |
 
 ### 5.3 M2 — fuehrungsorganisation
 
