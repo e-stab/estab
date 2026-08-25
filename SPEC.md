@@ -270,8 +270,8 @@ Anforderungen aus M9 erfüllt.
 | `NV-14-TATSACHE-VERMUTUNG` | Q4 Kap. 8.2.1, Q3 Kap. 3 | Die Nachricht macht unterscheidbar, was selbst festgestellt, was von anderen berichtet und was vermutet ist. | Der Vordruck bietet dafür eine Kennzeichnung oder einen festen Hinweis am Textfeld. | `offen` |
 | `NV-15-ABSENDER` | Q1 Feld 15 | Absender als Dienststellen-, Teileinheits- oder Einheitsbezeichnung; keine Eigennamen. | Ausfüllhilfe und Rückweisungsgrund benennen die Bezeichnungsart. | `teilweise` |
 | `NV-16-ABFASSUNGSZEIT` | Q1 Feld 16 | Feld 16 trägt die Abfassungszeit. Der Server setzt keine Erfassungszeit ein, ohne dies auszuweisen. | vorhandene Regel | `erfüllt` |
-| `NV-17-ZEICHEN-FUNKTION` | Q1 Feld 17 | Der Verfasser beglaubigt die Nachricht mit Namenszeichen **und** Funktion. | Beide Angaben stammen aus der Anmeldung und sind nicht frei überschreibbar. | `ohne Regel` |
-| `NV-18-QUITTUNG` | Q1 Feld 18 | Der Sichter quittiert den Erhalt mit vierstelliger Uhrzeit und Namenszeichen. | Ohne Quittung ist die Sichtung nicht abschließbar. | `ohne Regel` |
+| `NV-17-ZEICHEN-FUNKTION` | Q1 Feld 17 | Der Verfasser beglaubigt die Nachricht mit Namenszeichen **und** Funktion. | Beide Angaben stammen aus der Anmeldung und sind nicht frei überschreibbar. | `erfüllt` |
+| `NV-18-QUITTUNG` | Q1 Feld 18 | Der Sichter quittiert den Erhalt mit vierstelliger Uhrzeit und Namenszeichen. | Ohne Quittung ist die Sichtung nicht abschließbar. | `erfüllt` |
 | `NV-19-VERTEILER-EINGANG` | Q2 Feld 19 | Die Sichtung einer eingehenden Nachricht benennt mindestens einen Empfänger. | vorhandene Regel | `erfüllt` |
 | `NV-19-VERTEILER-AUSGANG` | Q2 Feld 19 | Der Verteiler gilt auch im Ausgang und ist vom Verfasser ausfüllbar. | vorhandene Regel | `erfüllt` |
 | `NV-20-VERMERKE-ERHALT` | Q2 Feld 20 | Eine spätere Eintragung ergänzt die vorhandenen Vermerke und löscht sie nicht. | vorhandene Regel | `erfüllt` |

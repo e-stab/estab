@@ -26,7 +26,7 @@ Risiko: `·` niedrig · `!` mittel · `!!` hoch
 
 - [x] **T04** `·` Vermerke der Fernmeldezentrale — `NV-02-AUFNAHMEVERMERK`, `NV-03-ANNAHMEVERMERK`, `NV-04-BEFOERDERUNGSVERMERK`, `NV-05-TBB-NUMMER`
 - [x] **T05** `·` Felder ohne eigene Prüfung — `NV-01-TKM-TATSAECHLICH`, `NV-06-RUFNAME`, `NV-11-RUFNUMMER`, `NV-13-INHALT-BETREFF`
-- [ ] **T06** `·` Beglaubigung und Quittung — `NV-17-ZEICHEN-FUNKTION`, `NV-18-QUITTUNG`
+- [x] **T06** `·` Beglaubigung und Quittung — `NV-17-ZEICHEN-FUNKTION`, `NV-18-QUITTUNG`
 - [ ] **T07** `·` Stationen des Laufwegs — `LW-EINGANG-STATIONEN`, `LW-AUSGANG-STATIONEN`
 - [ ] **T08** `·` Feldhoheit und Korrekturschleife — `LW-NUR-BLAUER-TEIL`, `LW-KORREKTURSCHLEIFE`
 - [ ] **T09** `·` Die vier Durchschriften — `NV-4FACH-VERTEILUNG`

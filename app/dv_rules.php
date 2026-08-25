@@ -145,6 +145,20 @@ function estab_dv_rules(): array
                 . 'Der Server setzt an ihrer Stelle keine Erfassungszeit ein, '
                 . 'ohne dies am Vordruck auszuweisen.',
         ],
+        'NV-17-ZEICHEN-FUNKTION' => [
+            'source' => ESTAB_DV_SOURCE_AUSFUELLANLEITUNG,
+            'reference' => 'Feld 17',
+            'requirement' => 'Der Verfasser beglaubigt die Nachricht mit '
+                . 'seinem Namenszeichen und der Funktion, in der er handelt. '
+                . 'Beides zusammen macht die Nachricht zurechenbar.',
+        ],
+        'NV-18-QUITTUNG' => [
+            'source' => ESTAB_DV_SOURCE_AUSFUELLANLEITUNG,
+            'reference' => 'Feld 18',
+            'requirement' => 'Der Sichter quittiert den Erhalt der Nachricht '
+                . 'mit vierstelliger Uhrzeit und Namenszeichen. Ohne Quittung '
+                . 'ist die Sichtung nicht abschließbar.',
+        ],
         'NV-19-VERTEILER-EINGANG' => [
             'source' => ESTAB_DV_SOURCE_UNTERLAGE,
             'reference' => 'Feld 19, Laufweg Eingang',
