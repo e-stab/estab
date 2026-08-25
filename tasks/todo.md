@@ -42,7 +42,7 @@ Risiko: `·` niedrig · `!` mittel · `!!` hoch
 
 ## P2 — Nachweise nachziehen: Bedienung · setzt T03 voraus
 
-- [ ] **T13** `·` Das Papierbild des Vordrucks — `UX-EINE-SEITE`, `UX-PAPIERBILD`, `UX-SPRACHE-VORSCHRIFT`
+- [x] **T13** `·` Das Papierbild des Vordrucks — `UX-EINE-SEITE`, `UX-PAPIERBILD`, `UX-SPRACHE-VORSCHRIFT`
 - [ ] **T14** `·` Ausfüllhilfen und Rückmeldung — `UX-INFOPOINTER`, `UX-RUECKMELDUNG`
 - [ ] **T15** `·` Standort und flache Bildschirme — `UX-STANDORT`, `UX-FLACHE-BILDSCHIRME`
 

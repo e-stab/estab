@@ -356,9 +356,9 @@ Mehrwert, sondern der Grund, warum im Einsatz wieder Papier benutzt wird.
 
 | ID | Soll | Abnahme | Ist |
 | --- | --- | --- | --- |
-| `UX-EINE-SEITE` | Alles, was ein Arbeitsschritt auszufüllen verlangt, steht auf **einer** Seite. Kein Assistent, keine Reiter, kein Nachladen, kein Weiterblättern zum Absenden. | Kein Arbeitsschritt verteilt seine Pflichtfelder auf mehr als ein Dokument. | `ohne Regel` |
-| `UX-PAPIERBILD` (P1 + Q2 Aufbau) | Die Oberfläche zeigt den Vordruck so, wie er auf Papier aussieht: dieselbe Feldfolge und die drei Teile der Unterlage — oben die Bearbeitungsvermerke der Fernmeldezentrale, in der Mitte die Nachricht, unten der Laufzettel. | Die gerenderte Feldfolge entspricht der Q1-Nummernfolge; die drei Teile sind als Gruppen ausgezeichnet und benannt. | `ohne Regel` |
-| `UX-SPRACHE-VORSCHRIFT` | Feldbeschriftungen und Schaltflächen benutzen die Begriffe der Vorschrift, nicht Anwendungsjargon. Wer den Vordruck kennt, erkennt das Feld an seinem Namen wieder. | Jede Feldbeschriftung stimmt mit der Benennung der Ausfüllanleitung überein. | `ohne Regel` |
+| `UX-EINE-SEITE` | Alles, was ein Arbeitsschritt auszufüllen verlangt, steht auf **einer** Seite. Kein Assistent, keine Reiter, kein Nachladen, kein Weiterblättern zum Absenden. | Kein Arbeitsschritt verteilt seine Pflichtfelder auf mehr als ein Dokument. | `erfüllt` |
+| `UX-PAPIERBILD` (P1 + Q2 Aufbau) | Die Oberfläche zeigt den Vordruck so, wie er auf Papier aussieht: dieselbe Feldfolge und die drei Teile der Unterlage — oben die Bearbeitungsvermerke der Fernmeldezentrale, in der Mitte die Nachricht, unten der Laufzettel. | Die gerenderte Feldfolge entspricht der Q1-Nummernfolge; die drei Teile sind als Gruppen ausgezeichnet und benannt. | `erfüllt` |
+| `UX-SPRACHE-VORSCHRIFT` | Feldbeschriftungen und Schaltflächen benutzen die Begriffe der Vorschrift, nicht Anwendungsjargon. Wer den Vordruck kennt, erkennt das Feld an seinem Namen wieder. | Jede Feldbeschriftung stimmt mit der Benennung der Ausfüllanleitung überein. | `erfüllt` |
 
 #### C — Führung im Feld
 

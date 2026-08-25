@@ -29,7 +29,31 @@ const ESTAB_UX_ORIGIN_BETREIBER =
  */
 function estab_ux_rules(): array
 {
-    return [];
+    return [
+        'UX-EINE-SEITE' => [
+            'origin' => ESTAB_UX_ORIGIN_BETREIBER,
+            'reference' => 'Eine Seite je Arbeitsschritt',
+            'requirement' => 'Alles, was ein Arbeitsschritt auszufüllen '
+                . 'verlangt, steht auf einer Seite. Kein Assistent, keine '
+                . 'Reiter, kein Weiterblättern zum Absenden.',
+        ],
+        'UX-PAPIERBILD' => [
+            'origin' => ESTAB_UX_ORIGIN_BETREIBER,
+            'reference' => 'Bild des Papiervordrucks',
+            'requirement' => 'Die Oberfläche zeigt den Vordruck so, wie er '
+                . 'auf Papier aussieht: dieselbe Feldfolge und dieselben drei '
+                . 'Teile -- oben die Vermerke der Fernmeldezentrale, in der '
+                . 'Mitte die Nachricht, unten der Laufzettel.',
+        ],
+        'UX-SPRACHE-VORSCHRIFT' => [
+            'origin' => ESTAB_UX_ORIGIN_BETREIBER,
+            'reference' => 'Begriffe der Vorschrift',
+            'requirement' => 'Feldbeschriftungen und Schaltflächen benutzen '
+                . 'die Begriffe der Vorschrift statt Anwendungsjargon. Wer '
+                . 'den Vordruck kennt, erkennt das Feld an seinem Namen '
+                . 'wieder.',
+        ],
+    ];
 }
 
 /**
