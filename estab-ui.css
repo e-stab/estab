@@ -516,7 +516,7 @@
 .estab-shell {
     display: grid;
     grid-template-columns:
-        clamp(13rem, 15vw, 16rem)
+        clamp(15.5rem, 18vw, 18rem)
         minmax(0, 1fr)
         clamp(15rem, 19vw, 20rem);
     height: 100dvh;
@@ -1307,35 +1307,59 @@ audio[data-estab-sidebar-audio] {
 }
 
 .estab-navigation-sidebar-heading {
-    padding: 0.75rem 0.75rem 0.45rem;
+    padding: 0.35rem 0.55rem 0.25rem;
 }
 
 .estab-navigation-sidebar-heading h2 {
-    font-size: 0.95rem;
+    color: #c5d6e8;
+    font-size: 0.66rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
     margin: 0;
+    text-transform: uppercase;
 }
 
+/* "Arbeitsbereich wechseln" sagte, was die Ueberschrift schon sagt. Die
+   Zeile bleibt fuer Vorleseprogramme, kostet aber keine Hoehe mehr. */
 .estab-navigation-sidebar-heading p {
-    color: #c5d6e8;
-    font-size: 0.8rem;
-    margin: 0.18rem 0 0;
+    border: 0;
+    clip: rect(0 0 0 0);
+    clip-path: inset(50%);
+    height: 1px;
+    margin: 0;
+    overflow: hidden;
+    position: absolute;
+    white-space: nowrap;
+    width: 1px;
 }
 
 .estab-navigation-sidebar .estab-navigation-content {
     display: grid;
-    gap: 0.65rem;
+    gap: 0.4rem;
+    /* Die Grundregel packt die Leiste waagerecht an den Anfang. Als Raster
+       heisst das: die Spalte wird nur so breit wie ihr Inhalt und der Rest
+       bleibt leer -- und die Liste darin kann dann nie zwei Ziele
+       nebeneinander stellen. Hier soll die Spalte die Breite fuellen. */
+    justify-content: normal;
     margin: 0;
     max-width: none;
     overflow: visible;
-    padding: 0 0.65rem 0.7rem;
+    padding: 0 0.5rem 0.4rem;
 }
 
+/* Zwei Ziele je Zeile, sobald die Spalte breit genug dafuer ist. Bei 13 rem
+   ist sie das nicht: dort braeche "Fuehrungsstelle" mitten durch, und ein
+   zerrissener Name kostet mehr als die gesparte Zeile wert ist. */
 .estab-navigation-sidebar .estab-navigation-list {
     display: grid;
-    gap: 0.3rem;
-    grid-template-columns: minmax(0, 1fr);
+    gap: 0.25rem;
+    grid-template-columns: repeat(auto-fill, minmax(6.2rem, 1fr));
     margin: 0;
     padding: 0;
+    /* Ohne feste Breite bleibt die Breite der Liste unbestimmt, und
+       "auto-fill" rechnet dann mit genau einer Spalte -- die Zahl der
+       Spalten haengt daran, dass hier eine Breite steht. */
+    width: 100%;
 }
 
 .estab-navigation-sidebar .estab-navigation-item {
@@ -1350,13 +1374,13 @@ audio[data-estab-sidebar-audio] {
     border-left: 4px solid transparent;
     border-radius: 5px;
     box-sizing: border-box;
-    font-size: 0.82rem;
+    font-size: 0.72rem;
     justify-content: flex-start;
-    line-height: 1.2;
-    min-height: 2.4rem;
+    line-height: 1.15;
+    min-height: 1.9rem;
     min-width: 0;
     overflow-wrap: break-word;
-    padding: 0.4rem 0.55rem;
+    padding: 0.3rem 0.4rem;
     white-space: normal;
     word-break: normal;
 }
@@ -1378,18 +1402,19 @@ audio[data-estab-sidebar-audio] {
     border-left: 0;
     border-top: 1px solid #45627f;
     display: grid;
-    gap: 0.45rem;
+    gap: 0.25rem;
     margin: 0;
-    padding: 0.6rem 0 0;
+    padding: 0.35rem 0 0;
 }
 
 .estab-navigation-sidebar .estab-navigation-services-label {
     clip: auto;
     clip-path: none;
     color: #c5d6e8;
-    font-size: 0.75rem;
+    font-size: 0.66rem;
     font-weight: 700;
     height: auto;
+    letter-spacing: 0.05em;
     overflow: visible;
     position: static;
     text-transform: uppercase;
@@ -8574,7 +8599,7 @@ a.estab-message-list-chip:hover {
 .estab-situation-stations {
     display: grid;
     gap: 0.3rem;
-    grid-template-columns: repeat(auto-fit, minmax(5rem, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(6.2rem, 1fr));
     list-style: none;
     margin: 0;
     padding: 0;
@@ -8593,6 +8618,9 @@ a.estab-message-list-chip:hover {
 .estab-situation-station-name {
     font-size: 0.85rem;
     font-weight: 700;
+    hyphens: auto;
+    min-width: 0;
+    overflow-wrap: anywhere;
 }
 
 .estab-situation-station-state {

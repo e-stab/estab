@@ -30,8 +30,16 @@ require_once __DIR__ . '/csp.php';
  * Scrollbereiche brauchen kein Kleben.
  */
 
-/** Die feste Breite der beiden stehenden Spalten. */
-const ESTAB_SHELL_MENU_WIDTH = 'clamp(13rem, 15vw, 16rem)';
+/**
+ * Die feste Breite der beiden stehenden Spalten -- dieselben Werte wie in
+ * `.estab-shell` im Stylesheet.
+ *
+ * Das Menue ist breiter geworden, seit die Arbeitsschritte dort stehen: Zwei
+ * Ziele nebeneinander brauchen Platz, und ohne ihn braeche
+ * "Fuehrungsstelle" mitten durch. Die Breite kommt aus der Mitte, nicht vom
+ * Cockpit -- das behaelt seine.
+ */
+const ESTAB_SHELL_MENU_WIDTH = 'clamp(15.5rem, 18vw, 18rem)';
 const ESTAB_SHELL_COCKPIT_WIDTH = 'clamp(15rem, 19vw, 20rem)';
 
 /**
