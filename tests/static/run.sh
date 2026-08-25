@@ -175,6 +175,7 @@ for test_name in \
     dv_rule_registry \
     ux_rule_registry \
     nv_reception_marks \
+    nv_message_head_fields \
     telecom_plan_security \
     upload_security \
     attachment_security \

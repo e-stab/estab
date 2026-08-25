@@ -71,6 +71,14 @@ function estab_dv_rules(): array
                 . 'die der jeweilige Arbeitsschritt verlangt, und benennt bei '
                 . 'einer Rückweisung das Feld und den Grund.',
         ],
+        'NV-01-TKM-TATSAECHLICH' => [
+            'source' => ESTAB_DV_SOURCE_AUSFUELLANLEITUNG,
+            'reference' => 'Feld 1',
+            'requirement' => 'Feld 1 nimmt das tatsächlich benutzte '
+                . 'Übermittlungsmittel auf und wird von der Fernmeldezentrale '
+                . 'gesetzt. Es ist von Feld 7 getrennt, das nur den Wunsch des '
+                . 'Verfassers trägt.',
+        ],
         'NV-02-AUFNAHMEVERMERK' => [
             'source' => ESTAB_DV_SOURCE_AUSFUELLANLEITUNG,
             'reference' => 'Feld 2',
@@ -102,11 +110,33 @@ function estab_dv_rules(): array
                 . 'Technischen Betriebsbuch. Eine anwendungsinterne Nummer '
                 . 'tritt nicht an ihre Stelle.',
         ],
+        'NV-06-RUFNAME' => [
+            'source' => ESTAB_DV_SOURCE_AUSFUELLANLEITUNG,
+            'reference' => 'Feld 6',
+            'requirement' => 'Feld 6 trägt den Funkrufnamen der Gegenstelle. '
+                . 'Ein Eigenname oder die Anschrift tritt nicht an seine '
+                . 'Stelle.',
+        ],
         'NV-07-TKM-WUNSCH' => [
             'source' => ESTAB_DV_SOURCE_AUSFUELLANLEITUNG,
             'reference' => 'Feld 7',
             'requirement' => 'Feld 7 nimmt das gewünschte Übermittlungsmittel '
                 . 'auf. Wer die Nachricht verfasst, muss es ausfüllen können.',
+        ],
+        'NV-11-RUFNUMMER' => [
+            'source' => ESTAB_DV_SOURCE_AUSFUELLANLEITUNG,
+            'reference' => 'Feld 11',
+            'requirement' => 'Feld 11 trägt die Rufnummer der Gegenstelle und '
+                . 'wird in der Regel bei Gesprächsnotizen verwendet. Die '
+                . 'Anwendung macht das Feld nicht zur Pflicht.',
+        ],
+        'NV-13-INHALT-BETREFF' => [
+            'source' => ESTAB_DV_SOURCE_AUSFUELLANLEITUNG,
+            'reference' => 'Felder 13 und 14',
+            'requirement' => 'Feld 13 trägt den kurzen Betreff, Feld 14 den '
+                . 'ausführlichen Text. Beide sind eigene Felder und werden '
+                . 'dort verlangt, wo die Nachricht abgefasst oder aufgenommen '
+                . 'wird.',
         ],
         'NV-16-ABFASSUNGSZEIT' => [
             'source' => ESTAB_DV_SOURCE_AUSFUELLANLEITUNG,
