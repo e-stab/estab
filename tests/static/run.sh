@@ -174,6 +174,7 @@ for test_name in \
     dv_double_hat_queues \
     dv_rule_registry \
     ux_rule_registry \
+    nv_reception_marks \
     telecom_plan_security \
     upload_security \
     attachment_security \

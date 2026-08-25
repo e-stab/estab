@@ -71,6 +71,37 @@ function estab_dv_rules(): array
                 . 'die der jeweilige Arbeitsschritt verlangt, und benennt bei '
                 . 'einer Rückweisung das Feld und den Grund.',
         ],
+        'NV-02-AUFNAHMEVERMERK' => [
+            'source' => ESTAB_DV_SOURCE_AUSFUELLANLEITUNG,
+            'reference' => 'Feld 2',
+            'requirement' => 'Die Fernmeldezentrale bestätigt die Aufnahme '
+                . 'einer eingehenden Nachricht mit der Uhrzeit und ihrem '
+                . 'Namenszeichen. Ohne beides ist die Aufnahme nicht '
+                . 'abschließbar.',
+        ],
+        'NV-03-ANNAHMEVERMERK' => [
+            'source' => ESTAB_DV_SOURCE_AUSFUELLANLEITUNG,
+            'reference' => 'Feld 3',
+            'requirement' => 'Eine zur Beförderung angenommene Nachricht '
+                . 'erhält von der Fernmeldezentrale Uhrzeit und '
+                . 'Namenszeichen. Ohne beides ist die Annahme nicht '
+                . 'abschließbar.',
+        ],
+        'NV-04-BEFOERDERUNGSVERMERK' => [
+            'source' => ESTAB_DV_SOURCE_AUSFUELLANLEITUNG,
+            'reference' => 'Feld 4',
+            'requirement' => 'Die Beförderung wird mit der Quittungszeit der '
+                . 'Gegenstelle und einem Namenszeichen bestätigt. Ohne beides '
+                . 'ist die Beförderung nicht abschließbar.',
+        ],
+        'NV-05-TBB-NUMMER' => [
+            'source' => ESTAB_DV_SOURCE_AUSFUELLANLEITUNG,
+            'reference' => 'Feld 5',
+            'requirement' => 'Feld 5 kennzeichnet die Nachricht als Eingang '
+                . 'oder Ausgang und trägt die laufende Nummer aus dem '
+                . 'Technischen Betriebsbuch. Eine anwendungsinterne Nummer '
+                . 'tritt nicht an ihre Stelle.',
+        ],
         'NV-07-TKM-WUNSCH' => [
             'source' => ESTAB_DV_SOURCE_AUSFUELLANLEITUNG,
             'reference' => 'Feld 7',
