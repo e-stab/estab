@@ -632,11 +632,17 @@ HTML;
                     . 'erhalten. Beantworten Sie wo, wann, was, wie und wer, '
                     . 'und trennen Sie, was Sie selbst festgestellt haben, '
                     . 'was Ihnen gemeldet wurde und was Sie vermuten. '
-                    . 'Eine Meldung berichtet an die vorgesetzte Stelle. Eine '
-                    . 'Orientierung unterrichtet nachgeordnete oder '
-                    . 'gleichgestellte Stellen. Ein Antrag fordert etwas an. '
-                    . 'Die Art steht im Text; die Anwendung führt sie nicht '
-                    . 'gesondert mit.',
+                    . 'Eine Meldung berichtet an die vorgesetzte '
+                    . 'Führungsstelle; der Meldeweg führt von unten nach '
+                    . 'oben. Eine Orientierung unterrichtet nachgeordnete '
+                    . 'oder gleichgestellte Stellen. Ein Antrag fordert '
+                    . 'etwas an; er geht an die vorgesetzte Führungsstelle '
+                    . 'oder an einen Nachbarn, der aushelfen kann, und '
+                    . 'beantwortet wo, wann, was und '
+                    . 'warum, wie viele beziehungsweise wie beschaffen, und '
+                    . 'wer anfordert. Die Art steht im Text; die Anwendung '
+                    . 'führt sie nicht gesondert mit und hindert Sie an '
+                    . 'keinem Weg.',
             ],
             15 => [
                 'title' => 'Absender',

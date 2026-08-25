@@ -204,6 +204,7 @@ for test_name in \
     tkm_catalogue \
     tkm_messenger_duties \
     mw_message_kinds \
+    mw_message_directions \
     telecom_plan_security \
     upload_security \
     attachment_security \

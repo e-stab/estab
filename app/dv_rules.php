@@ -177,6 +177,43 @@ function estab_dv_rules(): array
                 . 'drei unterscheidet -- auch dort, wo Fernmeldezentrale und '
                 . 'Leiter des Fernmeldebetriebes rückfragen können.',
         ],
+        'MW-MELDEWEG-RICHTUNG' => [
+            'source' => ESTAB_DV_SOURCE_MELDEWESEN,
+            'reference' => 'Kapitel 1, Meldeweg',
+            'requirement' => 'Der Meldeweg führt von unten nach oben. Der '
+                . 'Vordruck erinnert daran; er hindert niemanden, weil im '
+                . 'Einsatz eine verweigerte Nachricht teurer ist als eine '
+                . 'falsch benannte.',
+        ],
+        'MW-ORIENTIERUNG-RICHTUNG' => [
+            'source' => ESTAB_DV_SOURCE_MELDEWESEN,
+            'reference' => 'Kapitel 2, Orientierung',
+            'requirement' => 'Die Orientierung unterrichtet nachgeordnete '
+                . 'und gleichgestellte Stellen. Der Vordruck nennt beide '
+                . 'Richtungen; der Verteiler sperrt kein Ziel deswegen.',
+            'verdraengt' => [
+                'source' => ESTAB_DV_SOURCE_DV_1_101,
+                'reference' => 'Kapitel 8.2.2',
+            ],
+        ],
+        'MW-ANTRAG-RICHTUNG' => [
+            'source' => ESTAB_DV_SOURCE_MELDEWESEN,
+            'reference' => 'Kapitel 2, Antrag',
+            'requirement' => 'Der Antrag geht an die vorgesetzte '
+                . 'Führungsstelle oder an einen Nachbarn, der aushelfen '
+                . 'kann. Der Vordruck nennt beide Wege.',
+            'verdraengt' => [
+                'source' => ESTAB_DV_SOURCE_DV_1_101,
+                'reference' => 'Kapitel 8.2.3',
+            ],
+        ],
+        'MW-ANTRAG-SCHEMA' => [
+            'source' => ESTAB_DV_SOURCE_MELDEWESEN,
+            'reference' => 'Kapitel 3, Aufbau eines Antrags',
+            'requirement' => 'Ein Antrag beantwortet wo, wann, was und '
+                . 'warum, wie viele beziehungsweise wie beschaffen und wer '
+                . 'anfordert. Die Ausfüllhilfe nennt diese Leitfragen.',
+        ],
         'NV-14-5W' => [
             'source' => ESTAB_DV_SOURCE_MELDEWESEN,
             'reference' => 'Kapitel 3, Aufbau einer Meldung',
