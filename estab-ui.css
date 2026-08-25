@@ -757,8 +757,8 @@
 .estab-sidebar-status-top {
     align-items: start;
     display: grid;
-    gap: 0.75rem;
-    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 0.5rem;
+    grid-template-columns: minmax(0, 1fr) auto auto;
 }
 
 .estab-sidebar-queue {
@@ -933,17 +933,16 @@
     padding-top: 0.65rem;
 }
 
-/* Anmeldung, Glocke und Abmelden stehen in einer Zeile unter Warteschlange
-   und Uhr. Drei kurze Angaben brauchen keinen eigenen Kasten. */
+/* Anmeldung und Abmelden stehen in einer Zeile unter Warteschlange und Uhr.
+   Zwei kurze Angaben brauchen keinen eigenen Kasten -- und der Platz, den
+   ein Kasten kostete, fehlte weiter unten beim Aktivitaetsraster. */
 .estab-sidebar-identity-row {
     align-items: center;
     border-top: 1px solid #2c4a68;
     display: flex;
-    flex-wrap: wrap;
     gap: 0.4rem;
-    justify-content: space-between;
-    margin-top: 0.5rem;
-    padding-top: 0.5rem;
+    margin-top: 0.4rem;
+    padding-top: 0.4rem;
 }
 
 .estab-sidebar-identity-row .estab-session-bar {
@@ -956,35 +955,81 @@
     padding: 0;
 }
 
-.estab-sidebar-identity-row .estab-session-topline {
+/* Die Leiste der Seitenspalte stellt sonst ein Raster aus zwei Zeilen auf:
+   oben die Marke und der Weg hinaus, unten die Anmeldung. Die Marke steht
+   hier nicht mehr -- sie ist im Menue --, und dann bliebe die obere Zeile
+   halb leer und der Knopf stuende allein. Im Cockpit ist es deshalb eine
+   Zeile: Anmeldung links, Weg hinaus rechts daneben. */
+.estab-sidebar-identity-row .estab-session-bar .estab-session-topline {
     align-items: center;
+    box-sizing: border-box;
     display: flex;
-    flex-wrap: wrap;
-    gap: 0.35rem;
+    gap: 0.4rem;
     justify-content: space-between;
+    min-width: 0;
+    padding: 0;
+    width: 100%;
 }
 
-.estab-sidebar-identity-actions {
-    align-items: center;
-    display: flex;
+.estab-sidebar-identity-row .estab-session-bar .estab-session-identity {
+    display: grid;
+    gap: 0;
+    line-height: 1.25;
+    min-width: 0;
+}
+
+/* "Angemeldet als" bleibt stehen -- ohne die Zeile weiss niemand, wessen
+   Name da steht. Sie wird nur klein: die Angabe ordnet ein, sie meldet
+   nichts. */
+.estab-sidebar-identity-row .estab-session-bar .estab-session-prefix {
+    font-size: 0.62rem;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+}
+
+.estab-sidebar-identity-row .estab-session-bar [data-estab-user-name] {
+    font-size: 0.92rem;
+}
+
+.estab-sidebar-identity-row .estab-session-bar .estab-session-detail {
+    font-size: 0.68rem;
+}
+
+.estab-sidebar-identity-row .estab-session-bar .estab-session-actions {
     flex: 0 0 auto;
-    gap: 0.3rem;
+    margin: 0;
+}
+
+/* Der Weg hinaus behaelt sein Wort. Ein Symbol allein spart noch ein paar
+   Pixel, aber wer die Anwendung zum ersten Mal sieht, muss dann raten -- und
+   Raten am Abmelden ist der falsche Ort dafuer. Klein reicht. */
+.estab-sidebar-identity-row .estab-session-bar .estab-button-logout {
+    font-size: 0.72rem;
+    min-width: 0;
+    padding: 0.3rem 0.55rem;
+    white-space: nowrap;
 }
 
 /* Die Glocke: offen heisst hoerbar, durchgestrichen heisst stumm. Dasselbe
    Zeichen benutzt jedes Geraet dafuer, und es braucht keine Uebersetzung. */
 .estab-sidebar-sound-toggle {
     align-items: center;
+    align-self: start;
     background: #16283c;
     border: 1px solid #45627f;
-    border-radius: 7px;
+    border-radius: 6px;
     color: #e6edf5;
     cursor: pointer;
     display: inline-flex;
     justify-content: center;
-    min-height: 2.2rem;
-    min-width: 2.2rem;
-    padding: 0.25rem;
+    min-height: 1.8rem;
+    min-width: 1.8rem;
+    padding: 0.2rem;
+}
+
+.estab-sidebar-sound-toggle .estab-sidebar-sound-bell {
+    height: 15px;
+    width: 15px;
 }
 
 .estab-sidebar-sound-toggle:hover,
@@ -2178,10 +2223,10 @@ audio[data-estab-sidebar-audio] {
 }
 
 .estab-incident-indicator-label {
-    font-size: 0.72rem;
+    font-size: 0.66rem;
     font-weight: 800;
     grid-column: 1 / -1;
-    letter-spacing: 0.08em;
+    letter-spacing: 0.03em;
     text-transform: uppercase;
 }
 

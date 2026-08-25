@@ -1509,22 +1509,19 @@ function estab_sidebar_status_markup(
         . '<strong>' . estab_auth_html($now->format('H:i')) . '</strong>'
         . '<span>' . estab_auth_html($now->format('d.m.Y')) . '</span>'
         . '</time>'
+        . $soundControl
         . '</div>'
         /*
-         * Wer angemeldet ist, die Glocke und der Weg hinaus stehen in einer
-         * Zeile unter Warteschlange und Uhr -- nicht in einem eigenen Feld
-         * darunter. Es sind drei kurze Angaben; ein eigener Kasten dafuer
-         * kostete mehr Platz als sie selbst.
+         * Wer angemeldet ist und der Weg hinaus stehen nebeneinander in einer
+         * Zeile unter Warteschlange und Uhr -- nicht untereinander in einem
+         * eigenen Feld. Es sind zwei kurze Angaben; ein Kasten dafuer kostete
+         * mehr Platz als sie selbst, und weiter unten fehlt der Platz dann
+         * beim Aktivitaetsraster.
          */
-        . ($identityMarkup === '' && $soundControl === ''
+        . ($identityMarkup === ''
             ? ''
             : '<div class="estab-sidebar-identity-row">'
-                . $identityMarkup
-                . ($soundControl === ''
-                    ? ''
-                    : '<div class="estab-sidebar-identity-actions">'
-                        . $soundControl . '</div>')
-                . '</div>')
+                . $identityMarkup . '</div>')
         . $queueStrip
         . $incidentMarkup
         . '<div class="estab-sidebar-freshness"'
