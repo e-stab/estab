@@ -3,8 +3,14 @@
 Begründung, Zuschnitt und Abnahmekriterien stehen in `tasks/plan.md`.
 Anforderungstexte stehen in `SPEC.md` Abschnitt 5.
 
-Stand: 61 offene Anforderungen in 40 Aufgaben. 20 Anforderungen sind bereits
-erfüllt und stehen nicht in dieser Liste.
+Stand am Ende des Durchlaufs: **40 von 40 Aufgaben abgearbeitet.** Die Spec
+führt 81 Anforderungen; 80 sind erfüllt und durch eine Regel im Katalog samt
+Test nachgewiesen. Offen bleibt allein `UX-EINARBEITUNG` — sie ist nicht
+maschinell prüfbar und verlangt Menschen vor dem Bildschirm.
+
+Ebenfalls offen und nicht durch Arbeit zu schliessen: die Bedienprüfungen an
+den Prüfpunkten C4 und C7 sowie die Abschlussprüfung. Sie brauchen je drei
+Personen ohne Anwendungskenntnis.
 
 Risiko: `·` niedrig · `!` mittel · `!!` hoch
 

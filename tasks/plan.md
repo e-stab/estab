@@ -8,6 +8,12 @@ Aufgaben, Phasen und Prüfpunkte. Er beschreibt **wie** gearbeitet wird, nicht
 
 ## 1. Ausgangslage
 
+**Stand am Ende des Durchlaufs:** 40 von 40 Aufgaben abgearbeitet, 80 von 81
+Anforderungen erfüllt und nachgewiesen. Offen bleibt `UX-EINARBEITUNG`, die
+nicht maschinell prüfbar ist. Der folgende Text beschreibt den Plan, wie er
+vor der Umsetzung stand; P7 und P8 sind nach der Betreiberentscheidung an
+Prüfpunkt C5 umgeschnitten.
+
 Die Spec führt 81 Anforderungen. Davon sind 20 erfüllt und nachgewiesen; die
 übrigen 61 sind Gegenstand dieses Plans.
 
