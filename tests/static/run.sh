@@ -189,6 +189,7 @@ for test_name in \
     nv_field_number_bridge \
     nv_designation_guidance \
     nv_form_and_priority \
+    nv_message_text_guidance \
     telecom_plan_security \
     upload_security \
     attachment_security \

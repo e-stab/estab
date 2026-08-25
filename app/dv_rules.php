@@ -169,6 +169,28 @@ function estab_dv_rules(): array
                 . 'dort verlangt, wo die Nachricht abgefasst oder aufgenommen '
                 . 'wird.',
         ],
+        'NV-14-5W' => [
+            'source' => ESTAB_DV_SOURCE_MELDEWESEN,
+            'reference' => 'Kapitel 3, Aufbau einer Meldung',
+            'requirement' => 'Der Vordruck trägt die Leitfragen Wo, Wann, '
+                . 'Was, Wie und Wer sichtbar am Nachrichtentext, so wie der '
+                . 'gedruckte Vordruck sie als Merke ausweist.',
+            'verdraengt' => [
+                'source' => ESTAB_DV_SOURCE_DV_1_101,
+                'reference' => 'Kapitel 8.2.1.1',
+            ],
+        ],
+        'NV-14-TATSACHE-VERMUTUNG' => [
+            'source' => ESTAB_DV_SOURCE_MELDEWESEN,
+            'reference' => 'Kapitel 3, Tatsachen und Vermutungen',
+            'requirement' => 'Die Nachricht macht unterscheidbar, was selbst '
+                . 'festgestellt, was von anderen gemeldet und was vermutet '
+                . 'ist. Der Vordruck weist am Nachrichtentext darauf hin.',
+            'verdraengt' => [
+                'source' => ESTAB_DV_SOURCE_DV_1_101,
+                'reference' => 'Kapitel 8.2.1',
+            ],
+        ],
         'NV-15-ABSENDER' => [
             'source' => ESTAB_DV_SOURCE_AUSFUELLANLEITUNG,
             'reference' => 'Feld 15',

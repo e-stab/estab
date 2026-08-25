@@ -4989,6 +4989,25 @@ section.estab-message-timeline[data-estab-message-timeline] * {
     display: none;
 }
 
+/*
+ * Die Leitfragen des Vordrucks stehen als Merke am Textfeld, so klein wie
+ * auf dem Papier und so gross, dass sie noch zu lesen sind.
+ */
+.estab-official-text-guidance {
+    color: #405a72;
+    display: flex;
+    flex-wrap: wrap;
+    font-size: 0.7rem;
+    gap: 0.15rem 0.8rem;
+    line-height: 1.25;
+    margin: 0 0 0.2rem;
+}
+
+.estab-official-text-questions {
+    font-weight: 600;
+    letter-spacing: 0.02em;
+}
+
 .estab-official-address-block {
     border-bottom: 1.5px solid var(--estab-official-line);
     display: grid;

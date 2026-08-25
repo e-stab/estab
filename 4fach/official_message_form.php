@@ -1480,6 +1480,38 @@ HTML;
         $this->formdata['07_durchspruch'] = 'D';
     }
 
+    /**
+     * Feld 14: die Leitfragen und die Herkunft der Angaben.
+     *
+     * Eine Meldung, die nicht sagt wo, wann, was, wie und wer, erzwingt eine
+     * Rückfrage, und eine Rückfrage kostet im Einsatz mehr Zeit als die
+     * Meldung selbst. Der gedruckte Vordruck trägt die Leitfragen als Merke
+     * am Textfeld; die Maske trägt sie ebenso, sichtbar und vorlesbar. Wer
+     * sie erst in einer Hilfe suchen muss, sucht sie nicht.
+     *
+     * Die zweite Zeile ist folgenschwerer. Eine Lage entsteht aus Meldungen,
+     * und eine Vermutung, die als Feststellung ankommt, führt zu
+     * Entscheidungen über eine Lage, die es nicht gibt. Der Hinweis steht
+     * neben dem Feld und nicht darin: Was der Verfasser absetzt, hat er
+     * geschrieben, und ein vorgesetzter Text stünde später als seine Aussage
+     * im Nachweis.
+     *
+     * Beides erscheint nur dort, wo geschrieben wird. Ein gesichteter
+     * Vordruck zeigt, was gemeldet wurde, nicht mehr, wie man meldet.
+     */
+    function official_message_text_guidance(): void
+    {
+        if (!$this->official_message_field_access(14)) {
+            return;
+        }
+        echo '<p class="estab-official-text-guidance">'
+            . '<span class="estab-official-text-questions">'
+            . 'Wo? Wann? Was? Wie? Wer?</span>'
+            . '<span class="estab-official-text-provenance">'
+            . 'Trennen: selbst festgestellt, von anderen gemeldet, '
+            . 'vermutet.</span></p>';
+    }
+
     function official_message_priority(): void
     {
         $editable = $this->official_message_field_access(9);
@@ -3109,6 +3141,7 @@ HTML;
 
         echo '<section class="estab-official-message-text">';
         $this->official_message_help(14);
+        $this->official_message_text_guidance();
         $this->official_message_textarea(
             '12_inhalt',
             $this->official_message_field_access(14),
