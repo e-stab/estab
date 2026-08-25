@@ -7,6 +7,8 @@
  * controls. This preserves the official visual hierarchy while the legacy
  * controller continues to receive the field names it already authorises.
  */
+require_once __DIR__ . '/../app/nv_field_numbers.php';
+
 trait EstabOfficialMessageFormView
 {
     /** Carry one server-selected Stab/FB workspace through form round-trips. */
@@ -898,6 +900,19 @@ HTML;
             && !estab_permission_telecom_plan_required();
     }
 
+    /**
+     * Steht dieses gedruckte Feld dem laufenden Arbeitsschritt offen?
+     *
+     * Die Ansicht spricht die Zählung, die sie druckt. Welchen Zugriffsindex
+     * ein gedrucktes Feld trägt, weiss allein app/nv_field_numbers.php --
+     * sonst stünde in jeder zweiten Zeile eine Übersetzung, die niemand
+     * nachschlagen kann.
+     */
+    function official_message_field_access(int $number): bool
+    {
+        return (bool)($this->feld[estab_nv_access_index($number)] ?? false);
+    }
+
     function official_message_required_fields(): array
     {
         return match ((string) $this->task) {
@@ -1443,7 +1458,7 @@ HTML;
 
     function official_message_priority(): void
     {
-        $editable = (bool)$this->feld[9];
+        $editable = $this->official_message_field_access(9);
         $current = (string)($this->formdata['09_vorrangstufe'] ?? '');
         if (!$editable) {
             echo '<input type="hidden" name="09_vorrangstufe" value="'
@@ -1513,7 +1528,7 @@ HTML;
             true
         );
         return $immutableAdmin
-            || !$this->feld[16]
+            || !$this->official_message_field_access(19)
             || (
                 $this->task === 'Stab_sichten'
                 && ($this->formdata['04_richtung'] ?? '') === 'A'
@@ -2030,7 +2045,7 @@ HTML;
             $this->task,
             ['Stab_gesprnoti', 'LdF-Eingang', 'LdF-Ausgang', 'FM-Ausgang'],
             true
-        ) || (bool)($this->feld[6] ?? false);
+        ) || $this->official_message_field_access(7);
         if (!$hasTransport) {
             return;
         }
@@ -2154,7 +2169,7 @@ HTML;
                 . 'name="ldf_rueckgabegrund" maxlength="2000" rows="3">'
                 . $this->safe_message_value('ldf_rueckgabegrund')
                 . '</textarea></fieldset>';
-        } elseif ((bool)($this->feld[6] ?? false)) {
+        } elseif ($this->official_message_field_access(7)) {
             echo '<fieldset><legend>Beförderungsweg</legend>';
             $this->official_message_text_input(
                 '06_befweg',
@@ -2798,7 +2813,7 @@ HTML;
         // dem gewählten Weg ab; ein eigenes Auswahlfeld wäre dort eine
         // Eingabe, die still verworfen wird. Ohne Plan disponiert LdF das
         // Übermittlungsmittel hier unmittelbar.
-        $actualMediumEditable = (bool)$this->feld[1]
+        $actualMediumEditable = $this->official_message_field_access(1)
             || $this->task === 'LdF-Eingang'
             || ($this->task === 'LdF-Ausgang'
                 && $this->official_message_manual_disposition())
@@ -2874,7 +2889,7 @@ HTML;
             2,
             '01_datum',
             '01_zeichen',
-            (bool)$this->feld[1],
+            $this->official_message_field_access(2),
             'Datum und Uhrzeit des Eingangs',
             'Namenszeichen der Aufnahme'
         );
@@ -2883,7 +2898,7 @@ HTML;
             3,
             '02_zeit',
             '02_zeichen',
-            (bool)$this->feld[2],
+            $this->official_message_field_access(3),
             'Zeit der Annahme',
             'Namenszeichen der Annahme'
         );
@@ -2892,7 +2907,7 @@ HTML;
             4,
             '03_datum',
             '03_zeichen',
-            (bool)$this->feld[3],
+            $this->official_message_field_access(4),
             'Datum und Quittungszeit der Gegenstelle',
             'Namenszeichen der Beförderung'
         );
@@ -2903,7 +2918,7 @@ HTML;
             . 'Rufname der Gegenstelle<br><span>Spruchkopf</span>';
         $this->official_message_help(6);
         echo '</div><div class="estab-official-field-value">';
-        if ((bool)$this->feld[5]) {
+        if ($this->official_message_field_access(6)) {
             echo '<div class="estab-message-suggestion-control">';
             $this->official_message_text_input(
                 '05_gegenstelle',
@@ -2968,7 +2983,7 @@ HTML;
                 ['value' => 'D', 'label' => 'DURCHSAGE', 'id' => 'durchsage'],
                 ['value' => 'S', 'label' => 'Spruch', 'id' => 'spruch'],
             ],
-            (bool)$this->feld[7],
+            $this->official_message_field_access(8),
             'Nachrichtenform'
         );
         echo '<span class="estab-official-print-number">8</span></div>'
@@ -2985,7 +3000,7 @@ HTML;
             . '<div class="estab-official-address-value">';
         $this->official_message_textarea(
             '10_anschrift',
-            (bool)$this->feld[10],
+            $this->official_message_field_access(10),
             'Anschrift',
             255
         );
@@ -2996,7 +3011,7 @@ HTML;
             . '</div><div class="estab-official-phone-value">';
         $this->official_message_text_input(
             '11_rufnummer',
-            (bool)$this->feld[10],
+            $this->official_message_field_access(11),
             128,
             'Rufnummer der Gegenstelle',
             ' inputmode="tel" autocomplete="tel"'
@@ -3007,7 +3022,8 @@ HTML;
         echo '</div><div class="estab-official-conversation-control">';
         $this->official_message_checkbox(
             '11_gesprnotiz',
-            (bool)$this->feld[11] && $this->task !== 'Stab_gesprnoti',
+            $this->official_message_field_access(12)
+                && $this->task !== 'Stab_gesprnoti',
             'Gesprächsnotiz',
             $this->task !== 'Stab_korrigieren'
         );
@@ -3033,7 +3049,7 @@ HTML;
         echo '</div><div class="estab-official-field-value">';
         $this->official_message_text_input(
             '12_betreff',
-            (bool)$this->feld[12],
+            $this->official_message_field_access(13),
             255,
             'Betreff der Nachricht'
         );
@@ -3043,7 +3059,7 @@ HTML;
         $this->official_message_help(14);
         $this->official_message_textarea(
             '12_inhalt',
-            (bool)$this->feld[12],
+            $this->official_message_field_access(14),
             'Nachrichtentext'
         );
         echo '<span class="estab-official-print-number">14</span></section>';
@@ -3062,7 +3078,7 @@ HTML;
             echo '<span id="f_13_abseinheit" '
                 . 'class="estab-official-readonly" data-estab-readonly="true">'
                 . 'Wird durch LdF aus dem Rufnamen ergänzt</span>';
-        } elseif ((bool)$this->feld[13]) {
+        } elseif ($this->official_message_field_access(15)) {
             echo '<div class="estab-message-suggestion-control">';
             $this->official_message_text_input(
                 '13_abseinheit',
@@ -3090,7 +3106,7 @@ HTML;
         echo '</div></div><div class="estab-official-composition-value">';
         $this->official_message_text_input(
             '12_abfzeit',
-            (bool)$this->feld[12],
+            $this->official_message_field_access(16),
             19,
             'Abfassungszeit',
             ' inputmode="numeric" autocomplete="off"'
@@ -3104,7 +3120,7 @@ HTML;
             . '<div class="estab-official-author-mark">'
             . '<span class="estab-official-print-number">17</span>';
         $this->official_message_help(17);
-        if ((bool)$this->feld[14]) {
+        if ($this->official_message_field_access(17)) {
             $this->official_message_text_input(
                 '14_zeichen',
                 true,
@@ -3123,7 +3139,7 @@ HTML;
             . '<div class="estab-official-author-function">';
         $this->official_message_text_input(
             '14_funktion',
-            (bool)$this->feld[14],
+            $this->official_message_field_access(17),
             128,
             'Funktion des Verfassers'
         );
@@ -3157,7 +3173,8 @@ HTML;
                 . 'aria-label="Sichterzeichen wird aus der Anmeldung übernommen">'
                 . $this->safe_message_value('15_quitzeichen') . '</strong>';
         } else {
-            $editableReceipt = (bool)$this->feld[15] && !$immutableAdmin;
+            $editableReceipt = $this->official_message_field_access(18)
+                && !$immutableAdmin;
             $this->official_message_text_input(
                 '15_quitdatum',
                 $editableReceipt,
@@ -3193,7 +3210,7 @@ HTML;
         echo '</div>';
         $this->official_message_textarea(
             '17_vermerke',
-            (bool)$this->feld[17],
+            $this->official_message_field_access(20),
             'Vermerke',
             0,
             false

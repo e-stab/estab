@@ -63,6 +63,14 @@ function estab_dv_rules(): array
                 . 'und die Nummer der zugehörigen Ausfüllhilfe sind gleich, '
                 . 'und jedes der zwanzig Felder trägt eine Nummer.',
         ],
+        'NV-NUMMERNBRUECKE' => [
+            'source' => ESTAB_DV_SOURCE_AUSFUELLANLEITUNG,
+            'reference' => 'Feldnummern gegenüber der Stab-Unterlage',
+            'requirement' => 'Die Übersetzung zwischen der gedruckten '
+                . 'Zählung und den übrigen Zählungen des Vordrucks liegt an '
+                . 'genau einer Stelle. Kein Kommentar nennt eine Nummer der '
+                . 'einen Zählung neben einem Bezeichner der anderen.',
+        ],
         'NV-PFLICHTFELDER' => [
             'source' => ESTAB_DV_SOURCE_AUSFUELLANLEITUNG,
             'reference' => 'Felder 10 und 13 bis 17',

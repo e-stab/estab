@@ -172,6 +172,17 @@ ausgehende Nachrichten" die Q1-Nummer, während die darunter gesetzte Variable
 Datenbankschlüssel folgen keiner der beiden durchgängig: `10_anschrift` zählt
 nach Q1, `05_gegenstelle` nach Q2. Daraus folgt **NV-NUMMERNBRUECKE**.
 
+**Nachtrag aus T16.** Bei der Umsetzung zeigte sich eine dritte Zählung. Der
+Arbeitsschritt gibt Felder über ein Zugriffsfeld `$this->feld[…]` frei, dessen
+Indizes der Q2-Zählung nur ähneln: Platz 8 trägt einen ausgemusterten
+Beförderungshinweis, den die Unterlage nicht kennt, weshalb die Vorrangstufe
+auf 9 statt auf Q2 8 liegt; die Anschrift und die Rufnummer teilen sich
+Index 10; Betreff, Nachrichtentext und Abfassungszeit teilen sich Index 12.
+Die Tabelle oben bleibt die normative Gegenüberstellung der beiden gedruckten
+Zählungen. Die vollständige Abbildung einschließlich des Zugriffsindex führt
+`app/nv_field_numbers.php`; sie ist die einzige Stelle, an der übersetzt wird.
+Die Ansicht des Vordrucks spricht nur noch die Zählung, die sie druckt.
+
 ---
 
 ## 4. Capability Map
@@ -251,7 +262,7 @@ Anforderungen aus M9 erfüllt.
 | ID | Quelle | Soll | Abnahme | Ist |
 | --- | --- | --- | --- | --- |
 | `NV-FELDNUMMERN` | Q1 Felder 1–20 | Sichtbare Feldnummer und Nummer der Ausfüllhilfe sind gleich; jedes der zwanzig Felder trägt eine Nummer. | vorhandene Regel | `erfüllt` |
-| `NV-NUMMERNBRUECKE` | Abschnitt 3 | Die Übersetzung zwischen Q1- und Q2-Zählung liegt an genau einer Stelle. Kein Kommentar nennt eine Nummer der einen Zählung neben einem Bezeichner der anderen. | Eine Abbildungsfunktion ist die einzige Stelle mit beiden Zählungen; ein Test prüft Kommentar und Bezeichner auf Zählungsbruch. | `offen` |
+| `NV-NUMMERNBRUECKE` | Abschnitt 3 | Die Übersetzung zwischen Q1- und Q2-Zählung liegt an genau einer Stelle. Kein Kommentar nennt eine Nummer der einen Zählung neben einem Bezeichner der anderen. | Eine Abbildungsfunktion ist die einzige Stelle mit beiden Zählungen; ein Test prüft Kommentar und Bezeichner auf Zählungsbruch. | `erfüllt` |
 | `NV-PFLICHTFELDER` | Q2 „Immer ausfüllen" | Die Felder 10, 13, 14, 15, 16 und 17 sind Pflicht. Eine Rückweisung benennt Feld und Grund. | vorhandene Regel | `erfüllt` |
 | `NV-01-TKM-TATSAECHLICH` | Q1 Feld 1 | Feld 1 nimmt das **tatsächlich** benutzte Übermittlungsmittel auf und ist von Feld 7 getrennt. | Feld 1 ist im Ausgang erst nach der Beförderung setzbar und übernimmt Feld 7 nicht automatisch. | `erfüllt` |
 | `NV-02-AUFNAHMEVERMERK` | Q1 Feld 2 | Datum mindestens zweistellig, Uhrzeit vierstellig, Aufnahme mit Namenszeichen bestätigt. | Aufnahme ohne Handzeichen ist nicht abschließbar. | `erfüllt` |

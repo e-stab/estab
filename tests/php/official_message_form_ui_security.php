@@ -1040,7 +1040,10 @@ $assert(
             $view,
             'aria-label="Sichterzeichen wird aus der Anmeldung übernommen"'
         )
-        && str_contains($view, "\$editableReceipt = (bool)\$this->feld[15]"),
+        && str_contains(
+            $view,
+            "\$editableReceipt = \$this->official_message_field_access(18)"
+        ),
     'Sighting identity fields are not kept server-authoritative'
 );
 $assert(

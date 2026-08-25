@@ -937,8 +937,9 @@ HTML;
         $this->feld [14] = false;
         // The local organisation is derived from server configuration.
         $this->feld [13] = false;
-        // Feld 19 gilt für ein- und ausgehende Nachrichten. Der Verfasser
-        // legt den innerdienstlichen Laufweg seiner Nachricht selbst fest.
+        // Feld 19 des Vordrucks, hier Zugriffsindex 16: der Verteiler.
+        // Der Verfasser legt den innerdienstlichen Laufweg seiner
+        // Nachricht selbst fest.
         // Die rote Lage-/Dokumentationsdurchschrift und seine eigene grüne
         // Durchschrift ergänzt der Server beim Speichern unabwählbar.
         $this->bg [16] = $this->feldbg [16]["a"];

@@ -52,7 +52,7 @@ Risiko: `·` niedrig · `!` mittel · `!!` hoch
 
 ## P3 — Vordruck schärfen · ab hier ändert sich Verhalten
 
-- [ ] **T16** `!` Feldnummern auf eine Brücke ziehen — `NV-NUMMERNBRUECKE`
+- [x] **T16** `!` Feldnummern auf eine Brücke ziehen — `NV-NUMMERNBRUECKE`
       → zuerst in dieser Phase; danach arbeitet T17–T20 mit einer Zählung
 - [ ] **T17** `!` Dienststelle statt Eigenname — `NV-10-ANSCHRIFT-DIENSTSTELLE`, `NV-15-ABSENDER`
       → Führung statt Zurückweisung; Entscheidung an C3
