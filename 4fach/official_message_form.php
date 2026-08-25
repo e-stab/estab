@@ -2336,6 +2336,47 @@ HTML;
         echo '</div></details>';
     }
 
+    /**
+     * Worauf sich die Sichtung im Ausgang erstreckt.
+     *
+     * Die Dienstvorschrift beschraenkt die Pruefung des Sichters bei
+     * ausgehenden Nachrichten auf Anschrift, Absender sowie Zeichen und
+     * Funktion des Verfassers: "eine inhaltliche Pruefung der Nachricht
+     * entfaellt". Der Grund ist eine Zustaendigkeitsfrage. Was in einer
+     * Meldung steht, verantwortet der Verfasser mit seinem Namenszeichen;
+     * pruefte der Sichter den Inhalt mit, entstuende eine zweite, unbenannte
+     * Instanz zwischen Sachgebiet und Gegenstelle -- und im Zweifel eine
+     * Verzoegerung ohne Zustaendigen.
+     *
+     * Die Anwendung sperrt deshalb nicht, sondern fuehrt. Der Sichter kann
+     * weiterhin aus jedem Grund zurueckgeben; eine Maske, die im Einsatz
+     * eine begruendete Rueckgabe verweigert, waere schlimmer als eine
+     * ueberschiessende. Er liest hier aber, worauf seine Pruefung zielt.
+     *
+     * Im Eingang steht der Hinweis nicht: Dort verteilt der Sichter die
+     * Nachricht an die zustaendigen Sachgebiete, und das geht nur
+     * inhaltlich.
+     */
+    function official_message_review_scope(): void
+    {
+        if ($this->task !== 'Stab_sichten') {
+            return;
+        }
+        if (($this->formdata['04_richtung'] ?? '') !== 'A') {
+            return;
+        }
+        echo '<p class="estab-official-review-scope">'
+            . '<span class="estab-official-review-scope-title">'
+            . 'Formale Sichtung</span>'
+            . '<span>Geprüft werden Anschrift (10), Absender (15) sowie '
+            . 'Zeichen und Funktion des Verfassers (17). Eine inhaltliche '
+            . 'Prüfung der Nachricht entfällt: Für den Inhalt steht der '
+            . 'Verfasser mit seinem Namenszeichen ein.</span>'
+            . '<span>Eine Rückgabe braucht einen Vermerk in Feld 20 -- '
+            . 'sonst erfährt der Verfasser nicht, was zu ändern ist.</span>'
+            . '</p>';
+    }
+
     function official_message_workflow_controls(): void
     {
         $hasTransport = in_array(
@@ -3509,6 +3550,7 @@ HTML;
             . '<div class="estab-official-cell-heading">Vermerke:';
         $this->official_message_help(20);
         echo '</div>';
+        $this->official_message_review_scope();
         $this->official_message_textarea(
             '17_vermerke',
             $this->official_message_field_access(20),

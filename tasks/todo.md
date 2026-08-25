@@ -94,7 +94,7 @@ Risiko: `·` niedrig · `!` mittel · `!!` hoch
 
 ## P6 — Führungsstelle und Führungsmittel
 
-- [ ] **T29** `!!` Sichtung im Ausgang auf die Form begrenzen — `FUEST-SICHTER-AUSGANG-FORMAL`
+- [x] **T29** `!!` Sichtung im Ausgang auf die Form begrenzen — `FUEST-SICHTER-AUSGANG-FORMAL`
       → nimmt dem Sichter eine heute vorhandene Möglichkeit · nur nach Freigabe an C5
 - [ ] **T30** `!` Übermittlungsmittel erweitern — `TKM-KATALOG` *(braucht T01)*
 - [ ] **T31** `!` Melder und Kurier trennen — `TKM-MELDER-KURIER` *(braucht T01, T02)*

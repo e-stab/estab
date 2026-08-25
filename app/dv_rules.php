@@ -333,6 +333,15 @@ function estab_dv_rules(): array
                 . 'abgeschlossen; eine Disposition und eine Beförderung finden '
                 . 'nicht statt.',
         ],
+        'FUEST-SICHTER-AUSGANG-FORMAL' => [
+            'source' => ESTAB_DV_SOURCE_DV_1_101,
+            'reference' => 'Kapitel 4.3.1.10',
+            'requirement' => 'Die Prüfung des Sichters bei ausgehenden '
+                . 'Nachrichten erstreckt sich auf Anschrift, Absender sowie '
+                . 'Zeichen und Funktion des Verfassers. Eine inhaltliche '
+                . 'Prüfung der Nachricht entfällt; der Vordruck weist darauf '
+                . 'hin.',
+        ],
         'FUEST-SICHTER-BINDEGLIED' => [
             'source' => ESTAB_DV_SOURCE_DV_1_101,
             'reference' => 'Kapitel 4.3.1.10',
