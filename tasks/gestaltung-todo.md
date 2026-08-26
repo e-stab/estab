@@ -36,12 +36,13 @@ ansehen → Migrationsgrenze kürzen.** Abweichungen stehen bei der Aufgabe.
       - **Prüfung:** beide Tests einzeln, Zusicherungszahl vorher/nachher gleich
       - **Abhängigkeit:** keine
 
-- [ ] **G03** `·` **S** Marken und Migrationsgrenze
-      → `estab-ui.css` (nur `:root` ergänzen), `tests/php/ges_migrationsgrenze.php`
-      - [ ] `:root` trägt alle Marken aus `docs/GESTALTUNG.md` Anhang A wörtlich, samt Dichtestufe bei `max-height: 34rem`
-      - [ ] `ges_migrationsgrenze.php` führt die noch nicht umgestellten Auswählerpräfixe als **eine** Liste und gibt sie als Funktion heraus
-      - [ ] Die Liste deckt beim Anlegen den gesamten Bestand ab — sie ist Ausgangslage, nicht Ziel
-      - [ ] **Keine bestehende Regel geändert** — die Anwendung sieht unverändert aus
+- [x] **G03** `·` **S** Marken und Migrationsgrenze
+      → `estab-ui.css` (nur `:root` ergänzen), `tests/php/lib/migrationsgrenze.php`
+      - **Abweichung vom Plan:** liegt in `lib/`, nicht in `tests/php/` — dort ist der Namensraum der Prüfungen, die `run.sh` und die Registry einsammeln; ein Helfer gehört daneben, nicht hinein
+      - [x] `:root` trägt alle Marken aus `docs/GESTALTUNG.md` Anhang A wörtlich, samt Dichtestufe bei `max-height: 34rem`
+      - [x] `ges_migrationsgrenze.php` führt die noch nicht umgestellten Auswählerpräfixe als **eine** Liste und gibt sie als Funktion heraus
+      - [x] Die Liste deckt beim Anlegen den gesamten Bestand ab — sie ist Ausgangslage, nicht Ziel
+      - [x] **Keine bestehende Regel geändert** — die Anwendung sieht unverändert aus
       - **Prüfung:** `stylesheet_integrity_security.php` grün; Bildvergleich vor/nach zeigt keinen Unterschied
       - **Abhängigkeit:** G01, G02
 
