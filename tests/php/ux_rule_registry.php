@@ -31,10 +31,24 @@ $assert = static function (bool $condition, string $message) use (&$assertions):
 
 $rules = estab_ux_rules();
 
+// The catalogue carries two bodies of requirements from the same authority:
+// the operator's behavioural ones (UX-) from SPEC.md section 5.10, and the
+// operator's appearance ones (GES-) from docs/GESTALTUNG.md. They stay
+// distinguishable at a glance, and both are enforced with the same rigour.
+$origins = [ESTAB_UX_ORIGIN_BETREIBER, ESTAB_UX_ORIGIN_GESTALTUNG];
+$assert(
+    ESTAB_UX_ORIGIN_BETREIBER !== ESTAB_UX_ORIGIN_GESTALTUNG,
+    'The two operating origins are indistinguishable'
+);
+$assert(
+    str_contains(ESTAB_UX_ORIGIN_GESTALTUNG, 'docs/GESTALTUNG.md'),
+    'The appearance origin does not cite its source document'
+);
+
 foreach ($rules as $id => $rule) {
     $assert(
-        preg_match('~\AUX(?:-[A-Z0-9ÄÖÜ]+)+\z~u', $id) === 1,
-        'Operating rule identifier does not start with UX- : ' . $id
+        preg_match('~\A(?:UX|GES)(?:-[A-Z0-9ÄÖÜ]+)+\z~u', $id) === 1,
+        'Operating rule identifier starts with neither UX- nor GES- : ' . $id
     );
     foreach (['origin', 'reference', 'requirement'] as $field) {
         $assert(
@@ -48,8 +62,15 @@ foreach ($rules as $id => $rule) {
         'Operating rule ' . $id . ' does not state its requirement as a sentence'
     );
     $assert(
-        $rule['origin'] === ESTAB_UX_ORIGIN_BETREIBER,
+        in_array($rule['origin'], $origins, true),
         'Operating rule ' . $id . ' cites an origin outside the catalogue'
+    );
+    // An appearance rule that cites the behavioural origin would make the
+    // catalogue unable to answer which document a requirement comes from.
+    $assert(
+        str_starts_with($id, 'GES-')
+            === ($rule['origin'] === ESTAB_UX_ORIGIN_GESTALTUNG),
+        'Operating rule ' . $id . ' cites an origin that contradicts its prefix'
     );
 }
 
@@ -62,6 +83,19 @@ try {
     $unknownRejected = true;
 }
 $assert($unknownRejected, 'An unknown operating rule identifier is accepted');
+
+// The same must hold for the appearance prefix, or a mistyped GES- rule would
+// resolve to nothing and silently disable its test.
+$unknownAppearanceRejected = false;
+try {
+    estab_ux_rule('GES-NO-SUCH-RULE');
+} catch (InvalidArgumentException) {
+    $unknownAppearanceRejected = true;
+}
+$assert(
+    $unknownAppearanceRejected,
+    'An unknown appearance rule identifier is accepted'
+);
 
 // A service-regulation identifier must not resolve here either, or the two
 // catalogues would quietly merge.

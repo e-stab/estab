@@ -19,12 +19,12 @@ ansehen → Migrationsgrenze kürzen.** Abweichungen stehen bei der Aufgabe.
 
 ## P0 — Apparat · blockiert alles Weitere
 
-- [ ] **G01** `·` **S** Bedienkatalog nimmt Gestaltungsregeln auf
+- [x] **G01** `·` **S** Bedienkatalog nimmt Gestaltungsregeln auf
       → `app/ux_rules.php`, `tests/php/ux_rule_registry.php`
-      - [ ] `ESTAB_UX_ORIGIN_GESTALTUNG` mit Fundstelle `docs/GESTALTUNG.md`
-      - [ ] Kennungsmuster akzeptiert `GES-`, weist Unbekanntes weiterhin ab
-      - [ ] Herkunftsprüfung wird Positivliste beider Konstanten
-      - [ ] Eine unbekannte `GES-`-Kennung schlägt weiterhin laut fehl
+      - [x] `ESTAB_UX_ORIGIN_GESTALTUNG` mit Fundstelle `docs/GESTALTUNG.md`
+      - [x] Kennungsmuster akzeptiert `GES-`, weist Unbekanntes weiterhin ab
+      - [x] Herkunftsprüfung wird Positivliste beider Konstanten
+      - [x] Eine unbekannte `GES-`-Kennung schlägt weiterhin laut fehl
       - **Prüfung:** `ux_rule_registry.php` einzeln; Zusicherungszahl steigt, keine sinkt
       - **Abhängigkeit:** keine
 

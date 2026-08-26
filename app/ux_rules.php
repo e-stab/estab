@@ -25,6 +25,25 @@ const ESTAB_UX_ORIGIN_BETREIBER =
     'Bedienanforderungen des Betreibers, SPEC.md Abschnitt 5.10';
 
 /**
+ * The second body in this catalogue: how the application looks.
+ *
+ * SPEC.md section 5.10 says what the operation must achieve -- constancy of
+ * place, constancy of element, the paper image, contrast, keyboard. It does
+ * not say how tall a button is, and that is exactly where UX-ELEMENTKONSTANZ
+ * fails in practice: two buttons of equal meaning look alike only while the
+ * same person writes them on the same day.
+ *
+ * Appearance rules carry the GES- prefix and this origin. They share the
+ * catalogue with the behavioural ones because they share their authority --
+ * both are the operator's own decision and may be revised when they turn out
+ * to serve nobody. They stay apart from the service-regulation catalogue for
+ * the same reason as before: an audit asks what the regulation demands, and
+ * that answer becomes useless once product decisions run through it.
+ */
+const ESTAB_UX_ORIGIN_GESTALTUNG =
+    'Gestaltungsanforderungen des Betreibers, docs/GESTALTUNG.md';
+
+/**
  * @return array<string, array{origin:string,reference:string,requirement:string}>
  */
 function estab_ux_rules(): array
