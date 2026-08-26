@@ -1,5 +1,8 @@
 # Aufgabenliste — Meldewesen der THW-Führungsstelle
 
+> **Dieser Durchlauf ist abgeschlossen.** Der nächste — die Umsetzung von
+> `docs/GESTALTUNG.md` — steht in `tasks/gestaltung-todo.md`.
+
 Begründung, Zuschnitt und Abnahmekriterien stehen in `tasks/plan.md`.
 Anforderungstexte stehen in `SPEC.md` Abschnitt 5.
 

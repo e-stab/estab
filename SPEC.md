@@ -543,6 +543,7 @@ nicht zu verwenden.
 | `stabetb/`, `fmtbb/` | ETB und Technisches Betriebsbuch |
 | `app/sidebar.php`, `app/navigation.php`, `app/root_menu.php` | Menüführung |
 | `estab-ui.css` | Papierbild, Kontrast, Gerätetauglichkeit |
+| `docs/GESTALTUNG.md` | **Gestaltungsspec**: Aufbau einer Seite, Maße, Farbmarken. Füllt aus, was M9 offenlässt, und verschärft `UX-KONTRAST` auf 7:1. Steht unter Vorschrift und Bedienkatalog |
 | `docs/BEDIENUNG.md` | Bedienung; folgt dieser Spec, führt sie nicht |
 
 ---

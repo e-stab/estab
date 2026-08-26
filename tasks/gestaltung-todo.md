@@ -1,0 +1,286 @@
+# Aufgabenliste — Gestaltung aus einem Guss
+
+Begründung, Zuschnitt und Prüfpunkte stehen in `tasks/gestaltung-plan.md`.
+Die Sollwerte stehen in `docs/GESTALTUNG.md` und werden hier nur referenziert.
+
+Nachfolger von `tasks/todo.md` (Meldewesen nach `SPEC.md`, abgeschlossen).
+
+**Betreiberentscheidung:** Zwei Seiten werden neu gebaut und einzeln
+freigegeben — der **Nachrichtenvordruck** und **„Stab lesen"** —, danach wird
+der Rest nach demselben Schema nachgezogen (Plan Abschnitt 2.6).
+
+Risiko: `·` niedrig · `!` mittel · `!!` hoch
+Umfang: **XS** 1 Datei · **S** 1–2 · **M** 3–5
+
+Jede Aufgabe folgt derselben Reihenfolge: **Test rot → umstellen → Bild
+ansehen → Migrationsgrenze kürzen.** Abweichungen stehen bei der Aufgabe.
+
+---
+
+## P0 — Apparat · blockiert alles Weitere
+
+- [ ] **G01** `·` **S** Bedienkatalog nimmt Gestaltungsregeln auf
+      → `app/ux_rules.php`, `tests/php/ux_rule_registry.php`
+      - [ ] `ESTAB_UX_ORIGIN_GESTALTUNG` mit Fundstelle `docs/GESTALTUNG.md`
+      - [ ] Kennungsmuster akzeptiert `GES-`, weist Unbekanntes weiterhin ab
+      - [ ] Herkunftsprüfung wird Positivliste beider Konstanten
+      - [ ] Eine unbekannte `GES-`-Kennung schlägt weiterhin laut fehl
+      - **Prüfung:** `ux_rule_registry.php` einzeln; Zusicherungszahl steigt, keine sinkt
+      - **Abhängigkeit:** keine
+
+- [ ] **G02** `·` **S** Kontrastrechnung wird gemeinsame Testhilfe
+      → `tests/php/lib/farbe.php` (neu), `tests/php/ux_form_contrast.php`, `tests/php/list_contrast_security.php`
+      - [ ] `estab_colour_*` aus `4fach/tools.php` stehen als einbindbare Hilfe bereit
+      - [ ] Die beiden vorhandenen Tests holen sie nicht mehr per `eval` heraus
+      - [ ] Beide Tests bleiben grün und prüfen unverändert dieselben Paare
+      - **Prüfung:** beide Tests einzeln, Zusicherungszahl vorher/nachher gleich
+      - **Abhängigkeit:** keine
+
+- [ ] **G03** `·` **S** Marken und Migrationsgrenze
+      → `estab-ui.css` (nur `:root` ergänzen), `tests/php/ges_migrationsgrenze.php`
+      - [ ] `:root` trägt alle Marken aus `docs/GESTALTUNG.md` Anhang A wörtlich, samt Dichtestufe bei `max-height: 34rem`
+      - [ ] `ges_migrationsgrenze.php` führt die noch nicht umgestellten Auswählerpräfixe als **eine** Liste und gibt sie als Funktion heraus
+      - [ ] Die Liste deckt beim Anlegen den gesamten Bestand ab — sie ist Ausgangslage, nicht Ziel
+      - [ ] **Keine bestehende Regel geändert** — die Anwendung sieht unverändert aus
+      - **Prüfung:** `stylesheet_integrity_security.php` grün; Bildvergleich vor/nach zeigt keinen Unterschied
+      - **Abhängigkeit:** G01, G02
+
+- [ ] **G04** `!` **M** Die vier Wächter
+      → `tests/php/ges_marken.php`, `ges_schriftskala.php`, `ges_abstandsskala.php`, `ges_kontrast.php`, `tests/static/run.sh`
+      - [ ] `ges_marken.php`: kein Farbliteral außerhalb `:root`, für alles außerhalb der Migrationsgrenze
+      - [ ] `ges_schriftskala.php`: `font-size` gegen die 7 Stufen, `font-weight` gegen 400/600/700
+      - [ ] `ges_abstandsskala.php`: `padding`, `gap`, `margin`, `border-radius` gegen die Skalen
+      - [ ] `ges_kontrast.php`: jede Tinte × jeden zulässigen Grund, Ränder ≥ 3:1, kein `opacity` an textführenden Auswählern
+      - [ ] Alle vier in `run.sh` registriert und in `--list` sichtbar
+      - **Prüfung:** volle Suite grün — die Wächter finden im Bestand nichts, weil er in der Grenze steht
+      - **Abhängigkeit:** G03
+
+> **Prüfpunkt C0** — Trägt der Apparat? Ein absichtlich in einen umgestellten
+> Bereich gesetztes Literal **muss** die Suite rot machen. Findet sie es
+> nicht, ist die Migrationsgrenze wirkungslos und alles Weitere ungeprüft.
+
+---
+
+## P1 — Querschnitt · behebt den WCAG-Verstoß, gilt sofort überall
+
+- [ ] **G05** `!` **M** Fokus und Ränder von Bedienelementen
+      → `estab-ui.css`, `tests/php/ges_fokus.php`, `tests/static/run.sh`, `app/ux_rules.php`
+      - [ ] Ein `:focus-visible` für die ganze Anwendung: 2px `--fokus-aussen`, Versatz 1px, `box-shadow` 2px `--fokus-innen`
+      - [ ] Die acht bisherigen Ringfarben sind verschwunden
+      - [ ] `forced-colors: active` setzt den Systemring
+      - [ ] Jeder Rand, der ein Bedienelement begrenzt, trägt `--rand-bedienelement` — auch an `details` und `fieldset`
+      - [ ] `outline: none` kommt weiterhin nicht vor
+      - [ ] Regeln `GES-FOKUS-DOPPELRING`, `GES-KONTRAST-RAND`
+      - **Prüfung:** `ges_fokus.php`, `ges_kontrast.php`; dann mit dem Tabulator durch je eine helle und eine dunkle Seite und **Bilder ansehen**
+      - **Abhängigkeit:** G04
+
+- [ ] **G06** `!` **S** `UX-KONTRAST` auf zwei Stufen heben
+      → `app/ux_rules.php`, `SPEC.md`, `tests/php/ges_kontrast.php`, `tests/php/list_contrast_security.php`, `tests/php/ux_form_contrast.php`
+      - [ ] Regeltext: **4.5:1 Untergrenze ausnahmslos, 7:1 Sollwert** — gearbeitet wird am Sollwert
+      - [ ] Die 4.5-Stufe prüft den **gesamten** Bestand, ab sofort
+      - [ ] Die 7-Stufe prüft alles **außerhalb** der Migrationsgrenze
+      - [ ] Regel `GES-KONTRAST-TEXT`, `GES-KEINE-BLASSE-SCHRIFT`
+      - [ ] Ausnahmen nur für vorgeschriebene Farben, namentlich in `docs/GESTALTUNG.md` vermerkt, nie unter 4.5:1
+      - **Prüfung:** volle Suite; ein absichtlich auf 4.4 gesetztes Paar muss rot werden
+      - **Abhängigkeit:** G04
+      - **Warum zweistufig:** einstufig wäre die Suite ab dem Tag der Regeländerung monatelang rot — und eine rote Suite prüft nichts mehr
+
+> **Prüfpunkt C1** — Sieht der Fokus auf hellem **und** dunklem Grund gleich
+> aus, auch auf dem blauen Vordruck und dem roten Gefahrknopf? Hält der
+> unveränderte Bestand die 4.5:1-Untergrenze?
+
+---
+
+## P2 — Musterseite 1: der Nachrichtenvordruck · endet mit Freigabe
+
+- [ ] **G07** `!!` **M** Hülle, Menüspalte, Cockpitspalte
+      → `estab-ui.css`, `app/app_shell.php`, `tests/php/ges_seitenaufbau.php`, `app/ux_rules.php`
+      - [ ] Spaltenbreiten `clamp(13.5rem, 15vw, 15rem)` und `clamp(12.5rem, 14vw, 14rem)`, auch in `ESTAB_SHELL_*_WIDTH`
+      - [ ] Kacheln 1.75rem hoch, `--schrift-2`, sichtbarer Rand im Ruhezustand, `--tinte-spalte-neben` beim Zeigen
+      - [ ] Umbruchgrenze des Menüs von 44rem auf 56rem
+      - [ ] **`blick` meldet über alle vier Breiten keinen Wortbruch.** Bricht ein Wort, wird die Beschriftung gekürzt — durch ein **anderes, kürzeres Wort**, nicht durch Auslassungspunkte, `text-overflow`, Abkürzungspunkte oder CSS. Trägt das Ziel einen Vorschriftbegriff, wird stattdessen seine Kachelreihe einspaltig gesetzt
+      - [ ] Regel `GES-SEITENKOPF`
+      - **Prüfung:** Wächter grün; `blick` über vier Breiten; **Bilder ansehen** — eine gekürzte Beschriftung darf nicht abgeschnitten wirken
+      - **Abhängigkeit:** G05, G06
+      - **Risiko:** höchstes der Liste. Die Hülle steht auf jeder Seite; ein Fehler hier ist überall sichtbar
+
+- [ ] **G08** `!` **M** Umfeld des Vordrucks
+      → `estab-ui.css`, `4fach/official_message_form.php`, `tests/php/ges_seitenaufbau.php`, `app/ux_rules.php`
+      - [ ] Seitenkopf: Bereichsmarke, ein `h1` in `--schrift-6`, Unterlinie, kein Erklärsatz
+      - [ ] Aktionsleiste: Knöpfe 2rem, Lücke `--abstand-4`, Rollenreihenfolge aus `app/ui_elements.php` unverändert
+      - [ ] Klebende Leiste bekommt Grund und Unterlinie
+      - [ ] Bearbeitungsweg, Meldungskästen und Fehlerübersicht auf die Marken
+      - [ ] Regel `GES-BAENDER`
+      - **Prüfung:** `ges_seitenaufbau.php`; Bild bei 768 px Höhe
+      - **Abhängigkeit:** G07
+
+- [ ] **G09** `!!` **M** Das Blatt: Maßstab und Lesbarkeit
+      → `estab-ui.css`, `tests/php/ges_vordruck.php`, `tests/php/ux_form_contrast.php`, `app/ux_rules.php`
+      - [ ] `zoom: max(0.75, min(1, calc(100cqw / 56rem)))` — Untergrenze neu
+      - [ ] Tragende Angaben im Blatt mindestens `0.875rem`
+      - [ ] Kleinstdruck des Papierbildes bleibt, steht aber nachweislich anderswo lesbar
+      - [ ] Fokusring skaliert nicht mit
+      - [ ] `ux_form_contrast.php` von 4.5 auf den 7er-Sollwert; was die Vorschrift vorgibt und 7 nicht erreicht, wird namentlich vermerkt und bleibt über 4.5
+      - [ ] Regeln `GES-VORDRUCK-MASSSTAB`, `GES-VORDRUCK-LESBAR`, `GES-INHALT-BLEIBT-GROSS`
+      - **Prüfung:** gerenderte Blattbreite bei 1920/1366/1280/1024/896/800/733 px gegen die Tabelle in Spec 12.2
+      - **Abhängigkeit:** G07, G08
+
+> **Prüfpunkt C2 — MUSTERSEITE 1, FREIGABE**
+> - [ ] Maßstab 0.99 bei 1366 px; nichts abgeschnitten, nichts gestaucht
+> - [ ] Springt der Maßstab bei 896 px nach oben, weil die Menüspalte weicht?
+> - [ ] `blick` ohne Befund über vier Breiten und vier Höhen
+> - [ ] **Bedienprüfung mit drei Personen ohne Anwendungskenntnis**, je ein vollständiger Nachrichtenlauf (`docs/BEDIENPRUEFUNG.md`). Jeder Abbruch ist ein Mangel
+> - [ ] **Das Schema ist aufgeschrieben** — `tasks/gestaltung-plan.md` Abschnitt 5.1 ist gefüllt
+> - [ ] Freigabe
+
+---
+
+## P3 — Musterseite 2: „Stab lesen" · endet mit Freigabe
+
+`stab_lesen` führt über `app/workflow.php:1184` auf `4fach/liste.php` — 2 346
+Zeilen übernommener Bestand mit Bildknöpfen, Statusgrafiken und eigenem Farb-
+und Schriftraum. Freigabefähig ist die Seite erst nach allen drei Aufgaben.
+
+- [ ] **G10** `!!` **M** Die Liste wird eine Tabelle nach Abschnitt 6
+      → `4fach/liste.php`, `estab-ui.css`, `tests/php/ges_tabelle.php`, `app/ux_rules.php`
+      - [ ] Rahmen als Tafel, klebender Kopf, feste Spaltenbreiten in Prozent
+      - [ ] Zellenpolster `--abstand-2 --abstand-4`, zwei Textzeilen je Zelle
+      - [ ] Betreff und Nachrichteninhalt in `--schrift-4`
+      - [ ] **Eine** Aktionsspalte statt eines Formulars je Zelle
+      - [ ] Zeilenkanten 3px zeigen / 4px Vorrang; Vorrangzeichen ▲ ◆ ■
+      - [ ] Leerzustand mit Ausweg
+      - [ ] Regel `GES-TABELLE`
+      - **Prüfung:** `ges_tabelle.php`; die Überlaufbefunde aus `bilder/befunde-*.json` sind verschwunden
+      - **Abhängigkeit:** G09 (Schema aus C2)
+
+- [ ] **G11** `!` **M** Suche und Filter nach Abschnitt 7
+      → `4fach/liste.php`, `estab-ui.css`, `tests/php/ges_filter.php`, `app/ux_rules.php`
+      - [ ] Sechs Bänder, Feld- und Knopfhöhe 2rem, ein Formular
+      - [ ] Die Reiter- und Seitengrößenleiste wird Band 2 und 3
+      - [ ] „Schnellfilter" nur noch für Vorleseprogramme sichtbar
+      - [ ] Marken 1.75rem; kein Filter greift ohne „Filter anwenden"
+      - [ ] Der ganze Block bleibt im Ruhezustand unter 13rem
+      - [ ] Regel `GES-FILTER-BAENDER`
+      - **Prüfung:** `ges_filter.php`; ein Durchgang **ohne JavaScript**
+      - **Abhängigkeit:** G10
+
+- [ ] **G12** `!` **M** Bildknöpfe und Statusgrafiken ersetzen
+      → `4fach/liste.php`, `estab-ui.css`, `tests/php/ges_marken.php`, `tests/php/ges_migrationsgrenze.php`
+      - [ ] Die Blätterpfeile werden Knöpfe (1.75rem), keine GIF-Dateien
+      - [ ] `info.gif`, `checked.gif`, `transport.gif`, `status_*.gif` werden Abzeichen mit Zeichen **und** Wort
+      - [ ] Kein erzeugtes Bild trägt noch Text
+      - [ ] `.estab-legacy-page` gilt für diese Seite nicht mehr
+      - [ ] Präfixe der Seite aus der Migrationsgrenze gestrichen
+      - **Prüfung:** Wächter ohne Ausnahme für diese Präfixe; Graustufenbild — jeder Status bleibt unterscheidbar
+      - **Abhängigkeit:** G11
+
+> **Prüfpunkt C3 — MUSTERSEITE 2, FREIGABE**
+> - [ ] Passen mehr Zeilen auf den Schirm als vorher, ohne dass etwas kleiner geworden ist? **Gemessen mit `blick`, nicht geschätzt**
+> - [ ] Jeder Status ohne Farbe unterscheidbar
+> - [ ] **Bedienprüfung mit drei anderen Personen** — wer C2 mitgemacht hat, ist ungeeignet
+> - [ ] **Das Schema ist um den Listenfall ergänzt.** Trägt es dort nicht, ist das ein Befund über das Schema, nicht über die Liste
+> - [ ] Freigabe
+
+---
+
+## P4 — Der Rest nach demselben Schema · untereinander unabhängig
+
+Ab hier ist keine Entwurfsentscheidung mehr zu treffen. Wer hier eine trifft,
+hat einen Fall gefunden, den das Schema nicht kennt — und trägt ihn nach.
+
+- [ ] **G13** `·` **M** Meldungsübersicht
+      → `estab-ui.css`, `app/message_list_ui.php`, `tests/php/ges_tabelle.php`
+      - [ ] Nach dem Schema aus P3; sie ist der leichtere Fall, weil sie schon sechs Bänder hat
+      - **Prüfung:** `ges_tabelle.php`, `ges_filter.php`; Bilder
+      - **Abhängigkeit:** C3
+
+- [ ] **G14** `·` **M** Werkzeug- und Verwaltungsseiten
+      → `estab-ui.css` (Hauptteil), `tests/php/ges_bedienmasse.php`, `app/ux_rules.php`, dazu die `4fadm`-Dateien mit Maßen im Markup
+      - [ ] `estab-tool-*`, `estab-admin-*`, `estab-export-*`, `estab-telecom-*`, `estab-incident-*`
+      - [ ] Einzelelement-Tafeln aufgelöst (Spec 4.4)
+      - [ ] Regeln `GES-KNOPFMASSE`, `GES-GESPERRT-LESBAR`
+      - [ ] Reißt der Bereich fünf Dateien, wird er nach Präfix geteilt
+      - **Prüfung:** `ges_bedienmasse.php`; Bilder der Verwaltungsseiten
+      - **Abhängigkeit:** C3
+
+- [ ] **G15** `·` **M** Infosammlung, Handbuch, E-Mail-Ansicht
+      → `estab-ui.css`, `handbuch/handbuch.css`, `tests/php/ges_marken.php`, dazu die `stabinfo`-Dateien mit eigenen Maßen
+      - [ ] `estab-bos-*`, `estab-email-preview-*`
+      - [ ] `handbuch/handbuch.css` bindet dieselben Marken ein und färbt keine Verweise der Hülle mehr um
+      - [ ] Fließtext im Handbuch auf 34rem begrenzt
+      - **Prüfung:** Wächter über beide Stylesheets; Bild der Handbuchseite
+      - **Abhängigkeit:** C3
+
+- [ ] **G16** `·` **M** Zeitleiste und Anlagen
+      → `estab-ui.css`, `app/message_timeline.php`, `tests/php/ges_marken.php`
+      - [ ] `estab-message-timeline-*`, `estab-message-attachment-*`
+      - [ ] Die sieben alten Custom Properties der Zeitleiste durch Marken ersetzt
+      - **Prüfung:** Wächter; Bild einer Nachricht mit Anlage und Rücklauf
+      - **Abhängigkeit:** C3
+
+- [ ] **G17** `!` **M** Übrige übernommene Seiten
+      → `estab-ui.css`, `tests/php/ges_migrationsgrenze.php`, dazu die `4fach`-Dateien mit Bildknöpfen
+      - [ ] Anhangseite und die verbliebenen `.estab-list-*`-Ansichten nach dem Schema aus P3
+      - [ ] `.estab-legacy-page` als eigener Farb- und Schriftraum entfällt vollständig
+      - **Prüfung:** Wächter ohne Ausnahme; Bilder
+      - **Abhängigkeit:** C3
+
+> **Prüfpunkt C4** — Ist irgendwo ein Bereich anders geworden, als das Schema
+> es vorgibt? Wenn ja: Hat das Schema gefehlt, oder hat jemand es übergangen?
+
+---
+
+## P5 — Festsetzen
+
+- [ ] **G18** `!` **M** Höhenbudget messen und durchsetzen
+      → `tools/bedienpruefung/blick/aufnahme.mjs`, `tests/php/ges_seitenaufbau.php`, `app/ux_rules.php`
+      - [ ] `blick` misst die Höhe jedes Bandes je Seite
+      - [ ] Vergleich gegen Spec 4.1: Seitenkopf 2.5rem, Meldungskasten 4rem, Aktionsleiste 2rem, Filterblock 13rem, Fußleiste 2.5rem
+      - [ ] Was reißt, wird **gekürzt** — Reihenfolge aus Spec 4.1
+      - [ ] Regel `GES-HOEHENBUDGET`
+      - **Prüfung:** `blick` über vier Höhen; kein Band über Budget
+      - **Abhängigkeit:** G13–G17
+
+- [ ] **G19** `!` **S** Migrationsgrenze entfernen, `!important` räumen
+      → `tests/php/ges_migrationsgrenze.php` (entfällt), `estab-ui.css`, alle `ges_*`-Tests
+      - [ ] Die Ausnahmeliste ist leer und die Datei entfernt
+      - [ ] Die 7er-Stufe von `UX-KONTRAST` gilt jetzt ohne Ausnahme
+      - [ ] `!important` nur noch in `@media print` und `prefers-reduced-motion`
+      - [ ] `GES-MARKEN` zählt null Literale außerhalb `:root`
+      - **Prüfung:** volle Suite; ein neues Literal an **beliebiger** Stelle muss rot werden
+      - **Abhängigkeit:** G18
+
+- [ ] **G20** `·` **M** Bildprüfung erweitern
+      → `tools/bedienpruefung/blick/aufnahme.mjs`, `rundgang.mjs`, `docs/BEDIENPRUEFUNG.md`
+      - [ ] Vier Bildschirm**höhen** zusätzlich zu den vier Breiten
+      - [ ] Graustufenvergleich: jeder Zustand aus Spec Abschnitt 9 bleibt unterscheidbar
+      - [ ] Maßstab des Vordrucks wird mitgemessen
+      - [ ] Regeln `GES-KEIN-UEBERLAUF`, `GES-OHNE-FARBE`
+      - **Prüfung:** ein voller Rundgang je Konto
+      - **Abhängigkeit:** G19
+
+- [ ] **G21** `·` **S** Dokumentation nachziehen
+      → `docs/GESTALTUNG.md`, `SPEC.md`, `docs/TECHNIK.md`, `docs/BEDIENUNG.md`
+      - [ ] Gestaltungsspec Abschnitt 14: Bestandsspalte auf den neuen Stand
+      - [ ] Gestaltungsspec Abschnitt 15: „noch keine Regeln eingetragen" ersetzt durch die Katalogeinträge
+      - [ ] `SPEC.md` Abschnitt 10.1: die zweite Herkunft im Bedienkatalog erklärt
+      - [ ] Namentlich vermerkte Kontrastausnahmen vollständig
+      - **Prüfung:** `tests/static/run.sh` grün; Fundstellen stimmen
+      - **Abhängigkeit:** G20
+
+> **Prüfpunkt C5** — Abschluss. Migrationsgrenze entfernt, `GES-MARKEN` zählt
+> null, alle Regeln im Katalog, jede von mindestens einem Test benannt,
+> Registry grün, `blick` ohne Befund über vier Breiten und vier Höhen.
+
+---
+
+## Parallelisierbar
+
+**P0 bis P3 sind sequenziell.** Die beiden Musterseiten bringen das Schema
+hervor; sie parallel zu bauen hieße, es zweimal zu erfinden.
+
+**P4 ist vollständig parallel:** G13, G14, G15, G16 und G17 berühren
+getrennte Auswählerräume und getrennte Präfixe der Migrationsgrenze.
+Gemeinsam angefasst wird nur die eine Liste in `ges_migrationsgrenze.php`.
+
+**P5 ist wieder sequenziell**, weil jede Aufgabe die vorige voraussetzt.
