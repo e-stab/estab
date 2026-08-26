@@ -84,7 +84,20 @@ $assert(
         && str_contains($markup, 'data-estab-nav-key="overview"')
         && str_contains($markup, '>Übersicht</span>')
         && str_contains($markup, 'name="logout_action" value="logout"')
-        && str_contains($markup, '>Abmelden</button>'),
+        /*
+         * Der Knopf traegt ein Zeichen statt des Wortes: eine Tuer mit
+         * Pfeil. In der schmalen Spalte neben der Anmeldung stand
+         * "Abmelden" gestaucht und nahm mehr Breite als der Name daneben.
+         * Das Wort muss bleiben -- fuer Vorleseprogramme in der Beschriftung
+         * und am Mauszeiger im Titel; ein Zeichen ohne Wort waere fuer
+         * beides nichts.
+         */
+        && str_contains($markup, 'estab-session-logout-icon')
+        && str_contains($markup, ' title="Abmelden">')
+        && str_contains(
+            $markup,
+            '<span class="estab-visually-hidden">Abmelden</span>'
+        ),
     'navigation or logout form contract incomplete'
 );
 $assert(

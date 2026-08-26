@@ -1,4 +1,15 @@
 .estab-login-cta,
+/* Die Anmeldeseite bringt ihre eigene Gestaltung mit. Sie trug frueher nur
+   denselben lila Grund wie die uebernommenen Seiten und wurde deshalb
+   versehentlich wie eine von ihnen behandelt -- mit deren Innenabstaenden
+   lief sie seitlich ueber. */
+.estab-auth-page {
+    background: #eef2f6;
+    color: #172033;
+    font-family: Arial, Helvetica, sans-serif;
+    margin: 0;
+}
+
 .estab-auth-shell,
 .estab-session-bar {
     box-sizing: border-box;
@@ -1090,14 +1101,22 @@
     margin: 0;
 }
 
-/* Der Weg hinaus behaelt sein Wort. Ein Symbol allein spart noch ein paar
-   Pixel, aber wer die Anwendung zum ersten Mal sieht, muss dann raten -- und
-   Raten am Abmelden ist der falsche Ort dafuer. Klein reicht. */
+/* Der Weg hinaus traegt jetzt eine Tuer mit Pfeil statt des Wortes. In der
+   schmalen Spalte stand "Abmelden" gestaucht und nahm mehr Breite als der
+   Name daneben; das Zeichen braucht ein Viertel davon. Das Wort bleibt fuer
+   Vorleseprogramme und als Titel am Mauszeiger. */
 .estab-sidebar-identity-row .estab-session-bar .estab-button-logout {
-    font-size: 0.72rem;
-    min-width: 0;
-    padding: 0.3rem 0.55rem;
-    white-space: nowrap;
+    align-items: center;
+    display: inline-flex;
+    justify-content: center;
+    min-height: 1.9rem;
+    min-width: 1.9rem;
+    padding: 0.2rem;
+    width: auto;
+}
+
+.estab-session-logout-icon {
+    display: block;
 }
 
 /* Die Glocke: offen heisst hoerbar, durchgestrichen heisst stumm. Dasselbe
@@ -2870,13 +2889,35 @@ form[data-estab-incident-disabled="true"]::before {
 
 .estab-legacy-page table {
     border-collapse: collapse;
+    font-size: 0.78rem;
     max-width: 100%;
 }
 
 .estab-legacy-page td,
 .estab-legacy-page th {
-    padding: 0.15rem 0.3rem;
+    line-height: 1.25;
+    padding: 0.12rem 0.3rem;
     vertical-align: top;
+}
+
+/* Die uebernommenen Listen setzen jede Zelle als Verweis. Alle Zellen
+   unterstrichen macht die Tabelle unlesbar; der Verweis bleibt, der Strich
+   kommt erst beim Zeigen. */
+.estab-legacy-page td a,
+.estab-legacy-page th a {
+    color: inherit;
+    text-decoration: none;
+}
+
+.estab-legacy-page td a:hover,
+.estab-legacy-page td a:focus-visible {
+    text-decoration: underline;
+}
+
+.estab-legacy-page input[type="submit"],
+.estab-legacy-page button {
+    font-size: 0.75rem;
+    padding: 0.2rem 0.45rem;
 }
 
 .estab-legacy-page big {
@@ -2931,6 +2972,270 @@ form[data-estab-incident-disabled="true"]::before {
    sie nicht mehr zu sehen und stoeren nur. */
 .estab-legacy-page div[style*="border"] {
     border-color: #c5d1dd !important;
+}
+
+/* ---------------------------------------------------------------------
+   Bedienleiste der Meldungsliste.
+
+   Reiter, Seitengroessen und Filter waren Bilder: Jedes kam als PNG vom
+   Server, gezeichnet mit der einzigen mitgelieferten Schrift, einer
+   Serifenschrift in Kursiv. Kein Stylesheet erreichte sie -- Text in einem
+   Bild laesst sich nicht umfaerben, nicht vergroessern und nicht vorlesen.
+
+   Es sind jetzt Verweise und Knoepfe. Sie bringen keine eigene Schrift mit
+   und tragen deshalb dieselbe wie alles andere. Und sie sind klein: Eine
+   Liste lebt von den Zeilen darunter, nicht von ihrer Leiste.
+   --------------------------------------------------------------------- */
+/* Die uebernommenen Listen setzen jede Zelle als Verweis -- ein Klick
+   irgendwo in der Zeile oeffnet die Meldung. Alle Zellen unterstrichen zu
+   zeigen macht die Tabelle unlesbar; der Verweis bleibt, der Strich geht
+   und kommt beim Zeigen zurueck. */
+.estab-list-table td a,
+.estab-list-table th a {
+    color: inherit;
+    text-decoration: none;
+}
+
+.estab-list-table td a:hover,
+.estab-list-table td a:focus-visible {
+    text-decoration: underline;
+}
+
+.estab-list-head {
+    background: #e7edf3;
+}
+
+.estab-list-head th,
+.estab-list-head td {
+    border-bottom: 2px solid #45627f;
+    color: #1f3a5a;
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+/* Die Spaltenbreiten ergeben sich aus dem Inhalt. Ein festes Raster war
+   hier falsch: Acht schmale Spalten und eine lange -- vorgegebene Breiten
+   liessen die Zellen ineinanderlaufen.
+
+   Als Block mit eigenem Rollbereich bleibt nichts abgeschnitten: Neun
+   Spalten passen auf einen schmalen Schirm nicht, aber sie sind erreichbar.
+   Die Zeilen bleiben flach -- die Statuszeichen brachten je einen Absatz
+   mit, und drei Absaetze uebereinander ergaben 260 Pixel Zeilenhoehe. */
+.estab-list-table {
+    display: block;
+    font-size: 0.74rem;
+    max-width: 100%;
+    overflow-x: auto;
+    table-layout: auto;
+    width: 100%;
+}
+
+.estab-list-table p {
+    margin: 0;
+}
+
+.estab-list-table img {
+    display: block;
+    max-height: 1rem;
+    width: auto;
+}
+
+.estab-list-table td,
+.estab-list-table th {
+    padding: 0.2rem 0.4rem;
+    text-align: left;
+    vertical-align: middle;
+}
+
+/* Der Meldungstext ist die eine lange Spalte; sie bekommt, was uebrig
+   bleibt. Angezeigt werden drei Zeilen -- die ganze Meldung steht im
+   Vordruck, den ein Klick oeffnet. Ohne diese Grenze wuchs jede Zeile der
+   Liste auf 260 Pixel, und auf den Schirm passten drei Meldungen. */
+.estab-list-table td:last-child,
+.estab-list-table th:last-child {
+    max-width: 26rem;
+    min-width: 12rem;
+    width: 100%;
+}
+
+/* Jede Zelle ist ein Formular mit Knopf: Ein Klick irgendwo in der Zeile
+   oeffnet die Meldung. Alle Zellen unterstrichen macht die Tabelle
+   unlesbar -- der Strich kommt erst beim Zeigen. */
+.estab-list-cell-form {
+    display: inline;
+    margin: 0;
+}
+
+.estab-legacy-page .estab-list-cell-button,
+.estab-list-cell-button {
+    background: transparent;
+    border: 0;
+    color: inherit;
+    cursor: pointer;
+    font: inherit;
+    padding: 0;
+    text-align: left;
+    text-decoration: none;
+}
+
+.estab-list-cell-button:hover,
+.estab-list-cell-button:focus-visible {
+    text-decoration: underline;
+}
+
+/* Drei Zeilen Meldungstext. Die ganze Meldung steht im Vordruck, den ein
+   Klick oeffnet; ohne Grenze wuchs jede Listenzeile auf 230 Pixel. */
+.estab-list-table td:last-child .estab-list-cell-button {
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3;
+    display: -webkit-box;
+    line-clamp: 3;
+    overflow: hidden;
+}
+
+.estab-list-table td:not(:last-child),
+.estab-list-table th:not(:last-child) {
+    white-space: nowrap;
+}
+
+/* Die Bedienleiste steckt in einer uebernommenen Tabelle. Deren Zellen
+   sollen hier nicht auseinanderlaufen -- die Leiste ist eine Zeile. */
+.estab-legacy-page [data-estab-list-filter] table,
+.estab-legacy-page [data-estab-list-filter] td {
+    border: 0;
+    padding: 0.1rem 0.25rem;
+    vertical-align: middle;
+}
+
+.estab-list-tabs {
+    align-items: center;
+    border-bottom: 2px solid #45627f;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.2rem;
+    margin: 0 0 0.3rem;
+    padding: 0 0 0.2rem;
+}
+
+.estab-list-tab {
+    background: #e7edf3;
+    border: 1px solid #a6b5c4;
+    border-radius: 4px 4px 0 0;
+    color: #1f3a5a;
+    display: inline-block;
+    font-size: 0.68rem;
+    font-weight: 700;
+    line-height: 1.1;
+    padding: 0.1rem 0.35rem;
+    text-decoration: none;
+    white-space: nowrap;
+}
+
+.estab-list-tab:hover,
+.estab-list-tab:focus-visible {
+    background: #d6e2ee;
+}
+
+/* Die drei Herkuenfte trugen frueher drei Farben. Sie behalten je einen
+   schmalen Streifen -- das unterscheidet sie, ohne Flaeche zu kosten. */
+.estab-list-tabs--global {
+    border-bottom-color: #9b2634;
+}
+
+.estab-list-tabs--funktion {
+    border-bottom-color: #2b6397;
+}
+
+.estab-list-tabs--benutzer {
+    border-bottom-color: #246b43;
+}
+
+.estab-list-tabs--global .estab-list-tab.is-active {
+    background: #9b2634;
+    border-color: #9b2634;
+    color: #ffffff;
+}
+
+.estab-list-tabs--funktion .estab-list-tab.is-active {
+    background: #2b6397;
+    border-color: #2b6397;
+    color: #ffffff;
+}
+
+.estab-list-tabs--benutzer .estab-list-tab.is-active {
+    background: #246b43;
+    border-color: #246b43;
+    color: #ffffff;
+}
+
+.estab-list-chips {
+    display: inline-flex;
+    gap: 0.15rem;
+}
+
+.estab-list-chip {
+    background: #e7edf3;
+    border: 1px solid #a6b5c4;
+    border-radius: 4px;
+    color: #1f3a5a;
+    display: inline-block;
+    font-size: 0.7rem;
+    font-weight: 700;
+    line-height: 1.15;
+    min-width: 1.4rem;
+    padding: 0.12rem 0.3rem;
+    text-align: center;
+    text-decoration: none;
+}
+
+.estab-list-chip.is-active {
+    background: #1f4f7d;
+    border-color: #1f4f7d;
+    color: #ffffff;
+}
+
+.estab-legacy-page .estab-list-toggle,
+.estab-legacy-page .estab-list-pager,
+.estab-list-toggle,
+.estab-list-pager {
+    background: #e7edf3;
+    border: 1px solid #a6b5c4;
+    border-radius: 4px;
+    color: #1f3a5a;
+    cursor: pointer;
+    font: inherit;
+    font-size: 0.7rem;
+    font-weight: 700;
+    line-height: 1.1;
+    padding: 0.12rem 0.4rem;
+    white-space: nowrap;
+}
+
+.estab-list-toggle.is-active {
+    background: #1f4f7d;
+    border-color: #1f4f7d;
+    color: #ffffff;
+}
+
+.estab-list-toggle:hover,
+.estab-list-pager:hover,
+.estab-list-toggle:focus-visible,
+.estab-list-pager:focus-visible {
+    background: #d6e2ee;
+}
+
+.estab-list-pagers {
+    display: inline-flex;
+    gap: 0.15rem;
+}
+
+.estab-legacy-page .estab-list-pager,
+.estab-list-pager {
+    min-width: 1.5rem;
+    padding: 0.12rem 0.25rem;
 }
 
 /* ---------------------------------------------------------------------
@@ -4673,17 +4978,21 @@ body.estab-message-form-body {
     background: #d5e7f4;
 }
 
+/* Vier Knoepfe in Vollgroesse assen auf einem schmalen Schirm fast ein
+   Drittel der Hoehe -- sie standen untereinander, jeder ueber die ganze
+   Breite. Es sind vier kurze Woerter; in dieser Groesse stehen sie
+   nebeneinander und die Leiste kostet eine Zeile. */
 .estab-message-actionbar {
     align-items: center;
     background: rgba(255, 255, 255, 0.97);
     border: 1px solid #b8c7d5;
-    border-radius: 9px;
-    box-shadow: 0 5px 16px rgba(31, 58, 86, 0.1);
+    border-radius: 8px;
+    box-shadow: 0 3px 10px rgba(31, 58, 86, 0.08);
     display: flex;
     flex-wrap: wrap;
-    gap: 0.55rem;
-    margin: 0 0 0.85rem;
-    padding: 0.65rem;
+    gap: 0.35rem;
+    margin: 0 0 0.5rem;
+    padding: 0.35rem 0.4rem;
     position: relative;
     z-index: 30;
 }
@@ -4698,8 +5007,10 @@ body.estab-message-form-body {
 }
 
 .estab-message-actionbar .estab-button {
-    min-height: 2.55rem;
-    padding: 0.55rem 0.8rem;
+    border-width: 1px;
+    font-size: 0.8rem;
+    min-height: 1.85rem;
+    padding: 0.3rem 0.6rem;
 }
 
 .estab-button-secondary {
@@ -6983,12 +7294,23 @@ section.estab-message-timeline[data-estab-message-timeline]
    jede 115 Pixel hoch, alle so hoch wie die hoechste, und der halbe Kasten
    stand leer. Jetzt ist jede so breit wie ihr Inhalt und zwei knappe Zeilen
    hoch; passen nicht alle nebeneinander, laesst sich die Leiste schieben. */
+/* Als umbrechende Zeile rechnete der Kasten seine Breite so, als stuenden
+   Name, Zustand und Vermerk nebeneinander -- die Eingangsmarke wurde 279
+   Pixel breit fuer Text, der in 162 passt, und der Rest stand leer. Als
+   Raster mit zwei Zeilen ist die Marke so breit wie ihre breiteste Zeile. */
 .estab-message-timeline__content {
     align-items: baseline;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0 0.3rem;
+    column-gap: 0.3rem;
+    display: grid;
+    grid-template-columns: auto auto;
+    justify-content: start;
     min-width: 0;
+    row-gap: 0;
+}
+
+.estab-message-timeline__content > .estab-message-timeline__station,
+.estab-message-timeline__content > .estab-message-timeline__reason {
+    grid-column: 1 / -1;
 }
 
 .estab-message-timeline__step {
@@ -7008,7 +7330,6 @@ section.estab-message-timeline[data-estab-message-timeline]
 }
 
 .estab-message-timeline__station {
-    flex: 0 0 100%;
     font-size: 0.68rem;
     line-height: 1.2;
     margin: 0;
@@ -7033,7 +7354,6 @@ section.estab-message-timeline[data-estab-message-timeline]
 }
 
 .estab-message-timeline__reason {
-    flex: 0 0 100%;
     font-size: 0.56rem;
     line-height: 1.2;
     margin: 0;
@@ -7153,7 +7473,10 @@ section.estab-message-timeline[data-estab-message-timeline]
     }
 }
 
-@media (max-width: 34rem) {
+/* Ein Knopf je Zeile erst, wenn wirklich nichts mehr nebeneinander passt.
+   Bei 34 rem war das zu frueh: Dort standen vier kurze Woerter untereinander
+   und die Leiste ass ein Drittel des Bildschirms. */
+@media (max-width: 22rem) {
     .estab-message-actionbar {
         align-items: stretch;
         display: grid;
@@ -7163,7 +7486,9 @@ section.estab-message-timeline[data-estab-message-timeline]
     .estab-message-actionbar .estab-button {
         width: 100%;
     }
+}
 
+@media (max-width: 34rem) {
     .estab-message-attachment-card {
         grid-template-columns: 1fr;
     }
@@ -8344,7 +8669,9 @@ a.estab-message-list-chip:hover {
    der vollstaendige Text bleibt in derselben Zeile erreichbar. */
 .estab-message-list-clamp {
     display: block;
-    overflow-wrap: anywhere;
+    hyphens: auto;
+    overflow-wrap: break-word;
+    word-break: normal;
 }
 
 .estab-message-list-clamp--empty {
@@ -8361,9 +8688,11 @@ a.estab-message-list-chip:hover {
 }
 
 .estab-message-list-fulltext > p {
+    hyphens: auto;
     margin: 0.3rem 0 0;
-    overflow-wrap: anywhere;
+    overflow-wrap: break-word;
     white-space: pre-line;
+    word-break: normal;
 }
 
 .estab-message-list-attachments {

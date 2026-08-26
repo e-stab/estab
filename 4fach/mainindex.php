@@ -3248,7 +3248,7 @@ Nachricht als Sichtung anzeigen
     echo "<script src=\"../estab-password-policy.js\" defer></script>\n";
     echo "<title>eStab – Anmeldung</title>\n";
     echo "</head>\n";
-    echo "<body class=\"estab-legacy-page\">\n";
+    echo "<body class=\"estab-auth-page\">\n";
     echo "<main class=\"estab-auth-shell\">\n";
     echo "<section class=\"estab-auth-card\" aria-labelledby=\"estab-auth-title\">\n";
     echo "<h1 id=\"estab-auth-title\">eStab-Funktionskonto</h1>\n";

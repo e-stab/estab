@@ -3146,9 +3146,6 @@ HTML;
         );
         echo '<body class="estab-message-form-body">';
         echo '<main class="estab-message-form-page">';
-        $attachmentCount = count(
-            $this->official_message_attachment_references()
-        );
         echo '<header class="estab-message-page-header">'
             . '<div><span class="estab-section-kicker">Nachrichtenwesen</span>'
             . '<h1>Nachrichtenvordruck</h1>'
@@ -3159,23 +3156,15 @@ HTML;
                 : ' Felder mit Stern und Randstreifen gehören zu diesem '
                     . 'Arbeitsschritt und sind auszufüllen.')
             . '</p>'
-            . '</div><div class="estab-message-header-badges">'
-            . '<span class="estab-message-task-badge">'
-            . estab_message_html($this->task) . '</span>';
-        if ($attachmentCount > 0 || $this->official_message_attachments_editable()) {
-            echo '<a class="estab-message-attachment-badge'
-                . ($attachmentCount === 0
-                    ? ' estab-message-attachment-badge--empty'
-                    : '')
-                . '" '
-                . 'href="#nachrichtenanlagen">'
-                . ($attachmentCount > 0
-                    ? $attachmentCount . ' '
-                        . ($attachmentCount === 1 ? 'Anlage' : 'Anlagen')
-                    : 'Anlage hinzufügen')
-                . '</a>';
-        }
-        echo '</div></header>';
+            /*
+             * Hier standen zwei runde Marken: der Arbeitsschritt und ein
+             * Verweis auf die Anlagen. Beide sagten nichts, was nicht
+             * daneben schon stand -- der Arbeitsschritt ist links im Menue
+             * hervorgehoben, und der Verweis auf die Anlagen ist ein Knopf
+             * in der Aktionsleiste, der dasselbe Sprungziel hat und dabei
+             * die Zahl der Anlagen nennt.
+             */
+            . '</div></header>';
         if ((string)$this->formdata['estab_route_error'] !== '') {
             echo '<div class="estab-alert estab-alert--danger" role="alert">'
                 . estab_message_html($this->formdata['estab_route_error'])

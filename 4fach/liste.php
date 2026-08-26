@@ -29,7 +29,8 @@ function estab_list_state_action ($action, $recordId, $todo, $image, $alt) {
   $safeTodo = estab_auth_html ($todo);
   $safeImage = estab_auth_html ($image);
   $safeAlt = estab_auth_html ($alt);
-  echo "<form method=\"post\" action=\"mainindex.php\" target=\"_self\" style=\"display:inline\">";
+  echo "<form class=\"estab-list-cell-form\" method=\"post\""
+    ." action=\"mainindex.php\" target=\"_self\">";
   echo estab_csrf_field ();
   echo estab_list_acting_function_field ();
   echo "<input type=\"hidden\" name=\"action\" value=\"".$safeAction."\">";
@@ -55,7 +56,8 @@ function estab_list_detail_action (
   $safeValue = estab_auth_html ($value);
   $safeRecordId = estab_auth_html (estab_message_positive_id ($recordId));
   $safeLabel = estab_message_html ($label);
-  echo "<form method=\"post\" action=\"mainindex.php\" target=\"_self\" style=\"display:inline\">";
+  echo "<form class=\"estab-list-cell-form\" method=\"post\""
+    ." action=\"mainindex.php\" target=\"_self\">";
   echo estab_csrf_field ();
   echo estab_list_acting_function_field ();
   echo "<input type=\"hidden\" name=\"".$safeRoute."\" value=\"".$safeValue."\">";
@@ -64,8 +66,13 @@ function estab_list_detail_action (
     echo "<button type=\"submit\" class=\"estab-button estab-button-primary ".
          "estab-message-list-open\">";
   } else {
-    echo "<button type=\"submit\" style=\"border:0;background:transparent;padding:0;".
-         "color:inherit;text-decoration:underline;cursor:pointer;font:inherit\">";
+    /*
+     * Der Knopf trug seine Gestaltung als feste Angabe im Markup und war
+     * damit von aussen nicht erreichbar: nicht zu verkleinern, nicht zu
+     * entstreichen, nicht zu begrenzen. Er traegt jetzt einen Namen; das
+     * Aussehen steht im Stylesheet.
+     */
+    echo "<button type=\"submit\" class=\"estab-list-cell-button\">";
   }
   if ($large) { echo "<big>"; }
   echo $safeLabel;
@@ -108,14 +115,58 @@ function estab_list_category_url ($baseUrl, array $parameters) {
 }
 
 /** Build and escape the fixed local category-button URL. */
-function estab_list_category_icon ($label, $color) {
-  return estab_message_html (
-    "./kategobutton.php?".http_build_query (array (
-      "icontext" => (string) $label,
-      "color" => (string) $color,
-    ), "", "&", PHP_QUERY_RFC3986)
-  );
+/*
+ * Bedienelemente der Meldungsliste.
+ *
+ * Sie waren Bilder: Jeder Reiter, jede Seitengroesse und jeder Filter kam
+ * als PNG vom Server, gezeichnet mit der einzigen mitgelieferten Schrift --
+ * einer Serifenschrift in Kursiv. Neben der uebrigen Anwendung sah die
+ * Liste dadurch aus wie ein anderes Programm, und kein Stylesheet erreichte
+ * sie: Text in einem Bild laesst sich nicht umfaerben, nicht vergroessern
+ * und nicht vorlesen.
+ *
+ * Es sind jetzt Verweise und Knoepfe. Sie tragen dieselbe Schrift wie alles
+ * andere, weil sie gar keine eigene mitbringen, und sie sind klein: Eine
+ * Liste lebt von den Zeilen darunter, nicht von ihrer Leiste.
+ */
+
+/** Ein Reiter der Kategorienleiste. */
+function estab_list_tab_markup ($url, $label, $title, $active, $kind) {
+  return "<a class=\"estab-list-tab estab-list-tab--".estab_message_html ((string) $kind)
+    .($active ? " is-active" : "")."\""
+    ." href=\"".$url."\""
+    .($active ? " aria-current=\"page\"" : "")
+    ." title=\"".estab_message_html ((string) $title)."\">"
+    .estab_message_html ((string) $label)."</a>";
 }
+
+/** Eine Marke fuer die Zahl der Meldungen je Seite. */
+function estab_list_size_markup ($url, $label, $active) {
+  return "<a class=\"estab-list-chip".($active ? " is-active" : "")."\""
+    ." href=\"".$url."\""
+    .($active ? " aria-current=\"true\"" : "")
+    ." title=\"".estab_message_html ((string) $label)." Meldungen je Seite\">"
+    .estab_message_html ((string) $label)."</a>";
+}
+
+/** Ein Schalter der Filterleiste; sein Zustand steht in aria-pressed. */
+function estab_list_toggle_markup ($name, $label, $active) {
+  return "<button class=\"estab-list-toggle".($active ? " is-active" : "")."\""
+    ." type=\"submit\" name=\"".estab_message_html ((string) $name)."\" value=\"1\""
+    ." aria-pressed=\"".($active ? "true" : "false")."\">"
+    .estab_message_html ((string) $label)."</button>";
+}
+
+/** Ein Knopf zum Blaettern. Das Zeichen ist Schmuck, das Wort ist die Angabe. */
+function estab_list_pager_markup ($name, $glyph, $label) {
+  return "<button class=\"estab-list-pager\" type=\"submit\""
+    ." name=\"".estab_message_html ((string) $name)."\" value=\"1\""
+    ." title=\"".estab_message_html ((string) $label)."\">"
+    ."<span aria-hidden=\"true\">".$glyph."</span>"
+    ."<span class=\"estab-visually-hidden\">"
+    .estab_message_html ((string) $label)."</span></button>";
+}
+
 
 /** Clamp and advance the legacy list pager without putting request data in SQL. */
 function estab_list_page_window ($resultCount) {
@@ -523,55 +574,38 @@ class Listen extends kategorien {
           echo "<tr>";
 
           echo "<td>";
-          echo "<div  style=\"border-top-color:#DCDCFF; border-left-color:#DCDCFF; border-right-color:#DCDCFF; border-bottom-color:#000000; border-width:1px; border-style:solid; padding:0px\">";
+          echo "<span class=\"estab-list-chips\">";
             for ($pps=5; $pps <=25; $pps+=5){
-              if ( $_SESSION["filter_anzahl"] == $pps )  {
-                echo "<a href=\"".estab_list_category_url ($conf_4f ["MainURL"], array (
+              echo estab_list_size_markup (
+                estab_list_category_url ($conf_4f ["MainURL"], array (
                   "filter_anzahl_x" => 1, "filter_anzahl" => $pps,
-                ))."\"><img src=\"button.php?type=icon&amp;status=AUS&amp;text=".$pps."&amp;bg=blue\" border=\"0\" alt=\"Anzahl".$pps."EIN\"></a>";
-              } else {
-                echo "<a href=\"".estab_list_category_url ($conf_4f ["MainURL"], array (
-                  "filter_anzahl_x" => 1, "filter_anzahl" => $pps,
-                ))."\"><img src=\"button.php?type=icon&amp;status=EIN&amp;text=".$pps."&amp;bg=lighterblue\" border=\"0\" alt=\"Anzahl".$pps."AUS\"></a>";
-              }
+                )),
+                $pps,
+                $_SESSION["filter_anzahl"] == $pps
+              );
             }
-          echo "</div>";
+          echo "</span>";
           echo "</td>";
           echo "</tr>";
           echo "</tbody></table>";
           echo "</td>";
           echo "<td>";
-          if ($_SESSION ['filter_unerledigt'] == 0)  {
-            echo "<div>";
-            echo "<input type=\"image\" name=\"filter_unerledigt_ein\" src=\"button.php?type=push&textpos=buttom&status=AUS&text=un-\" alt=\"unerledigte\">\n";
-            echo "</div>";
-          } else {
-            echo "<div>";
-            echo "<input type=\"image\" name=\"filter_unerledigt_aus\" src=\"button.php?type=push&textpos=buttom&status=EIN&text=un-\" alt=\"unerledigte\">\n";
-            echo "</div>";
-          }
+          $an = $_SESSION ['filter_unerledigt'] != 0;
+          echo estab_list_toggle_markup (
+            $an ? "filter_unerledigt_aus" : "filter_unerledigt_ein", "Unerledigt", $an
+          );
           echo "</td>";
           echo "<td>";
-          if ($_SESSION ['filter_erledigt'] == 0)  {
-            echo "<div>";
-            echo "<input type=\"image\" name=\"filter_erledigt_ein\" src=\"button.php?type=push&textpos=buttom&status=AUS&text=erledigt\" alt=\"erledigte\">\n";
-            echo "</div>";
-          } else {
-            echo "<div>";
-            echo "<input type=\"image\" name=\"filter_erledigt_aus\" src=\"button.php?type=push&textpos=buttom&status=EIN&text=erledigt\" alt=\"erledigte\">\n";
-            echo "</div>";
-          }
+          $an = $_SESSION ['filter_erledigt'] != 0;
+          echo estab_list_toggle_markup (
+            $an ? "filter_erledigt_aus" : "filter_erledigt_ein", "Erledigt", $an
+          );
           echo "</td>";
           echo "<td>";
-          if ($_SESSION ['flt_find_mask'] == 0)  {
-            echo "<div>";
-            echo "<input type=\"image\" name=\"flt_find_mask_ein\" src=\"button.php?type=push&textpos=buttom&status=AUS&text=finden\" alt=\"finden\">\n";
-            echo "</div>";
-          } else {
-            echo "<div>";
-            echo "<input type=\"image\" name=\"flt_find_mask_aus\" src=\"button.php?type=push&textpos=buttom&status=EIN&text=finden\" alt=\"finden\">\n";
-            echo "</div>";
-          }
+          $an = $_SESSION ['flt_find_mask'] != 0;
+          echo estab_list_toggle_markup (
+            $an ? "flt_find_mask_aus" : "flt_find_mask_ein", "Suche", $an
+          );
           echo "</td>";
 
         echo "<!-- liste.php 233 -->";
@@ -628,19 +662,17 @@ class Listen extends kategorien {
           echo "<tr>";
 
           echo "<td>";
-          echo "<div  style=\"border-top-color:#DCDCFF; border-left-color:#DCDCFF; border-right-color:#DCDCFF; border-bottom-color:#000000; border-width:1px; border-style:solid; padding:0px\">";
+          echo "<span class=\"estab-list-chips\">";
             for ($pps=5; $pps <=25; $pps+=5){
-              if ( $_SESSION["filter_anzahl"] == $pps )  {
-                echo "<a href=\"".estab_list_category_url ($conf_4f ["MainURL"], array (
+              echo estab_list_size_markup (
+                estab_list_category_url ($conf_4f ["MainURL"], array (
                   "filter_anzahl_x" => 1, "filter_anzahl" => $pps,
-                ))."\"><img src=\"button.php?type=icon&amp;status=AUS&amp;text=".$pps."&amp;bg=blue\" border=\"0\" alt=\"Anzahl".$pps."EIN\"></a>";
-              } else {
-                echo "<a href=\"".estab_list_category_url ($conf_4f ["MainURL"], array (
-                  "filter_anzahl_x" => 1, "filter_anzahl" => $pps,
-                ))."\"><img src=\"button.php?type=icon&amp;status=EIN&amp;text=".$pps."&amp;bg=lighterblue\" border=\"0\" alt=\"Anzahl".$pps."AUS\"></a>";
-              }
+                )),
+                $pps,
+                $_SESSION["filter_anzahl"] == $pps
+              );
             }
-          echo "</div>";
+          echo "</span>";
           echo "</td>";
           echo "</tr>";
           echo "</tbody></table>";
@@ -648,15 +680,10 @@ class Listen extends kategorien {
 
 		  
           echo "<td>";
-          if ($_SESSION ['flt_find_mask'] == 0)  {
-            echo "<div>";
-            echo "<input type=\"image\" name=\"flt_find_mask_ein\" src=\"button.php?type=push&textpos=buttom&status=AUS&text=finden\" alt=\"finden\">\n";
-            echo "</div>";
-          } else {
-            echo "<div>";
-            echo "<input type=\"image\" name=\"flt_find_mask_aus\" src=\"button.php?type=push&textpos=buttom&status=EIN&text=finden\" alt=\"finden\">\n";
-            echo "</div>";
-          }
+          $an = $_SESSION ['flt_find_mask'] != 0;
+          echo estab_list_toggle_markup (
+            $an ? "flt_find_mask_aus" : "flt_find_mask_ein", "Suche", $an
+          );
           echo "</td>";
 
         echo "<!-- liste.php 233 -->";
@@ -697,10 +724,12 @@ class Listen extends kategorien {
   \******************************************************************************/
   function  listen_navi (){
     include ("../4fcfg/config.inc.php");
-    echo "<input type=\"image\" name=\"flt_start\" src=\"".$conf_design_path."/go_start.gif\" alt=\"Anfang\">\n";
-    echo "<input type=\"image\" name=\"flt_back\" src=\"".$conf_design_path."/go_back.gif\" alt=\"zurueck\">\n";
-    echo "<input type=\"image\" name=\"flt_for\" src=\"".$conf_design_path."/go_forward.gif\" alt=\"vor\">\n";
-    echo "<input type=\"image\" name=\"flt_end\" src=\"".$conf_design_path."/go_end.gif\" alt=\"Ende\">\n";
+    echo "<span class=\"estab-list-pagers\">";
+    echo estab_list_pager_markup ("flt_start", "&#124;&#9664;", "Erste Seite");
+    echo estab_list_pager_markup ("flt_back", "&#9664;", "Seite zurück");
+    echo estab_list_pager_markup ("flt_for", "&#9654;", "Seite vor");
+    echo estab_list_pager_markup ("flt_end", "&#9654;&#124;", "Letzte Seite");
+    echo "</span>";
   }
 
 
@@ -818,117 +847,77 @@ class Listen extends kategorien {
 
         // MASTER KATEGORIE
       if ($mastercount != 0){
-        echo "<div style=\"height:20px;
-                           background-color:#FFC8C8;
-                           border-top-color:#FFC8C8;
-                           border-left-color:#FFC8C8;
-                           border-right-color:#FFC8C8;
-                           border-bottom-color:#000000;
-                           border-width:2px;
-                           border-style:solid;
-                           padding-top:10px;
-                           padding-bottom:0px;\">\n";
-        if (!isset($_SESSION ['ma_katego'])){$color = "red";}else{$color = "lightred";}
-            echo"<a href=\"".estab_list_category_url ($conf_4f ["MainURL"], array (
-              "ma_ktgotyp" => "global",
-              "ma_ktgo" => "alle",
-            ))."\">
-              <img src=\"".estab_list_category_icon ("ALLE", $color)."\"
-                   alt=\"Alle\"
-                   border=\"0\"
-                   title=\"Alle\"></a>\n";
-
-        for ($i=1; $i<= $mastercount; $i++) {
-          if ( $this->masterresult[$i]["kategorie"] == "" ) {
-            echo "<a><img src=\"null.gif\" alt=\"leer\"></a>\n";
-          } else {
-            if ( (($_SESSION ['ma_katego'] ?? "") == $this->masterresult[$i]["lfd"]) AND
-                 (($_SESSION ['ma_kategotyp'] ?? "") == "global") ){$color = "red";}else{$color = "lightred";}
-            echo"<a href=\"".estab_list_category_url ($conf_4f ["MainURL"], array (
-              "ma_ktgotyp" => "global",
-              "ma_ktgo" => $this->masterresult[$i]["lfd"],
-            ))."\">
-              <img src=\"".estab_list_category_icon ($this->masterresult[$i]["kategorie"], $color)."\"
-                   alt=\"".estab_message_html ($this->masterresult[$i]["beschreibung"] ?? "")."\"
-                   border=\"0\"
-                   title=\"".estab_message_html ($this->masterresult[$i]["beschreibung"] ?? "")."\"></a>\n";
-          }
+        echo "<nav class=\"estab-list-tabs estab-list-tabs--global\" aria-label=\"Kategorien\">";
+        $aktiv = !isset ($_SESSION ['ma_katego']);
+        echo estab_list_tab_markup (
+          estab_list_category_url ($conf_4f ["MainURL"], array (
+            "ma_ktgotyp" => "global", "ma_ktgo" => "alle",
+          )), "Alle", "Alle Kategorien", $aktiv, "global"
+        )."\n";
+        for ($i = 1; $i <= $mastercount; $i++) {
+          if ( $this->masterresult[$i]["kategorie"] == "" ) { continue; }
+          $aktiv = (($_SESSION ['ma_katego'] ?? "") == $this->masterresult[$i]["lfd"])
+            AND (($_SESSION ['ma_kategotyp'] ?? "") == "global");
+          echo estab_list_tab_markup (
+            estab_list_category_url ($conf_4f ["MainURL"], array (
+              "ma_ktgotyp" => "global", "ma_ktgo" => $this->masterresult[$i]["lfd"],
+            )),
+            $this->masterresult[$i]["kategorie"],
+            $this->masterresult[$i]["beschreibung"] ?? "",
+            $aktiv, "global"
+          )."\n";
         }
-        echo "</div>";
+        echo "</nav>";
       }
 
         // FUNKTIONS KATEGORIE
       if ($fktcount != 0){
-        echo "<div style=\"height:20px;
-                           background-color:#C8C8FF;
-                           border-top-color:#C8C8FF;
-                           border-left-color:#C8C8FF;
-                           border-right-color:#C8C8FF;
-                           border-bottom-color:#000000;
-                           border-width:2px;
-                           border-style:solid;
-                           padding-top:10px;
-                           padding-bottom:1px;
-                           margin-bottom:0px;\">\n";
-        if (!isset($_SESSION ['fk_katego'])){$color = "blue";}else{$color = "lightblue";}
-
-        echo "<a href=\"".estab_list_category_url ($conf_4f ["MainURL"], array (
-          "fk_ktgotyp" => "fkt",
-          "fk_ktgo" => "alle",
-        ))."\">";
-        echo "<img src=\"".estab_list_category_icon ("ALLE", $color)."\"
-                   alt=\"Alle\"
-                   border=\"0\"
-                   title=\"Alle\">"; //</a>";
-        for ($i=1; $i<= $fktcount; $i++) {
-          if ( $this->fktresult[$i]["kategorie"] == "" ) {
-            echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";
-          } else {
-            if ( (($_SESSION ['fk_katego'] ?? "") == $this->fktresult[$i]["lfd"]) AND
-                 (($_SESSION ['fk_kategotyp'] ?? "") == "fkt" ) ){$color = "blue";}else{$color = "lightblue";}
-              echo"<a href=\"".estab_list_category_url ($conf_4f ["MainURL"], array (
-                "fk_ktgotyp" => "fkt",
-                "fk_ktgo" => $this->fktresult[$i]["lfd"],
-              ))."\">
-              <img src=\"".estab_list_category_icon ($this->fktresult[$i]["kategorie"], $color)."\"
-                   alt=\"".estab_message_html ($this->fktresult[$i]["beschreibung"] ?? "")."\"
-                   border=\"0\"
-                   title=\"".estab_message_html ($this->fktresult[$i]["beschreibung"] ?? "")."\"></a>";
-          }
+        echo "<nav class=\"estab-list-tabs estab-list-tabs--funktion\" aria-label=\"Kategorien\">";
+        $aktiv = !isset ($_SESSION ['fk_katego']);
+        echo estab_list_tab_markup (
+          estab_list_category_url ($conf_4f ["MainURL"], array (
+            "fk_ktgotyp" => "fkt", "fk_ktgo" => "alle",
+          )), "Alle", "Alle Funktionskategorien", $aktiv, "funktion"
+        )."\n";
+        for ($i = 1; $i <= $fktcount; $i++) {
+          if ( $this->fktresult[$i]["kategorie"] == "" ) { continue; }
+          $aktiv = (($_SESSION ['fk_katego'] ?? "") == $this->fktresult[$i]["lfd"])
+            AND (($_SESSION ['fk_kategotyp'] ?? "") == "fkt");
+          echo estab_list_tab_markup (
+            estab_list_category_url ($conf_4f ["MainURL"], array (
+              "fk_ktgotyp" => "fkt", "fk_ktgo" => $this->fktresult[$i]["lfd"],
+            )),
+            $this->fktresult[$i]["kategorie"],
+            $this->fktresult[$i]["beschreibung"] ?? "",
+            $aktiv, "funktion"
+          )."\n";
         }
-        echo "</div>";   //echo "<p>";
+        echo "</nav>";
       }
 
         // USER KATEGORIE
       if ($usercount != 0){
-        echo "<div style=\"height:20px; background-color:#C8FFC8; border-top-color:#C8FFC8; border-left-color:#C8FFC8; border-right-color:#C8FFC8; border-bottom-color:#000000; border-width:2px; border-style:solid; padding-top:10px; padding-bottom:1px; margin-bottom:10px;\">\n";
-        if (!isset($_SESSION ['us_katego'])){$color = "green";}else{$color = "lightgreen";}
-
-        echo "<a href=\"".estab_list_category_url ($conf_4f ["MainURL"], array (
-          "us_ktgotyp" => "user",
-          "us_ktgo" => "alle",
-        ))."\">";
-        echo "<img src=\"".estab_list_category_icon ("ALLE", $color)."\"
-                   alt=\"Alle\"
-                   border=\"0\"
-                   title=\"Alle\">"; //</a>";
-        for ($i=1; $i<= $usercount; $i++) {
-          if ( $this->userresult[$i]["kategorie"] == "" ) {
-            echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";
-          } else {
-            if ( (($_SESSION ['us_katego'] ?? "") == $this->userresult[$i]["lfd"]) AND
-                 (($_SESSION ['us_kategotyp'] ?? "") == "user" ) ){$color = "green";}else{$color = "lightgreen";}
-            echo"<a href=\"".estab_list_category_url ($conf_4f ["MainURL"], array (
-              "us_ktgotyp" => "user",
-              "us_ktgo" => $this->userresult[$i]["lfd"],
-            ))."\">
-              <img src=\"".estab_list_category_icon ($this->userresult[$i]["kategorie"], $color)."\"
-                   alt=\"".estab_message_html ($this->userresult[$i]["beschreibung"] ?? "")."\"
-                   border=\"0\"
-                   title=\"".estab_message_html ($this->userresult[$i]["beschreibung"] ?? "")."\"></a>";
-          }
+        echo "<nav class=\"estab-list-tabs estab-list-tabs--benutzer\" aria-label=\"Kategorien\">";
+        $aktiv = !isset ($_SESSION ['us_katego']);
+        echo estab_list_tab_markup (
+          estab_list_category_url ($conf_4f ["MainURL"], array (
+            "us_ktgotyp" => "user", "us_ktgo" => "alle",
+          )), "Alle", "Alle eigenen Kategorien", $aktiv, "benutzer"
+        )."\n";
+        for ($i = 1; $i <= $usercount; $i++) {
+          if ( $this->userresult[$i]["kategorie"] == "" ) { continue; }
+          $aktiv = (($_SESSION ['us_katego'] ?? "") == $this->userresult[$i]["lfd"])
+            AND (($_SESSION ['us_kategotyp'] ?? "") == "user");
+          echo estab_list_tab_markup (
+            estab_list_category_url ($conf_4f ["MainURL"], array (
+              "us_ktgotyp" => "user", "us_ktgo" => $this->userresult[$i]["lfd"],
+            )),
+            $this->userresult[$i]["kategorie"],
+            $this->userresult[$i]["beschreibung"] ?? "",
+            $aktiv, "benutzer"
+          )."\n";
         }
-        echo "</div>";   //echo "<p>";
+        echo "</nav>";
       }
 
 
@@ -1260,11 +1249,22 @@ class Listen extends kategorien {
           estab_auth_close ($messageConnection);
         }
         $result = $result === array () ? "" : $result;
-        echo "<p align=\"center\"><big><big><b>LdF: Rufnamen und Beförderungswege</b></big></big></p>";
+        /*
+         * Die Tabelle stand in schwarzen Rahmen mit weisser Kopfzeile und
+         * acht Pixeln Polster je Zelle -- eine Darstellung aus der Zeit, in
+         * der Tabellen die Gestaltung waren. Sie traegt jetzt denselben Stil
+         * wie jede andere Tabelle der Anwendung.
+         */
+        echo "<header class=\"estab-tool-panel-heading\">";
+        echo "<span class=\"estab-tool-eyebrow\">Disposition</span>";
+        echo "<h2>LdF: Rufnamen und Beförderungswege</h2>";
+        echo "</header>";
         if ($result != "") {
-          echo "<table style=\"text-align:center;background-color:#fff\" border=\"1\" cellpadding=\"8\" cellspacing=\"1\"><tbody>";
-          echo "<tr style=\"background-color:#000;color:#fff;font-weight:bold\">";
+          echo "<div class=\"estab-tool-table-wrap\">";
+          echo "<table class=\"estab-tool-table estab-list-table\"><thead>";
+          echo "<tr>";
           echo "<th>E/A</th><th>Zeit</th><th>Vorrang</th><th>Rufname</th><th>Von/An</th><th>Inhalt</th></tr>";
+          echo "</thead><tbody>";
           foreach ($result as $row) {
             $abfzeit = convdatetimeto ($row ["12_abfzeit"]);
             $direction = (string) $row ["04_richtung"];
@@ -1294,9 +1294,10 @@ class Listen extends kategorien {
             estab_list_attachment_badge ($row ["12_anhang"] ?? null);
             echo "</td></tr>";
           }
-          echo "</tbody></table>";
+          echo "</tbody></table></div>";
         } else {
-          echo "<big><big>Zur Zeit keine Nachricht für die LdF</big></big>";
+          echo "<p class=\"estab-message-list-empty\">".
+               "Zur Zeit keine Nachricht für die LdF</p>";
         }
       break;
 
@@ -1326,13 +1327,14 @@ class Listen extends kategorien {
         }
         $result = $result === array () ? "" : $result;
         if ($result != "" ){
-          echo "<table style=\"text-align: center; background-color: rgb(255, 255, 255); \" border=\"1\" cellpadding=\"10\" cellspacing=\"1\">\n<tbody>\n";
-          echo "<tr style=\"background-color: rgb(0,0,0); color:#FFFFFF; font-weight:bold;\">\n";
-          echo "<td>ZEIT</td>\n";
-          echo "<td>Vorst</td>\n";
-          echo "<td>Anschr</td>\n";
-          echo "<td>Inhalt</td>\n";
-          echo "</tr>";
+          echo "<div class=\"estab-tool-table-wrap\">";
+          echo "<table class=\"estab-tool-table estab-list-table\">\n<thead>\n";
+          echo "<tr>\n";
+          echo "<th>Zeit</th>\n";
+          echo "<th>Vorrang</th>\n";
+          echo "<th>Anschrift</th>\n";
+          echo "<th>Inhalt</th>\n";
+          echo "</tr>\n</thead>\n<tbody>\n";
           foreach ($result as $row){
             $priorityStyle = estab_message_priority_requires_attention (
               $row["09_vorrangstufe"]
@@ -1341,7 +1343,7 @@ class Listen extends kategorien {
                 : "";
             echo "<tr".$priorityStyle.">\n";
             $abfzeit = convdatetimeto ($row["12_abfzeit"]);
-            echo "<td>"; if (($row["12_abfzeit"] != "")) { estab_list_detail_action ("fm", "meldung", $row["00_lfd"], $abfzeit["stak"]); } else { echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";} echo "</td>\n";
+            echo "<td>"; if (($row["12_abfzeit"] != "")) { estab_list_detail_action ("fm", "meldung", $row["00_lfd"], $abfzeit["stak"]); } else { echo "<span class=\"estab-message-list-clamp--empty\">–</span>";} echo "</td>\n";
             echo "<td>";
             estab_list_detail_action (
               "fm",
@@ -1350,12 +1352,13 @@ class Listen extends kategorien {
               estab_message_priority_label ($row["09_vorrangstufe"])
             );
             echo "</td>\n";
-            echo "<td>"; if (($row["10_anschrift"] != "")) { estab_list_detail_action ("fm", "meldung", $row["00_lfd"], $row["10_anschrift"]); } else { echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";} echo "</td>\n";
-            echo "<td align=\"left\">"; if (($row["12_inhalt"] != "")) { estab_list_detail_action ("fm", "meldung", $row["00_lfd"], $row["12_inhalt"]); } else { echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";} estab_list_attachment_badge ($row ["12_anhang"] ?? null); echo "</td>\n";           echo "</tr>";
+            echo "<td>"; if (($row["10_anschrift"] != "")) { estab_list_detail_action ("fm", "meldung", $row["00_lfd"], $row["10_anschrift"]); } else { echo "<span class=\"estab-message-list-clamp--empty\">–</span>";} echo "</td>\n";
+            echo "<td align=\"left\">"; if (($row["12_inhalt"] != "")) { estab_list_detail_action ("fm", "meldung", $row["00_lfd"], $row["12_inhalt"]); } else { echo "<span class=\"estab-message-list-clamp--empty\">–</span>";} estab_list_attachment_badge ($row ["12_anhang"] ?? null); echo "</td>\n";           echo "</tr>";
           }
-          echo "</tbody></table>";
+          echo "</tbody></table></div>";
         } else {// if $result != ""
-          echo "<big><big><big>Zur Zeit keine Meldung im Ausgang</big></big></big><br>";
+          echo "<p class=\"estab-message-list-empty\">".
+               "Zur Zeit keine Meldung im Ausgang</p>";
         }
       break;
       case "Stab_lesen":  // ******  S T A B    l e s e n *****
@@ -1375,8 +1378,8 @@ class Listen extends kategorien {
         $this->kategoliste ();
         $this->listen_navi () ;  //Navigationsbutton
         if  ($result != "") {
-          echo "<table style=\"text-align: center; background-color: rgb(255,255,255); \" border=\"2\" cellpadding=\"2\" cellspacing=\"2\">\n<tbody>\n";
-          echo "<tr style=\"background-color: rgb(240,240,200); color:#000000; font-weight:bold;\">\n";
+          echo "<table class=\"estab-tool-table estab-list-table\">\n<tbody>\n";
+          echo "<tr class=\"estab-list-head\">\n";
             // gelesen ?
           echo "<th align=\"center\">";
           echo "<p><img src=\"".$conf_design_path."/info.gif\" alt=\"Vorrang/gelesen\"></p>";
@@ -1490,11 +1493,11 @@ class Listen extends kategorien {
                    echo "<p><img src=\"".$conf_design_path."/status_green.gif\" alt=\"Transport abgeschlossen!\"></p>";
                  break;
                  default:
-                   echo "<p><img src=\"".$conf_design_path."/null.gif\" alt=\"fremd\"></p>";
+                   echo "<span class=\"estab-message-list-clamp--empty\">–</span>";
                  break;
                }
              } else { // ist ein Eingang, damit eine NULL nummer
-               echo "<p><img src=\"".$conf_design_path."/null.gif\" alt=\"fremd\"></p>";
+               echo "<span class=\"estab-message-list-clamp--empty\">–</span>";
              }
              echo "</td>\n";
 
@@ -1508,7 +1511,7 @@ class Listen extends kategorien {
              );
              echo "</td>\n";
               // Eingang / Ausgang
-             echo "<td>"; if (($row["04_richtung"] != "")) { estab_list_detail_action ("stab", "meldung", $row["00_lfd"], $row["04_richtung"]); } else { echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";} echo "</td>\n";
+             echo "<td>"; if (($row["04_richtung"] != "")) { estab_list_detail_action ("stab", "meldung", $row["00_lfd"], $row["04_richtung"]); } else { echo "<span class=\"estab-message-list-clamp--empty\">–</span>";} echo "</td>\n";
               // Einsatzlokaler Nachrichtennachweis im TTB
              echo "<td>";
              estab_list_detail_action (
@@ -1530,7 +1533,7 @@ class Listen extends kategorien {
                    estab_function_display_name ((string) $row["14_funktion"])
                  );
                } else {
-                 echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";}
+                 echo "<span class=\"estab-message-list-clamp--empty\">–</span>";}
                echo "</td>\n";
 
                 // Ausgang AN
@@ -1538,7 +1541,7 @@ class Listen extends kategorien {
                if (($row["10_anschrift"] != "")) {
                  estab_list_detail_action ("stab", "meldung", $row["00_lfd"], $row["10_anschrift"]);
                } else {
-                 echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";}
+                 echo "<span class=\"estab-message-list-clamp--empty\">–</span>";}
                echo "</td>\n";
 
              }
@@ -1548,7 +1551,7 @@ class Listen extends kategorien {
                if ( ($row["13_abseinheit"] != "") ) {
                  estab_list_detail_action ("stab", "meldung", $row["00_lfd"], $row["13_abseinheit"], true);
                } else {
-                 echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";
+                 echo "<span class=\"estab-message-list-clamp--empty\">–</span>";
                }
                echo "</td>\n";
 
@@ -1557,7 +1560,7 @@ class Listen extends kategorien {
                if (($row["10_anschrift"] != "")) {
                  estab_list_detail_action ("stab", "meldung", $row["00_lfd"], $row["10_anschrift"], true);
                } else {
-                 echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";
+                 echo "<span class=\"estab-message-list-clamp--empty\">–</span>";
                }
                echo "</td>\n";
              }
@@ -1567,7 +1570,7 @@ class Listen extends kategorien {
                $abzeit = $arr ["stak"];
                estab_list_detail_action ("stab", "meldung", $row["00_lfd"], $abzeit, true);
              } else {
-               echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";
+               echo "<span class=\"estab-message-list-clamp--empty\">–</span>";
              }
              echo "</td>\n";
 
@@ -1575,7 +1578,7 @@ class Listen extends kategorien {
              if (($row["12_inhalt"] != "")) {
                estab_list_detail_action ("stab", "meldung", $row["00_lfd"], $row["12_inhalt"], true);
              } else {
-               echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";
+               echo "<span class=\"estab-message-list-clamp--empty\">–</span>";
              }
              estab_list_attachment_badge ($row ["12_anhang"] ?? null);
              echo "</td>\n";
@@ -1727,8 +1730,8 @@ class Listen extends kategorien {
         }
         $result = $result === array () ? "" : $result;
         if ($result != "" ){
-          echo "<table style=\"text-align: center; background-color: rgb(255, 255, 255); \" border=\"2\" cellpadding=\"2\" cellspacing=\"2\">\n<tbody>\n";
-          echo "<tr style=\"background-color: rgb(240,240,200); color:#000000; font-weight:bold;\">\n";
+          echo "<table class=\"estab-tool-table estab-list-table\">\n<tbody>\n";
+          echo "<tr class=\"estab-list-head\">\n";
           echo "<td>ZEIT</td>\n";
           echo "<td>Vorst</td>\n";
           echo "<td>Anschrift</td>\n";
@@ -1742,7 +1745,7 @@ class Listen extends kategorien {
                : "";
            echo "<tr".$priorityStyle.">\n";
            $abfzeit = convdatetimeto ($row["12_abfzeit"]);
-           echo "<td>"; if (($row["12_abfzeit"] != "")) { estab_list_detail_action ("sichter", "meldung", $row["00_lfd"], $abfzeit["stak"]); } else { echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";} echo "</td>\n";
+           echo "<td>"; if (($row["12_abfzeit"] != "")) { estab_list_detail_action ("sichter", "meldung", $row["00_lfd"], $abfzeit["stak"]); } else { echo "<span class=\"estab-message-list-clamp--empty\">–</span>";} echo "</td>\n";
            echo "<td>";
            estab_list_detail_action (
              "sichter",
@@ -1751,8 +1754,8 @@ class Listen extends kategorien {
              estab_message_priority_label ($row["09_vorrangstufe"])
            );
            echo "</td>\n";
-           echo "<td>"; if (($row["10_anschrift"] != "")) { estab_list_detail_action ("sichter", "meldung", $row["00_lfd"], $row["10_anschrift"]); } else { echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";} echo "</td>\n";
-           echo "<td align=\"left\">"; if (($row["12_inhalt"] != "")) { estab_list_detail_action ("sichter", "meldung", $row["00_lfd"], $row["12_inhalt"]); } else { echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";} estab_list_attachment_badge ($row ["12_anhang"] ?? null); echo "</td>\n";
+           echo "<td>"; if (($row["10_anschrift"] != "")) { estab_list_detail_action ("sichter", "meldung", $row["00_lfd"], $row["10_anschrift"]); } else { echo "<span class=\"estab-message-list-clamp--empty\">–</span>";} echo "</td>\n";
+           echo "<td align=\"left\">"; if (($row["12_inhalt"] != "")) { estab_list_detail_action ("sichter", "meldung", $row["00_lfd"], $row["12_inhalt"]); } else { echo "<span class=\"estab-message-list-clamp--empty\">–</span>";} estab_list_attachment_badge ($row ["12_anhang"] ?? null); echo "</td>\n";
            echo "</tr>";
           } // foreach result row
           echo "</tbody></table>";
@@ -1860,8 +1863,8 @@ class Listen extends kategorien {
 
         $result = $dbaccess->query_table ($query);
         if  ($result != ""){
-          echo "<table style=\"text-align: center; background-color: rgb(250,250, 250); \" border=\"2\" cellpadding=\"2\" cellspacing=\"2\">\n<tbody>\n";
-          echo "<tr style=\"background-color: rgb(240,240,200); color:fm=meldung&0000FF; font-weight:bold;\">\n";
+          echo "<table class=\"estab-tool-table estab-list-table\">\n<tbody>\n";
+          echo "<tr class=\"estab-list-head\">\n";
           echo "<td>Vorst</td>\n";
           echo "<td>E/A</td>\n";
           echo "<td>Nw-Nr.</td>\n";
@@ -1881,13 +1884,13 @@ class Listen extends kategorien {
           foreach ($result as $row){
              // VORRANGSTUFE
              if ( ( $row["09_vorrangstufe"] != "") and ( $row["09_vorrangstufe"] != "eee" ) ){
-               echo "<tr style=\"background-color: rgb(255,255,0); color:fm=meldung&FFFFFF; font-weight:bold;\">\n";
+               echo "<tr class=\"estab-list-head\">\n";
              }
              echo "<td>";
              if ( ( $row["09_vorrangstufe"] != "") and ( $row["09_vorrangstufe"] != "eee" ) ) {
                echo "<a href=\"mainindex.php?fm=SI-Adminmeldung&00_lfd=".$row["00_lfd"]."\" target=\"_self\">".$row["09_vorrangstufe"]."</a>\n" ;
              } else {
-               echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";
+               echo "<span class=\"estab-message-list-clamp--empty\">–</span>";
              }
              echo "</td>\n";
 
@@ -1896,7 +1899,7 @@ class Listen extends kategorien {
              if (($row["04_richtung"] != "")) {
                echo "<a href=\"mainindex.php?fm=SI-Adminmeldung&00_lfd=".$row["00_lfd"]."\" target=\"_self\">".$row["04_richtung"]."</a>\n";
              } else {
-               echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";
+               echo "<span class=\"estab-message-list-clamp--empty\">–</span>";
              }
              echo "</td>\n";
 
@@ -1905,7 +1908,7 @@ class Listen extends kategorien {
              if (($row["04_richtung"] != "")) {
                echo "<a href=\"mainindex.php?fm=SI-Adminmeldung&00_lfd=".$row["00_lfd"]."\" target=\"_self\">".$row["04_nummer"]."</a>\n";
              } else {
-               echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";
+               echo "<span class=\"estab-message-list-clamp--empty\">–</span>";
              }
              echo "</td>\n";
 
@@ -1914,7 +1917,7 @@ class Listen extends kategorien {
                if (($row["10_anschrift"] != "")) {
                  echo "<a href=\"mainindex.php?fm=SI-Adminmeldung&00_lfd=".$row["00_lfd"]."\" target=\"_self\">".$row["10_anschrift"]."</a>\n";
                } else {
-                 echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";
+                 echo "<span class=\"estab-message-list-clamp--empty\">–</span>";
                }
                echo "</td>\n";
              } else {
@@ -1924,7 +1927,7 @@ class Listen extends kategorien {
              if (($row["13_abseinheit"] != "")) {
                echo "<a href=\"mainindex.php?fm=SI-Adminmeldung&00_lfd=".$row["00_lfd"]."\" target=\"_self\">".$row["13_abseinheit"]."</a>\n";
                } else {
-                 echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";
+                 echo "<span class=\"estab-message-list-clamp--empty\">–</span>";
                }
                echo "</td>\n";
              }
@@ -1934,7 +1937,7 @@ class Listen extends kategorien {
                $abfzeit = convdatetimeto ($row["12_abfzeit"]);
                echo "<a href=\"mainindex.php?fm=SI-Adminmeldung&00_lfd=".$row["00_lfd"]."\" target=\"_self\">".$abfzeit['stak']."</a>\n";
              } else {
-               echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";
+               echo "<span class=\"estab-message-list-clamp--empty\">–</span>";
              }
              echo "</td>\n";
 
@@ -1946,7 +1949,7 @@ class Listen extends kategorien {
                  echo estab_recipient_copy_cell_html (
                    $empfcolor [$recipientFunction] ?? "",
                    $cfg ["vbg"],
-                   "<p><img src=\"null.gif\" alt=\"leer\"></p>"
+                   "<span class=\"estab-message-list-clamp--empty\">–</span>"
                  );
                }
              }
@@ -1958,7 +1961,7 @@ class Listen extends kategorien {
                         $row["00_lfd"]."\" target=\"_self\">".
                         substr($row["12_inhalt"], 0, $conf_4f_liste ["inhalt"])." ..."."</a>\n";
              } else {
-               echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";
+               echo "<span class=\"estab-message-list-clamp--empty\">–</span>";
              }
              echo "</td>\n";
              echo "</tr>";
@@ -2013,8 +2016,8 @@ class Listen extends kategorien {
         echo "<p align=\"center\"><big><big><big><b>Nachweisung Eingang</b></big></big></big></p>";
         estab_message_list_render_resultbar ($trackingFilters, $trackingWindow);
         if ( $result != "" ){
-          echo "<table style=\"text-align: center; background-color: rgb(255,255,255); \" border=\"2\" cellpadding=\"2\" cellspacing=\"2\">\n<tbody>\n";
-          echo "<tr style=\"background-color: rgb(240,240,200); color:#000000; font-weight:bold;\">\n";
+          echo "<table class=\"estab-tool-table estab-list-table\">\n<tbody>\n";
+          echo "<tr class=\"estab-list-head\">\n";
           echo "<td>Vorrang</td>\n";
           echo "<td>E/A</td>\n";
           echo "<td>TBB-Nachweis</td>\n";
@@ -2031,20 +2034,20 @@ class Listen extends kategorien {
                  estab_message_priority_label ($row["09_vorrangstufe"])
                )."</a>\n" ;
                echo "</td>\n";
-               echo "<td>"; if (($row["04_richtung"] != "")) { echo "<a>".estab_message_html ($row["04_richtung"])."</a>\n";  } else { echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";} echo "</td>\n";
+               echo "<td>"; if (($row["04_richtung"] != "")) { echo "<a>".estab_message_html ($row["04_richtung"])."</a>\n";  } else { echo "<span class=\"estab-message-list-clamp--empty\">–</span>";} echo "</td>\n";
                echo "<td><a>".estab_message_html (
                  estab_message_list_tbb_evidence_label ($row)
                )."</a></td>\n";
                if ($row["04_richtung"] == "A" ) {
                  echo "<td>";
                  if (($row["10_anschrift"] != "")) {
-                   echo "<a>".estab_message_html ($row["10_anschrift"])."</a>\n"; } else { echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";} echo "</td>\n";
+                   echo "<a>".estab_message_html ($row["10_anschrift"])."</a>\n"; } else { echo "<span class=\"estab-message-list-clamp--empty\">–</span>";} echo "</td>\n";
                } else {
                  echo "<td>";
                  if (($row["13_abseinheit"] != "")) {
                    echo "<a>".estab_message_html ($row["13_abseinheit"])."</a>\n";
                  } else {
-                   echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";} echo "</td>\n";
+                   echo "<span class=\"estab-message-list-clamp--empty\">–</span>";} echo "</td>\n";
                }
                echo "<td>";
                if (($row["12_abfzeit"] != "")) {
@@ -2052,7 +2055,7 @@ class Listen extends kategorien {
                  $abzeit = $arr ['stak'];
                  echo "<a>".$abzeit."</a>\n";
                } else {
-                 echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";
+                 echo "<span class=\"estab-message-list-clamp--empty\">–</span>";
                }
                echo "</td>\n";
                echo "<td>";
@@ -2119,8 +2122,8 @@ class Listen extends kategorien {
         echo "<p align=\"center\"><big><big><big><b>Nachweisung Ausgang</b></big></big></big></p>";
         estab_message_list_render_resultbar ($trackingFilters, $trackingWindow);
         if ( $result != "" ){
-          echo "<table style=\"text-align: center; background-color: rgb(255,255,255); \" border=\"2\" cellpadding=\"2\" cellspacing=\"2\">\n<tbody>\n";
-          echo "<tr style=\"background-color: rgb(240,240,200); color:#000000; font-weight:bold;\">\n";
+          echo "<table class=\"estab-tool-table estab-list-table\">\n<tbody>\n";
+          echo "<tr class=\"estab-list-head\">\n";
           echo "<td>Vorrang</td>\n";
           echo "<td>E/A</td>\n";
           echo "<td>TBB-Nachweis</td>\n";
@@ -2137,20 +2140,20 @@ class Listen extends kategorien {
                  estab_message_priority_label ($row["09_vorrangstufe"])
                )."</a>\n" ;
                echo "</td>\n";
-               echo "<td>"; if (($row["04_richtung"] != "")) { echo "<a>".estab_message_html ($row["04_richtung"])."</a>\n";  } else { echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";} echo "</td>\n";
+               echo "<td>"; if (($row["04_richtung"] != "")) { echo "<a>".estab_message_html ($row["04_richtung"])."</a>\n";  } else { echo "<span class=\"estab-message-list-clamp--empty\">–</span>";} echo "</td>\n";
                echo "<td><a>".estab_message_html (
                  estab_message_list_tbb_evidence_label ($row)
                )."</a></td>\n";
                if ($row["04_richtung"] == "A" ) {
                  echo "<td>";
                  if (($row["10_anschrift"] != "")) {
-                   echo "<a>".estab_message_html ($row["10_anschrift"])."</a>\n"; } else { echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";} echo "</td>\n";
+                   echo "<a>".estab_message_html ($row["10_anschrift"])."</a>\n"; } else { echo "<span class=\"estab-message-list-clamp--empty\">–</span>";} echo "</td>\n";
                } else {
                  echo "<td>";
                  if (($row["13_abseinheit"] != "")) {
                    echo "<a>".estab_message_html ($row["13_abseinheit"])."</a>\n";
                  } else {
-                   echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";} echo "</td>\n";
+                   echo "<span class=\"estab-message-list-clamp--empty\">–</span>";} echo "</td>\n";
                }
                echo "<td>";
                if (($row["12_abfzeit"] != "")) {
@@ -2158,7 +2161,7 @@ class Listen extends kategorien {
                  $abzeit = $arr ['stak'];
                  echo "<a>".$abzeit."</a>\n";
                } else {
-                 echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";
+                 echo "<span class=\"estab-message-list-clamp--empty\">–</span>";
                }
                echo "</td>\n";
                echo "<td>";
@@ -2212,8 +2215,8 @@ class Listen extends kategorien {
              "</big><br>Nachweisung Eingang / Ausgang</b></big></big></p>";
         estab_message_list_render_resultbar ($trackingFilters, $trackingWindow);
         if ( $result != "" ){
-          echo "<table style=\"text-align: center; background-color: rgb(255,255,255); \" border=\"2\" cellpadding=\"2\" cellspacing=\"2\">\n<tbody>\n";
-          echo "<tr style=\"background-color: rgb(240,240,200); color:#000000; font-weight:bold;\">\n";
+          echo "<table class=\"estab-tool-table estab-list-table\">\n<tbody>\n";
+          echo "<tr class=\"estab-list-head\">\n";
           echo "<td>Vorrang</td>\n";
           echo "<td>E/A</td>\n";
           echo "<td>TBB-Nachweis</td>\n";
@@ -2234,20 +2237,20 @@ class Listen extends kategorien {
                  estab_message_priority_label ($row["09_vorrangstufe"])
                )."</a>\n" ;
                echo "</td>\n";
-               echo "<td>"; if (($row["04_richtung"] != "")) { echo "<a>".estab_message_html ($row["04_richtung"])."</a>\n";  } else { echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";} echo "</td>\n";
+               echo "<td>"; if (($row["04_richtung"] != "")) { echo "<a>".estab_message_html ($row["04_richtung"])."</a>\n";  } else { echo "<span class=\"estab-message-list-clamp--empty\">–</span>";} echo "</td>\n";
                echo "<td><a>".estab_message_html (
                  estab_message_list_tbb_evidence_label ($row)
                )."</a></td>\n";
                if ($row["04_richtung"] == "A" ) {
                  echo "<td>";
                  if (($row["10_anschrift"] != "")) {
-                   echo "<a>".estab_message_html ($row["10_anschrift"])."</a>\n"; } else { echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";} echo "</td>\n";
+                   echo "<a>".estab_message_html ($row["10_anschrift"])."</a>\n"; } else { echo "<span class=\"estab-message-list-clamp--empty\">–</span>";} echo "</td>\n";
                } else {
                  echo "<td>";
                  if (($row["13_abseinheit"] != "")) {
                    echo "<a>".estab_message_html ($row["13_abseinheit"])."</a>\n";
                  } else {
-                   echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";} echo "</td>\n";
+                   echo "<span class=\"estab-message-list-clamp--empty\">–</span>";} echo "</td>\n";
                }
 
 
@@ -2257,7 +2260,7 @@ class Listen extends kategorien {
                  $abzeit = $arr ['stak'];
                  echo "<a>".$abzeit."</a>\n";
                } else {
-                 echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";
+                 echo "<span class=\"estab-message-list-clamp--empty\">–</span>";
                }
                echo "</td>";
 // Aufn. Zeichen
@@ -2266,7 +2269,7 @@ class Listen extends kategorien {
                if (($row["01_zeichen"] != "")) {
                  echo "<a>".$row["01_zeichen"]."</a>\n"; }
                else {
-                 echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";
+                 echo "<span class=\"estab-message-list-clamp--empty\">–</span>";
                }
                echo "</td>\n";
 */
@@ -2275,7 +2278,7 @@ class Listen extends kategorien {
                if (($row["01_zeichen"] != "")) {
                  echo "<a>".$row["01_zeichen"]."</a>\n"; }
                else {
-                 echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";
+                 echo "<span class=\"estab-message-list-clamp--empty\">–</span>";
                }
                echo "</td>\n";
 */
@@ -2285,7 +2288,7 @@ class Listen extends kategorien {
                  $abzeit = $arr ['stak'];
                  echo "<a>".$abzeit."</a>\n";
                } else {
-                 echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";
+                 echo "<span class=\"estab-message-list-clamp--empty\">–</span>";
                }
                echo "</td>";
 
@@ -2295,7 +2298,7 @@ class Listen extends kategorien {
                  $abzeit = $arr ['stak'];
                  echo "<a>".$abzeit."</a>\n";
                } else {
-                 echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";
+                 echo "<span class=\"estab-message-list-clamp--empty\">–</span>";
                }
                echo "</td>\n";
                echo "<td>";
@@ -2321,7 +2324,7 @@ class Listen extends kategorien {
                if (($row["14_zeichen"] != "")) {
                  echo "<a>".$row["14_zeichen"]."</a>\n"; }
                else {
-                 echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";
+                 echo "<span class=\"estab-message-list-clamp--empty\">–</span>";
                }
                echo "</td>\n";
 */

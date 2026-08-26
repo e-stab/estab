@@ -158,7 +158,10 @@ function estab_session_ui_markup(
         . estab_auth_html($csrfToken) . '">'
         . '<input type="hidden" name="logout_action" value="logout">'
         . '<button class="estab-button estab-button-logout"'
-        . ' type="submit">Abmelden</button>'
+        . ' type="submit" title="Abmelden">'
+        . estab_session_ui_logout_icon()
+        . '<span class="estab-visually-hidden">Abmelden</span>'
+        . '</button>'
         . '</form>'
         . '</div>'
         . '</div>'
@@ -168,6 +171,29 @@ function estab_session_ui_markup(
         . ($compact ? '' : estab_session_ui_mainframe_guard())
         . estab_session_ui_dirty_guard_script($popup)
         . estab_session_ui_activity_script($csrfToken, $identity['kuerzel']);
+}
+
+/**
+ * Das Zeichen am Weg hinaus.
+ *
+ * Der Knopf trug das Wort "Abmelden". In der schmalen Spalte neben der
+ * Anmeldung stand es gestaucht und nahm mehr Breite als der Name daneben.
+ * Eine Tuer mit Pfeil sagt dasselbe und braucht ein Viertel davon; das Wort
+ * bleibt fuer Vorleseprogramme und als Titel am Mauszeiger stehen.
+ *
+ * Gezeichnet und nicht als Sonderzeichen gesetzt -- ein Sonderzeichen sieht
+ * auf jedem Geraet anders aus und behaelt seine eigene Farbe.
+ */
+function estab_session_ui_logout_icon(): string
+{
+    return '<svg class="estab-session-logout-icon" viewBox="0 0 24 24"'
+        . ' width="16" height="16" aria-hidden="true" focusable="false"'
+        . ' fill="none" stroke="currentColor" stroke-width="2"'
+        . ' stroke-linecap="round" stroke-linejoin="round">'
+        . '<path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"></path>'
+        . '<polyline points="10 17 15 12 10 7"></polyline>'
+        . '<line x1="15" y1="12" x2="3" y2="12"></line>'
+        . '</svg>';
 }
 
 /**

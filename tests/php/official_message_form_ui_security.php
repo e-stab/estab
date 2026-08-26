@@ -935,10 +935,19 @@ $assert(
 $assert(
     str_contains($view, 'id="nachrichtenanlagen"')
         && str_contains($view, '<h2 id="nachrichtenanlagen-title">Anlagen (')
-        && str_contains($view, 'class="estab-message-attachment-badge')
         && str_contains($view, "'Anlage hinzufügen'")
         && str_contains($view, 'estab-message-attachment-jump')
-        && str_contains($view, 'data-estab-attachment-count="'),
+        && str_contains($view, 'data-estab-attachment-count="')
+        /*
+         * Im Kopf stand dieselbe Angabe ein zweites Mal, als runde Marke
+         * neben dem Titel. Der Knopf in der Aktionsleiste hat dasselbe
+         * Sprungziel und nennt dabei die Zahl der Anlagen; die Marke sagte
+         * nichts, was nicht daneben schon stand, und nahm Platz im Kopf.
+         * Ebenso die Marke mit dem Arbeitsschritt: Der ist links im Menue
+         * hervorgehoben.
+         */
+        && !str_contains($view, 'class="estab-message-attachment-badge')
+        && !str_contains($view, 'class="estab-message-task-badge'),
     'The form does not make attached files immediately visible at the message'
 );
 $assert(
