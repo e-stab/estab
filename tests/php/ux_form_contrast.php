@@ -26,6 +26,7 @@ declare(strict_types=1);
 
 $root = dirname(__DIR__, 2);
 require_once $root . '/app/ux_rules.php';
+require_once __DIR__ . '/lib/farbe.php';
 
 $assertions = 0;
 $assert = static function (bool $condition, string $message) use (&$assertions): void {
@@ -43,29 +44,17 @@ if (!is_string($stylesheet)) {
 // Auswähler dazu -- dann sucht die Prüfung den Grund für einen Kommentar.
 $rulesSource = preg_replace('~/\*.*?\*/~s', ' ', $stylesheet) ?? $stylesheet;
 
-/** Relative Helligkeit nach WCAG. */
-$luminance = static function (string $colour): float {
-    $hex = ltrim(trim($colour), '#');
-    if (strlen($hex) === 3) {
-        $hex = $hex[0] . $hex[0] . $hex[1] . $hex[1] . $hex[2] . $hex[2];
-    }
-    $channels = [];
-    foreach ([0, 2, 4] as $offset) {
-        $value = hexdec(substr($hex, $offset, 2)) / 255;
-        $channels[] = $value <= 0.03928
-            ? $value / 12.92
-            : (($value + 0.055) / 1.055) ** 2.4;
-    }
-    return 0.2126 * $channels[0] + 0.7152 * $channels[1]
-        + 0.0722 * $channels[2];
-};
-
-/** Kontrastverhältnis zweier Farben. */
-$contrast = static function (string $front, string $back) use ($luminance): float {
-    $lighter = max($luminance($front), $luminance($back));
-    $darker = min($luminance($front), $luminance($back));
-    return ($lighter + 0.05) / ($darker + 0.05);
-};
+/*
+ * Die Rechnung stand hier als Closure ein zweites Mal abgeschrieben. Sie
+ * steht jetzt einmal in tests/php/lib/farbe.php und kommt von dort -- aus
+ * derselben Quelle wie im Betrieb, statt aus einer Kopie, die auseinander-
+ * laufen kann. Die Namen bleiben, damit die Paarungen unten unveraendert
+ * lesbar sind.
+ */
+$luminance = static fn (string $colour): float
+    => estab_test_helligkeit($colour);
+$contrast = static fn (string $front, string $back): float
+    => estab_test_kontrast($front, $back);
 
 $assert(
     abs($contrast('#000000', '#ffffff') - 21.0) < 0.01

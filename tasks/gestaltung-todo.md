@@ -28,11 +28,11 @@ ansehen → Migrationsgrenze kürzen.** Abweichungen stehen bei der Aufgabe.
       - **Prüfung:** `ux_rule_registry.php` einzeln; Zusicherungszahl steigt, keine sinkt
       - **Abhängigkeit:** keine
 
-- [ ] **G02** `·` **S** Kontrastrechnung wird gemeinsame Testhilfe
+- [x] **G02** `·` **S** Kontrastrechnung wird gemeinsame Testhilfe
       → `tests/php/lib/farbe.php` (neu), `tests/php/ux_form_contrast.php`, `tests/php/list_contrast_security.php`
-      - [ ] `estab_colour_*` aus `4fach/tools.php` stehen als einbindbare Hilfe bereit
-      - [ ] Die beiden vorhandenen Tests holen sie nicht mehr per `eval` heraus
-      - [ ] Beide Tests bleiben grün und prüfen unverändert dieselben Paare
+      - [x] `estab_colour_*` aus `4fach/tools.php` stehen als einbindbare Hilfe bereit
+      - [x] Die beiden vorhandenen Tests holen sie nicht mehr per `eval` heraus
+      - [x] Beide Tests bleiben grün und prüfen unverändert dieselben Paare
       - **Prüfung:** beide Tests einzeln, Zusicherungszahl vorher/nachher gleich
       - **Abhängigkeit:** keine
 

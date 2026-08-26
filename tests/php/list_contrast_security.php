@@ -14,6 +14,7 @@ declare(strict_types=1);
  */
 
 $root = dirname(__DIR__, 2);
+require_once __DIR__ . '/lib/farbe.php';
 
 $assertions = 0;
 $assert = static function (bool $condition, string $message) use (&$assertions): void {
@@ -23,45 +24,19 @@ $assert = static function (bool $condition, string $message) use (&$assertions):
     }
 };
 
-// Load the colour arithmetic without pulling in the legacy request bootstrap.
-$toolsSource = file_get_contents($root . '/4fach/tools.php');
-if (!is_string($toolsSource)) {
-    throw new RuntimeException('Could not read 4fach/tools.php');
-}
-$extractFunction = static function (string $source, string $name): string {
-    $pattern = '/\n\s*function\s+' . preg_quote($name, '/') . '\s*\(/';
-    if (preg_match($pattern, $source, $match, PREG_OFFSET_CAPTURE) !== 1) {
-        throw new RuntimeException('Function not found: ' . $name);
-    }
-    $start = $match[0][1];
-    $offset = strpos($source, '{', $start);
-    if ($offset === false) {
-        throw new RuntimeException('Function body not found: ' . $name);
-    }
-    $depth = 0;
-    $length = strlen($source);
-    for ($index = $offset; $index < $length; $index++) {
-        if ($source[$index] === '{') {
-            $depth++;
-        } elseif ($source[$index] === '}') {
-            $depth--;
-            if ($depth === 0) {
-                return substr($source, $start, $index - $start + 1);
-            }
-        }
-    }
-    throw new RuntimeException('Unbalanced function body: ' . $name);
-};
+// The colour arithmetic and the copy-palette helpers both live in
+// 4fach/tools.php, which cannot be required here -- it drags in relative
+// includes, authentication and a session. The trick to reach them lives in
+// tests/php/lib/farbe.php now, so this test states what it needs instead of
+// carrying its own brace counter.
 foreach ([
     'estab_recipient_copy_colours',
     'estab_recipient_copy_background',
-    'estab_colour_channels',
-    'estab_colour_relative_luminance',
-    'estab_colour_contrast_ratio',
     'estab_recipient_copy_ink',
 ] as $functionName) {
-    eval($extractFunction($toolsSource, $functionName));
+    estab_test_funktion_uebernehmen($root . '/4fach/tools.php', $functionName);
 }
+estab_test_farbrechnung_laden();
 
 // The configured palette is the thing under test, not a fixture.
 $cfg = [];
