@@ -97,13 +97,31 @@ function estab_ux_rules(): array
                 . 'sind. Wer die Nachricht als Fernmelder gesehen hat, '
                 . 'erkennt sie als Sichter wieder.',
         ],
+        /*
+         * Zwei Stufen, eine Regel.
+         *
+         * Die Regel verlangte urspruenglich nur den AA-Wert 4.5:1. Der
+         * Betreiber hat sie gehoben: 7:1 ist der Sollwert, 4.5:1 das absolute
+         * Minimum, und gearbeitet wird am Sollwert. Der Grund ist nicht
+         * Perfektionismus -- ein Laptopbildschirm im Einsatzraum steht unter
+         * Deckenbeleuchtung oder im Tageslicht, oft schraeg im Blick. Der
+         * gemessene Kontrast ist der beste Fall, nicht der tatsaechliche.
+         *
+         * Zwei Stufen und nicht eine, weil die Umstellung Zeit braucht: Eine
+         * Regel, die 7:1 vom ersten Tag an ueberall verlangt, macht die Suite
+         * monatelang rot, und eine rote Suite prueft nichts mehr. Die
+         * 4.5-Stufe gilt deshalb ueberall und sofort, die 7-Stufe fuer jeden
+         * Bereich, sobald er umgestellt ist.
+         */
         'UX-KONTRAST' => [
             'origin' => ESTAB_UX_ORIGIN_BETREIBER,
             'reference' => 'Lesbarkeit auf farbigem Grund',
-            'requirement' => 'Text erfüllt das AA-Kontrastverhältnis der '
-                . 'WCAG gegen seinen tatsächlichen Hintergrund -- auch dort, '
-                . 'wo der Hintergrund die Farbe des amtlichen Vordrucks '
-                . 'trägt.',
+            'requirement' => 'Text erreicht 7:1 gegen seinen tatsächlichen '
+                . 'Hintergrund und unterschreitet 4.5:1 niemals -- auch dort '
+                . 'nicht, wo der Hintergrund die Farbe des amtlichen '
+                . 'Vordrucks trägt. Eine Ausnahme gibt es nur für Farben, die '
+                . 'die Dienstvorschrift vorgibt; sie wird namentlich '
+                . 'vermerkt und bleibt über 4.5:1.',
         ],
         'UX-TASTATUR' => [
             'origin' => ESTAB_UX_ORIGIN_BETREIBER,

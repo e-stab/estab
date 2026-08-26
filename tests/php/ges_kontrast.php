@@ -330,6 +330,40 @@ $assert(
     )
 );
 
+/*
+ * Beisst die Untergrenze?
+ *
+ * `UX-KONTRAST` traegt seit der Anhebung zwei Stufen: 7:1 als Sollwert und
+ * 4.5:1 als absolutes Minimum. Waere die Untergrenze nur ein Satz im
+ * Regeltext, hielte sie nichts. Die Probe rechnet ein Paar, das knapp
+ * darunter liegt, und verlangt, dass es auffaellt.
+ *
+ * #767676 auf Weiss ergibt 4.54 -- gerade noch AA. #7a7a7a ergibt 4.37 und
+ * faellt durch. Der Abstand ist absichtlich klein: Eine Probe mit Grau auf
+ * Grau wuerde auch dann bestehen, wenn die Grenze bei 2 laege.
+ */
+$knappDarueber = estab_test_kontrast('#767676', '#ffffff');
+$knappDarunter = estab_test_kontrast('#7a7a7a', '#ffffff');
+$assert(
+    $knappDarueber >= ESTAB_GES_MINIMUM && $knappDarunter < ESTAB_GES_MINIMUM,
+    estab_ux_requirement(
+        'GES-KONTRAST-TEXT',
+        sprintf(
+            'Die Untergrenze von 4.5:1 trennt nicht: %.2f gilt als bestanden, '
+                . '%.2f als durchgefallen.',
+            $knappDarueber,
+            $knappDarunter
+        )
+    )
+);
+$assert(
+    $knappDarunter < ESTAB_GES_SOLL,
+    estab_ux_requirement(
+        'GES-KONTRAST-TEXT',
+        'Der Sollwert von 7:1 liegt nicht ueber der Untergrenze.'
+    )
+);
+
 printf(
     "Gestaltung Kontrast: OK (%d assertions, %d Paarungen, niedrigster "
         . "Textwert %.2f, %d Regeln auf Blaesse geprueft)\n",

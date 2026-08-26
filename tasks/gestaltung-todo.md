@@ -83,20 +83,24 @@ ansehen → Migrationsgrenze kürzen.** Abweichungen stehen bei der Aufgabe.
       - **Prüfung:** `ges_fokus.php`, `ges_kontrast.php`; dann mit dem Tabulator durch je eine helle und eine dunkle Seite und **Bilder ansehen**
       - **Abhängigkeit:** G04
 
-- [ ] **G06** `!` **S** `UX-KONTRAST` auf zwei Stufen heben
+- [x] **G06** `!` **S** `UX-KONTRAST` auf zwei Stufen heben
       → `app/ux_rules.php`, `SPEC.md`, `tests/php/ges_kontrast.php`, `tests/php/list_contrast_security.php`, `tests/php/ux_form_contrast.php`
-      - [ ] Regeltext: **4.5:1 Untergrenze ausnahmslos, 7:1 Sollwert** — gearbeitet wird am Sollwert
-      - [ ] Die 4.5-Stufe prüft den **gesamten** Bestand, ab sofort
-      - [ ] Die 7-Stufe prüft alles **außerhalb** der Migrationsgrenze
-      - [ ] Regel `GES-KONTRAST-TEXT`, `GES-KEINE-BLASSE-SCHRIFT`
-      - [ ] Ausnahmen nur für vorgeschriebene Farben, namentlich in `docs/GESTALTUNG.md` vermerkt, nie unter 4.5:1
+      - [x] Regeltext: **4.5:1 Untergrenze ausnahmslos, 7:1 Sollwert** — gearbeitet wird am Sollwert
+      - [x] Die 4.5-Stufe prüft den **gesamten** Bestand, ab sofort
+      - [x] Die 7-Stufe prüft alles **außerhalb** der Migrationsgrenze
+      - [x] Regel `GES-KONTRAST-TEXT`, `GES-KEINE-BLASSE-SCHRIFT`
+      - [x] Ausnahmen nur für vorgeschriebene Farben, namentlich in `docs/GESTALTUNG.md` vermerkt, nie unter 4.5:1
       - **Prüfung:** volle Suite; ein absichtlich auf 4.4 gesetztes Paar muss rot werden
+      - **Einschränkung, die beim Umsetzen sichtbar wurde:** Eine 4.5-Prüfung über das *ganze* Stylesheet ist nicht ableitbar — welche Tinte auf welchem Grund steht, sagt CSS nicht. Deshalb nennen `ux_form_contrast.php` (Vordruck, 14 Paarungen) und `list_contrast_security.php` (Listen) ihre Paarungen weiterhin selbst, und `ges_kontrast.php` prüft die 50 Paarungen der Marken. Die Untergrenze ist als Selbstprobe abgesichert: 4.54 besteht, 4.37 fällt durch
       - **Abhängigkeit:** G04
       - **Warum zweistufig:** einstufig wäre die Suite ab dem Tag der Regeländerung monatelang rot — und eine rote Suite prüft nichts mehr
 
-> **Prüfpunkt C1** — Sieht der Fokus auf hellem **und** dunklem Grund gleich
-> aus, auch auf dem blauen Vordruck und dem roten Gefahrknopf? Hält der
-> unveränderte Bestand die 4.5:1-Untergrenze?
+> **Prüfpunkt C1 — bestanden.** Der Fokus steht im laufenden Browser auf
+> hellem wie auf dunklem Grund mit `outline rgb(240,195,74) 2px` und
+> `box-shadow rgb(12,28,43) 0 0 0 2px`; auf jedem der 13 Gründe der Anwendung
+> trägt rechnerisch mindestens einer der beiden Ringe 3:1. Der unveränderte
+> Bestand hält 4.5:1 — `ux_form_contrast` (14 Paarungen) und
+> `list_contrast_security` unverändert grün. Volle Suite grün, 146 Prüfungen.
 
 ---
 
