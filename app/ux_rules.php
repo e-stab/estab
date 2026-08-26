@@ -217,6 +217,15 @@ function estab_ux_rules(): array
                 . 'Fokusring traegt auf jedem Grund mindestens einer seiner '
                 . 'beiden Ringe.',
         ],
+        'GES-FOKUS-DOPPELRING' => [
+            'origin' => ESTAB_UX_ORIGIN_GESTALTUNG,
+            'reference' => 'Abschnitt 2.6',
+            'requirement' => 'Der Fokus wird von genau einer Regel gesetzt '
+                . 'und besteht aus zwei Ringen -- aussen gold, innen dunkel. '
+                . 'Auf jedem Grund der Anwendung traegt mindestens einer von '
+                . 'beiden. Bei erzwungenen Farben tritt der Systemring an '
+                . 'seine Stelle; `outline: none` ohne Ersatz gibt es nicht.',
+        ],
         'GES-KEINE-BLASSE-SCHRIFT' => [
             'origin' => ESTAB_UX_ORIGIN_GESTALTUNG,
             'reference' => 'Abschnitt 2.4',

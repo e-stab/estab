@@ -72,14 +72,14 @@ ansehen → Migrationsgrenze kürzen.** Abweichungen stehen bei der Aufgabe.
 
 ## P1 — Querschnitt · behebt den WCAG-Verstoß, gilt sofort überall
 
-- [ ] **G05** `!` **M** Fokus und Ränder von Bedienelementen
+- [x] **G05** `!` **M** Fokus und Ränder von Bedienelementen
       → `estab-ui.css`, `tests/php/ges_fokus.php`, `tests/static/run.sh`, `app/ux_rules.php`
-      - [ ] Ein `:focus-visible` für die ganze Anwendung: 2px `--fokus-aussen`, Versatz 1px, `box-shadow` 2px `--fokus-innen`
-      - [ ] Die acht bisherigen Ringfarben sind verschwunden
-      - [ ] `forced-colors: active` setzt den Systemring
-      - [ ] Jeder Rand, der ein Bedienelement begrenzt, trägt `--rand-bedienelement` — auch an `details` und `fieldset`
-      - [ ] `outline: none` kommt weiterhin nicht vor
-      - [ ] Regeln `GES-FOKUS-DOPPELRING`, `GES-KONTRAST-RAND`
+      - [x] Ein `:focus-visible` für die ganze Anwendung: 2px `--fokus-aussen`, Versatz 1px, `box-shadow` 2px `--fokus-innen`
+      - [x] Die acht bisherigen Ringfarben sind verschwunden
+      - [x] `forced-colors: active` setzt den Systemring
+      - [x] Jeder Rand, der ein Bedienelement begrenzt, trägt `--rand-bedienelement` — auch an `details` und `fieldset`
+      - [x] `outline: none` kommt weiterhin nicht vor
+      - [x] Regeln `GES-FOKUS-DOPPELRING`, `GES-KONTRAST-RAND`
       - **Prüfung:** `ges_fokus.php`, `ges_kontrast.php`; dann mit dem Tabulator durch je eine helle und eine dunkle Seite und **Bilder ansehen**
       - **Abhängigkeit:** G04
 

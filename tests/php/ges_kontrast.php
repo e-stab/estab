@@ -198,6 +198,66 @@ $assert(
 );
 
 /*
+ * Raender, die ein Bedienelement begrenzen, erreichen 3:1.
+ *
+ * WCAG 1.4.11 verlangt das fuer alles, was noetig ist, um ein Bedienelement
+ * zu erkennen -- nicht fuer Zierrat. Ein Tafelrahmen darf deshalb zart sein,
+ * der Rand eines Aufklapps, einer Feldgruppe oder eines Eingabefeldes nicht.
+ *
+ * Welche Auswaehler ein Bedienelement meinen, steht im Stylesheet nicht: dass
+ * `.estab-message-list-more` ein `details` ist, weiss nur das Markup. Die
+ * Muster unten benennen es deshalb hier -- und greifen zugleich auf die
+ * Elementnamen, damit ein neues Bedienelement nicht durchrutscht.
+ */
+$bedienmuster = '~(\bdetails\b|\bsummary\b|\bfieldset\b|\binput\b|\bselect\b'
+    . '|\btextarea\b|\bbutton\b|-chip\b|-tab\b|-toggle\b|-more\b'
+    . '|-action\b|estab-button)~i';
+//
+// Die dunklen Spalten bleiben aussen vor: Dort steht ein Bedienelement auf
+// Dunkelblau, und die Goldmarke, die auf Weiss 1.95 erreicht, kommt dort auf
+// 10.36. Gegen die Tafel gemessen waere sie ein Falschbefund -- und ein
+// Falschbefund, den man wegdrueckt, macht den ganzen Waechter unglaubwuerdig.
+$dunkleSpalte = '~estab-(sidebar|cockpit|shell-menu|navigation|actions-page)~i';
+$schwacheRaender = [];
+foreach (estab_test_css_regeln($stylesheet) as $regel) {
+    if (preg_match($bedienmuster, $regel['auswaehler']) !== 1) {
+        continue;
+    }
+    if (preg_match($dunkleSpalte, $regel['auswaehler']) === 1) {
+        continue;
+    }
+    foreach ($regel['deklarationen'] as $erklaerung) {
+        if (preg_match('~\Aborder(?:-(?:top|right|bottom|left))?\z~',
+            $erklaerung['eigenschaft']) !== 1) {
+            continue;
+        }
+        if (preg_match('~#[0-9a-fA-F]{6}~', $erklaerung['wert'], $t) !== 1) {
+            continue;
+        }
+        $verhaeltnis = estab_test_kontrast($t[0], $farbe('--grund-tafel'));
+        if ($verhaeltnis < ESTAB_GES_NICHTTEXT) {
+            $schwacheRaender[] = sprintf(
+                '%s { %s: %s } = %.2f, Zeile %d',
+                $regel['auswaehler'],
+                $erklaerung['eigenschaft'],
+                $t[0],
+                $verhaeltnis,
+                $regel['zeile']
+            );
+        }
+    }
+}
+$assert(
+    $schwacheRaender === [],
+    estab_ux_requirement(
+        'GES-KONTRAST-RAND',
+        'Diese Raender begrenzen ein Bedienelement und erreichen gegen die '
+            . 'Tafel keine 3:1: '
+            . implode(' | ', array_slice($schwacheRaender, 0, 8))
+    )
+);
+
+/*
  * Keine gedaempfte Schrift.
  *
  * `opacity` senkt den Kontrast unkontrolliert und entzieht ihn der Messung:

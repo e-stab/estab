@@ -201,6 +201,7 @@ for test_name in \
     ges_schriftskala \
     ges_abstandsskala \
     ges_kontrast \
+    ges_fokus \
     ux_keyboard \
     ux_without_javascript \
     fuest_formal_review \

@@ -127,12 +127,23 @@ $assert(
             $stylesheet,
             '.estab-tool-table-responsive .estab-tool-table td::before'
         )
-        && str_contains($stylesheet, 'content: attr(data-label)')
-        && str_contains(
-            $stylesheet,
-            '.estab-tool-action-stack input:focus-visible'
-        ),
-    'tool pages lack responsive table cards or visible keyboard focus'
+        && str_contains($stylesheet, 'content: attr(data-label)'),
+    'tool pages lack responsive table cards'
+);
+/*
+ * Der sichtbare Tastaturfokus wurde hier frueher an einer einzelnen Regel
+ * festgemacht -- `.estab-tool-action-stack input:focus-visible`. Das war
+ * richtig, solange jedes Bauteil seinen eigenen Ring mitbrachte, und ist es
+ * nicht mehr: Die Werkzeugseiten bekommen ihn jetzt aus der einen
+ * allgemeinen Regel, die fuer die ganze Anwendung gilt. Eine Pruefung auf
+ * die alte Stelle wuerde verlangen, dass der Ring dreimal dasteht.
+ *
+ * Dass es diese eine Regel gibt und dass sie traegt, prueft
+ * tests/php/ges_fokus.php.
+ */
+$assert(
+    str_contains($stylesheet, ':focus-visible {'),
+    'the shared stylesheet no longer states a keyboard focus ring'
 );
 
 $incident = $sources['4fadm/incidents.php'];

@@ -87,6 +87,37 @@
         --schrift-6: 1.125rem;  --schrift-7: 1.25rem;
     }
 }
+/* ------------------------------------------------------------------ *
+ * Der Fokus.
+ *
+ * Eine Regel fuer die ganze Anwendung. Der Bestand trug acht verschiedene
+ * Ringfarben; vier davon Goldtoene, die auf hellem Grund 1.86 bis 2.48
+ * erreichten -- ein Verstoss gegen WCAG 1.4.11 an der Stelle, an der er am
+ * meisten kostet: Der Ring ist die einzige Rueckmeldung, die ein
+ * Tastaturbediener bekommt, und im Stab wird getippt, nicht gezeigt.
+ *
+ * Zwei Ringe, weil die Anwendung helle und dunkle Flaechen nebeneinander
+ * hat: Gold erreicht auf Weiss 1.67, Dunkelblau auf der Menuespalte 1.00.
+ * Der dunkle Ring liegt in der 1px-Luecke, der goldene aussen -- auf jedem
+ * Grund traegt einer von beiden mindestens 3:1.
+ *
+ * :focus-visible, nicht :focus: Ein Mausklick soll keinen Ring
+ * hinterlassen, ein Tabulatorsprung schon.
+ * ------------------------------------------------------------------ */
+:focus-visible {
+    outline: 2px solid var(--fokus-aussen);
+    outline-offset: 1px;
+    box-shadow: 0 0 0 2px var(--fokus-innen);
+}
+
+/* Bei erzwungenen Farben faellt der box-shadow weg. Ohne Ersatz bliebe der
+   Fokus dort unsichtbar; der Systemring tritt an seine Stelle. */
+@media (forced-colors: active) {
+    :focus-visible {
+        outline: 2px solid CanvasText;
+    }
+}
+
 
 .estab-login-cta,
 /* Die Anmeldeseite bringt ihre eigene Gestaltung mit. Sie trug frueher nur
@@ -414,8 +445,6 @@
 .estab-navigation-link:hover,
 .estab-navigation-link:focus {
     background: #294b70;
-    outline: 2px solid #ffffff;
-    outline-offset: -2px;
 }
 
 .estab-navigation-link[aria-current="page"] {
@@ -537,8 +566,6 @@
 .estab-navigation-disclosure > summary:hover,
 .estab-navigation-disclosure > summary:focus {
     background: #294b70;
-    outline: 2px solid #ffffff;
-    outline-offset: -2px;
 }
 
 .estab-navigation-compact .estab-navigation-content,
@@ -719,8 +746,6 @@
 .estab-shell-context-link:hover,
 .estab-shell-context-link:focus-visible {
     background: #294b70;
-    outline: 3px solid #ffffff;
-    outline-offset: -3px;
 }
 
 .estab-shell-context-link[aria-current="page"] {
@@ -1415,8 +1440,6 @@
 .estab-sidebar-sound-toggle:hover,
 .estab-sidebar-sound-toggle:focus-visible {
     background: #294b70;
-    outline: 3px solid #ffffff;
-    outline-offset: -3px;
 }
 
 .estab-sidebar-sound-toggle[aria-pressed="true"] {
@@ -1587,8 +1610,6 @@ audio[data-estab-sidebar-audio] {
 .estab-navigation-sidebar .estab-navigation-link:hover,
 .estab-navigation-sidebar .estab-navigation-link:focus-visible {
     background: #294b70;
-    outline: 3px solid #ffffff;
-    outline-offset: -3px;
 }
 
 .estab-navigation-sidebar .estab-navigation-link[aria-current="page"] {
@@ -1672,8 +1693,6 @@ audio[data-estab-sidebar-audio] {
 .estab-sidebar-action:hover,
 .estab-sidebar-action:focus-visible {
     background: #294b70;
-    outline: 3px solid #ffffff;
-    outline-offset: -3px;
 }
 
 .estab-sidebar-action-title {
@@ -1868,8 +1887,6 @@ audio[data-estab-sidebar-audio] {
 .estab-menu-link:hover,
 .estab-menu-link:focus {
     background: #eef3f8;
-    outline: 3px solid #111827;
-    outline-offset: 2px;
 }
 
 .estab-menu-icon {
@@ -1956,8 +1973,6 @@ audio[data-estab-sidebar-audio] {
 .estab-button:hover,
 .estab-button:focus {
     background: #dbe8f5;
-    outline: 3px solid #111827;
-    outline-offset: 2px;
 }
 
 .estab-button-primary {
@@ -2037,12 +2052,6 @@ audio[data-estab-sidebar-audio] {
     max-width: 100%;
     padding: 0.55rem;
     width: 24rem;
-}
-
-.estab-auth-fields input:focus,
-.estab-auth-fields select:focus {
-    outline: 3px solid #111827;
-    outline-offset: 1px;
 }
 
 .estab-account-list {
@@ -2186,11 +2195,6 @@ audio[data-estab-sidebar-audio] {
     background: #eef5fc;
     border-color: #2b659a;
     box-shadow: 0 7px 18px rgba(31, 75, 116, 0.15);
-}
-
-.estab-admin-dashboard-card:focus-visible {
-    outline: 4px solid #e5b247;
-    outline-offset: 3px;
 }
 
 .estab-admin-dashboard-number {
@@ -2374,12 +2378,6 @@ audio[data-estab-sidebar-audio] {
     width: 100%;
 }
 
-.estab-incident-export-field select:focus-visible,
-.estab-incident-export-option input:focus-visible {
-    outline: 3px solid #f0b429;
-    outline-offset: 2px;
-}
-
 .estab-incident-export-sections {
     border: 1px solid #c6d2df;
     border-radius: 10px;
@@ -2515,8 +2513,6 @@ audio[data-estab-sidebar-audio] {
 .estab-incident-indicator-alert > a:hover,
 .estab-incident-indicator-alert > a:focus-visible {
     background: #fff0f0;
-    outline: 3px solid #f0b429;
-    outline-offset: 2px;
 }
 
 .estab-incident-indicator-compact {
@@ -2821,8 +2817,6 @@ form[data-estab-incident-disabled="true"]::before {
 .estab-export-manifest > summary:hover,
 .estab-export-manifest > summary:focus-visible {
     color: #102f50;
-    outline: 3px solid #e5b247;
-    outline-offset: 2px;
 }
 
 .estab-export-manifest-list {
@@ -3016,7 +3010,7 @@ form[data-estab-incident-disabled="true"]::before {
 
 .estab-legacy-page fieldset {
     background: #ffffff;
-    border: 1px solid #c5d1dd;
+    border: 1px solid var(--rand-bedienelement);
     border-radius: 10px;
     margin: 0 0 0.7rem;
     padding: 0.6rem 0.75rem;
@@ -3212,7 +3206,7 @@ form[data-estab-incident-disabled="true"]::before {
 
 .estab-list-tab {
     background: #e7edf3;
-    border: 1px solid #a6b5c4;
+    border: 1px solid var(--rand-bedienelement);
     border-radius: 4px 4px 0 0;
     color: #1f3a5a;
     display: inline-block;
@@ -3268,7 +3262,7 @@ form[data-estab-incident-disabled="true"]::before {
 
 .estab-list-chip {
     background: #e7edf3;
-    border: 1px solid #a6b5c4;
+    border: 1px solid var(--rand-bedienelement);
     border-radius: 4px;
     color: #1f3a5a;
     display: inline-block;
@@ -3292,7 +3286,7 @@ form[data-estab-incident-disabled="true"]::before {
 .estab-list-toggle,
 .estab-list-pager {
     background: #e7edf3;
-    border: 1px solid #a6b5c4;
+    border: 1px solid var(--rand-bedienelement);
     border-radius: 4px;
     color: #1f3a5a;
     cursor: pointer;
@@ -3784,7 +3778,7 @@ form[data-estab-incident-disabled="true"]::before {
 }
 
 .estab-tool-form > fieldset {
-    border: 1px solid #c5d1dd;
+    border: 1px solid var(--rand-bedienelement);
     border-radius: 9px;
     display: grid;
     gap: 0.65rem;
@@ -3801,20 +3795,6 @@ form[data-estab-incident-disabled="true"]::before {
     gap: 0.55rem;
 }
 
-.estab-tool-field input:focus-visible,
-.estab-tool-field textarea:focus-visible,
-.estab-tool-field select:focus-visible,
-.estab-tool-form > label > input:focus-visible,
-.estab-tool-form > label > textarea:focus-visible,
-.estab-tool-form > label > select:focus-visible,
-.estab-tool-form-grid > label > input:focus-visible,
-.estab-tool-form-grid > label > textarea:focus-visible,
-.estab-tool-form-grid > label > select:focus-visible,
-.estab-tool-action-stack input:focus-visible {
-    outline: 3px solid #e5b247;
-    outline-offset: 2px;
-}
-
 .estab-tool-field small,
 .estab-tool-help {
     color: #52657a;
@@ -3825,7 +3805,7 @@ form[data-estab-incident-disabled="true"]::before {
 .estab-tool-details,
 .estab-tool-action-stack details {
     background: #f8fafc;
-    border: 1px solid #c5d1dd;
+    border: 1px solid var(--rand-bedienelement);
     border-radius: 9px;
     padding: 0.35rem 0.65rem;
 }
@@ -3838,13 +3818,6 @@ form[data-estab-incident-disabled="true"]::before {
     font-weight: 800;
     min-height: 2.75rem;
     padding: 0.55rem 0.25rem;
-}
-
-.estab-tool-field summary:focus-visible,
-.estab-tool-details > summary:focus-visible,
-.estab-tool-action-stack summary:focus-visible {
-    outline: 3px solid #e5b247;
-    outline-offset: 2px;
 }
 
 .estab-tool-actions {
@@ -4275,7 +4248,7 @@ form[data-estab-incident-disabled="true"]::before {
 .estab-incident-action {
     align-content: start;
     background: #f8fafc;
-    border: 1px solid #c5d1dd;
+    border: 1px solid var(--rand-bedienelement);
     border-radius: 9px;
     padding: 0.85rem;
 }
@@ -4466,15 +4439,6 @@ form[data-estab-incident-disabled="true"]::before {
     min-height: 2.75rem;
 }
 
-.estab-tool-legacy-content a:focus-visible,
-.estab-tool-legacy-content button:focus-visible,
-.estab-tool-legacy-content input:focus-visible,
-.estab-tool-legacy-content select:focus-visible,
-.estab-tool-legacy-content textarea:focus-visible {
-    outline: 3px solid #e5b247;
-    outline-offset: 2px;
-}
-
 @media (max-width: 42rem) {
     body > aside.estab-session-bar:not(.estab-session-bar-compact) {
         position: static;
@@ -4527,8 +4491,6 @@ form[data-estab-incident-disabled="true"]::before {
     .estab-mobile-sidebar-return:hover,
     .estab-mobile-sidebar-return:focus-visible {
         background: #294b70;
-        outline: 3px solid #e5b247;
-        outline-offset: 2px;
     }
 
     .estab-session-topline {
@@ -4966,11 +4928,6 @@ body.estab-message-form-body {
     padding: 0.75rem 0.95rem;
 }
 
-.estab-message-error-summary:focus-visible {
-    outline: 3px solid #174f82;
-    outline-offset: 2px;
-}
-
 .estab-message-error-summary h2 {
     color: #7d1611;
     font-size: 1rem;
@@ -5053,8 +5010,6 @@ body.estab-message-form-body {
 .estab-message-attachment-badge:hover,
 .estab-message-attachment-badge:focus-visible {
     background: #f1ca69;
-    outline: 3px solid #ffffff;
-    outline-offset: 2px;
 }
 
 .estab-message-attachment-badge--empty {
@@ -5200,7 +5155,7 @@ body.estab-message-form-body {
 
 .estab-message-workflow-fields fieldset {
     background: #f4f7fa;
-    border: 1px solid #c5d1dd;
+    border: 1px solid var(--rand-bedienelement);
     border-radius: 7px;
     display: grid;
     gap: 0.45rem;
@@ -5232,20 +5187,13 @@ body.estab-message-form-body {
 .estab-message-workflow-fields select,
 .estab-message-workflow-fields textarea {
     background: #ffffff;
-    border: 1px solid #879aae;
+    border: 1px solid var(--rand-bedienelement);
     border-radius: 5px;
     color: #172033;
     font: inherit;
     max-width: 100%;
     padding: 0.5rem 0.6rem;
     width: 100%;
-}
-
-.estab-message-workflow-fields input:focus,
-.estab-message-workflow-fields select:focus,
-.estab-message-workflow-fields textarea:focus {
-    outline: 3px solid #e4b443;
-    outline-offset: 1px;
 }
 
 .estab-message-workflow-readonly {
@@ -5340,11 +5288,6 @@ section.estab-message-timeline[data-estab-message-timeline] * {
     background: #527394;
     border: 2px solid #e5ecf3;
     border-radius: 999px;
-}
-
-.estab-message-timeline__track:focus-visible {
-    outline: 3px solid var(--estab-timeline-gold);
-    outline-offset: 2px;
 }
 
 .estab-message-timeline__step {
@@ -5582,11 +5525,6 @@ section.estab-message-timeline[data-estab-message-timeline] * {
     overscroll-behavior-inline: contain;
     padding: clamp(0.4rem, 1.4vw, 0.9rem);
     scrollbar-color: #496a8a #e7edf3;
-}
-
-.estab-message-form-scroll:focus-visible {
-    outline: 4px solid #e4b443;
-    outline-offset: 2px;
 }
 
 /* Das Blatt bleibt 56 rem breit -- das ist das Raster des Vordrucks, und
@@ -6548,8 +6486,6 @@ section.estab-message-timeline[data-estab-message-timeline] * {
 .estab-official-textarea:focus,
 .estab-official-box-choice:focus-visible {
     background: #ffffff;
-    outline: 3px solid #174f82;
-    outline-offset: 1px;
     position: relative;
     z-index: 5;
 }
@@ -6722,8 +6658,6 @@ section.estab-message-timeline[data-estab-message-timeline] * {
     background: #173a5e;
     border-color: #173a5e;
     color: #ffffff;
-    outline: 3px solid #e4b443;
-    outline-offset: 1px;
 }
 
 .estab-official-help-dialog {
@@ -6795,11 +6729,6 @@ section.estab-message-timeline[data-estab-message-timeline] * {
     margin-top: 1rem;
     padding: clamp(0.85rem, 2.5vw, 1.25rem);
     scroll-margin-top: 5rem;
-}
-
-.estab-message-attachments:focus {
-    outline: 4px solid #e4b443;
-    outline-offset: 3px;
 }
 
 .estab-message-attachments-header {
@@ -6916,11 +6845,6 @@ section.estab-message-timeline[data-estab-message-timeline] * {
     padding: 0.55rem 0.7rem;
 }
 
-.estab-message-attachment-upload-grid input:focus-visible {
-    outline: 3px solid #e4b443;
-    outline-offset: 2px;
-}
-
 .estab-message-attachment-upload > small {
     color: #536476;
     display: block;
@@ -6996,11 +6920,6 @@ section.estab-message-timeline[data-estab-message-timeline] * {
     justify-content: center;
     min-height: 8rem;
     overflow: hidden;
-}
-
-.estab-message-attachment-preview:focus-visible {
-    outline: 3px solid #e4b443;
-    outline-offset: 2px;
 }
 
 .estab-message-attachment-preview img {
@@ -8072,11 +7991,6 @@ section.estab-message-timeline[data-estab-message-timeline]
     text-underline-offset: 0.15em;
 }
 
-.estab-bos-document-content a:focus-visible {
-    outline: 3px solid #e5b247;
-    outline-offset: 2px;
-}
-
 .estab-bos-table-scroll {
     border: 1px solid #bdcad8;
     border-radius: 8px;
@@ -8084,11 +7998,6 @@ section.estab-message-timeline[data-estab-message-timeline]
     max-width: 100%;
     overflow-x: auto;
     overscroll-behavior-inline: contain;
-}
-
-.estab-bos-table-scroll:focus-visible {
-    outline: 3px solid #e5b247;
-    outline-offset: 2px;
 }
 
 .estab-bos-document-content .estab-bos-table-scroll > table {
@@ -8287,22 +8196,6 @@ section.estab-message-timeline[data-estab-message-timeline]
     white-space: nowrap;
 }
 
-.estab-message-list-query:not(label):focus-visible,
-.estab-message-list-search-row input:focus-visible,
-.estab-message-list-search-row button:focus-visible,
-.estab-message-list-quick-filters input:focus-visible,
-.estab-message-list-quick-filters select:focus-visible,
-.estab-message-list-filter-grid input:focus-visible,
-.estab-message-list-filter-grid select:focus-visible,
-.estab-message-list-more > summary:focus-visible,
-.estab-message-list-chip:focus-visible,
-.estab-message-list-open:focus-visible,
-.estab-message-list-pager a:focus-visible,
-.estab-message-list-pager button:focus-visible {
-    outline: 3px solid #e5b247;
-    outline-offset: 2px;
-}
-
 .estab-message-list-quick-filters {
     align-items: end;
     border: 0;
@@ -8352,7 +8245,7 @@ section.estab-message-timeline[data-estab-message-timeline]
 
 .estab-message-list-more {
     background: #ffffff;
-    border: 1px solid #c5d1dd;
+    border: 1px solid var(--rand-bedienelement);
     border-radius: 9px;
     min-width: 0;
     padding: 0.2rem 0.75rem 0.7rem;
@@ -8404,7 +8297,7 @@ section.estab-message-timeline[data-estab-message-timeline]
 .estab-message-list-chip {
     align-items: center;
     background: #e4eef8;
-    border: 1px solid #8faac4;
+    border: 1px solid var(--rand-bedienelement);
     border-radius: 999px;
     box-sizing: border-box;
     color: #173f68;
@@ -9186,12 +9079,6 @@ a.estab-message-list-chip:hover {
     .estab-message-list-status,
     .estab-message-list-recipients > * {
         border-color: ButtonText;
-    }
-
-    .estab-message-list-row:hover,
-    .estab-message-list-row:focus-within {
-        outline: 2px solid Highlight;
-        outline-offset: -2px;
     }
 }
 
