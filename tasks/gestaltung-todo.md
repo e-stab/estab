@@ -46,19 +46,27 @@ ansehen → Migrationsgrenze kürzen.** Abweichungen stehen bei der Aufgabe.
       - **Prüfung:** `stylesheet_integrity_security.php` grün; Bildvergleich vor/nach zeigt keinen Unterschied
       - **Abhängigkeit:** G01, G02
 
-- [ ] **G04** `!` **M** Die vier Wächter
+- [x] **G04** `!` **M** Die vier Wächter
       → `tests/php/ges_marken.php`, `ges_schriftskala.php`, `ges_abstandsskala.php`, `ges_kontrast.php`, `tests/static/run.sh`
-      - [ ] `ges_marken.php`: kein Farbliteral außerhalb `:root`, für alles außerhalb der Migrationsgrenze
-      - [ ] `ges_schriftskala.php`: `font-size` gegen die 7 Stufen, `font-weight` gegen 400/600/700
-      - [ ] `ges_abstandsskala.php`: `padding`, `gap`, `margin`, `border-radius` gegen die Skalen
-      - [ ] `ges_kontrast.php`: jede Tinte × jeden zulässigen Grund, Ränder ≥ 3:1, kein `opacity` an textführenden Auswählern
-      - [ ] Alle vier in `run.sh` registriert und in `--list` sichtbar
+      - [x] `ges_marken.php`: kein Farbliteral außerhalb `:root`, für alles außerhalb der Migrationsgrenze
+      - [x] `ges_schriftskala.php`: `font-size` gegen die 7 Stufen, `font-weight` gegen 400/600/700
+      - [x] `ges_abstandsskala.php`: `padding`, `gap`, `margin`, `border-radius` gegen die Skalen
+      - [x] `ges_kontrast.php`: jede Tinte × jeden zulässigen Grund, Ränder ≥ 3:1, kein `opacity` an textführenden Auswählern
+      - [x] Alle vier in `run.sh` registriert und in `--list` sichtbar
       - **Prüfung:** volle Suite grün — die Wächter finden im Bestand nichts, weil er in der Grenze steht
       - **Abhängigkeit:** G03
+      - **Abweichung vom Plan:** G04 trägt auch die sieben Regeln ein, auf die seine Wächter zeigen — darunter `GES-KONTRAST-RAND` (im Plan bei G05) und `GES-KONTRAST-TEXT`, `GES-KEINE-BLASSE-SCHRIFT` (bei G06). Eine Prüfung, die auf eine Regel zeigt, kann nicht ohne sie landen; SPEC.md 10.2 verlangt beides zusammen. G06 hebt dann nur noch `UX-KONTRAST` selbst.
 
-> **Prüfpunkt C0** — Trägt der Apparat? Ein absichtlich in einen umgestellten
-> Bereich gesetztes Literal **muss** die Suite rot machen. Findet sie es
-> nicht, ist die Migrationsgrenze wirkungslos und alles Weitere ungeprüft.
+> **Prüfpunkt C0 — bestanden.** Zur Probe `estab-shell` aus der Grenze
+> genommen: `ges_marken`, `ges_schriftskala` und `ges_abstandsskala` wurden
+> sofort rot und nannten Auswähler, Eigenschaft, Wert und Zeile
+> (`.estab-shell-body { background: #0b1d31 } Zeile 590` und weitere).
+> `ges_kontrast` blieb grün — die Hülle setzt kein `opacity`; das ist
+> richtiges Verhalten, kein Versagen. Grenze wiederhergestellt, Suite grün.
+>
+> Zusätzlich trägt jeder Wächter eine Selbstprobe: Er muss ein eingebautes
+> Literal wiederfinden, sonst wäre seine Ruhe kein Beweis, solange der Bestand
+> noch in der Grenze steht.
 
 ---
 

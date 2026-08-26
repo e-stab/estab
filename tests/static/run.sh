@@ -197,6 +197,10 @@ for test_name in \
     ux_route_continuity \
     ux_own_fields \
     ux_form_contrast \
+    ges_marken \
+    ges_schriftskala \
+    ges_abstandsskala \
+    ges_kontrast \
     ux_keyboard \
     ux_without_javascript \
     fuest_formal_review \

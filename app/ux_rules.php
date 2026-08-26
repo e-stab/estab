@@ -165,6 +165,67 @@ function estab_ux_rules(): array
                 . 'Anwendung, was geschehen ist, wohin die Nachricht gegangen '
                 . 'ist und was als Nächstes ansteht.',
         ],
+        /*
+         * Gestaltung. Herkunft docs/GESTALTUNG.md, Kennung GES-.
+         *
+         * Sie fuellen aus, was die Bedienanforderungen offenlassen: Diese
+         * verlangen Elementkonstanz, sagen aber nicht, wie gross ein Knopf
+         * ist. Genau daran scheitert Konstanz in der Praxis.
+         */
+        'GES-MARKEN' => [
+            'origin' => ESTAB_UX_ORIGIN_GESTALTUNG,
+            'reference' => 'Abschnitt 1.5 und 2.4',
+            'requirement' => 'Jede Farb-, Schrift-, Abstands- und '
+                . 'Radiusangabe des Stylesheets kommt aus einer Marke im '
+                . ':root-Block. Eine eigene Zahl in einer Regel ist ein '
+                . 'Befund, kein Detail.',
+        ],
+        'GES-SCHRIFTSKALA' => [
+            'origin' => ESTAB_UX_ORIGIN_GESTALTUNG,
+            'reference' => 'Abschnitt 2.3',
+            'requirement' => 'Es gibt genau sieben Schriftgroessen. Die '
+                . 'Arbeitsgroesse ist 0.875rem, der Nachrichteninhalt 1rem, '
+                . 'und keine Angabe unterschreitet 0.75rem.',
+        ],
+        'GES-SCHRIFTSTAERKE' => [
+            'origin' => ESTAB_UX_ORIGIN_GESTALTUNG,
+            'reference' => 'Abschnitt 2.3',
+            'requirement' => 'Es gibt genau die Schriftstaerken 400, 600 und '
+                . '700. Staerken darueber sagen einen Unterschied zu, den die '
+                . 'Schrift nicht hat.',
+        ],
+        'GES-ABSTANDSSKALA' => [
+            'origin' => ESTAB_UX_ORIGIN_GESTALTUNG,
+            'reference' => 'Abschnitt 2.2 und 2.5',
+            'requirement' => 'Abstaende, Luecken und Innenabstaende stammen '
+                . 'aus sieben Stufen, Eckradien aus vier. Auch der zweite '
+                . 'Wert einer Kurzschreibweise stammt daraus.',
+        ],
+        'GES-KONTRAST-TEXT' => [
+            'origin' => ESTAB_UX_ORIGIN_GESTALTUNG,
+            'reference' => 'Abschnitt 2.4',
+            'requirement' => 'Jeder Text erreicht 7:1 gegen den Grund, auf '
+                . 'dem er tatsaechlich steht; 4.5:1 wird nie unterschritten. '
+                . 'Der gemessene Wert ist der beste Fall, der Bildschirm im '
+                . 'Einsatzraum nicht.',
+        ],
+        'GES-KONTRAST-RAND' => [
+            'origin' => ESTAB_UX_ORIGIN_GESTALTUNG,
+            'reference' => 'Abschnitt 2.4 und 2.6',
+            'requirement' => 'Jeder Rand eines Bedienelements erreicht 3:1 '
+                . 'gegen jeden Grund, auf dem er vorkommen kann. Vom '
+                . 'Fokusring traegt auf jedem Grund mindestens einer seiner '
+                . 'beiden Ringe.',
+        ],
+        'GES-KEINE-BLASSE-SCHRIFT' => [
+            'origin' => ESTAB_UX_ORIGIN_GESTALTUNG,
+            'reference' => 'Abschnitt 2.4',
+            'requirement' => 'Es gibt keine gedaempfte Schrift. Rangfolge '
+                . 'entsteht ueber Groesse, Staerke und Ort, nie ueber '
+                . 'Blaesse. Was zu unwichtig ist, um lesbar zu sein, ist zu '
+                . 'unwichtig, um zu stehen.',
+        ],
+
         'UX-SPRACHE-VORSCHRIFT' => [
             'origin' => ESTAB_UX_ORIGIN_BETREIBER,
             'reference' => 'Begriffe der Vorschrift',
