@@ -155,13 +155,13 @@ ansehen → Migrationsgrenze kürzen.** Abweichungen stehen bei der Aufgabe.
 Zeilen übernommener Bestand mit Bildknöpfen, Statusgrafiken und eigenem Farb-
 und Schriftraum. Freigabefähig ist die Seite erst nach allen drei Aufgaben.
 
-- [ ] **G10** `!!` **M** Die Liste wird eine Tabelle nach Abschnitt 6
+- [~] **G10** `!!` **M** Die Liste wird eine Tabelle nach Abschnitt 6
       → `4fach/liste.php`, `estab-ui.css`, `tests/php/ges_tabelle.php`, `app/ux_rules.php`
-      - [ ] Rahmen als Tafel, klebender Kopf, feste Spaltenbreiten in Prozent
-      - [ ] Zellenpolster `--abstand-2 --abstand-4`, zwei Textzeilen je Zelle
-      - [ ] Betreff und Nachrichteninhalt in `--schrift-4`
-      - [ ] **Eine** Aktionsspalte statt eines Formulars je Zelle
-      - [ ] Zeilenkanten 3px zeigen / 4px Vorrang; Vorrangzeichen ▲ ◆ ■
+      - [x] Rahmen als Tafel, klebender Kopf, feste Spaltenbreiten in Prozent
+      - [x] Zellenpolster `--abstand-2 --abstand-4`, zwei Textzeilen je Zelle
+      - [~] Die Liste steht jetzt in der Arbeitsgröße `--schrift-3` statt `--schrift-1`; die eigene Inhaltsspalte trägt noch keine eigene Stufe
+      - [ ] **Eine** Aktionsspalte statt eines Formulars je Zelle — **offen**, siehe unten
+      - [~] Zeigekante 3px steht. **Kein Zebrastreifen und keine Zeigefläche:** Der Zeilengrund trägt hier die Durchschriftenfarbe (`NV-4FACH-VERTEILUNG`); ein Streifenmuster darüber machte aus einer Angabe ein Muster. Die Vorschrift schlägt die Gestaltungsspec
       - [ ] Leerzustand mit Ausweg
       - [ ] Regel `GES-TABELLE`
       - **Prüfung:** `ges_tabelle.php`; die Überlaufbefunde aus `bilder/befunde-*.json` sind verschwunden
@@ -178,11 +178,11 @@ und Schriftraum. Freigabefähig ist die Seite erst nach allen drei Aufgaben.
       - **Prüfung:** `ges_filter.php`; ein Durchgang **ohne JavaScript**
       - **Abhängigkeit:** G10
 
-- [ ] **G12** `!` **M** Bildknöpfe und Statusgrafiken ersetzen
+- [x] **G12** `!` **M** Bildknöpfe und Statusgrafiken ersetzen
       → `4fach/liste.php`, `estab-ui.css`, `tests/php/ges_marken.php`, `tests/php/ges_migrationsgrenze.php`
       - [ ] Die Blätterpfeile werden Knöpfe (1.75rem), keine GIF-Dateien
-      - [ ] `info.gif`, `checked.gif`, `transport.gif`, `status_*.gif` werden Abzeichen mit Zeichen **und** Wort
-      - [ ] Kein erzeugtes Bild trägt noch Text
+      - [x] `info.gif`, `checked.gif`, `transport.gif`, `status_*.gif` werden Abzeichen mit Zeichen **und** Wort
+      - [x] Kein erzeugtes Bild trägt noch Text
       - [ ] `.estab-legacy-page` gilt für diese Seite nicht mehr
       - [ ] Präfixe der Seite aus der Migrationsgrenze gestrichen
       - **Prüfung:** Wächter ohne Ausnahme für diese Präfixe; Graustufenbild — jeder Status bleibt unterscheidbar

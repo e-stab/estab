@@ -2990,24 +2990,24 @@ form[data-estab-incident-disabled="true"]::before {
    bis ihre Erzeugung ersetzt ist.
    --------------------------------------------------------------------- */
 .estab-legacy-page {
-    background: #eef2f6;
-    color: #172033;
+    background: var(--handlung-sanft);
+    color: var(--tinte);
     font-family: Arial, Helvetica, sans-serif;
-    font-size: 0.9rem;
+    font-size: var(--schrift-3);
     margin: 0;
-    padding: 0.6rem 0.7rem;
+    padding: var(--abstand-4) var(--abstand-5);
 }
 
 .estab-legacy-page table {
     border-collapse: collapse;
-    font-size: 0.78rem;
+    font-size: var(--schrift-1);
     max-width: 100%;
 }
 
 .estab-legacy-page td,
 .estab-legacy-page th {
     line-height: 1.25;
-    padding: 0.12rem 0.3rem;
+    padding: var(--abstand-1) var(--abstand-2);
     vertical-align: top;
 }
 
@@ -3027,27 +3027,27 @@ form[data-estab-incident-disabled="true"]::before {
 
 .estab-legacy-page input[type="submit"],
 .estab-legacy-page button {
-    font-size: 0.75rem;
-    padding: 0.2rem 0.45rem;
+    font-size: var(--schrift-1);
+    padding: var(--abstand-2) var(--abstand-4);
 }
 
 .estab-legacy-page big {
-    font-size: 1em;
+    font-size: var(--schrift-4);
 }
 
 .estab-legacy-page fieldset {
-    background: #ffffff;
+    background: var(--grund-tafel);
     border: 1px solid var(--rand-bedienelement);
-    border-radius: 10px;
-    margin: 0 0 0.7rem;
-    padding: 0.6rem 0.75rem;
+    border-radius: var(--radius-3);
+    margin: 0 0 var(--abstand-5);
+    padding: var(--abstand-4) var(--abstand-5);
 }
 
 .estab-legacy-page legend {
-    color: #1f3a5a;
-    font-size: 0.95rem;
-    font-weight: 700;
-    padding: 0 0.3rem;
+    color: var(--handlung-dunkel);
+    font-size: var(--schrift-4);
+    font-weight: var(--stark-voll);
+    padding: 0 var(--abstand-2);
 }
 
 .estab-legacy-page input[type="text"],
@@ -3055,34 +3055,34 @@ form[data-estab-incident-disabled="true"]::before {
 .estab-legacy-page input:not([type]),
 .estab-legacy-page select,
 .estab-legacy-page textarea {
-    background: #ffffff;
-    border: 1px solid #7d94ad;
-    border-radius: 5px;
-    color: #172033;
+    background: var(--grund-tafel);
+    border: 1px solid var(--linie-spalte);
+    border-radius: var(--radius-2);
+    color: var(--tinte);
     font: inherit;
-    padding: 0.25rem 0.4rem;
+    padding: var(--abstand-2) var(--abstand-3);
 }
 
 .estab-legacy-page input[type="submit"],
 .estab-legacy-page button {
-    background: #1f4f7d;
-    border: 1px solid #1f4f7d;
-    border-radius: 6px;
-    color: #ffffff;
+    background: var(--handlung);
+    border: 1px solid var(--handlung);
+    border-radius: var(--radius-3);
+    color: var(--tinte-spalte);
     cursor: pointer;
     font: inherit;
-    font-weight: 700;
-    padding: 0.3rem 0.7rem;
+    font-weight: var(--stark-voll);
+    padding: var(--abstand-2) var(--abstand-5);
 }
 
 .estab-legacy-page a {
-    color: #1a4d7a;
+    color: var(--handlung-dunkel);
 }
 
 /* Die Liste bringt ihre eigenen Rahmenfarben mit; auf hellem Grund sind
    sie nicht mehr zu sehen und stoeren nur. */
 .estab-legacy-page div[style*="border"] {
-    border-color: #c5d1dd !important;
+    border-color: var(--linie) !important;
 }
 
 /* ---------------------------------------------------------------------
@@ -3112,19 +3112,106 @@ form[data-estab-incident-disabled="true"]::before {
     text-decoration: underline;
 }
 
+/* Die Zustandsumschalter der uebernommenen Liste.
+
+   Sie trugen GIFs -- und 000.gif war ein durchsichtiges Bild, also gar
+   nichts, wo ein Zustand stehen sollte. Jetzt traegt jeder Zustand ein
+   eigenes Zeichen, und der Name steht fuer Vorleseprogramme daneben.
+   1.75rem ist die Untergrenze fuer eine Klickflaeche. */
+.estab-list-state-toggle {
+    align-items: center;
+    background: var(--grund-tafel);
+    border: 1px solid var(--rand-bedienelement);
+    border-radius: var(--radius-2);
+    color: var(--tinte-neben);
+    cursor: pointer;
+    display: inline-flex;
+    font-size: var(--schrift-3);
+    justify-content: center;
+    line-height: 1;
+    min-height: 1.75rem;
+    min-width: 1.75rem;
+    padding: 0;
+}
+
+.estab-list-state-toggle:hover {
+    background: var(--handlung-sanft);
+}
+
+.estab-list-state-toggle--offen-vorrang {
+    border-color: var(--fehler-kante);
+    color: var(--fehler-tinte);
+}
+
+.estab-list-state-toggle--offen,
+.estab-list-state-toggle--erledigt-offen {
+    border-color: var(--achtung-kante);
+    color: var(--achtung-tinte);
+}
+
+.estab-list-state-toggle--gesetzt {
+    border-color: var(--erledigt-kante);
+    color: var(--erledigt-tinte);
+}
+
+/* Die Transportmarke der uebernommenen Liste.
+
+   Sie stand als GIF in der Zeile -- eine Ampel aus drei Farben. In
+   Graustufen und bei Farbfehlsichtigkeit war sie eine Ampel aus drei
+   gleichen Punkten. Sie traegt jetzt je Zustand ein eigenes Zeichen und das
+   Wort dazu; die Farbe kommt hinzu und traegt nichts allein. */
+.estab-list-state {
+    align-items: center;
+    border: 1px solid;
+    border-radius: var(--radius-pille);
+    display: inline-flex;
+    font-size: var(--schrift-2);
+    font-weight: var(--stark-voll);
+    gap: var(--abstand-2);
+    line-height: 1.2;
+    padding: var(--abstand-1) var(--abstand-3);
+    white-space: nowrap;
+}
+
+.estab-list-state--wartet {
+    background: var(--achtung-flaeche);
+    border-color: var(--achtung-kante);
+    color: var(--achtung-tinte);
+}
+
+.estab-list-state--sichter {
+    background: var(--fehler-flaeche);
+    border-color: var(--fehler-kante);
+    color: var(--fehler-tinte);
+}
+
+.estab-list-state--fertig {
+    background: var(--erledigt-flaeche);
+    border-color: var(--erledigt-kante);
+    color: var(--erledigt-tinte);
+}
+
+/* Der Kopf klebt am oberen Rand seines Rahmens. Eine Liste, in der man nach
+   zwanzig Zeilen nicht mehr weiss, welche Spalte was ist, zwingt zum
+   Zurueckscrollen -- und im Einsatz scrollt niemand zurueck, er raet. */
 .estab-list-head {
-    background: #e7edf3;
+    background: var(--grund-gedaempft);
 }
 
 .estab-list-head th,
 .estab-list-head td {
-    border-bottom: 2px solid #45627f;
-    color: #1f3a5a;
-    font-size: 0.7rem;
-    font-weight: 700;
-    letter-spacing: 0.02em;
+    background: var(--grund-gedaempft);
+    border-bottom: 2px solid var(--linie-kraeftig);
+    color: var(--tinte);
+    font-size: var(--schrift-1);
+    font-weight: var(--stark-voll);
+    letter-spacing: 0.045em;
+    padding: var(--abstand-2) var(--abstand-4);
+    position: sticky;
     text-transform: uppercase;
+    top: 0;
     white-space: nowrap;
+    z-index: 2;
 }
 
 /* Die Spaltenbreiten ergeben sich aus dem Inhalt. Ein festes Raster war
@@ -3135,13 +3222,55 @@ form[data-estab-incident-disabled="true"]::before {
    Spalten passen auf einen schmalen Schirm nicht, aber sie sind erreichbar.
    Die Zeilen bleiben flach -- die Statuszeichen brachten je einen Absatz
    mit, und drei Absaetze uebereinander ergaben 260 Pixel Zeilenhoehe. */
+/* Der Rahmen ist eine Tafel und scrollt fuer sich -- quer wie hoch. Die
+   Inhaltsspalte scrollt nie waagerecht; was zu breit ist, bleibt im Rahmen.
+   Die Schrift ist die Arbeitsgroesse: Eine Liste, die man nicht liest,
+   spart nichts. */
 .estab-list-table {
+    background: var(--grund-tafel);
+    border: 1px solid var(--linie-kraeftig);
+    border-radius: var(--radius-3);
+    box-shadow: var(--schatten-tafel);
     display: block;
-    font-size: 0.74rem;
+    font-size: var(--schrift-3);
+    max-height: min(74vh, 54rem);
     max-width: 100%;
-    overflow-x: auto;
+    overflow: auto;
+    overscroll-behavior: contain;
     table-layout: auto;
     width: 100%;
+}
+
+/* Zellenpolster nach der Abstandsskala. Der Bestand setzte 0.12rem senkrecht
+   -- die Zeilen klebten aneinander und liessen sich nur ueber die Farbe
+   auseinanderhalten. */
+.estab-list-table td,
+.estab-list-table th {
+    /* Deutsche Fachwoerter sind lang und die Spalten schmal. `hyphens: auto`
+       ist eine Bitte, keine Zusage -- nicht jeder Browser beherrscht deutsche
+       Silbentrennung, und das Chromium der Pruefabbilder tut es nicht.
+       Deshalb steht `overflow-wrap` daneben: Wer nicht trennen kann, bricht
+       wenigstens, statt ueberzulaufen. */
+    hyphens: auto;
+    overflow-wrap: anywhere;
+    padding: var(--abstand-2) var(--abstand-4);
+    vertical-align: top;
+}
+
+/* Kein Zebrastreifen und keine Zeigeflaeche in dieser Liste.
+   
+   Die Gestaltungsspec sieht beides vor. Hier gilt es nicht: Der Grund einer
+   Zeile traegt in dieser Liste die Durchschriftenfarbe -- welche Ausfertigung
+   die empfangende Funktion bekommt. Das gibt die Dienstvorschrift vor
+   (NV-4FACH-VERTEILUNG), und nach docs/GESTALTUNG.md Abschnitt 1.4 schlaegt
+   sie die Gestaltungsspec. Ein Streifenmuster darueber machte aus einer
+   Angabe ein Muster.
+
+   Die Zeile unter dem Zeiger bekommt deshalb nur eine Kante. Sie kommt ohne
+   Flaeche aus und laesst die Durchschrift stehen. */
+.estab-list-table tbody tr:hover > *:first-child,
+.estab-list-table tbody tr:focus-within > *:first-child {
+    box-shadow: inset 3px 0 0 var(--handlung-kante);
 }
 
 .estab-list-table p {
@@ -3156,7 +3285,7 @@ form[data-estab-incident-disabled="true"]::before {
 
 .estab-list-table td,
 .estab-list-table th {
-    padding: 0.2rem 0.4rem;
+    padding: var(--abstand-2) var(--abstand-3);
     text-align: left;
     vertical-align: middle;
 }
@@ -3175,9 +3304,13 @@ form[data-estab-incident-disabled="true"]::before {
 /* Jede Zelle ist ein Formular mit Knopf: Ein Klick irgendwo in der Zeile
    oeffnet die Meldung. Alle Zellen unterstrichen macht die Tabelle
    unlesbar -- der Strich kommt erst beim Zeigen. */
+/* Ein Formular je Zelle ist ein Erbe des Bestands. Solange es das gibt, darf
+   es die Ausrichtung nicht stoeren: `display: inline` haengt den Knopf an die
+   Schriftgrundlinie, und zwei Knoepfe nebeneinander stehen dann versetzt. */
 .estab-list-cell-form {
-    display: inline;
+    display: inline-flex;
     margin: 0;
+    vertical-align: top;
 }
 
 .estab-legacy-page .estab-list-cell-button,
@@ -3201,9 +3334,9 @@ form[data-estab-incident-disabled="true"]::before {
    Klick oeffnet; ohne Grenze wuchs jede Listenzeile auf 230 Pixel. */
 .estab-list-table td:last-child .estab-list-cell-button {
     -webkit-box-orient: vertical;
-    -webkit-line-clamp: 3;
+    -webkit-line-clamp: 2;
     display: -webkit-box;
-    line-clamp: 3;
+    line-clamp: 2;
     overflow: hidden;
 }
 
@@ -3217,136 +3350,136 @@ form[data-estab-incident-disabled="true"]::before {
 .estab-legacy-page [data-estab-list-filter] table,
 .estab-legacy-page [data-estab-list-filter] td {
     border: 0;
-    padding: 0.1rem 0.25rem;
+    padding: var(--abstand-1) var(--abstand-2);
     vertical-align: middle;
 }
 
 .estab-list-tabs {
     align-items: center;
-    border-bottom: 2px solid #45627f;
+    border-bottom: 2px solid var(--linie-spalte);
     display: flex;
     flex-wrap: wrap;
-    gap: 0.2rem;
-    margin: 0 0 0.3rem;
-    padding: 0 0 0.2rem;
+    gap: var(--abstand-2);
+    margin: 0 0 var(--abstand-2);
+    padding: 0 0 var(--abstand-2);
 }
 
 .estab-list-tab {
-    background: #e7edf3;
+    background: var(--handlung-sanft);
     border: 1px solid var(--rand-bedienelement);
-    border-radius: 4px 4px 0 0;
-    color: #1f3a5a;
+    border-radius: var(--radius-2) var(--radius-2) 0 0;
+    color: var(--handlung-dunkel);
     display: inline-block;
-    font-size: 0.68rem;
-    font-weight: 700;
+    font-size: var(--schrift-1);
+    font-weight: var(--stark-voll);
     line-height: 1.1;
-    padding: 0.1rem 0.35rem;
+    padding: var(--abstand-1) var(--abstand-3);
     text-decoration: none;
     white-space: nowrap;
 }
 
 .estab-list-tab:hover,
 .estab-list-tab:focus-visible {
-    background: #d6e2ee;
+    background: var(--handlung-sanft);
 }
 
 /* Die drei Herkuenfte trugen frueher drei Farben. Sie behalten je einen
    schmalen Streifen -- das unterscheidet sie, ohne Flaeche zu kosten. */
 .estab-list-tabs--global {
-    border-bottom-color: #9b2634;
+    border-bottom-color: var(--fehler-kante);
 }
 
 .estab-list-tabs--funktion {
-    border-bottom-color: #2b6397;
+    border-bottom-color: var(--handlung-kante);
 }
 
 .estab-list-tabs--benutzer {
-    border-bottom-color: #246b43;
+    border-bottom-color: var(--erledigt-kante);
 }
 
 .estab-list-tabs--global .estab-list-tab.is-active {
-    background: #9b2634;
-    border-color: #9b2634;
-    color: #ffffff;
+    background: var(--fehler-kante);
+    border-color: var(--fehler-kante);
+    color: var(--tinte-spalte);
 }
 
 .estab-list-tabs--funktion .estab-list-tab.is-active {
-    background: #2b6397;
-    border-color: #2b6397;
-    color: #ffffff;
+    background: var(--handlung);
+    border-color: var(--handlung-kante);
+    color: var(--tinte-spalte);
 }
 
 .estab-list-tabs--benutzer .estab-list-tab.is-active {
-    background: #246b43;
-    border-color: #246b43;
-    color: #ffffff;
+    background: var(--erledigt-spalte-flaeche);
+    border-color: var(--erledigt-kante);
+    color: var(--tinte-spalte);
 }
 
 .estab-list-chips {
     display: inline-flex;
-    gap: 0.15rem;
+    gap: var(--abstand-1);
 }
 
 .estab-list-chip {
-    background: #e7edf3;
+    background: var(--handlung-sanft);
     border: 1px solid var(--rand-bedienelement);
-    border-radius: 4px;
-    color: #1f3a5a;
+    border-radius: var(--radius-2);
+    color: var(--handlung-dunkel);
     display: inline-block;
-    font-size: 0.7rem;
-    font-weight: 700;
+    font-size: var(--schrift-1);
+    font-weight: var(--stark-voll);
     line-height: 1.15;
     min-width: 1.4rem;
-    padding: 0.12rem 0.3rem;
+    padding: var(--abstand-1) var(--abstand-2);
     text-align: center;
     text-decoration: none;
 }
 
 .estab-list-chip.is-active {
-    background: #1f4f7d;
-    border-color: #1f4f7d;
-    color: #ffffff;
+    background: var(--handlung);
+    border-color: var(--handlung);
+    color: var(--tinte-spalte);
 }
 
 .estab-legacy-page .estab-list-toggle,
 .estab-legacy-page .estab-list-pager,
 .estab-list-toggle,
 .estab-list-pager {
-    background: #e7edf3;
+    background: var(--handlung-sanft);
     border: 1px solid var(--rand-bedienelement);
-    border-radius: 4px;
-    color: #1f3a5a;
+    border-radius: var(--radius-2);
+    color: var(--handlung-dunkel);
     cursor: pointer;
     font: inherit;
-    font-size: 0.7rem;
-    font-weight: 700;
+    font-size: var(--schrift-1);
+    font-weight: var(--stark-voll);
     line-height: 1.1;
-    padding: 0.12rem 0.4rem;
+    padding: var(--abstand-1) var(--abstand-3);
     white-space: nowrap;
 }
 
 .estab-list-toggle.is-active {
-    background: #1f4f7d;
-    border-color: #1f4f7d;
-    color: #ffffff;
+    background: var(--handlung);
+    border-color: var(--handlung);
+    color: var(--tinte-spalte);
 }
 
 .estab-list-toggle:hover,
 .estab-list-pager:hover,
 .estab-list-toggle:focus-visible,
 .estab-list-pager:focus-visible {
-    background: #d6e2ee;
+    background: var(--handlung-sanft);
 }
 
 .estab-list-pagers {
     display: inline-flex;
-    gap: 0.15rem;
+    gap: var(--abstand-1);
 }
 
 .estab-legacy-page .estab-list-pager,
 .estab-list-pager {
     min-width: 1.5rem;
-    padding: 0.12rem 0.25rem;
+    padding: var(--abstand-1) var(--abstand-2);
 }
 
 /* ---------------------------------------------------------------------

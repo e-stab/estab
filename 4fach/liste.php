@@ -23,12 +23,29 @@ function estab_list_acting_function_field () {
       estab_auth_html ($function)."\">";
 }
 
-function estab_list_state_action ($action, $recordId, $todo, $image, $alt) {
+/**
+ * Einen Zustand umschalten -- als Knopf mit Zeichen und Namen.
+ *
+ * Der Knopf trug ein GIF: mail_prio_unread, task_due, 000. Ein Zeichen in
+ * einem Bild laesst sich nicht umfaerben, nicht vergroessern und nicht
+ * vorlesen; in Graustufen sind die Zustaende nicht zu unterscheiden, und
+ * 000.gif war ein durchsichtiges Bild -- also gar nichts, wo ein Zustand
+ * stehen sollte.
+ *
+ * Er traegt jetzt je Zustand ein eigenes Zeichen und den Namen dazu. Der
+ * Name steht fuer Vorleseprogramme immer; sichtbar ist er, wo Platz ist.
+ */
+function estab_list_state_action ($action, $recordId, $todo, $zustand, $alt) {
+  $zeichen = array (
+    "offen-vorrang" => "\u{25B2}",  // Dreieck -- ungelesen, mit Vorrang
+    "offen" => "\u{25CB}",          // Kreis offen -- ungelesen
+    "erledigt-offen" => "\u{25A1}", // Quadrat offen -- noch nicht erledigt
+    "gesetzt" => "\u{25CF}",        // Kreis voll -- Zustand steht
+  );
   $safeAction = estab_auth_html ($action);
   $safeRecordId = estab_auth_html ($recordId);
   $safeTodo = estab_auth_html ($todo);
-  $safeImage = estab_auth_html ($image);
-  $safeAlt = estab_auth_html ($alt);
+  $safeZustand = estab_auth_html ($zustand);
   echo "<form class=\"estab-list-cell-form\" method=\"post\""
     ." action=\"mainindex.php\" target=\"_self\">";
   echo estab_csrf_field ();
@@ -36,8 +53,11 @@ function estab_list_state_action ($action, $recordId, $todo, $image, $alt) {
   echo "<input type=\"hidden\" name=\"action\" value=\"".$safeAction."\">";
   echo "<input type=\"hidden\" name=\"00_lfd\" value=\"".$safeRecordId."\">";
   echo "<input type=\"hidden\" name=\"todo\" value=\"".$safeTodo."\">";
-  echo "<button type=\"submit\" style=\"border:0;background:transparent;padding:0\">";
-  echo "<img src=\"".$safeImage."\" alt=\"".$safeAlt."\" border=\"0\"></button></form>";
+  echo "<button type=\"submit\" class=\"estab-list-state-toggle"
+    ." estab-list-state-toggle--".$safeZustand."\">";
+  echo "<span aria-hidden=\"true\">".($zeichen [$zustand] ?? "\u{25CF}")."</span>";
+  echo "<span class=\"estab-visually-hidden\">".estab_message_html ($alt)."</span>";
+  echo "</button></form>";
 }
 
 /** Render a detail navigation as a CSRF-protected POST control. */
@@ -78,6 +98,29 @@ function estab_list_detail_action (
   echo $safeLabel;
   if ($large) { echo "</big>"; }
   echo "</button></form>";
+}
+
+/**
+ * Einen Transportzustand als Marke ausgeben -- Zeichen, Farbe und Wort.
+ *
+ * Der Zustand stand als GIF in der Zeile: status_yellow, status_red,
+ * status_green. Text in einem Bild laesst sich nicht umfaerben, nicht
+ * vergroessern und nicht vorlesen, und in Graustufen sind drei Ampelfarben
+ * nicht mehr zu unterscheiden. Die Marke traegt deshalb ein eigenes Zeichen
+ * je Zustand und das Wort dazu; die Farbe kommt hinzu, sie traegt nichts
+ * allein.
+ */
+function estab_list_transport_badge ($zustand, $wort) {
+  $zeichen = array (
+    "wartet" => "\u{25B2}",   // Dreieck -- liegt noch bei jemandem
+    "sichter" => "\u{25A0}",  // Quadrat -- liegt vorm Sichter
+    "fertig" => "\u{25CF}",   // Kreis   -- Transport abgeschlossen
+  );
+  $klasse = "estab-list-state estab-list-state--".estab_auth_html ($zustand);
+  echo "<span class=\"".$klasse."\">";
+  echo "<span aria-hidden=\"true\">".($zeichen [$zustand] ?? "")."</span>";
+  echo "<span>".estab_message_html ($wort)."</span>";
+  echo "</span>";
 }
 
 /** Show a safe attachment count beside one legacy operational-list message. */
@@ -1382,15 +1425,15 @@ class Listen extends kategorien {
           echo "<tr class=\"estab-list-head\">\n";
             // gelesen ?
           echo "<th align=\"center\">";
-          echo "<p><img src=\"".$conf_design_path."/info.gif\" alt=\"Vorrang/gelesen\"></p>";
+          echo "Kenntnis";
           echo "</th>\n";
             // erledigt
           echo "<th align=\"center\">";
-          echo "<p><img src=\"".$conf_design_path."/checked.gif\" alt=\"gepr&uuml;ft/erledigt\"></p>";
+          echo "Erledigt";
           echo "</th>\n";
             // Transport
           echo "<th align=\"center\">";
-          echo "<p><img src=\"".$conf_design_path."/transport.gif\" alt=\"Transportstatus\"></p>";
+          echo "Transport";
           echo "</th>\n";
           echo "<th>Vorrang</th>\n";
           echo "<th>E/A</th>\n";
@@ -1438,21 +1481,21 @@ class Listen extends kategorien {
              if ( $vorrang ){
                if ( $schongelesen ){
                  echo "<td align=\"center\">";
-                 estab_list_state_action ("gelesen", $row ["00_lfd"], "unset", $conf_design_path."/000.gif", "lesen");
+                 estab_list_state_action ("gelesen", $row ["00_lfd"], "unset", "gesetzt", "gelesen -- als ungelesen kennzeichnen");
                  echo "</td>\n";
                } else {
                  echo "<td align=\"center\">";
-                 estab_list_state_action ("gelesen", $row ["00_lfd"], "set", $conf_design_path."/mail_prio_unread.gif", "lesen");
+                 estab_list_state_action ("gelesen", $row ["00_lfd"], "set", "offen-vorrang", "ungelesen, mit Vorrang -- als gelesen kennzeichnen");
                  echo "</td>\n";
                }
              } else {
                if ( $schongelesen ){  // ==> wurde schon gelesen
                  echo "<td align=\"center\">";
-                 estab_list_state_action ("gelesen", $row ["00_lfd"], "unset", $conf_design_path."/000.gif", "lesen");
+                 estab_list_state_action ("gelesen", $row ["00_lfd"], "unset", "gesetzt", "gelesen -- als ungelesen kennzeichnen");
                  echo "</td>\n";
                } else {
                  echo "<td align=\"center\">";
-                 estab_list_state_action ("gelesen", $row ["00_lfd"], "set", $conf_design_path."/mail_unread.gif", "Neu/new");
+                 estab_list_state_action ("gelesen", $row ["00_lfd"], "set", "offen", "ungelesen -- als gelesen kennzeichnen");
                  echo "</td>\n";
                }
              }
@@ -1468,11 +1511,11 @@ class Listen extends kategorien {
 
              if ( $schonerledigt ){  // ==> wurde schon erledigt
                  echo "<td style=\"text-align: center; vertical-align: middle;\">";
-                 estab_list_state_action ("erledigt", $row ["00_lfd"], "unset", $conf_design_path."/task_done.gif", "erledigt");
+                 estab_list_state_action ("erledigt", $row ["00_lfd"], "unset", "gesetzt", "erledigt -- als offen kennzeichnen");
                  echo "</td>\n";
              } else {
                  echo "<td style=\"text-align: center; vertical-align: middle;\">";
-                 estab_list_state_action ("erledigt", $row ["00_lfd"], "set", $conf_design_path."/task_due.gif", "NICHT erledigt");
+                 estab_list_state_action ("erledigt", $row ["00_lfd"], "set", "erledigt-offen", "nicht erledigt -- als erledigt kennzeichnen");
                  echo "</td>\n";
              }
 
@@ -1481,16 +1524,16 @@ class Listen extends kategorien {
              if ( ( $row["04_richtung"] == "A") ){
                switch ( $row["x00_status"] ) {
                  case 1:
-                   echo "<p><img src=\"".$conf_design_path."/status_yellow.gif\" alt=\"liegt bei LdF: Rufname und Beförderungsweg festlegen\"></p>";
+                   estab_list_transport_badge ("wartet", "bei LdF");
                  break;
                  case 2: // liegt vor dem Fernmelder
-                   echo "<p><img src=\"".$conf_design_path."/status_yellow.gif\" alt=\"liegt vorm Fernmelder\"></p>";
+                   estab_list_transport_badge ("wartet", "beim Fernmelder");
                  break;
                  case 4: // liegt vor dem Sichter ==> gelb
-                   echo "<p><img src=\"".$conf_design_path."/status_red.gif\" alt=\"liegt vorm Sichter\"></p>";
+                   estab_list_transport_badge ("sichter", "beim Sichter");
                  break;
                  case 8: // fertig == gruen
-                   echo "<p><img src=\"".$conf_design_path."/status_green.gif\" alt=\"Transport abgeschlossen!\"></p>";
+                   estab_list_transport_badge ("fertig", "abgeschlossen");
                  break;
                  default:
                    echo "<span class=\"estab-message-list-clamp--empty\">–</span>";

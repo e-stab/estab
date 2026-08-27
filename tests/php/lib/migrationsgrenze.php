@@ -36,9 +36,7 @@ function estab_test_migrationsgrenze(): array
         // mehr hier; die Wächter sind für sie scharf.
         'estab-official',
 
-        // P3 -- Musterseite 2: die übernommene Liste
-        'estab-legacy-page',
-        'estab-list-',
+        // P3 -- Musterseite 2 ist umgestellt; hier steht nichts mehr.
 
         // P4 -- der Rest.
         // 'estab-message' stand hier als ein Eintrag. Mit G08 ist das Umfeld
