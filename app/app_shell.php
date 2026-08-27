@@ -39,8 +39,8 @@ require_once __DIR__ . '/csp.php';
  * "Fuehrungsstelle" mitten durch. Die Breite kommt aus der Mitte, nicht vom
  * Cockpit -- das behaelt seine.
  */
-const ESTAB_SHELL_MENU_WIDTH = 'clamp(15.5rem, 18vw, 18rem)';
-const ESTAB_SHELL_COCKPIT_WIDTH = 'clamp(15rem, 19vw, 20rem)';
+const ESTAB_SHELL_MENU_WIDTH = 'clamp(13.5rem, 15vw, 15rem)';
+const ESTAB_SHELL_COCKPIT_WIDTH = 'clamp(15rem, 16vw, 16rem)';
 
 /**
  * Den Kopf der Seite ausgeben.

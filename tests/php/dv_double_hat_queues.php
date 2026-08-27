@@ -475,9 +475,20 @@ $assert(
             '~\.estab-sidebar-queue-item\s*\{[^}]*display:\s*flex~',
             $stylesheet
         ) === 1
+        // Der Zaehler muss auf einem flachen Schirm kleiner werden, damit
+        // die zweite Warteschlange neben die erste passt. Geprueft wird die
+        // Sache, nicht die Schreibweise: Frueher stand hier das Literal
+        // 1.5rem; seit die Masse aus Marken kommen, waere das eine Pruefung
+        // auf die Schreibweise und nicht auf die Verkleinerung.
         && preg_match(
             '~@media \(max-height: 46rem\)\s*\{.*'
-                . '\.estab-sidebar-queue strong\s*\{\s*font-size:\s*1\.5rem~s',
+                . '\.estab-sidebar-queue strong\s*\{[^}]*'
+                . 'font-size:\s*var\(--schrift-6\)~s',
+            $stylesheet
+        ) === 1
+        && preg_match(
+            '~\n\.estab-sidebar-queue strong\s*\{[^}]*'
+                . 'font-size:\s*var\(--schrift-7\)~',
             $stylesheet
         ) === 1,
     estab_dv_requirement(

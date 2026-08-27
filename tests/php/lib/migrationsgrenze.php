@@ -31,14 +31,9 @@ declare(strict_types=1);
 function estab_test_migrationsgrenze(): array
 {
     return [
-        // P2 -- Musterseite 1: Hülle und Vordruck
-        'estab-shell',
-        'estab-navigation',
-        'estab-sidebar',
-        'estab-session',
-        'estab-cockpit',
-        'estab-menu',
-        'estab-root',
+        // P2 -- Musterseite 1: Vordruck.
+        // Hülle, Menü und Cockpit sind mit G07 umgestellt und stehen nicht
+        // mehr hier; die Wächter sind für sie scharf.
         'estab-official',
 
         // P3 -- Musterseite 2: die übernommene Liste

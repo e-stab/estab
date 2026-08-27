@@ -75,6 +75,15 @@ $ausSkala = static function (string $wert, string $praefix): bool {
         return true;
     }
     // Klammerinhalte zusammenhalten, damit var(...) nicht zerfaellt.
+    // Ein negativer Abstand kann keine Stufe sein -- eine Skala hat keine
+    // Vorzeichen. Aus einer Stufe abgeleitet ist er trotzdem: Er zieht genau
+    // eine Stufe zurueck und wandert mit, wenn die Stufe sich aendert.
+    // Geprueft wird vor dem Trennen, weil ein Trenner an Leerzeichen die
+    // verschachtelten Klammern von calc() zerreisst.
+    if (preg_match('~\Acalc\(\s*-1\s*\*\s*var\(\s*' . $praefix
+        . '[a-z0-9-]+\s*\)\s*\)\z~', $wert) === 1) {
+        return true;
+    }
     $teile = preg_split('~\s+(?![^(]*\))~', $wert) ?: [];
     foreach ($teile as $teil) {
         $teil = trim($teil);

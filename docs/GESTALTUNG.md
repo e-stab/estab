@@ -385,6 +385,19 @@ Tabelle ohne Zeilenlinien ist bei 4 px Polster nicht mehr zu lesen.
 | `--tinte-spalte` | `#ffffff` | Text in der dunklen Spalte |
 | `--tinte-spalte-neben` | `#c9d3de` | Abschnittsüberschrift, Nebenangabe, Rand beim Zeigen |
 | `--linie-spalte` | `#717f92` | Rand einer Kachel im Ruhezustand |
+| `--erledigt-spalte` | `#8ce8bd` | „besetzt", „aktiv" — Zustandstinte in der Spalte |
+| `--erledigt-spalte-flaeche` | `#163e35` | Fläche dazu |
+| `--fehler-spalte` | `#ffc2c2` | „unbesetzt", „Vorrang offen" |
+| `--fehler-spalte-flaeche` | `#5a1a1f` | Fläche dazu |
+| `--marke-standort-flaeche` | `#3d341d` | Fläche unter der Standortmarke |
+
+**Warum es diese fünf zusätzlich gibt:** Die hellen Zustandsfarben aus der
+Tabelle weiter unten sind für Meldungskästen auf der Tafel gerechnet. Das
+Cockpit zeigt Besetzung und Vorrang aber auf dunklem Grund, und dort trägt
+`#155c2d` nichts. Sie sind beim Umsetzen der Hülle aufgefallen und
+nachgetragen worden — geprüft: Zustandstinte mindestens **7.63** auf allen
+drei Kachelgründen, weiße Schrift auf den Flächen mindestens **11.83**, Gold
+auf seiner Fläche **7.39**.
 
 Geprüft: Weiß auf Spaltengrund **17.26**, auf Kachel **15.23**, auf
 Zeigekachel **11.66**. Nebentinte `#c9d3de` auf Spaltengrund **11.39**, auf
@@ -642,15 +655,29 @@ Spalten, zwei davon stehen still.
 | --- | --- | --- |
 | Menü | `clamp(13.5rem, 15vw, 15rem)` | `--grund-spalte` |
 | Inhalt | `minmax(0, 1fr)` | `--grund-seite` |
-| Cockpit | `clamp(12.5rem, 14vw, 14rem)` | `--grund-spalte` |
+| Cockpit | `clamp(15rem, 16vw, 16rem)` | `--grund-spalte` |
 
-Beide Spalten sind gegenüber dem Bestand um rund **3rem** schmaler. Das ist
-die einzige Stelle, an der L1 an eine harte Grenze stößt: Zwei Menükacheln
-nebeneinander müssen „Führungsstelle" tragen, ohne dass das Wort ohne
-Trennstrich bricht. Die Breiten oben sind gerechnet, nicht gemessen — **vor
-der Umsetzung ist der Wortbruch-Melder aus `tools/bedienpruefung/blick` über
-alle vier Bildschirmbreiten zu fahren.** Bricht ein Wort, gewinnt die Spalte,
-nicht die Ersparnis.
+**Diese Werte sind gemessen, nicht gerechnet.** Ein früherer Entwurf setzte
+beide Spalten auf rund 3rem schmaler an; der Wortbruch-Melder aus
+`tools/bedienpruefung/blick` hat das widerlegt, und die Regel dieser Spec —
+bricht ein Wort, gewinnt die Spalte — hat entschieden:
+
+- **Die Menüspalte trägt die Verkleinerung** von 15.5rem auf 13.5rem. Sie
+  gibt 182 Bildpunkte für die Kachelliste her. Zwei Kacheln nebeneinander
+  bräuchten 210, weil „Führungsstelle" allein 89 Bildpunkte Text ist. Die
+  Liste steht deshalb **einspaltig** — und das ist kein Verlust: Die Spalte
+  scrollt für sich, ihre Höhe steht in keinem Wettbewerb mit dem Inhalt, und
+  eine Kachel über die volle Breite ist der sicherere Griff. Gewonnen sind
+  2rem Breite für die Mitte.
+- **Die Cockpitspalte trägt sie nicht.** Bei 12.5rem fiel das
+  Anwesenheitsraster auf eine Spalte zusammen, die Bezeichnungen liefen über,
+  und „Führungsstelle" brach mitten durch. Sie bleibt deshalb bei 15rem.
+  Gegenüber dem Bestand ist das ein halbes rem — die Ersparnis liegt hier
+  nicht in der Breite, sondern im Polster.
+
+**Vor jeder Änderung an diesen Breiten ist der Wortbruch-Melder über alle
+vier Bildschirmbreiten zu fahren.** Eine gerechnete Spaltenbreite ist eine
+Vermutung; die Metrik von Arial ist keine, die sich abschätzen lässt.
 
 Höhe `100dvh`. **Jede Spalte scrollt für sich** (`overflow-y: auto;
 overscroll-behavior: contain`). Das ist keine Bequemlichkeit: Solange alles in
@@ -1973,6 +2000,17 @@ Durchlaufs, keine neue Werkzeugkette.
     --handlung-dunkel: #153f66;  /* Schrift und Verweis; min 9.13 */
     --handlung-sanft: #e2edfa;
     --handlung-kante: #2b6ea8;
+
+
+    /* Zustaende in den dunklen Spalten.
+       Beim Umsetzen der Huelle sichtbar geworden: Das Cockpit zeigt
+       Besetzung und Vorrang auf dunklem Grund, und die hellen
+       Zustandsfarben oben tragen dort nicht. */
+    --erledigt-spalte: #8ce8bd;          /* min 7.99 auf den drei Kachelgruenden */
+    --erledigt-spalte-flaeche: #163e35;  /* weiss darauf 11.83 */
+    --fehler-spalte: #ffc2c2;            /* min 7.63 */
+    --fehler-spalte-flaeche: #5a1a1f;    /* weiss darauf 13.11 */
+    --marke-standort-flaeche: #3d341d;   /* Gold darauf 7.39 */
 
     /* Standort und Fokus */
     --marke-standort: #f0c34a;

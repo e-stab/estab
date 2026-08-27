@@ -1643,8 +1643,12 @@ $assert(
             $stylesheet,
             '.estab-sidebar-queue.has-work strong'
         )
-        && str_contains($stylesheet, 'border-color: #e5b247')
-        && str_contains($stylesheet, 'color: #ffd36b'),
+        // Stand als Literalpaar #e5b247/#ffd36b hier. Beides ist jetzt die
+        // Standortmarke, und die ist gegen jeden Grund der dunklen Spalte
+        // gerechnet -- geprueft wird deshalb, dass die Warnung die Marke
+        // traegt, nicht dass sie einen bestimmten Farbwert abschreibt.
+        && str_contains($stylesheet, 'border-color: var(--marke-standort)')
+        && str_contains($stylesheet, 'color: var(--marke-standort)'),
     'non-empty queue has no persistent high-contrast warning style'
 );
 $assert(

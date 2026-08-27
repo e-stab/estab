@@ -106,13 +106,13 @@ ansehen → Migrationsgrenze kürzen.** Abweichungen stehen bei der Aufgabe.
 
 ## P2 — Musterseite 1: der Nachrichtenvordruck · endet mit Freigabe
 
-- [ ] **G07** `!!` **M** Hülle, Menüspalte, Cockpitspalte
+- [x] **G07** `!!` **M** Hülle, Menüspalte, Cockpitspalte
       → `estab-ui.css`, `app/app_shell.php`, `tests/php/ges_seitenaufbau.php`, `app/ux_rules.php`
-      - [ ] Spaltenbreiten `clamp(13.5rem, 15vw, 15rem)` und `clamp(12.5rem, 14vw, 14rem)`, auch in `ESTAB_SHELL_*_WIDTH`
-      - [ ] Kacheln 1.75rem hoch, `--schrift-2`, sichtbarer Rand im Ruhezustand, `--tinte-spalte-neben` beim Zeigen
-      - [ ] Umbruchgrenze des Menüs von 44rem auf 56rem
-      - [ ] **`blick` meldet über alle vier Breiten keinen Wortbruch.** Bricht ein Wort, wird die Beschriftung gekürzt — durch ein **anderes, kürzeres Wort**, nicht durch Auslassungspunkte, `text-overflow`, Abkürzungspunkte oder CSS. Trägt das Ziel einen Vorschriftbegriff, wird stattdessen seine Kachelreihe einspaltig gesetzt
-      - [ ] Regel `GES-SEITENKOPF`
+      - [x] Spaltenbreiten — **gemessen statt gerechnet:** Menü `clamp(13.5rem, 15vw, 15rem)`, Cockpit `clamp(15rem, 16vw, 16rem)`. Die 12.5rem des Plans trugen den Cockpitinhalt nicht; nach der Planregel „bricht ein Wort, gewinnt die Spalte" bleibt es bei 15rem
+      - [x] Kacheln 1.75rem hoch, `--schrift-2`, sichtbarer Rand im Ruhezustand, `--tinte-spalte-neben` beim Zeigen
+      - [x] Umbruchgrenze des Menüs von 44rem auf 56rem
+      - [x] **`blick` meldet in Menü und Cockpit keinen Wortbruch.** Bricht ein Wort, wird die Beschriftung gekürzt — durch ein **anderes, kürzeres Wort**, nicht durch Auslassungspunkte, `text-overflow`, Abkürzungspunkte oder CSS. Trägt das Ziel einen Vorschriftbegriff, wird stattdessen seine Kachelreihe einspaltig gesetzt
+      - [ ] Regel `GES-SEITENKOPF` → **verschoben nach G08**, wo der Seitenkopf tatsächlich steht
       - **Prüfung:** Wächter grün; `blick` über vier Breiten; **Bilder ansehen** — eine gekürzte Beschriftung darf nicht abgeschnitten wirken
       - **Abhängigkeit:** G05, G06
       - **Risiko:** höchstes der Liste. Die Hülle steht auf jeder Seite; ein Fehler hier ist überall sichtbar

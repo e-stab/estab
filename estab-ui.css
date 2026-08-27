@@ -57,6 +57,17 @@
     --handlung-sanft: #e2edfa;
     --handlung-kante: #2b6ea8;
 
+
+    /* Zustaende in den dunklen Spalten.
+       Beim Umsetzen der Huelle sichtbar geworden: Das Cockpit zeigt
+       Besetzung und Vorrang auf dunklem Grund, und die hellen
+       Zustandsfarben oben tragen dort nicht. */
+    --erledigt-spalte: #8ce8bd;          /* min 7.99 auf den drei Kachelgruenden */
+    --erledigt-spalte-flaeche: #163e35;  /* weiss darauf 11.83 */
+    --fehler-spalte: #ffc2c2;            /* min 7.63 */
+    --fehler-spalte-flaeche: #5a1a1f;    /* weiss darauf 13.11 */
+    --marke-standort-flaeche: #3d341d;   /* Gold darauf 7.39 */
+
     /* Standort und Fokus */
     --marke-standort: #f0c34a;
     --fokus-aussen: #f0c34a;
@@ -134,7 +145,7 @@
 .estab-auth-shell,
 .estab-session-bar {
     box-sizing: border-box;
-    color: #172033;
+    color: var(--tinte);
     font-family: Arial, Helvetica, sans-serif;
 }
 
@@ -280,10 +291,10 @@
 }
 
 .estab-session-bar {
-    background: #172f4d;
-    border-bottom: 3px solid #e5b247;
-    box-shadow: 0 3px 10px rgba(23, 32, 51, 0.24);
-    color: #ffffff;
+    background: var(--grund-kachel-zeigen);
+    border-bottom: 3px solid var(--marke-standort);
+    box-shadow: var(--schatten-tafel);
+    color: var(--tinte-spalte);
     display: block;
     margin: 0;
     overflow-x: hidden;
@@ -297,19 +308,19 @@
 .estab-session-topline {
     align-items: center;
     display: flex;
-    gap: 1rem;
+    gap: var(--abstand-6);
     justify-content: space-between;
     min-height: 3.25rem;
-    padding: 0.55rem 1rem;
+    padding: var(--abstand-4) var(--abstand-6);
 }
 
 .estab-session-brand {
     align-items: center;
-    color: #ffffff;
+    color: var(--tinte-spalte);
     display: inline-flex;
     flex: 0 0 auto;
-    font-size: 1.25rem;
-    font-weight: 800;
+    font-size: var(--schrift-6);
+    font-weight: var(--stark-voll);
     letter-spacing: 0.02em;
     min-height: 2.75rem;
     text-decoration: none;
@@ -326,27 +337,27 @@
     display: flex;
     flex: 1 1 auto;
     flex-wrap: wrap;
-    gap: 0.35rem 0.7rem;
+    gap: var(--abstand-3) var(--abstand-5);
     line-height: 1.35;
 }
 
 .estab-session-prefix {
-    color: #dbe8f5;
+    color: var(--tinte-spalte);
 }
 
 .estab-session-detail {
-    border-left: 1px solid #8da2bd;
-    padding-left: 0.7rem;
+    border-left: 1px solid var(--linie-kraeftig);
+    padding-left: var(--abstand-5);
 }
 
 .estab-session-admin-context {
-    border-left: 1px solid #8da2bd;
-    color: #dbe8f5;
-    padding-left: 0.7rem;
+    border-left: 1px solid var(--linie-kraeftig);
+    color: var(--tinte-spalte);
+    padding-left: var(--abstand-5);
 }
 
 .estab-session-admin-note {
-    color: #b9cbe0;
+    color: var(--tinte-spalte-neben);
 }
 
 .estab-session-logout {
@@ -358,43 +369,43 @@
     align-items: center;
     display: flex;
     flex: 0 0 auto;
-    gap: 0.6rem;
+    gap: var(--abstand-4);
 }
 
 .estab-session-bar .estab-button-login {
     background: transparent;
-    border-color: #dbe8f5;
-    color: #ffffff;
+    border-color: var(--linie);
+    color: var(--tinte-spalte);
 }
 
 .estab-session-bar .estab-button-login:hover,
 .estab-session-bar .estab-button-login:focus {
-    background: #294b70;
-    border-color: #ffffff;
+    background: var(--grund-kachel-zeigen);
+    border-color: var(--tinte-spalte);
 }
 
 .estab-session-bar .estab-button-logout {
-    background: #ffffff;
-    border-color: #ffffff;
-    color: #7a1b18;
+    background: var(--grund-tafel);
+    border-color: var(--tinte-spalte);
+    color: var(--fehler-tinte);
     min-width: 7.5rem;
 }
 
 .estab-session-bar .estab-button-logout:hover,
 .estab-session-bar .estab-button-logout:focus {
-    background: #fff1f0;
-    border-color: #ffffff;
+    background: var(--fehler-flaeche);
+    border-color: var(--tinte-spalte);
 }
 
 .estab-session-anonymous {
-    color: #dbe8f5;
+    color: var(--tinte-spalte);
     flex: 1 1 auto;
 }
 
 .estab-navigation {
-    background: #102641;
-    border-top: 1px solid #45627f;
-    color: #ffffff;
+    background: var(--grund-kachel);
+    border-top: 1px solid var(--linie-spalte);
+    color: var(--tinte-spalte);
     max-width: 100%;
     overflow-x: hidden;
 }
@@ -403,13 +414,13 @@
     align-items: stretch;
     box-sizing: border-box;
     display: flex;
-    gap: 0.4rem;
+    gap: var(--abstand-3);
     justify-content: flex-start;
     margin: 0 auto;
     max-width: 100rem;
     overflow-x: auto;
     overscroll-behavior-inline: contain;
-    padding: 0 0.65rem;
+    padding: 0 var(--abstand-5);
     scrollbar-width: thin;
     width: 100%;
 }
@@ -418,7 +429,7 @@
     align-items: stretch;
     display: flex;
     flex-wrap: nowrap;
-    gap: 0.15rem;
+    gap: var(--abstand-1);
     list-style: none;
     margin: 0;
     padding: 0;
@@ -432,33 +443,33 @@
 .estab-navigation-link {
     align-items: center;
     border-bottom: 3px solid transparent;
-    color: #ffffff;
+    color: var(--tinte-spalte);
     display: flex;
-    font-size: 0.84rem;
-    font-weight: 700;
+    font-size: var(--schrift-2);
+    font-weight: var(--stark-voll);
     min-height: 2.8rem;
-    padding: 0.35rem 0.55rem;
+    padding: var(--abstand-3) var(--abstand-4);
     text-decoration: none;
     white-space: nowrap;
 }
 
 .estab-navigation-link:hover,
 .estab-navigation-link:focus {
-    background: #294b70;
+    background: var(--grund-kachel-zeigen);
 }
 
 .estab-navigation-link[aria-current="page"] {
-    background: #294b70;
-    border-bottom-color: #e5b247;
+    background: var(--grund-kachel-zeigen);
+    border-bottom-color: var(--marke-standort);
 }
 
 .estab-navigation-item[data-estab-navigation-locked] .estab-navigation-link {
-    color: #d2dce8;
+    color: var(--tinte-spalte);
 }
 
 .estab-navigation-item[data-estab-navigation-locked] .estab-navigation-label::after {
     content: "  🔒";
-    font-size: 0.7rem;
+    font-size: var(--schrift-1);
 }
 
 /* Hier stand die Darstellung gesperrter Menueeintraege: gedaempft, nicht
@@ -479,11 +490,11 @@
 
 .estab-navigation-services {
     align-items: center;
-    border-left: 1px solid #45627f;
+    border-left: 1px solid var(--linie-spalte);
     display: flex;
     flex: 0 0 auto;
     margin-left: auto;
-    padding-left: 0.4rem;
+    padding-left: var(--abstand-3);
 }
 
 .estab-navigation-services-label,
@@ -501,7 +512,7 @@
 .estab-session-bar-compact {
     border-bottom-width: 2px;
     display: block;
-    font-size: 0.82rem;
+    font-size: var(--schrift-2);
     padding: 0;
     position: static;
     text-align: left;
@@ -510,15 +521,15 @@
 .estab-session-bar-compact .estab-session-topline {
     align-items: stretch;
     display: grid;
-    gap: 0.45rem;
+    gap: var(--abstand-4);
     min-height: 0;
-    padding: 0.65rem;
+    padding: var(--abstand-5);
 }
 
 .estab-session-bar-compact .estab-session-identity {
     align-items: stretch;
     display: grid;
-    gap: 0.2rem;
+    gap: var(--abstand-2);
 }
 
 .estab-session-bar-compact .estab-session-prefix,
@@ -538,34 +549,34 @@
 .estab-session-bar-compact .estab-session-actions {
     align-items: stretch;
     display: grid;
-    gap: 0.45rem;
+    gap: var(--abstand-4);
     grid-template-columns: 1fr;
-    margin-top: 0.15rem;
+    margin-top: var(--abstand-1);
 }
 
 .estab-session-bar-compact .estab-button-login,
 .estab-session-bar-compact .estab-button-logout {
-    font-size: 0.88rem;
+    font-size: var(--schrift-3);
     min-width: 0;
-    padding: 0.5rem;
+    padding: var(--abstand-4);
     width: 100%;
 }
 
 .estab-session-bar-compact .estab-navigation {
-    border-top-color: #6b8199;
+    border-top-color: var(--linie-spalte);
 }
 
 .estab-navigation-disclosure > summary {
     cursor: pointer;
-    font-size: 0.92rem;
-    font-weight: 700;
+    font-size: var(--schrift-3);
+    font-weight: var(--stark-voll);
     min-height: 2.75rem;
-    padding: 0.75rem;
+    padding: var(--abstand-5);
 }
 
 .estab-navigation-disclosure > summary:hover,
 .estab-navigation-disclosure > summary:focus {
-    background: #294b70;
+    background: var(--grund-kachel-zeigen);
 }
 
 .estab-navigation-compact .estab-navigation-content,
@@ -579,7 +590,7 @@
 
 .estab-navigation-compact .estab-navigation-services {
     border-left: 0;
-    border-top: 1px solid #45627f;
+    border-top: 1px solid var(--linie-spalte);
 }
 
 .estab-navigation-compact .estab-navigation-item {
@@ -591,12 +602,12 @@
     border-left: 4px solid transparent;
     justify-content: flex-start;
     min-height: 2.75rem;
-    padding: 0.55rem 0.7rem;
+    padding: var(--abstand-4) var(--abstand-5);
 }
 
 .estab-navigation-compact .estab-navigation-link[aria-current="page"] {
     border-bottom: 0;
-    border-left-color: #e5b247;
+    border-left-color: var(--marke-standort);
 }
 
 .estab-navigation-frame {
@@ -631,7 +642,7 @@
  * nicht klebt, ueberlagert auch nichts.
  * ------------------------------------------------------------------ */
 .estab-shell-body {
-    background: #0b1d31;
+    background: var(--grund-spalte);
     /* Dieselbe Schrift wie ueberall sonst. Ohne diese Zeile faellt die
        Huelle auf die Vorgabe des Browsers zurueck, und das Menue saehe
        anders aus als der Vordruck daneben. */
@@ -644,9 +655,9 @@
 .estab-shell {
     display: grid;
     grid-template-columns:
-        clamp(15.5rem, 18vw, 18rem)
+        clamp(13.5rem, 15vw, 15rem)
         minmax(0, 1fr)
-        clamp(15rem, 19vw, 20rem);
+        clamp(15rem, 16vw, 16rem);
     height: 100dvh;
     min-height: 0;
     min-width: 0;
@@ -692,30 +703,30 @@
 }
 
 .estab-shell-menu {
-    background: #0b1d31;
-    border-right: 2px solid #45627f;
+    background: var(--grund-spalte);
+    border-right: 2px solid var(--linie-spalte);
     box-sizing: border-box;
     display: flex;
     flex-direction: column;
-    gap: 0.5rem;
-    padding: 0.6rem 0.5rem;
+    gap: var(--abstand-4);
+    padding: var(--abstand-4) var(--abstand-4);
 }
 
 /* Die Arbeitsschritte fuellen, was das Menue uebrig laesst, und scrollen
    fuer sich. Bleibt kein Platz, scrollt der Rahmen -- nicht die Spalte, und
    die Ziele darueber bleiben stehen. */
 .estab-shell-context {
-    border-top: 1px solid #45627f;
-    margin-top: 0.15rem;
-    padding-top: 0.1rem;
+    border-top: 1px solid var(--linie-spalte);
+    margin-top: var(--abstand-1);
+    padding-top: var(--abstand-1);
 }
 
 .estab-shell-context-list {
     display: grid;
-    gap: 0.25rem;
+    gap: var(--abstand-2);
     list-style: none;
     margin: 0;
-    padding: 0 0.5rem 0.4rem;
+    padding: 0 var(--abstand-4) var(--abstand-3);
 }
 
 .estab-shell-context-item {
@@ -725,32 +736,32 @@
 
 .estab-shell-context-link {
     align-items: center;
-    background: #183654;
-    border: 1px solid #45627f;
+    background: var(--grund-kachel);
+    border: 1px solid var(--linie-spalte);
     border-left: 4px solid transparent;
-    border-radius: 5px;
+    border-radius: var(--radius-2);
     box-sizing: border-box;
-    color: #ffffff;
+    color: var(--tinte-spalte);
     display: flex;
-    font-size: 0.72rem;
-    font-weight: 700;
+    font-size: var(--schrift-1);
+    font-weight: var(--stark-voll);
     hyphens: auto;
     line-height: 1.15;
     min-height: 1.9rem;
     min-width: 0;
     overflow-wrap: anywhere;
-    padding: 0.3rem 0.4rem;
+    padding: var(--abstand-2) var(--abstand-3);
     text-decoration: none;
 }
 
 .estab-shell-context-link:hover,
 .estab-shell-context-link:focus-visible {
-    background: #294b70;
+    background: var(--grund-kachel-zeigen);
 }
 
 .estab-shell-context-link[aria-current="page"] {
-    background: #294b70;
-    border-left-color: #e5b247;
+    background: var(--grund-kachel-zeigen);
+    border-left-color: var(--marke-standort);
 }
 
 .estab-shell-actions {
@@ -769,15 +780,15 @@
 
 .estab-shell-actions-inner {
     box-sizing: border-box;
-    padding: 0 0.5rem 0.5rem;
+    padding: 0 var(--abstand-4) var(--abstand-4);
 }
 
 .estab-shell-brand {
-    color: #ffffff;
-    font-size: 1.05rem;
-    font-weight: 700;
+    color: var(--tinte-spalte);
+    font-size: var(--schrift-4);
+    font-weight: var(--stark-voll);
     letter-spacing: 0.04em;
-    padding: 0.2rem 0.35rem 0.4rem;
+    padding: var(--abstand-2) var(--abstand-3) var(--abstand-3);
     text-decoration: none;
 }
 
@@ -787,7 +798,7 @@
 }
 
 .estab-shell-content {
-    background: #eef2f6;
+    background: var(--handlung-sanft);
     box-sizing: border-box;
 }
 
@@ -806,9 +817,9 @@
 }
 
 .estab-shell-cockpit {
-    background: #0b1d31;
+    background: var(--grund-spalte);
     border: 0;
-    border-left: 2px solid #45627f;
+    border-left: 2px solid var(--linie-spalte);
     display: block;
     height: 100%;
     width: 100%;
@@ -823,12 +834,12 @@
 .estab-shell-menu .estab-navigation-link,
 .estab-shell-menu .estab-shell-brand,
 .estab-shell-menu .estab-shell-context-link {
-    color: #ffffff;
+    color: var(--tinte-spalte);
 }
 
 .estab-shell-menu .estab-navigation-services-label,
 .estab-shell-menu .estab-navigation-sidebar-heading h2 {
-    color: #c5d6e8;
+    color: var(--tinte-spalte-neben);
 }
 
 /* Die Navigation steht in der Menuespalte und braucht dort weder eigenen
@@ -881,8 +892,8 @@
    eigenen Dokument und teilen sich deshalb den dunklen Grund der Huelle. */
 .estab-cockpit-page,
 .estab-bos-list-page {
-    background: #0b1d31;
-    color: #ffffff;
+    background: var(--grund-spalte);
+    color: var(--tinte-spalte);
     font-family: Arial, Helvetica, sans-serif;
     min-height: 100%;
 }
@@ -908,55 +919,55 @@
 .estab-sidebar-account-function,
 .estab-sidebar-duty-hat,
 .estab-sidebar-workflow {
-    background: #172f4d;
-    border: 1px solid #45627f;
-    border-radius: 8px;
-    box-shadow: 0 3px 10px rgba(5, 14, 26, 0.3);
+    background: var(--grund-kachel-zeigen);
+    border: 1px solid var(--linie-spalte);
+    border-radius: var(--radius-3);
+    box-shadow: var(--schatten-tafel);
     box-sizing: border-box;
-    color: #ffffff;
+    color: var(--tinte-spalte);
     min-width: 0;
 }
 
 .estab-sidebar-status {
-    padding: 0.75rem;
+    padding: var(--abstand-5);
 }
 
 .estab-sidebar-account-function,
 .estab-sidebar-duty-hat {
-    border-left: 4px solid #e5b247;
+    border-left: 4px solid var(--marke-standort);
     display: grid;
-    gap: 0.2rem;
-    padding: 0.7rem 0.75rem;
+    gap: var(--abstand-2);
+    padding: var(--abstand-5) var(--abstand-5);
 }
 
 .estab-sidebar-account-function span,
 .estab-sidebar-duty-hat span {
-    color: #c5d6e8;
-    font-size: 0.75rem;
-    font-weight: 700;
+    color: var(--tinte-spalte-neben);
+    font-size: var(--schrift-1);
+    font-weight: var(--stark-voll);
     text-transform: uppercase;
 }
 
 .estab-sidebar-account-function a,
 .estab-sidebar-duty-hat a {
-    color: #f3cf77;
-    font-size: 0.78rem;
-    font-weight: 700;
+    color: var(--marke-standort);
+    font-size: var(--schrift-1);
+    font-weight: var(--stark-voll);
 }
 
 .estab-sidebar-status-notification {
     animation: estab-sidebar-notification 0.8s ease-out 2;
-    border-color: #f2c966;
+    border-color: var(--marke-standort);
     box-shadow:
-        0 0 0 3px rgba(242, 201, 102, 0.32),
-        0 3px 10px rgba(5, 14, 26, 0.3);
+        0 0 0 3px var(--marke-standort),
+        var(--schatten-tafel);
 }
 
 .estab-sidebar-status-stale {
-    border-color: #f0a4a4;
+    border-color: var(--fehler-spalte);
     box-shadow:
-        0 0 0 3px rgba(222, 75, 75, 0.24),
-        0 3px 10px rgba(5, 14, 26, 0.3);
+        0 0 0 3px var(--fehler-spalte),
+        var(--schatten-tafel);
 }
 
 @keyframes estab-sidebar-notification {
@@ -973,47 +984,47 @@
 .estab-sidebar-status-top {
     align-items: start;
     display: grid;
-    gap: 0.5rem;
+    gap: var(--abstand-4);
     grid-template-columns: minmax(0, 1fr) auto auto;
 }
 
 .estab-sidebar-queue {
     border: 1px solid transparent;
-    border-radius: 5px;
+    border-radius: var(--radius-2);
     display: grid;
-    gap: 0.1rem;
-    margin: -0.35rem;
-    padding: 0.35rem;
+    gap: var(--abstand-1);
+    margin: calc(-1 * var(--abstand-3));
+    padding: var(--abstand-3);
 }
 
 .estab-sidebar-queue.has-work {
-    background: #4b3d18;
-    border-color: #e5b247;
+    background: var(--marke-standort-flaeche);
+    border-color: var(--marke-standort);
 }
 
 .estab-sidebar-queue.has-work .estab-sidebar-eyebrow {
-    color: #ffe29b;
+    color: var(--marke-standort);
 }
 
 .estab-sidebar-queue.has-work strong {
-    color: #ffd36b;
+    color: var(--marke-standort);
 }
 
 .estab-sidebar-eyebrow {
-    color: #c5d6e8;
-    font-size: 0.74rem;
-    font-weight: 700;
+    color: var(--tinte-spalte-neben);
+    font-size: var(--schrift-1);
+    font-weight: var(--stark-voll);
     letter-spacing: 0.04em;
     text-transform: uppercase;
 }
 
 .estab-sidebar-queue strong {
-    font-size: 2rem;
+    font-size: var(--schrift-7);
     line-height: 1;
 }
 
 .estab-sidebar-queue.unavailable strong {
-    color: #b9cbe0;
+    color: var(--tinte-spalte-neben);
 }
 
 /* Jede weitere getragene Funktion kostet eine Zeile von rund 26 px statt
@@ -1021,86 +1032,86 @@
    Eintraege nebeneinander, solange die Spalte breit genug ist. */
 .estab-sidebar-queue-strip {
     display: grid;
-    gap: 0.25rem;
+    gap: var(--abstand-2);
     grid-template-columns: repeat(auto-fit, minmax(4.5rem, 1fr));
     list-style: none;
-    margin: 0.4rem 0 0;
+    margin: var(--abstand-3) 0 0;
     padding: 0;
 }
 
 .estab-sidebar-queue-item {
     align-items: baseline;
-    background: #263f5d;
-    border: 1px solid #5d7692;
-    border-radius: 5px;
+    background: var(--grund-kachel-zeigen);
+    border: 1px solid var(--linie-spalte);
+    border-radius: var(--radius-2);
     box-sizing: border-box;
     display: flex;
-    gap: 0.3rem;
+    gap: var(--abstand-2);
     justify-content: space-between;
     min-width: 0;
-    padding: 0.15rem 0.35rem;
+    padding: var(--abstand-1) var(--abstand-3);
 }
 
 .estab-sidebar-queue-item span {
-    color: #c5d6e8;
-    font-size: 0.72rem;
-    font-weight: 700;
+    color: var(--tinte-spalte-neben);
+    font-size: var(--schrift-1);
+    font-weight: var(--stark-voll);
     min-width: 0;
     overflow-wrap: anywhere;
     text-transform: uppercase;
 }
 
 .estab-sidebar-queue-item strong {
-    font-size: 0.95rem;
+    font-size: var(--schrift-4);
     line-height: 1.2;
 }
 
 .estab-sidebar-queue-item.has-work {
-    background: #4b3d18;
-    border-color: #e5b247;
+    background: var(--marke-standort-flaeche);
+    border-color: var(--marke-standort);
 }
 
 .estab-sidebar-queue-item.has-work span {
-    color: #ffe29b;
+    color: var(--marke-standort);
 }
 
 .estab-sidebar-queue-item.has-work strong {
-    color: #ffd36b;
+    color: var(--marke-standort);
 }
 
 .estab-sidebar-queue-item.unavailable strong {
-    color: #b9cbe0;
+    color: var(--tinte-spalte-neben);
 }
 
 .estab-sidebar-time {
     align-items: end;
     display: grid;
-    gap: 0.1rem;
+    gap: var(--abstand-1);
     text-align: right;
 }
 
 .estab-sidebar-time strong {
-    font-size: 1.4rem;
+    font-size: var(--schrift-7);
     line-height: 1;
 }
 
 .estab-sidebar-time span {
-    color: #c5d6e8;
-    font-size: 0.76rem;
+    color: var(--tinte-spalte-neben);
+    font-size: var(--schrift-1);
 }
 
 .estab-sidebar-freshness {
     align-items: center;
-    color: #c5d6e8;
+    color: var(--tinte-spalte-neben);
     display: flex;
-    font-size: 0.72rem;
-    gap: 0.35rem;
-    margin-top: 0.55rem;
+    font-size: var(--schrift-1);
+    gap: var(--abstand-3);
+    margin-top: var(--abstand-4);
 }
 
 .estab-sidebar-freshness i {
-    background: #67d5aa;
-    border-radius: 50%;
+    background: var(--erledigt-spalte);
+    border-radius: var(--radius-pille);
     display: inline-block;
     flex: 0 0 auto;
     height: 0.5rem;
@@ -1108,27 +1119,27 @@
 }
 
 .estab-sidebar-freshness[data-estab-status-freshness="stale"] {
-    color: #ffe0e0;
-    font-weight: 700;
+    color: var(--tinte-spalte);
+    font-weight: var(--stark-voll);
 }
 
 .estab-sidebar-freshness[data-estab-status-freshness="partial"] {
-    color: #ffe29b;
-    font-weight: 700;
+    color: var(--marke-standort);
+    font-weight: var(--stark-voll);
 }
 
 .estab-sidebar-freshness[data-estab-status-freshness="unavailable"] {
-    color: #ffe0e0;
-    font-weight: 700;
+    color: var(--tinte-spalte);
+    font-weight: var(--stark-voll);
 }
 
 .estab-sidebar-freshness[data-estab-status-freshness="stale"] i,
 .estab-sidebar-freshness[data-estab-status-freshness="unavailable"] i {
-    background: #ff8e8e;
+    background: var(--fehler-spalte);
 }
 
 .estab-sidebar-freshness[data-estab-status-freshness="partial"] i {
-    background: #f2c966;
+    background: var(--marke-standort);
 }
 
 /* Der Rahmen um das Aktivitaetsraster. Er hiess frueher wie eine einzelne
@@ -1141,12 +1152,12 @@
 
 .estab-sidebar-presence-heading {
     align-items: baseline;
-    border-top: 1px solid #45627f;
+    border-top: 1px solid var(--linie-spalte);
     display: flex;
-    gap: 0.4rem;
+    gap: var(--abstand-3);
     justify-content: space-between;
-    margin-top: 0.7rem;
-    padding-top: 0.65rem;
+    margin-top: var(--abstand-5);
+    padding-top: var(--abstand-5);
 }
 
 /* Anmeldung und Abmelden stehen in einer Zeile unter Warteschlange und Uhr.
@@ -1154,11 +1165,11 @@
    ein Kasten kostete, fehlte weiter unten beim Aktivitaetsraster. */
 .estab-sidebar-identity-row {
     align-items: center;
-    border-top: 1px solid #2c4a68;
+    border-top: 1px solid var(--handlung-dunkel);
     display: flex;
-    gap: 0.4rem;
-    margin-top: 0.4rem;
-    padding-top: 0.4rem;
+    gap: var(--abstand-3);
+    margin-top: var(--abstand-3);
+    padding-top: var(--abstand-3);
 }
 
 .estab-sidebar-identity-row .estab-session-bar {
@@ -1180,7 +1191,7 @@
     align-items: center;
     box-sizing: border-box;
     display: flex;
-    gap: 0.4rem;
+    gap: var(--abstand-3);
     justify-content: space-between;
     min-width: 0;
     padding: 0;
@@ -1198,17 +1209,17 @@
    Name da steht. Sie wird nur klein: die Angabe ordnet ein, sie meldet
    nichts. */
 .estab-sidebar-identity-row .estab-session-bar .estab-session-prefix {
-    font-size: 0.62rem;
+    font-size: var(--schrift-1);
     letter-spacing: 0.05em;
     text-transform: uppercase;
 }
 
 .estab-sidebar-identity-row .estab-session-bar [data-estab-user-name] {
-    font-size: 0.92rem;
+    font-size: var(--schrift-3);
 }
 
 .estab-sidebar-identity-row .estab-session-bar .estab-session-detail {
-    font-size: 0.68rem;
+    font-size: var(--schrift-1);
 }
 
 .estab-sidebar-identity-row .estab-session-bar .estab-session-actions {
@@ -1226,7 +1237,7 @@
     justify-content: center;
     min-height: 1.9rem;
     min-width: 1.9rem;
-    padding: 0.2rem;
+    padding: var(--abstand-2);
     width: auto;
 }
 
@@ -1239,16 +1250,16 @@
 .estab-sidebar-sound-toggle {
     align-items: center;
     align-self: start;
-    background: #16283c;
-    border: 1px solid #45627f;
-    border-radius: 6px;
-    color: #e6edf5;
+    background: var(--grund-kachel);
+    border: 1px solid var(--linie-spalte);
+    border-radius: var(--radius-3);
+    color: var(--tinte-spalte);
     cursor: pointer;
     display: inline-flex;
     justify-content: center;
     min-height: 1.8rem;
     min-width: 1.8rem;
-    padding: 0.2rem;
+    padding: var(--abstand-2);
 }
 
 .estab-sidebar-sound-toggle .estab-sidebar-sound-bell {
@@ -1258,7 +1269,7 @@
 
 .estab-sidebar-sound-toggle:hover,
 .estab-sidebar-sound-toggle:focus-visible {
-    background: #1f3a5a;
+    background: var(--grund-kachel-zeigen);
 }
 
 .estab-sidebar-sound-bell {
@@ -1272,50 +1283,53 @@
 }
 
 .estab-sidebar-sound-toggle[aria-pressed="true"] {
-    background: #1d4b2f;
-    border-color: #67d5aa;
-    color: #8ce8bd;
+    background: var(--erledigt-spalte-flaeche);
+    border-color: var(--erledigt-spalte);
+    color: var(--erledigt-spalte);
 }
 
 
 .estab-sidebar-presence-heading h2 {
-    font-size: 0.86rem;
+    font-size: var(--schrift-3);
     margin: 0;
 }
 
 .estab-sidebar-presence-heading > span {
-    color: #c5d6e8;
-    font-size: 0.7rem;
+    color: var(--tinte-spalte-neben);
+    font-size: var(--schrift-1);
     white-space: nowrap;
 }
 
 .estab-sidebar-presence-grid {
     display: grid;
-    gap: 0.3rem;
-    grid-template-columns: repeat(auto-fill, minmax(5.6rem, 1fr));
+    gap: var(--abstand-2);
+    /* Gemessen in der 12.5rem breiten Spalte: 171 Bildpunkte fuer das
+       Raster. Zwei Spalten zu 5.6rem brauchten 184 und fielen deshalb auf
+       eine zusammen -- was Hoehe kostet statt sie zu sparen. */
+    grid-template-columns: repeat(auto-fill, minmax(5rem, 1fr));
     list-style: none;
-    margin: 0.55rem 0 0;
+    margin: var(--abstand-4) 0 0;
     padding: 0;
 }
 
 .estab-sidebar-presence {
     align-items: center;
-    background: #263f5d;
-    border: 1px solid #5d7692;
-    border-radius: 5px;
+    background: var(--grund-kachel-zeigen);
+    border: 1px solid var(--linie-spalte);
+    border-radius: var(--radius-2);
     box-sizing: border-box;
     display: flex;
-    font-size: 0.75rem;
-    font-weight: 700;
-    gap: 0.25rem;
+    font-size: var(--schrift-1);
+    font-weight: var(--stark-voll);
+    gap: var(--abstand-2);
     justify-content: center;
     min-height: 2rem;
     min-width: 0;
-    padding: 0.25rem;
+    padding: var(--abstand-2);
 }
 
 .estab-sidebar-presence-label {
-    font-size: 0.7rem;
+    font-size: var(--schrift-1);
     hyphens: auto;
     min-width: 0;
     overflow-wrap: break-word;
@@ -1330,17 +1344,17 @@
 }
 
 .estab-sidebar-presence-note {
-    color: #f3ead5;
+    color: var(--tinte-spalte);
     flex: 0 0 100%;
-    font-size: 0.58rem;
-    font-weight: 600;
+    font-size: var(--schrift-1);
+    font-weight: var(--stark-halb);
     text-align: center;
 }
 
 .estab-sidebar-presence-dot,
 .estab-sidebar-presence-legend i {
-    background: #8da2bd;
-    border-radius: 50%;
+    background: var(--tinte-spalte-neben);
+    border-radius: var(--radius-pille);
     display: inline-block;
     flex: 0 0 auto;
     height: 0.48rem;
@@ -1348,115 +1362,115 @@
 }
 
 .estab-sidebar-presence-online {
-    background: #163e35;
-    border-color: #49b68d;
+    background: var(--erledigt-spalte-flaeche);
+    border-color: var(--erledigt-spalte);
 }
 
 .estab-sidebar-presence-online .estab-sidebar-presence-dot,
 .estab-sidebar-presence-legend i.online {
-    background: #67d5aa;
+    background: var(--erledigt-spalte);
 }
 
 .estab-sidebar-presence-current {
-    background: #4b3d18;
-    border-color: #e5b247;
+    background: var(--marke-standort-flaeche);
+    border-color: var(--marke-standort);
 }
 
 .estab-sidebar-presence-current .estab-sidebar-presence-dot,
 .estab-sidebar-presence-legend i.current {
-    background: #f2c966;
+    background: var(--marke-standort);
 }
 
 .estab-sidebar-presence-inactive {
-    background: #413821;
-    border-color: #b99a55;
-    color: #f1e4c4;
+    background: var(--marke-standort-flaeche);
+    border-color: var(--marke-standort);
+    color: var(--tinte-spalte);
 }
 
 .estab-sidebar-presence-inactive .estab-sidebar-presence-dot,
 .estab-sidebar-presence-legend i.inactive {
-    background: #d7b96f;
+    background: var(--marke-standort);
 }
 
 .estab-sidebar-presence-mixed {
-    background: linear-gradient(135deg, #163e35 0 50%, #413821 50%);
-    border-color: #b9aa68;
+    background: linear-gradient(135deg, var(--erledigt-spalte-flaeche) 0 50%, var(--marke-standort-flaeche) 50%);
+    border-color: var(--marke-standort);
 }
 
 .estab-sidebar-presence-current-inactive {
-    background: #413821;
-    border-color: #e5b247;
-    box-shadow: inset 0 0 0 1px #e5b247;
+    background: var(--marke-standort-flaeche);
+    border-color: var(--marke-standort);
+    box-shadow: inset 0 0 0 1px var(--marke-standort);
 }
 
 .estab-sidebar-presence-current-inactive .estab-sidebar-presence-dot {
-    background: #d7b96f;
+    background: var(--marke-standort);
 }
 
 .estab-sidebar-presence-offline {
-    color: #d2dce8;
+    color: var(--tinte-spalte);
 }
 
 .estab-sidebar-presence-legend {
-    color: #c5d6e8;
+    color: var(--tinte-spalte-neben);
     display: flex;
     flex-wrap: wrap;
-    font-size: 0.72rem;
-    gap: 0.35rem 0.65rem;
-    margin-top: 0.55rem;
+    font-size: var(--schrift-1);
+    gap: var(--abstand-3) var(--abstand-5);
+    margin-top: var(--abstand-4);
 }
 
 .estab-sidebar-presence-legend span {
     align-items: center;
     display: inline-flex;
-    gap: 0.25rem;
+    gap: var(--abstand-2);
 }
 
 .estab-sidebar-sound-control {
-    border-top: 1px solid #45627f;
+    border-top: 1px solid var(--linie-spalte);
     display: grid;
-    gap: 0.35rem;
-    margin-top: 0.65rem;
-    padding-top: 0.65rem;
+    gap: var(--abstand-3);
+    margin-top: var(--abstand-5);
+    padding-top: var(--abstand-5);
 }
 
 .estab-sidebar-sound-toggle {
     align-items: center;
-    background: #183654;
-    border: 1px solid #6f89a5;
-    border-radius: 5px;
-    color: #ffffff;
+    background: var(--grund-kachel);
+    border: 1px solid var(--linie-spalte);
+    border-radius: var(--radius-2);
+    color: var(--tinte-spalte);
     cursor: pointer;
     display: inline-flex;
     font: inherit;
-    font-size: 0.78rem;
-    font-weight: 700;
+    font-size: var(--schrift-1);
+    font-weight: var(--stark-voll);
     justify-content: center;
     min-height: 2.75rem;
-    padding: 0.55rem 0.7rem;
+    padding: var(--abstand-4) var(--abstand-5);
     width: 100%;
 }
 
 .estab-sidebar-sound-toggle:hover,
 .estab-sidebar-sound-toggle:focus-visible {
-    background: #294b70;
+    background: var(--grund-kachel-zeigen);
 }
 
 .estab-sidebar-sound-toggle[aria-pressed="true"] {
-    background: #163e35;
-    border-color: #67d5aa;
+    background: var(--erledigt-spalte-flaeche);
+    border-color: var(--erledigt-spalte);
 }
 
 .estab-sidebar-sound-toggle[data-estab-sound-state="blocked"],
 .estab-sidebar-sound-toggle[data-estab-sound-state="unsupported"] {
-    background: #4b3d18;
-    border-color: #f2c966;
+    background: var(--marke-standort-flaeche);
+    border-color: var(--marke-standort);
 }
 
 .estab-sidebar-sound-feedback {
-    color: #f3f7fb;
+    color: var(--tinte-spalte);
     display: block;
-    font-size: 0.75rem;
+    font-size: var(--schrift-1);
     line-height: 1.35;
 }
 
@@ -1466,20 +1480,20 @@ audio[data-estab-sidebar-audio] {
 
 .estab-session-bar-sidebar {
     border-bottom-width: 1px;
-    box-shadow: 0 3px 10px rgba(5, 14, 26, 0.3);
+    box-shadow: var(--schatten-tafel);
     overflow: hidden;
 }
 
 .estab-session-bar-sidebar .estab-session-topline {
     align-items: center;
     display: grid;
-    gap: 0.5rem;
+    gap: var(--abstand-4);
     grid-template-columns: minmax(0, 1fr) auto;
-    padding: 0.75rem;
+    padding: var(--abstand-5);
 }
 
 .estab-session-bar-sidebar .estab-session-brand {
-    font-size: 1.2rem;
+    font-size: var(--schrift-6);
     grid-column: 1;
     grid-row: 1;
 }
@@ -1487,25 +1501,25 @@ audio[data-estab-sidebar-audio] {
 .estab-session-bar-sidebar .estab-session-identity,
 .estab-session-bar-sidebar .estab-session-anonymous {
     display: grid;
-    gap: 0.12rem;
+    gap: var(--abstand-1);
     grid-column: 1 / -1;
     grid-row: 2;
     min-width: 0;
 }
 
 .estab-session-bar-sidebar .estab-session-prefix {
-    font-size: 0.72rem;
+    font-size: var(--schrift-1);
 }
 
 .estab-session-bar-sidebar [data-estab-user-name] {
-    font-size: 1rem;
+    font-size: var(--schrift-4);
     overflow-wrap: anywhere;
 }
 
 .estab-session-bar-sidebar .estab-session-detail {
     border-left: 0;
-    color: #c5d6e8;
-    font-size: 0.8rem;
+    color: var(--tinte-spalte-neben);
+    font-size: var(--schrift-2);
     padding-left: 0;
 }
 
@@ -1517,25 +1531,25 @@ audio[data-estab-sidebar-audio] {
 
 .estab-session-bar-sidebar .estab-button-login,
 .estab-session-bar-sidebar .estab-button-logout {
-    font-size: 0.78rem;
+    font-size: var(--schrift-1);
     min-height: 2.75rem;
     min-width: 0;
-    padding: 0.45rem 0.65rem;
+    padding: var(--abstand-4) var(--abstand-5);
     width: auto;
 }
 
 .estab-session-bar-sidebar .estab-navigation {
-    border-top: 1px solid #45627f;
+    border-top: 1px solid var(--linie-spalte);
 }
 
 .estab-navigation-sidebar-heading {
-    padding: 0.35rem 0.55rem 0.25rem;
+    padding: var(--abstand-3) var(--abstand-4) var(--abstand-2);
 }
 
 .estab-navigation-sidebar-heading h2 {
-    color: #c5d6e8;
-    font-size: 0.66rem;
-    font-weight: 700;
+    color: var(--tinte-spalte-neben);
+    font-size: var(--schrift-1);
+    font-weight: var(--stark-voll);
     letter-spacing: 0.05em;
     margin: 0;
     text-transform: uppercase;
@@ -1557,7 +1571,7 @@ audio[data-estab-sidebar-audio] {
 
 .estab-navigation-sidebar .estab-navigation-content {
     display: grid;
-    gap: 0.4rem;
+    gap: var(--abstand-3);
     /* Die Grundregel packt die Leiste waagerecht an den Anfang. Als Raster
        heisst das: die Spalte wird nur so breit wie ihr Inhalt und der Rest
        bleibt leer -- und die Liste darin kann dann nie zwei Ziele
@@ -1566,7 +1580,7 @@ audio[data-estab-sidebar-audio] {
     margin: 0;
     max-width: none;
     overflow: visible;
-    padding: 0 0.5rem 0.4rem;
+    padding: 0 var(--abstand-4) var(--abstand-3);
 }
 
 /* Zwei Ziele je Zeile, sobald die Spalte breit genug dafuer ist. Bei 13 rem
@@ -1574,7 +1588,7 @@ audio[data-estab-sidebar-audio] {
    zerrissener Name kostet mehr als die gesparte Zeile wert ist. */
 .estab-navigation-sidebar .estab-navigation-list {
     display: grid;
-    gap: 0.25rem;
+    gap: var(--abstand-2);
     grid-template-columns: repeat(auto-fill, minmax(6.2rem, 1fr));
     margin: 0;
     padding: 0;
@@ -1591,48 +1605,49 @@ audio[data-estab-sidebar-audio] {
 
 .estab-navigation-sidebar .estab-navigation-link {
     align-items: center;
-    background: #183654;
-    border: 1px solid #45627f;
-    border-left: 4px solid transparent;
-    border-radius: 5px;
+    background: var(--grund-kachel);
+    border: 1px solid var(--linie-spalte);
+    border-left: 3px solid transparent;
+    border-radius: var(--radius-2);
     box-sizing: border-box;
-    font-size: 0.72rem;
+    font-size: var(--schrift-2);
     justify-content: flex-start;
     line-height: 1.15;
-    min-height: 1.9rem;
+    min-height: 1.75rem;
     min-width: 0;
     overflow-wrap: break-word;
-    padding: 0.3rem 0.4rem;
+    padding: var(--abstand-2) var(--abstand-3);
     white-space: normal;
     word-break: normal;
 }
 
 .estab-navigation-sidebar .estab-navigation-link:hover,
 .estab-navigation-sidebar .estab-navigation-link:focus-visible {
-    background: #294b70;
+    background: var(--grund-kachel-zeigen);
+    border-color: var(--tinte-spalte-neben);
 }
 
 .estab-navigation-sidebar .estab-navigation-link[aria-current="page"] {
-    background: #294b70;
-    border-bottom-color: #45627f;
-    border-left-color: #e5b247;
+    background: var(--grund-kachel-zeigen);
+    border-bottom-color: var(--linie-spalte);
+    border-left-color: var(--marke-standort);
 }
 
 .estab-navigation-sidebar .estab-navigation-services {
     border-left: 0;
-    border-top: 1px solid #45627f;
+    border-top: 1px solid var(--linie-spalte);
     display: grid;
-    gap: 0.25rem;
+    gap: var(--abstand-2);
     margin: 0;
-    padding: 0.35rem 0 0;
+    padding: var(--abstand-3) 0 0;
 }
 
 .estab-navigation-sidebar .estab-navigation-services-label {
     clip: auto;
     clip-path: none;
-    color: #c5d6e8;
-    font-size: 0.66rem;
-    font-weight: 700;
+    color: var(--tinte-spalte-neben);
+    font-size: var(--schrift-1);
+    font-weight: var(--stark-voll);
     height: auto;
     letter-spacing: 0.05em;
     overflow: visible;
@@ -1643,28 +1658,28 @@ audio[data-estab-sidebar-audio] {
 }
 
 .estab-sidebar-workflow {
-    padding: 0.75rem;
+    padding: var(--abstand-5);
 }
 
 .estab-sidebar-section-heading h1,
 .estab-sidebar-section-heading h2 {
-    font-size: 0.95rem;
+    font-size: var(--schrift-4);
     margin: 0;
 }
 
 .estab-sidebar-section-heading p {
-    color: #c5d6e8;
-    font-size: 0.8rem;
-    margin: 0.18rem 0 0;
+    color: var(--tinte-spalte-neben);
+    font-size: var(--schrift-2);
+    margin: var(--abstand-1) 0 0;
 }
 
 .estab-sidebar-action-form {
-    margin: 0.65rem 0 0;
+    margin: var(--abstand-5) 0 0;
 }
 
 .estab-sidebar-actions {
     display: grid;
-    gap: 0.45rem;
+    gap: var(--abstand-4);
 }
 
 .estab-sidebar-actions .estab-sidebar-action-form {
@@ -1673,72 +1688,77 @@ audio[data-estab-sidebar-audio] {
 
 .estab-sidebar-action {
     align-items: flex-start;
-    background: #183654;
-    border: 1px solid #5d7692;
-    border-left: 4px solid #e5b247;
-    border-radius: 6px;
+    background: var(--grund-kachel);
+    border: 1px solid var(--linie-spalte);
+    border-left: 4px solid var(--marke-standort);
+    border-radius: var(--radius-3);
     box-sizing: border-box;
-    color: #ffffff;
+    color: var(--tinte-spalte);
     cursor: pointer;
     display: flex;
     flex-direction: column;
     font: inherit;
     justify-content: center;
     min-height: 3.5rem;
-    padding: 0.55rem 0.65rem;
+    padding: var(--abstand-4) var(--abstand-5);
     text-align: left;
     width: 100%;
 }
 
 .estab-sidebar-action:hover,
 .estab-sidebar-action:focus-visible {
-    background: #294b70;
+    background: var(--grund-kachel-zeigen);
 }
 
 .estab-sidebar-action-title {
-    font-size: 0.86rem;
-    font-weight: 700;
+    font-size: var(--schrift-3);
+    font-weight: var(--stark-voll);
 }
 
 .estab-sidebar-action-description {
-    color: #c5d6e8;
-    font-size: 0.78rem;
+    color: var(--tinte-spalte-neben);
+    font-size: var(--schrift-1);
     line-height: 1.25;
-    margin-top: 0.12rem;
+    margin-top: var(--abstand-1);
 }
 
 /* Der Zaehler steht an der Schaltflaeche selbst. Auf einem flachen
    Laptopschirm ist jede zusaetzliche Zeile teuer. */
 .estab-sidebar-action-badge {
-    background: #f4ca70;
-    border-radius: 999px;
-    color: #3a2a05;
+    background: var(--marke-standort);
+    border-radius: var(--radius-pille);
+    color: var(--achtung-tinte);
     display: inline-block;
-    font-size: 0.76rem;
-    font-weight: 800;
+    font-size: var(--schrift-1);
+    font-weight: var(--stark-voll);
     line-height: 1.15;
-    margin-left: 0.35rem;
+    margin-left: var(--abstand-3);
     min-width: 1.3rem;
-    padding: 0.08rem 0.4rem;
+    padding: var(--abstand-1) var(--abstand-3);
     text-align: center;
 }
 
 .estab-sidebar-action[data-estab-workflow-key="stab_korrekturen"] {
-    background: #4a2f18;
-    border-color: #c98b3a;
-    border-left-color: #f4ca70;
+    background: var(--marke-standort-flaeche);
+    border-color: var(--achtung-kante);
+    border-left-color: var(--marke-standort);
 }
 
+/* Der Zeigezustand traegt hier der Rand, nicht die Flaeche: Diese Kachel
+   behaelt ihre Goldflaeche, weil sie damit als Korrekturweg auffaellt. Ein
+   zweites Gold nur fuer das Zeigen waere eine Farbe mehr fuer nichts. */
 .estab-sidebar-action[data-estab-workflow-key="stab_korrekturen"]:hover,
 .estab-sidebar-action[data-estab-workflow-key="stab_korrekturen"]:focus-visible {
-    background: #63401f;
+    background: var(--marke-standort-flaeche);
+    border-color: var(--tinte-spalte-neben);
+    border-left-color: var(--marke-standort);
 }
 
 .estab-sidebar-empty {
-    color: #c5d6e8;
-    font-size: 0.78rem;
+    color: var(--tinte-spalte-neben);
+    font-size: var(--schrift-1);
     line-height: 1.4;
-    margin: 0.65rem 0 0;
+    margin: var(--abstand-5) 0 0;
 }
 
 .estab-root-header,
@@ -1756,20 +1776,23 @@ audio[data-estab-sidebar-audio] {
 
 .estab-root-header {
     align-items: center;
-    background: var(--estab-menu-background, #f0f0f0);
-    border: 3px solid #969696;
+    /* Stand hier als `var(--estab-menu-background, #f0f0f0)`. Die Marke
+       wurde nie irgendwo definiert -- der Rueckfallwert war der eigentliche
+       Wert, also ein Farbliteral in Verkleidung. */
+    background: var(--grund-gedaempft);
+    border: 3px solid var(--linie-kraeftig);
     display: grid;
-    gap: 1rem;
+    gap: var(--abstand-6);
     grid-template-columns: minmax(4rem, 8rem) minmax(0, 1fr) minmax(4rem, 8rem);
-    margin: 1rem auto 0;
+    margin: var(--abstand-6) auto 0;
     max-width: 64rem;
-    padding: 0.75rem 1rem;
+    padding: var(--abstand-5) var(--abstand-6);
     text-align: center;
 }
 
 .estab-root-header p {
-    font-size: clamp(1.65rem, 4vw, 3rem);
-    font-weight: 700;
+    font-size: var(--schrift-7);
+    font-weight: var(--stark-voll);
     margin: 0;
 }
 
@@ -1784,14 +1807,14 @@ audio[data-estab-sidebar-audio] {
     font-family: Arial, Helvetica, sans-serif;
     margin: 0 auto;
     max-width: 70rem;
-    padding: 0 1rem 2rem;
+    padding: 0 var(--abstand-6) var(--abstand-7);
 }
 
 .estab-login-cta {
     background: #ffffff;
     border: 2px solid #355b8c;
     border-radius: 10px;
-    box-shadow: 0 4px 14px rgba(23, 32, 51, 0.12);
+    box-shadow: var(--schatten-tafel);
     margin: 2rem auto;
     max-width: 46rem;
     padding: 1.5rem 2rem;
@@ -1819,7 +1842,7 @@ audio[data-estab-sidebar-audio] {
     background: #ffffff;
     border: 1px solid #8da2bd;
     border-radius: 10px;
-    box-shadow: 0 3px 12px rgba(23, 32, 51, 0.12);
+    box-shadow: var(--schatten-tafel);
     margin-bottom: 1.25rem;
     overflow-x: auto;
     padding: 1.5rem;
@@ -1843,20 +1866,20 @@ audio[data-estab-sidebar-audio] {
 
 .estab-menu-section {
     box-sizing: border-box;
-    margin: 2rem auto;
+    margin: var(--abstand-7) auto;
     width: 100%;
 }
 
 .estab-menu-section h2 {
-    color: #172033;
+    color: var(--tinte);
     font-family: Arial, Helvetica, sans-serif;
-    margin: 0 0 0.8rem;
+    margin: 0 0 var(--abstand-5);
     text-align: center;
 }
 
 .estab-root-menu {
     display: grid;
-    gap: 1rem;
+    gap: var(--abstand-6);
     grid-template-columns: repeat(auto-fit, minmax(22rem, 1fr));
     list-style: none;
     margin: 0;
@@ -1864,10 +1887,10 @@ audio[data-estab-sidebar-audio] {
 }
 
 .estab-menu-card {
-    background: #ffffff;
-    border: 1px solid #8da2bd;
-    border-radius: 10px;
-    box-shadow: 0 3px 10px rgba(23, 32, 51, 0.1);
+    background: var(--grund-tafel);
+    border: 1px solid var(--linie-kraeftig);
+    border-radius: var(--radius-3);
+    box-shadow: var(--schatten-tafel);
     display: grid;
     min-width: 0;
 }
@@ -1876,17 +1899,17 @@ audio[data-estab-sidebar-audio] {
     align-items: center;
     border-radius: inherit;
     box-sizing: border-box;
-    color: #183454;
+    color: var(--tinte);
     display: grid;
-    gap: 1rem;
+    gap: var(--abstand-6);
     grid-template-columns: 5rem minmax(0, 1fr);
-    padding: 1rem;
+    padding: var(--abstand-6);
     text-decoration: none;
 }
 
 .estab-menu-link:hover,
 .estab-menu-link:focus {
-    background: #eef3f8;
+    background: var(--handlung-sanft);
 }
 
 .estab-menu-icon {
@@ -1901,57 +1924,57 @@ audio[data-estab-sidebar-audio] {
 
 .estab-menu-copy {
     display: grid;
-    gap: 0.4rem;
+    gap: var(--abstand-3);
     min-width: 0;
 }
 
 .estab-menu-title {
-    font-size: 1.15rem;
-    font-weight: 700;
+    font-size: var(--schrift-5);
+    font-weight: var(--stark-voll);
     hyphens: auto;
     overflow-wrap: anywhere;
     word-break: normal;
 }
 
 .estab-menu-description {
-    color: #3b4a5d;
-    font-size: 0.9rem;
+    color: var(--tinte-neben);
+    font-size: var(--schrift-3);
     line-height: 1.35;
 }
 
 .estab-menu-badge {
-    background: #e6edf5;
-    border-radius: 999px;
-    color: #183454;
+    background: var(--handlung-sanft);
+    border-radius: var(--radius-pille);
+    color: var(--tinte);
     display: inline-block;
-    font-size: 0.78rem;
-    font-weight: 700;
+    font-size: var(--schrift-1);
+    font-weight: var(--stark-voll);
     justify-self: start;
-    padding: 0.3rem 0.55rem;
+    padding: var(--abstand-2) var(--abstand-4);
 }
 
 .estab-menu-card-locked {
-    background: #f4f5f6;
+    background: var(--grund-seite);
     border-style: dashed;
 }
 
 
 .estab-menu-card-locked .estab-menu-link {
-    color: #4d5968;
+    color: var(--tinte-neben);
 }
 
 .estab-menu-card-locked .estab-menu-badge {
-    background: #fff3cd;
-    color: #664d03;
+    background: var(--achtung-flaeche);
+    color: var(--achtung-tinte);
 }
 
 .estab-menu-card-administration {
-    border-color: #8b5d28;
+    border-color: var(--achtung-kante);
 }
 
 .estab-menu-card-administration .estab-menu-badge {
-    background: #f6e5d0;
-    color: #623b0e;
+    background: var(--achtung-flaeche);
+    color: var(--achtung-tinte);
 }
 
 .estab-button {
@@ -2452,8 +2475,12 @@ audio[data-estab-sidebar-audio] {
     text-transform: uppercase;
 }
 
+/* Der Name der Fuehrungsstelle ist eine Angabe der Spalte, keine Nachricht;
+   er traegt deshalb die Arbeitsgroesse. Stand auf 0.98rem -- einer der
+   Streuwerte des Bestands -- und brach damit in der schmaleren Cockpitspalte
+   mitten durch "Fuehrungsstelle". */
 .estab-incident-indicator strong {
-    font-size: 0.98rem;
+    font-size: var(--schrift-3);
     min-width: 0;
     overflow-wrap: anywhere;
 }
@@ -2545,7 +2572,7 @@ form[data-estab-incident-disabled="true"]::before {
     padding: 0.75rem;
 }
 
-@media (max-width: 44rem) {
+@media (max-width: 56rem) {
     .estab-incident-indicator {
         grid-template-columns: 1fr;
         margin: 0.6rem 0.75rem;
@@ -4555,8 +4582,8 @@ form[data-estab-incident-disabled="true"]::before {
     }
 
     .estab-root-main {
-        padding-left: 0.75rem;
-        padding-right: 0.75rem;
+        padding-left: var(--abstand-5);
+        padding-right: var(--abstand-5);
     }
 
     .estab-root-auth-actions {
@@ -7751,9 +7778,9 @@ section.estab-message-timeline[data-estab-message-timeline]
 
 @media (max-width: 64rem) {
     .estab-root-header {
-        gap: 0.5rem;
+        gap: var(--abstand-4);
         grid-template-columns: minmax(2.75rem, 5rem) minmax(0, 1fr) minmax(2.75rem, 5rem);
-        padding: 0.6rem;
+        padding: var(--abstand-4);
         width: calc(100% - 1.5rem);
     }
 }
@@ -9208,17 +9235,17 @@ a.estab-message-list-chip:hover {
 }
 
 .estab-sidebar-duty-required {
-    background: #3a1f1c;
-    border: 1px solid #b5504a;
-    border-left: 4px solid #e08a83;
-    border-radius: 8px;
+    background: var(--fehler-spalte-flaeche);
+    border: 1px solid var(--fehler-kante);
+    border-left: 4px solid var(--fehler-spalte);
+    border-radius: var(--radius-3);
     box-sizing: border-box;
-    color: #ffffff;
-    padding: 0.75rem;
+    color: var(--tinte-spalte);
+    padding: var(--abstand-5);
 }
 
 .estab-sidebar-duty-required p {
-    margin: 0.35rem 0 0;
+    margin: var(--abstand-3) 0 0;
 }
 
 .estab-auth-exit {
@@ -9287,10 +9314,10 @@ a.estab-message-list-chip:hover {
     display: flex;
     flex: 1 1 auto;
     flex-direction: column;
-    gap: 0.6rem;
+    gap: var(--abstand-4);
     max-width: 82rem;
     min-height: 0;
-    padding: 0.6rem 1rem 0.8rem;
+    padding: var(--abstand-4) var(--abstand-6) var(--abstand-5);
     width: 100%;
 }
 
@@ -9412,19 +9439,19 @@ a.estab-message-list-chip:hover {
 
 .estab-situation-key,
 .estab-menu-shortcut {
-    background: #ffffff;
-    border: 1px solid #45627f;
-    border-radius: 4px;
+    background: var(--grund-tafel);
+    border: 1px solid var(--linie-spalte);
+    border-radius: var(--radius-2);
     box-shadow: 0 1px 0 #45627f;
-    color: #183454;
+    color: var(--tinte);
     font-family: Arial, Helvetica, sans-serif;
-    font-size: 0.72rem;
-    font-weight: 700;
-    padding: 0.05rem 0.35rem;
+    font-size: var(--schrift-1);
+    font-weight: var(--stark-voll);
+    padding: var(--abstand-1) var(--abstand-3);
 }
 
 .estab-menu-shortcut {
-    margin-right: 0.4rem;
+    margin-right: var(--abstand-3);
 }
 
 .estab-situation-queues {
@@ -9576,12 +9603,12 @@ a.estab-message-list-chip:hover {
 
     .estab-sidebar-status,
     .estab-sidebar-workflow {
-        padding: 0.55rem;
+        padding: var(--abstand-4);
     }
 
     .estab-sidebar-action {
         min-height: 2.9rem;
-        padding: 0.42rem 0.55rem;
+        padding: var(--abstand-3) var(--abstand-4);
     }
 
     .estab-message-error-summary {
@@ -9611,8 +9638,8 @@ a.estab-message-list-chip:hover {
     }
 
     .estab-root-main-situation {
-        gap: 0.45rem;
-        padding: 0.45rem 0.8rem 0.6rem;
+        gap: var(--abstand-4);
+        padding: var(--abstand-4) var(--abstand-5) var(--abstand-4);
     }
 
     .estab-situation {
@@ -9626,8 +9653,8 @@ a.estab-message-list-chip:hover {
     }
 
     .estab-root-page-situation .estab-root-header {
-        margin-top: 0.5rem;
-        padding: 0.4rem 0.75rem;
+        margin-top: var(--abstand-4);
+        padding: var(--abstand-3) var(--abstand-5);
     }
 
     .estab-tool-panel {
@@ -9648,35 +9675,40 @@ a.estab-message-list-chip:hover {
 
     .estab-sidebar-status,
     .estab-sidebar-workflow {
-        padding: 0.45rem;
+        padding: var(--abstand-4);
     }
 
     .estab-sidebar-action {
         min-height: 2.4rem;
-        padding: 0.32rem 0.5rem;
+        padding: var(--abstand-3) var(--abstand-4);
     }
 
+    /* Der Zaehler wird kleiner, damit die zweite Warteschlange einer
+       doppelt getragenen Funktion neben die erste passt statt darunter.
+       Das verlangt FUEST-DOPPELFUNKTION; eine Stufe Unterschied ist das
+       Mindeste, was die Skala dafuer hergibt. */
     .estab-sidebar-queue strong {
-        font-size: 1.5rem;
+        font-size: var(--schrift-6);
     }
 
     .estab-sidebar-queue-strip {
-        gap: 0.2rem;
-        margin: 0.3rem 0 0;
+        gap: var(--abstand-1);
+        margin: var(--abstand-2) 0 0;
     }
 
     .estab-sidebar-queue-item {
-        padding: 0.1rem 0.3rem;
+        padding: var(--abstand-1) var(--abstand-2);
     }
 
     .estab-sidebar-action-description {
-        font-size: 0.72rem;
+        font-size: var(--schrift-1);
         line-height: 1.2;
     }
 
+    /* Die Schriftgroesse steht schon auf der Untergrenze und darf nicht
+       kleiner werden; gespart wird am Polster. */
     .estab-sidebar-action-badge {
-        font-size: 0.7rem;
-        padding: 0.05rem 0.32rem;
+        padding: var(--abstand-1) var(--abstand-2);
     }
 
     .estab-message-confirmation {
@@ -9701,8 +9733,8 @@ a.estab-message-list-chip:hover {
     }
 
     .estab-root-main-situation {
-        gap: 0.35rem;
-        padding: 0.35rem 0.7rem 0.5rem;
+        gap: var(--abstand-3);
+        padding: var(--abstand-3) var(--abstand-5) var(--abstand-4);
     }
 
     .estab-situation {
@@ -9730,12 +9762,12 @@ a.estab-message-list-chip:hover {
     /* Die Kacheln der Bereiche werden zur Leiste: Symbol und Titel bleiben,
        der erklärende Satz weicht dem Lagebild. */
     .estab-root-page-situation .estab-root-header {
-        margin-top: 0.3rem;
-        padding: 0.3rem 0.6rem;
+        margin-top: var(--abstand-2);
+        padding: var(--abstand-2) var(--abstand-4);
     }
 
     .estab-root-page-situation .estab-root-header p {
-        font-size: clamp(1rem, 2.2vw, 1.4rem);
+        font-size: var(--schrift-6);
     }
 
     .estab-root-page-situation .estab-root-header img {
@@ -9744,27 +9776,27 @@ a.estab-message-list-chip:hover {
     }
 
     .estab-root-page-situation .estab-session-bar {
-        padding: 0.3rem 0.6rem;
+        padding: var(--abstand-2) var(--abstand-4);
     }
 
     .estab-root-page-situation .estab-menu-section {
-        margin: 0.2rem auto;
+        margin: var(--abstand-2) auto;
     }
 
     .estab-root-page-situation .estab-menu-section h2 {
-        font-size: 1rem;
-        margin: 0 0 0.3rem;
+        font-size: var(--schrift-4);
+        margin: 0 0 var(--abstand-2);
     }
 
     .estab-root-page-situation .estab-root-menu {
-        gap: 0.4rem;
+        gap: var(--abstand-3);
         grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
     }
 
     .estab-root-page-situation .estab-menu-link {
-        gap: 0.5rem;
+        gap: var(--abstand-4);
         grid-template-columns: 2.2rem minmax(0, 1fr);
-        padding: 0.35rem 0.5rem;
+        padding: var(--abstand-3) var(--abstand-4);
     }
 
     .estab-root-page-situation .estab-menu-icon img {
@@ -9772,7 +9804,7 @@ a.estab-message-list-chip:hover {
     }
 
     .estab-root-page-situation .estab-menu-title {
-        font-size: 0.85rem;
+        font-size: var(--schrift-3);
     }
 
     .estab-root-page-situation .estab-menu-description {
