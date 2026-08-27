@@ -70,6 +70,9 @@ $assert(
  * fuer den zweiten Wert.
  */
 $ausSkala = static function (string $wert, string $praefix): bool {
+    // `!important` sagt, wie stark eine Erklaerung gilt, nicht welchen Wert
+    // sie traegt. Im Druckblock ist es zulaessig (Spec Abschnitt 2.5).
+    $wert = trim(str_ireplace('!important', '', $wert));
     $wert = strtolower(trim($wert));
     if (in_array($wert, ['inherit', 'initial', 'unset', 'revert', 'auto'], true)) {
         return true;

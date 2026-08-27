@@ -40,8 +40,24 @@ function estab_test_migrationsgrenze(): array
         'estab-legacy-page',
         'estab-list-',
 
-        // P4 -- der Rest
-        'estab-message',
+        // P4 -- der Rest.
+        // 'estab-message' stand hier als ein Eintrag. Mit G08 ist das Umfeld
+        // des Vordrucks umgestellt, die Liste aber noch nicht -- deshalb
+        // steht jetzt jede Familie fuer sich.
+        'estab-message-list',
+        'estab-message-timeline',
+        'estab-message-attachment',
+        'estab-message-categor',
+        'estab-message-suggestion',
+        'estab-message-transport',
+        'estab-message-recipient',
+        'estab-message-sidebar',
+        'estab-message-workspace',
+        'estab-message-mapping',
+        'estab-message-content-frame',
+        'estab-message-distribution',
+        'estab-message-print-annex',
+        'estab-message-task-badge',
         'estab-mobile-sidebar',
         'estab-tool-',
         'estab-admin-',

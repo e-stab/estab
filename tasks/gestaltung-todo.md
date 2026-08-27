@@ -117,15 +117,16 @@ ansehen → Migrationsgrenze kürzen.** Abweichungen stehen bei der Aufgabe.
       - **Abhängigkeit:** G05, G06
       - **Risiko:** höchstes der Liste. Die Hülle steht auf jeder Seite; ein Fehler hier ist überall sichtbar
 
-- [ ] **G08** `!` **M** Umfeld des Vordrucks
+- [x] **G08** `!` **M** Umfeld des Vordrucks
       → `estab-ui.css`, `4fach/official_message_form.php`, `tests/php/ges_seitenaufbau.php`, `app/ux_rules.php`
-      - [ ] Seitenkopf: Bereichsmarke, ein `h1` in `--schrift-6`, Unterlinie, kein Erklärsatz
-      - [ ] Aktionsleiste: Knöpfe 2rem, Lücke `--abstand-4`, Rollenreihenfolge aus `app/ui_elements.php` unverändert
-      - [ ] Klebende Leiste bekommt Grund und Unterlinie
-      - [ ] Bearbeitungsweg, Meldungskästen und Fehlerübersicht auf die Marken
-      - [ ] Regel `GES-BAENDER`
+      - [x] Seitenkopf: Bereichsmarke, ein `h1` in `--schrift-6`, Unterlinie, kein Erklärsatz
+      - [x] Aktionsleiste: Knöpfe 2rem, Lücke `--abstand-4`, Rollenreihenfolge aus `app/ui_elements.php` unverändert
+      - [x] Klebende Leiste bekommt Grund und Unterlinie
+      - [x] Bearbeitungsweg, Meldungskästen und Fehlerübersicht auf die Marken
+      - [x] Regel `GES-BAENDER`
       - **Prüfung:** `ges_seitenaufbau.php`; Bild bei 768 px Höhe
       - **Abhängigkeit:** G07
+      - **Offen für Ihre Entscheidung:** Der Erklärsatz im Kopf des Vordrucks („Amtliches Raster mit feldbezogenen Ausfüllhinweisen …") steht noch im Markup und wird per CSS auf `display: none` gestellt — er ist damit weder sichtbar noch vorlesbar, also totes Markup. Ihn zu entfernen ist eine Inhalts-, keine Gestaltungsentscheidung; die Prüfung stellt vorerst nur sicher, dass er keine Höhe bekommt
 
 - [ ] **G09** `!!` **M** Das Blatt: Maßstab und Lesbarkeit
       → `estab-ui.css`, `tests/php/ges_vordruck.php`, `tests/php/ux_form_contrast.php`, `app/ux_rules.php`

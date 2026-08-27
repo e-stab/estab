@@ -74,7 +74,7 @@ $assert(
 
 /** Eine Angabe, die aus der Skala kommt oder gar keine Groesse waehlt. */
 $groesseErlaubt = static function (string $wert): bool {
-    $wert = strtolower(trim($wert));
+    $wert = strtolower(trim(str_ireplace('!important', '', $wert)));
     if (in_array($wert, ['inherit', 'initial', 'unset', 'revert', '1em'], true)) {
         return true;
     }
@@ -83,7 +83,7 @@ $groesseErlaubt = static function (string $wert): bool {
 
 /** 400, 600, 700 -- als Marke oder als Zahl. */
 $staerkeErlaubt = static function (string $wert): bool {
-    $wert = strtolower(trim($wert));
+    $wert = strtolower(trim(str_ireplace('!important', '', $wert)));
     if (in_array($wert, ['inherit', 'initial', 'unset', 'revert', 'normal', 'bold'], true)) {
         return true;
     }

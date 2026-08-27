@@ -3370,16 +3370,16 @@ form[data-estab-incident-disabled="true"]::before {
     align-items: baseline;
     background: none;
     border: 0;
-    border-bottom: 1px solid #c5d1dd;
+    border-bottom: 1px solid var(--linie);
     border-radius: 0;
     box-shadow: none;
-    color: #1f3a5a;
+    color: var(--handlung-dunkel);
     display: flex;
     flex-wrap: wrap;
-    gap: 0.2rem 0.6rem;
+    gap: var(--abstand-2) var(--abstand-4);
     justify-content: flex-start;
-    margin: 0 0 0.6rem;
-    padding: 0 0 0.35rem;
+    margin: 0 0 var(--abstand-4);
+    padding: 0 0 var(--abstand-3);
 }
 
 .estab-message-page-header .estab-message-header-badges,
@@ -3392,8 +3392,8 @@ form[data-estab-incident-disabled="true"]::before {
 .estab-bos-document-header h1,
 .estab-admin-dashboard-hero h1,
 .estab-export-hero h1 {
-    color: #1f3a5a;
-    font-size: 1.25rem;
+    color: var(--handlung-dunkel);
+    font-size: var(--schrift-6);
     line-height: 1.2;
     margin: 0;
 }
@@ -3403,9 +3403,9 @@ form[data-estab-incident-disabled="true"]::before {
 .estab-bos-document-header .estab-bos-document-kicker,
 .estab-admin-dashboard-hero .estab-tool-eyebrow,
 .estab-export-hero .estab-tool-eyebrow {
-    color: #5d7692;
-    font-size: 0.68rem;
-    font-weight: 800;
+    color: var(--tinte-neben);
+    font-size: var(--schrift-1);
+    font-weight: var(--stark-voll);
     letter-spacing: 0.08em;
     margin: 0;
     order: -1;
@@ -3555,34 +3555,34 @@ form[data-estab-incident-disabled="true"]::before {
 /* Rueckmeldung nach einer abgeschlossenen Nachrichtenaktion: was geschehen
    ist, wohin die Nachricht gegangen ist und was der naechste Griff ist. */
 .estab-message-confirmation {
-    gap: 0.75rem;
-    padding: 1.25rem 1rem 2rem;
+    gap: var(--abstand-5);
+    padding: var(--abstand-6) var(--abstand-6) var(--abstand-7);
 }
 
 .estab-message-confirmation .estab-tool-feedback {
     display: grid;
-    gap: 0.15rem;
+    gap: var(--abstand-1);
 }
 
 .estab-message-confirmation .estab-tool-feedback strong {
-    font-size: 1.15rem;
+    font-size: var(--schrift-5);
 }
 
 .estab-message-confirmation-target {
-    font-size: 0.95rem;
-    font-weight: 700;
+    font-size: var(--schrift-4);
+    font-weight: var(--stark-voll);
 }
 
 .estab-message-confirmation-detail {
-    color: #3d5266;
-    margin: 0.75rem 0 0;
+    color: var(--tinte-neben);
+    margin: var(--abstand-5) 0 0;
 }
 
 .estab-message-confirmation-actions {
     display: flex;
     flex-wrap: wrap;
-    gap: 0.5rem;
-    margin: 1rem 0 0;
+    gap: var(--abstand-4);
+    margin: var(--abstand-6) 0 0;
 }
 
 .estab-error-page {
@@ -4845,8 +4845,8 @@ form[data-estab-incident-disabled="true"]::before {
  * ---------------------------------------------------------------------- */
 
 body.estab-message-form-body {
-    background: #e7edf3 !important;
-    color: #172033;
+    background: var(--handlung-sanft) !important;
+    color: var(--tinte);
     font-family: Arial, Helvetica, sans-serif;
     margin: 0;
     min-width: 0;
@@ -4860,7 +4860,7 @@ body.estab-message-form-body {
 .estab-message-form-page {
     margin: 0 auto;
     max-width: 82rem;
-    padding: clamp(0.75rem, 2.5vw, 1.75rem);
+    padding: var(--abstand-5);
 }
 
 /* Der Kopf des Vordrucks: eine Zeile, kein Banner. Er stand als blauer
@@ -4872,21 +4872,21 @@ body.estab-message-form-body {
     align-items: baseline;
     background: none;
     border: 0;
-    border-bottom: 1px solid #b9c8d7;
+    border-bottom: 1px solid var(--linie-kraeftig);
     border-radius: 0;
     box-shadow: none;
-    color: #1f3a5a;
+    color: var(--handlung-dunkel);
     display: flex;
     flex-wrap: wrap;
-    gap: 0.2rem 0.6rem;
+    gap: var(--abstand-2) var(--abstand-4);
     justify-content: flex-start;
-    margin-bottom: 0.5rem;
-    padding: 0 0 0.3rem;
+    margin-bottom: var(--abstand-4);
+    padding: 0 0 var(--abstand-2);
 }
 
 .estab-message-page-header h1 {
-    color: #1f3a5a;
-    font-size: 1.2rem;
+    color: var(--handlung-dunkel);
+    font-size: var(--schrift-6);
     line-height: 1.2;
     margin: 0;
 }
@@ -4899,7 +4899,7 @@ body.estab-message-form-body {
     align-items: baseline;
     display: flex;
     flex-wrap: wrap;
-    gap: 0.15rem 0.55rem;
+    gap: var(--abstand-1) var(--abstand-4);
     min-width: 0;
 }
 
@@ -4910,9 +4910,9 @@ body.estab-message-form-body {
 
 .estab-message-page-header .estab-section-kicker,
 .estab-message-workflow-panel .estab-section-kicker {
-    color: #5d7692;
-    font-size: 0.68rem;
-    font-weight: 800;
+    color: var(--tinte-neben);
+    font-size: var(--schrift-1);
+    font-weight: var(--stark-voll);
     letter-spacing: 0.08em;
     text-transform: uppercase;
 }
@@ -4946,29 +4946,29 @@ body.estab-message-form-body {
 
 /* Fehlerübersicht am Seitenkopf: eine Meldung, ein Sprung je Feld. */
 .estab-message-error-summary {
-    background: #fdf2f1;
-    border: 1px solid #9d1c16;
-    border-left: 6px solid #9d1c16;
-    border-radius: 9px;
-    color: #4a100c;
-    margin: 0 0 0.85rem;
-    padding: 0.75rem 0.95rem;
+    background: var(--fehler-flaeche);
+    border: 1px solid var(--fehler-kante);
+    border-left: 6px solid var(--fehler-kante);
+    border-radius: var(--radius-3);
+    color: var(--fehler-tinte);
+    margin: 0 0 var(--abstand-5);
+    padding: var(--abstand-5) var(--abstand-6);
 }
 
 .estab-message-error-summary h2 {
-    color: #7d1611;
-    font-size: 1rem;
-    margin: 0 0 0.2rem;
+    color: var(--fehler-tinte);
+    font-size: var(--schrift-4);
+    margin: 0 0 var(--abstand-2);
 }
 
 .estab-message-error-summary p {
-    font-size: 0.85rem;
-    margin: 0 0 0.5rem;
+    font-size: var(--schrift-3);
+    margin: 0 0 var(--abstand-4);
 }
 
 .estab-message-error-summary ol {
     display: grid;
-    gap: 0.25rem;
+    gap: var(--abstand-2);
     list-style: none;
     margin: 0;
     padding: 0;
@@ -4979,7 +4979,7 @@ body.estab-message-form-body {
     color: inherit;
     display: flex;
     flex-wrap: wrap;
-    gap: 0.4rem;
+    gap: var(--abstand-3);
     text-decoration: none;
 }
 
@@ -4989,29 +4989,29 @@ body.estab-message-form-body {
 }
 
 .estab-message-error-summary strong {
-    background: #9d1c16;
-    border-radius: 4px;
-    color: #ffffff;
+    background: var(--fehler-kante);
+    border-radius: var(--radius-2);
+    color: var(--tinte-spalte);
     flex: 0 0 auto;
-    font-size: 0.72rem;
-    font-weight: 800;
-    padding: 0.1rem 0.4rem;
+    font-size: var(--schrift-1);
+    font-weight: var(--stark-voll);
+    padding: var(--abstand-1) var(--abstand-3);
 }
 
 .estab-message-error-summary span {
-    font-size: 0.85rem;
+    font-size: var(--schrift-3);
 }
 
 .estab-message-task-badge,
 .estab-message-readonly-badge {
-    background: #edf4fb;
-    border: 1px solid #9db2c7;
-    border-radius: 999px;
-    color: #173a5e;
+    background: var(--handlung-sanft);
+    border: 1px solid var(--linie-kraeftig);
+    border-radius: var(--radius-pille);
+    color: var(--handlung-dunkel);
     flex: 0 0 auto;
-    font-size: 0.78rem;
-    font-weight: 800;
-    padding: 0.45rem 0.7rem;
+    font-size: var(--schrift-1);
+    font-weight: var(--stark-voll);
+    padding: var(--abstand-4) var(--abstand-5);
 }
 
 .estab-message-header-badges {
@@ -5019,7 +5019,7 @@ body.estab-message-form-body {
     display: flex;
     flex: 0 0 auto;
     flex-wrap: wrap;
-    gap: 0.5rem;
+    gap: var(--abstand-4);
     justify-content: flex-end;
 }
 
@@ -5054,17 +5054,22 @@ body.estab-message-form-body {
    Drittel der Hoehe -- sie standen untereinander, jeder ueber die ganze
    Breite. Es sind vier kurze Woerter; in dieser Groesse stehen sie
    nebeneinander und die Leiste kostet eine Zeile. */
+/* Die Leiste klebt am oberen Rand ihres Scrollbereichs. Sie stand auf
+   halbdurchsichtigem Weiss -- bei dichtem Satz schiebt sich der Vordruck
+   dann sichtbar darunter durch. Sie deckt jetzt und traegt eine Unterlinie,
+   damit die Kante zwischen Leiste und Blatt eindeutig ist. */
 .estab-message-actionbar {
     align-items: center;
-    background: rgba(255, 255, 255, 0.97);
-    border: 1px solid #b8c7d5;
-    border-radius: 8px;
-    box-shadow: 0 3px 10px rgba(31, 58, 86, 0.08);
+    background: var(--grund-tafel);
+    border: 1px solid var(--linie-kraeftig);
+    border-bottom: 1px solid var(--linie-kraeftig);
+    border-radius: var(--radius-3);
+    box-shadow: var(--schatten-tafel);
     display: flex;
     flex-wrap: wrap;
-    gap: 0.35rem;
-    margin: 0 0 0.5rem;
-    padding: 0.35rem 0.4rem;
+    gap: var(--abstand-3);
+    margin: 0 0 var(--abstand-4);
+    padding: var(--abstand-3) var(--abstand-3);
     position: relative;
     z-index: 30;
 }
@@ -5075,14 +5080,14 @@ body.estab-message-form-body {
 }
 
 .estab-message-actionbar[data-estab-message-actions="bottom"] {
-    margin: 1rem 0 0;
+    margin: var(--abstand-6) 0 0;
 }
 
 .estab-message-actionbar .estab-button {
     border-width: 1px;
-    font-size: 0.8rem;
-    min-height: 1.85rem;
-    padding: 0.3rem 0.6rem;
+    font-size: var(--schrift-3);
+    min-height: 2rem;
+    padding: var(--abstand-2) var(--abstand-4);
 }
 
 .estab-button-secondary {
@@ -5146,21 +5151,21 @@ body.estab-message-form-body {
 
 .estab-message-workflow-panel {
     align-items: start;
-    background: #ffffff;
-    border: 1px solid #b9c8d7;
-    border-left: 5px solid #315f8b;
-    border-radius: 9px;
+    background: var(--grund-tafel);
+    border: 1px solid var(--linie-kraeftig);
+    border-left: 5px solid var(--handlung);
+    border-radius: var(--radius-3);
     display: grid;
-    gap: 1rem;
+    gap: var(--abstand-6);
     grid-template-columns: minmax(12rem, 0.7fr) minmax(18rem, 1.3fr);
-    margin-bottom: 1rem;
-    padding: 1rem;
+    margin-bottom: var(--abstand-6);
+    padding: var(--abstand-6);
 }
 
 .estab-message-workflow-panel h2 {
-    color: #173a5e;
-    font-size: 1.15rem;
-    margin: 0.25rem 0 0.35rem;
+    color: var(--handlung-dunkel);
+    font-size: var(--schrift-5);
+    margin: var(--abstand-2) 0 var(--abstand-3);
 }
 
 .estab-message-workflow-panel p {
@@ -5170,62 +5175,62 @@ body.estab-message-form-body {
 
 .estab-message-workflow-fields {
     display: grid;
-    gap: 0.7rem;
+    gap: var(--abstand-5);
 }
 
 .estab-message-workflow-fields ol {
     display: grid;
-    gap: 0.45rem;
+    gap: var(--abstand-4);
     margin: 0;
-    padding-left: 1.3rem;
+    padding-left: var(--abstand-7);
 }
 
 .estab-message-workflow-fields fieldset {
-    background: #f4f7fa;
+    background: var(--handlung-sanft);
     border: 1px solid var(--rand-bedienelement);
-    border-radius: 7px;
+    border-radius: var(--radius-3);
     display: grid;
-    gap: 0.45rem;
+    gap: var(--abstand-4);
     margin: 0;
     min-width: 0;
-    padding: 0.75rem;
+    padding: var(--abstand-5);
     position: relative;
 }
 
 .estab-message-workflow-fields legend {
-    color: #173a5e;
-    font-weight: 800;
-    padding: 0 0.35rem;
+    color: var(--handlung-dunkel);
+    font-weight: var(--stark-voll);
+    padding: 0 var(--abstand-3);
 }
 
 .estab-message-workflow-choice-row {
     display: flex;
     flex-wrap: wrap;
-    gap: 0.45rem 1rem;
+    gap: var(--abstand-4) var(--abstand-6);
 }
 
 .estab-message-workflow-choice-row label {
     align-items: center;
     display: inline-flex;
-    gap: 0.35rem;
+    gap: var(--abstand-3);
 }
 
 .estab-message-workflow-fields input:not([type="checkbox"]):not([type="radio"]),
 .estab-message-workflow-fields select,
 .estab-message-workflow-fields textarea {
-    background: #ffffff;
+    background: var(--grund-tafel);
     border: 1px solid var(--rand-bedienelement);
-    border-radius: 5px;
-    color: #172033;
+    border-radius: var(--radius-2);
+    color: var(--tinte);
     font: inherit;
     max-width: 100%;
-    padding: 0.5rem 0.6rem;
+    padding: var(--abstand-4) var(--abstand-4);
     width: 100%;
 }
 
 .estab-message-workflow-readonly {
-    color: #536476;
-    font-size: 0.9rem;
+    color: var(--tinte-neben);
+    font-size: var(--schrift-3);
 }
 
 /* Chronological station band for one Nachrichtenvordruck. Repeated stations
@@ -5543,15 +5548,15 @@ section.estab-message-timeline[data-estab-message-timeline] * {
 /* Der Kasten misst sich selbst, damit das Blatt darin wissen kann, wie
    viel Platz es hat. */
 .estab-message-form-scroll {
-    background: #cfd8e1;
-    border: 1px solid #a6b5c4;
-    border-radius: 10px;
+    background: var(--handlung-sanft);
+    border: 1px solid var(--linie-kraeftig);
+    border-radius: var(--radius-3);
     container-type: inline-size;
     max-width: 100%;
     overflow: auto;
     overscroll-behavior-inline: contain;
-    padding: clamp(0.4rem, 1.4vw, 0.9rem);
-    scrollbar-color: #496a8a #e7edf3;
+    padding: var(--abstand-4);
+    scrollbar-color: var(--tinte-neben) var(--tinte-spalte);
 }
 
 /* Das Blatt bleibt 56 rem breit -- das ist das Raster des Vordrucks, und
@@ -7397,12 +7402,12 @@ section.estab-message-timeline[data-estab-message-timeline]
 
 @media (max-width: 56rem) {
     .estab-message-form-page {
-        padding: 0.5rem;
+        padding: var(--abstand-4);
     }
 
     .estab-message-page-header {
         align-items: flex-start;
-        border-radius: 7px;
+        border-radius: var(--radius-3);
         flex-direction: column;
     }
 
@@ -7452,7 +7457,7 @@ section.estab-message-timeline[data-estab-message-timeline]
 @media (min-width: 70rem) {
     .estab-message-form-page {
         align-items: start;
-        column-gap: 0.9rem;
+        column-gap: var(--abstand-6);
         display: grid;
         grid-template-columns: minmax(0, 1fr) clamp(11.5rem, 20%, 14rem);
     }
@@ -7549,7 +7554,7 @@ section.estab-message-timeline[data-estab-message-timeline]
     }
 
     body.estab-message-form-body {
-        background: #ffffff !important;
+        background: var(--grund-tafel) !important;
         margin: 0 !important;
     }
 
@@ -7594,7 +7599,7 @@ section.estab-message-timeline[data-estab-message-timeline]
 
     .estab-message-form-page,
     .estab-message-form-scroll {
-        background: #ffffff;
+        background: var(--grund-tafel);
         border: 0;
         margin: 0;
         max-width: none;
@@ -9612,25 +9617,25 @@ a.estab-message-list-chip:hover {
     }
 
     .estab-message-error-summary {
-        margin: 0 0 0.6rem;
-        padding: 0.55rem 0.7rem;
+        margin: 0 0 var(--abstand-4);
+        padding: var(--abstand-4) var(--abstand-5);
     }
 
     .estab-message-error-summary p {
-        font-size: 0.8rem;
+        font-size: var(--schrift-2);
     }
 
     .estab-message-confirmation {
-        gap: 0.55rem;
-        padding: 0.9rem 0.85rem 1.5rem;
+        gap: var(--abstand-4);
+        padding: var(--abstand-6) var(--abstand-5) var(--abstand-7);
     }
 
     .estab-message-confirmation-detail {
-        margin: 0.55rem 0 0;
+        margin: var(--abstand-4) 0 0;
     }
 
     .estab-message-confirmation-actions {
-        margin: 0.7rem 0 0;
+        margin: var(--abstand-5) 0 0;
     }
 
     .estab-tool-shell {
@@ -9712,20 +9717,20 @@ a.estab-message-list-chip:hover {
     }
 
     .estab-message-confirmation {
-        gap: 0.4rem;
-        padding: 0.6rem 0.7rem 1rem;
+        gap: var(--abstand-3);
+        padding: var(--abstand-4) var(--abstand-5) var(--abstand-6);
     }
 
     .estab-message-confirmation .estab-tool-feedback strong {
-        font-size: 1.05rem;
+        font-size: var(--schrift-4);
     }
 
     .estab-message-confirmation-detail {
-        margin: 0.4rem 0 0;
+        margin: var(--abstand-3) 0 0;
     }
 
     .estab-message-confirmation-actions {
-        margin: 0.5rem 0 0;
+        margin: var(--abstand-4) 0 0;
     }
 
     .estab-sidebar-section-heading p {
@@ -9812,12 +9817,12 @@ a.estab-message-list-chip:hover {
     }
 
     .estab-message-error-summary {
-        margin: 0 0 0.45rem;
-        padding: 0.4rem 0.55rem;
+        margin: 0 0 var(--abstand-4);
+        padding: var(--abstand-3) var(--abstand-4);
     }
 
     .estab-message-error-summary h2 {
-        font-size: 0.9rem;
+        font-size: var(--schrift-3);
     }
 
     .estab-message-error-summary p {

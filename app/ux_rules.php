@@ -235,6 +235,23 @@ function estab_ux_rules(): array
                 . 'Fokusring traegt auf jedem Grund mindestens einer seiner '
                 . 'beiden Ringe.',
         ],
+        'GES-SEITENKOPF' => [
+            'origin' => ESTAB_UX_ORIGIN_GESTALTUNG,
+            'reference' => 'Abschnitt 4.2',
+            'requirement' => 'Jede Seite trägt genau eine Überschrift erster '
+                . 'Ordnung, darüber die Bereichsmarke und darunter eine '
+                . 'Trennlinie. Der Kopf ist eine Zeile, kein Banner, und '
+                . 'trägt keinen erklärenden Satz.',
+        ],
+        'GES-BAENDER' => [
+            'origin' => ESTAB_UX_ORIGIN_GESTALTUNG,
+            'reference' => 'Abschnitt 4.1',
+            'requirement' => 'Die Bänder der Inhaltsspalte stehen in fester '
+                . 'Reihenfolge: Seitenkopf, Rückmeldung, Aktionsleiste, '
+                . 'Inhalt, Fuß. Eine klebende Leiste deckt und trägt eine '
+                . 'Unterlinie, damit sich der Inhalt nicht sichtbar unter '
+                . 'ihr durchschiebt.',
+        ],
         'GES-FOKUS-DOPPELRING' => [
             'origin' => ESTAB_UX_ORIGIN_GESTALTUNG,
             'reference' => 'Abschnitt 2.6',
