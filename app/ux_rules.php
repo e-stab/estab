@@ -235,6 +235,32 @@ function estab_ux_rules(): array
                 . 'Fokusring traegt auf jedem Grund mindestens einer seiner '
                 . 'beiden Ringe.',
         ],
+        'GES-VORDRUCK-MASSSTAB' => [
+            'origin' => ESTAB_UX_ORIGIN_GESTALTUNG,
+            'reference' => 'Abschnitt 12.1 und 12.2',
+            'requirement' => 'Der Nachrichtenvordruck wird als Ganzes '
+                . 'skaliert, nie abgeschnitten und nie gestaucht. Sein Raster '
+                . 'bleibt 56rem; der Maßstab liegt zwischen 0.75 und 1 und '
+                . 'bemisst sich am Rahmen, nicht am Fenster. Im Druck gilt '
+                . 'ein eigener fester Maßstab.',
+        ],
+        'GES-VORDRUCK-LESBAR' => [
+            'origin' => ESTAB_UX_ORIGIN_GESTALTUNG,
+            'reference' => 'Abschnitt 12.2',
+            'requirement' => 'Tragende Angaben im Blatt sind mindestens '
+                . '0.875rem, damit sie im kleinsten Maßstab über 10 '
+                . 'Bildpunkten bleiben. Kleinstdruck des Papierbildes ist '
+                . 'ausgenommen, wenn er namentlich begründet ist und die '
+                . 'Angabe anderswo lesbar steht.',
+        ],
+        'GES-INHALT-BLEIBT-GROSS' => [
+            'origin' => ESTAB_UX_ORIGIN_GESTALTUNG,
+            'reference' => 'Abschnitt 2.3',
+            'requirement' => 'Betreff und Nachrichteninhalt tragen die '
+                . 'Inhaltsstufe von 1rem und schrumpfen auf keinem '
+                . 'Bildschirm. Sie sind der Gegenstand der Anwendung; wer '
+                . 'sie verkleinert, spart an der falschen Stelle.',
+        ],
         'GES-SEITENKOPF' => [
             'origin' => ESTAB_UX_ORIGIN_GESTALTUNG,
             'reference' => 'Abschnitt 4.2',

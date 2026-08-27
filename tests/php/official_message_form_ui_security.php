@@ -1183,7 +1183,12 @@ $assert(
          * aufgeblasen.
          */
         && str_contains($css, 'container-type: inline-size;')
-        && str_contains($css, 'zoom: min(1, calc(100cqw / 56rem));')
+        // Der Maszstab hat seit GES-VORDRUCK-LESBAR eine Untergrenze:
+        // Wer das Blatt skaliert, skaliert seine Schrift mit.
+        && str_contains(
+            $css,
+            'zoom: max(0.75, min(1, calc(100cqw / 56rem)));'
+        )
         && !str_contains(
             $css,
             'content: "Zum vollständigen Vordruck horizontal wischen"'

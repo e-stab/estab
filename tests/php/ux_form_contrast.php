@@ -14,7 +14,9 @@ declare(strict_types=1);
  * Für die Nachrichtenlisten war der Kontrast bereits geprüft; für den
  * Vordruck nicht. Diese Prüfung schliesst die Lücke. Sie misst jede
  * Vorder-/Hintergrundpaarung des Vordrucks gegen das AA-Verhältnis der
- * WCAG -- 4,5:1 für gewöhnlichen Text, 3:1 für grossen.
+ * WCAG. Seit der Betreiber UX-KONTRAST auf zwei Stufen gehoben hat, ist
+ * der Sollwert 7:1; 4,5:1 bleibt das absolute Minimum, das nie
+ * unterschritten wird.
  *
  * Der Zusammenhang, auf welchem Grund eine Farbe steht, ist im Stylesheet
  * nicht ablesbar: Ein Feld ist durchsichtig und liegt auf dem Vordruck, der
@@ -114,8 +116,15 @@ $backgroundFor = static function (string $selector) use ($backgrounds): ?string 
  * ab 24 Pixeln, fett ab 18,66 -- die Regeln des Vordrucks bleiben darunter,
  * deshalb wird durchweg 4,5 verlangt.
  */
-$required = 4.5;
+// Der Sollwert der Gestaltungsspec. Das Blatt haelt ihn: Die einzige
+// Paarung, die ihn verfehlte, war eine Streufarbe auf dem amtlichen Blau --
+// nicht die Vorschriftfarbe selbst. Der Grund ist vorgeschrieben, die
+// Schrift darauf war es nie.
+$required = 7.0;
 $measured = 0;
+
+require_once __DIR__ . '/lib/stylesheet.php';
+$markers = estab_test_css_definierte_marken($stylesheet);
 
 preg_match_all('~([^{}]+)\{([^{}]*)\}~', $rulesSource, $rules, PREG_SET_ORDER);
 foreach ($rules as $rule) {
@@ -143,18 +152,36 @@ foreach ($rules as $rule) {
         $word = strtok(trim($value), " \t");
         return $word === false ? null : $word;
     };
+    /*
+     * Eine Marke ist eine Farbe.
+     *
+     * Diese Pruefung las nur Hexliterale. Als der Vordruck auf Marken
+     * umgestellt wurde, fielen ihre Paarungen von 14 auf 9 -- die
+     * Umstellung haette die Deckung still verkleinert, und genau das ist
+     * die Art Regression, die niemand bemerkt. Ein var()-Aufruf wird
+     * deshalb aufgeloest, bevor gerechnet wird.
+     */
+    $aufloesen = static function (?string $value) use ($markers): ?string {
+        if (!is_string($value)) {
+            return null;
+        }
+        if (preg_match('~\Avar\(\s*(--[a-z0-9-]+)\s*\)\z~', $value, $t) === 1) {
+            return $markers[$t[1]] ?? null;
+        }
+        return $value;
+    };
     $isColour = static fn (?string $value): bool =>
         is_string($value)
         && preg_match('~\A#[0-9a-fA-F]{3,6}\z~', $value) === 1;
 
-    $front = $firstWord($declarations['color'] ?? null);
+    $front = $aufloesen($firstWord($declarations['color'] ?? null));
     if (!$isColour($front)) {
         // "inherit" und "transparent" setzen keine eigene Farbe.
         continue;
     }
-    $own = $firstWord(
+    $own = $aufloesen($firstWord(
         $declarations['background-color'] ?? $declarations['background'] ?? null
-    );
+    ));
     $back = $isColour($own) ? $own : $backgroundFor($selector);
     $assert(
         $back !== null,

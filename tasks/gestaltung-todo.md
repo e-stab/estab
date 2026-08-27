@@ -128,14 +128,14 @@ ansehen → Migrationsgrenze kürzen.** Abweichungen stehen bei der Aufgabe.
       - **Abhängigkeit:** G07
       - **Offen für Ihre Entscheidung:** Der Erklärsatz im Kopf des Vordrucks („Amtliches Raster mit feldbezogenen Ausfüllhinweisen …") steht noch im Markup und wird per CSS auf `display: none` gestellt — er ist damit weder sichtbar noch vorlesbar, also totes Markup. Ihn zu entfernen ist eine Inhalts-, keine Gestaltungsentscheidung; die Prüfung stellt vorerst nur sicher, dass er keine Höhe bekommt
 
-- [ ] **G09** `!!` **M** Das Blatt: Maßstab und Lesbarkeit
+- [x] **G09** `!!` **M** Das Blatt: Maßstab und Lesbarkeit
       → `estab-ui.css`, `tests/php/ges_vordruck.php`, `tests/php/ux_form_contrast.php`, `app/ux_rules.php`
-      - [ ] `zoom: max(0.75, min(1, calc(100cqw / 56rem)))` — Untergrenze neu
-      - [ ] Tragende Angaben im Blatt mindestens `0.875rem`
-      - [ ] Kleinstdruck des Papierbildes bleibt, steht aber nachweislich anderswo lesbar
-      - [ ] Fokusring skaliert nicht mit
-      - [ ] `ux_form_contrast.php` von 4.5 auf den 7er-Sollwert; was die Vorschrift vorgibt und 7 nicht erreicht, wird namentlich vermerkt und bleibt über 4.5
-      - [ ] Regeln `GES-VORDRUCK-MASSSTAB`, `GES-VORDRUCK-LESBAR`, `GES-INHALT-BLEIBT-GROSS`
+      - [x] `zoom: max(0.75, min(1, calc(100cqw / 56rem)))` — Untergrenze neu
+      - [x] Tragende Angaben im Blatt mindestens `0.875rem`
+      - [x] Kleinstdruck des Papierbildes bleibt, steht aber nachweislich anderswo lesbar
+      - [x] Fokusring skaliert nicht mit
+      - [x] `ux_form_contrast.php` von 4.5 auf den 7er-Sollwert; was die Vorschrift vorgibt und 7 nicht erreicht, wird namentlich vermerkt und bleibt über 4.5
+      - [x] Regeln `GES-VORDRUCK-MASSSTAB`, `GES-VORDRUCK-LESBAR`, `GES-INHALT-BLEIBT-GROSS`
       - **Prüfung:** gerenderte Blattbreite bei 1920/1366/1280/1024/896/800/733 px gegen die Tabelle in Spec 12.2
       - **Abhängigkeit:** G07, G08
 

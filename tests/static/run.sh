@@ -203,6 +203,7 @@ for test_name in \
     ges_kontrast \
     ges_fokus \
     ges_seitenaufbau \
+    ges_vordruck \
     ux_keyboard \
     ux_without_javascript \
     fuest_formal_review \

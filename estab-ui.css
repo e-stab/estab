@@ -5582,7 +5582,16 @@ section.estab-message-timeline[data-estab-message-timeline] * {
     min-width: 56rem;
     position: relative;
     width: 56rem;
-    zoom: min(1, calc(100cqw / 56rem));
+    /* Skaliert, nicht abgeschnitten und nicht gestaucht: Alle Verhaeltnisse
+       bleiben, kein Feld wandert. Nie groesser als 1 -- ein Vordruck in
+       Uebergroesse sieht falsch aus und gewinnt nichts.
+
+       Und nie kleiner als 0.75: Wer das Blatt skaliert, skaliert seine
+       Schrift mit. Bei 0.75 steht eine tragende Angabe noch bei 10.5
+       Bildpunkten. Darunter hoert das Skalieren auf und der Rahmen scrollt --
+       angeschnittener Text in lesbarer Groesse schlaegt vollstaendigen Text
+       in unlesbarer. */
+    zoom: max(0.75, min(1, calc(100cqw / 56rem)));
 }
 
 
@@ -5775,7 +5784,7 @@ section.estab-message-timeline[data-estab-message-timeline] * {
     bottom: 0;
     box-sizing: border-box;
     display: flex;
-    font-size: 0.72rem;
+    font-size: var(--schrift-3);
     justify-content: center;
     overflow: hidden;
     padding: 0.15rem 0.2rem;
@@ -5810,7 +5819,7 @@ section.estab-message-timeline[data-estab-message-timeline] * {
 .estab-official-stamp-labels {
     border-top: 1px solid var(--estab-official-line);
     display: grid;
-    font-size: 0.78rem;
+    font-size: var(--schrift-3);
     grid-template-columns: 1fr 1fr 0.65fr;
 }
 
@@ -5853,10 +5862,13 @@ section.estab-message-timeline[data-estab-message-timeline] * {
     min-height: 2.2rem;
 }
 
-/* Die Zeile ist im Raster 2,2 rem hoch -- so hoch ist sie auf dem Papier.
-   "noch kein TBB-Nachweis" brauchte in voller Schriftgroesse drei Zeilen und
-   stand dann quer ueber dem Rahmen. Kleiner gesetzt passt der Hinweis hinein,
-   und das Raster bleibt, wie der Vordruck es vorgibt. */
+/* Ausnahme nach docs/GESTALTUNG.md Abschnitt 1.4 und 12.2.
+   Die Zeile ist im Raster 2,2 rem hoch -- so hoch ist sie auf dem Papier.
+   "noch kein TBB-Nachweis" brauchte in Arbeitsgroesse drei Zeilen und stand
+   dann quer ueber dem Rahmen. Die Gestaltungsspec verlangt fuer tragende
+   Angaben 0.875rem; hier schlaegt das Papierbild sie, weil die Rasterzeile
+   nicht waechst. Die Nachweisnummer selbst steht in voller Groesse in der
+   Meldungsliste und im Laufzettel. */
 .estab-official-ttb > .estab-official-readonly {
     align-items: center;
     display: flex;
@@ -5948,6 +5960,11 @@ section.estab-message-timeline[data-estab-message-timeline] * {
     z-index: 0;
 }
 
+/* Ausnahme nach docs/GESTALTUNG.md Abschnitt 12.2: Kleinstdruck des
+   Papierbildes. Der senkrechte Streifen nennt, welche Durchschrift an wen
+   geht -- auf dem Papier steht er ebenso klein, und er traegt keine Angabe
+   des Vorgangs, sondern eine feste Zuordnung. Sie steht lesbar in der
+   Ausfuellhilfe und im Handbuch. */
 .estab-official-copy-distribution {
     bottom: 6.5rem;
     box-sizing: border-box;
@@ -6028,7 +6045,7 @@ section.estab-message-timeline[data-estab-message-timeline] * {
 
 .estab-official-priority .estab-official-choice-group {
     box-sizing: border-box;
-    font-size: 0.76rem;
+    font-size: var(--schrift-3);
     gap: 0.25rem;
     padding-right: 1.65rem;
 }
@@ -6056,7 +6073,7 @@ section.estab-message-timeline[data-estab-message-timeline] * {
 }
 
 .estab-official-priority-clear {
-    color: #405a72;
+    color: var(--tinte);
 }
 
 .estab-official-priority-note {
@@ -6072,8 +6089,14 @@ section.estab-message-timeline[data-estab-message-timeline] * {
    Zelle hat aber nur Platz fuer zwei -- der Text legte sich dann quer ueber
    "Ruf Nr." darunter. Klein gesetzt steht er in seiner Zelle, wie die
    uebrigen Ausfuellhinweise auch. */
+/* Ausnahme nach docs/GESTALTUNG.md Abschnitt 1.4: Die Gestaltungsspec
+   verlangt fuer tragende Angaben 0.875rem. Dieser Hinweis steht im festen
+   Raster des amtlichen Blattes unter "Anschrift:"; in Arbeitsgroesse
+   ueberlaeuft er die Feldnummer und zerstoert das Papierbild, das
+   UX-PAPIERBILD verlangt. Die Vorschrift schlaegt die Gestaltungsspec.
+   Derselbe Text steht lesbar in der Ausfuellhilfe am Feld. */
 .estab-official-designation-hint {
-    color: #405a72;
+    color: var(--tinte);
     display: inline-block;
     font-size: 0.6rem;
     font-weight: 400;
@@ -6081,10 +6104,10 @@ section.estab-message-timeline[data-estab-message-timeline] * {
 }
 
 .estab-official-text-guidance {
-    color: #405a72;
+    color: var(--tinte);
     display: flex;
     flex-wrap: wrap;
-    font-size: 0.7rem;
+    font-size: var(--schrift-3);
     gap: 0.15rem 0.8rem;
     line-height: 1.25;
     margin: 0 0 0.2rem;
@@ -6105,10 +6128,10 @@ section.estab-message-timeline[data-estab-message-timeline] * {
  * dort die Ruecknahme begruendet wird.
  */
 .estab-official-review-scope {
-    color: #405a72;
+    color: var(--tinte);
     display: flex;
     flex-direction: column;
-    font-size: 0.7rem;
+    font-size: var(--schrift-3);
     gap: 0.15rem;
     line-height: 1.3;
     margin: 0 0 0.25rem;
@@ -6185,6 +6208,10 @@ section.estab-message-timeline[data-estab-message-timeline] * {
     padding: 0.15rem 0.25rem;
 }
 
+/* Ausnahme wie oben: Der Satz steht im Kasten der Gespraechsnotiz, dessen
+   Hoehe das Raster festlegt. In Arbeitsgroesse laeuft er unten heraus. Was
+   er sagt -- welche Uebermittlungsart oben anzukreuzen ist -- steht ebenso
+   in der Ausfuellhilfe des Feldes. */
 .estab-official-conversation-medium-status {
     color: #24384a;
     display: block;
@@ -6239,7 +6266,7 @@ section.estab-message-timeline[data-estab-message-timeline] * {
 
 .estab-official-message-text .estab-official-textarea,
 .estab-official-message-text .estab-official-readonly--multiline {
-    font-size: 1.05rem;
+    font-size: var(--schrift-4);
     height: 100%;
     line-height: 2.75rem;
     padding: 0 2.6rem 0 0.75rem;
@@ -6410,6 +6437,8 @@ section.estab-message-timeline[data-estab-message-timeline] * {
     width: 1.45rem;
 }
 
+/* Ausnahme wie oben: Kleinstdruck des Papierbildes. Die Legende der
+   Durchschriften ist Beiwerk des Blattes, keine Angabe des Vorgangs. */
 .estab-official-copy-legend {
     display: flex;
     font-size: 0.65rem;
@@ -6440,7 +6469,7 @@ section.estab-message-timeline[data-estab-message-timeline] * {
 }
 
 .estab-official-distribution-record {
-    font-size: 0.68rem;
+    font-size: var(--schrift-3);
     margin: 0.35rem 0 0;
     overflow-wrap: anywhere;
 }
@@ -6580,7 +6609,7 @@ section.estab-message-timeline[data-estab-message-timeline] * {
  * bereits aria-required, und ein vorgelesener Stern waere nur Laerm.
  */
 .estab-official-required-mark {
-    font-size: 0.85rem;
+    font-size: var(--schrift-3);
     font-weight: 700;
     left: 0.1rem;
     line-height: 1;
@@ -6601,7 +6630,7 @@ section.estab-message-timeline[data-estab-message-timeline] * {
     background: #9d1c16;
     bottom: 0.12rem;
     color: #ffffff;
-    font-size: 0.62rem;
+    font-size: var(--schrift-3);
     font-weight: 800;
     line-height: 1.2;
     max-width: 13rem;
@@ -6649,6 +6678,8 @@ section.estab-message-timeline[data-estab-message-timeline] * {
     opacity: 1;
 }
 
+/* Ausnahme wie oben: Kleinstdruck des Papierbildes. Die Vordrucknummer
+   gehoert zum Blatt, nicht zur Nachricht. */
 .estab-official-print-number {
     bottom: 0.08rem;
     font-size: 0.52rem;
@@ -6674,7 +6705,7 @@ section.estab-message-timeline[data-estab-message-timeline] * {
     color: #000000;
     cursor: pointer;
     display: inline-flex;
-    font-size: 0.72rem;
+    font-size: var(--schrift-3);
     font-style: italic;
     font-weight: 800;
     height: 1.3rem;
@@ -6738,7 +6769,7 @@ section.estab-message-timeline[data-estab-message-timeline] * {
     border-radius: 5px;
     color: #173a5e;
     cursor: pointer;
-    font-size: 0.8rem;
+    font-size: var(--schrift-3);
     font-weight: 800;
     padding: 0.4rem 0.55rem;
 }
