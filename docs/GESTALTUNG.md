@@ -332,6 +332,19 @@ Verhältnisse stehen dabei. Der niedrigste Wert im ganzen Farbsystem ist
 | `--tinte` | `#243547` | Fließtext, Nachrichteninhalt, Überschriften |
 | `--tinte-neben` | `#3d4c5c` | zweite Tinte: Hilfstext, Platzhalter, Zeitangaben |
 
+**Eine Tinte braucht ihren Grund.** `--tinte-spalte` und
+`--tinte-spalte-neben` tragen nur, solange etwas Dunkles darunter liegt. Sie
+erscheinen deshalb ausschließlich dort, wo dieselbe Regel einen dunklen Grund
+setzt oder der Auswähler zu einem als dunkel benannten Bereich gehört.
+
+Das ist keine Vorsichtsmaßnahme, sondern die Lehre aus einem Fehler: Die
+Gestaltungsumstellung entfernte den dunklen Bannergrund von fünf Seitenköpfen
+— richtig, denn ein Seitenkopf ist eine Zeile und kein Banner — und ließ die
+weiße Tinte stehen. Weiße Überschrift auf hellem Grund, und die
+Kontrastprüfung schwieg: Sie kennt die Paarungen, die ihr aufgezählt sind,
+und ein verschwundener Grund steht in keiner Liste. Geprüft von
+`GES-TINTE-BRAUCHT-GRUND`.
+
 **`--tinte-neben` ist keine gedämpfte Tinte, sondern eine zweite.** Sie ist
 kühler und eine Spur dunkler gehalten, damit sie auf jedem Grund über 7:1
 bleibt. Der Unterschied zur Haupttinte trägt keine Bedeutung; er ordnet nur.

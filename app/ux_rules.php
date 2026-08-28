@@ -235,6 +235,16 @@ function estab_ux_rules(): array
                 . 'Fokusring traegt auf jedem Grund mindestens einer seiner '
                 . 'beiden Ringe.',
         ],
+        'GES-TINTE-BRAUCHT-GRUND' => [
+            'origin' => ESTAB_UX_ORIGIN_GESTALTUNG,
+            'reference' => 'Abschnitt 2.4',
+            'requirement' => 'Die Tinten der dunklen Spalte erscheinen nur '
+                . 'dort, wo ein dunkler Grund liegt -- gesetzt von derselben '
+                . 'Regel oder von einem Bereich, der als dunkel benannt ist. '
+                . 'Eine Tinte ohne ihren Grund ist unlesbar, und keine '
+                . 'Paarungsrechnung findet das: Ein verschwundener Grund '
+                . 'steht in keiner Liste.',
+        ],
         'GES-DURCHSETZUNG' => [
             'origin' => ESTAB_UX_ORIGIN_GESTALTUNG,
             'reference' => 'Abschnitt 2.5',

@@ -258,6 +258,101 @@ $assert(
 );
 
 /*
+ * Eine Tinte braucht ihren Grund.
+ *
+ * Die Farben der dunklen Spalte -- Weiss und das helle Blaugrau daneben --
+ * tragen nur, solange etwas Dunkles darunter liegt. Steht eine von ihnen auf
+ * hellem Grund, ist der Text unlesbar, und keine Paarungsrechnung findet das:
+ * Diese Pruefung kennt die Paarungen, die ihr aufgezaehlt sind, und ein
+ * verschwundener Grund steht in keiner Liste.
+ *
+ * Genau das ist passiert. Die Gestaltungsumstellung entfernte den dunklen
+ * Verlaufsgrund des Dokumentkopfs der Infosammlung -- richtig, denn ein
+ * Seitenkopf ist eine Zeile und kein Banner -- und liess die weisse Tinte
+ * stehen. Weisse Ueberschrift auf hellem Grund, und der Waechter schwieg.
+ *
+ * Ableitbar ist es trotzdem: Wer eine Spaltentinte benutzt, muss auf einem
+ * dunklen Grund stehen. Entweder setzt dieselbe Regel ihn, oder ihr
+ * Auswaehler gehoert zu einem Bereich, der als dunkel benannt ist.
+ */
+$dunkleGrundfarben = [
+    'var(--grund-spalte)', 'var(--grund-kachel)', 'var(--grund-kachel-zeigen)',
+    'var(--handlung)', 'var(--handlung-dunkel)', 'var(--fehler-kante)',
+    'var(--marke-standort-flaeche)', 'var(--erledigt-spalte-flaeche)',
+    'var(--fehler-spalte-flaeche)', 'var(--tinte)',
+];
+/* Bereiche, die als Ganzes auf dunklem Grund stehen. Sie stehen namentlich
+   hier, damit die Ausnahme eine Liste ist und keine Gewohnheit. */
+$dunkleBereiche = '~estab-(shell|navigation|sidebar|session|cockpit'
+    . '|menu-card|actions-page|bos-list-page|root-header'
+    . '|incident-indicator-alert)~';
+$spaltentinten = ['var(--tinte-spalte)', 'var(--tinte-spalte-neben)'];
+
+$ohneGrund = [];
+foreach (estab_test_css_regeln($stylesheet) as $regel) {
+    if (estab_test_ist_vordruck($regel['auswaehler'])) {
+        continue;
+    }
+    $tinte = null;
+    $grund = null;
+    foreach ($regel['deklarationen'] as $erklaerung) {
+        if ($erklaerung['eigenschaft'] === 'color') {
+            $tinte = trim($erklaerung['wert']);
+        }
+        if (str_starts_with($erklaerung['eigenschaft'], 'background')) {
+            $grund = trim($erklaerung['wert']);
+        }
+    }
+    if ($tinte === null || !in_array($tinte, $spaltentinten, true)) {
+        continue;
+    }
+    $stehtDunkel = false;
+    if ($grund !== null) {
+        foreach ($dunkleGrundfarben as $dunkel) {
+            if (str_contains($grund, $dunkel)) {
+                $stehtDunkel = true;
+                break;
+            }
+        }
+    }
+    if ($stehtDunkel || preg_match($dunkleBereiche, $regel['auswaehler']) === 1) {
+        continue;
+    }
+    $ohneGrund[] = $regel['auswaehler'] . ' { color: ' . $tinte . ' } Zeile '
+        . $regel['zeile'];
+}
+$assert(
+    $ohneGrund === [],
+    estab_ux_requirement(
+        'GES-TINTE-BRAUCHT-GRUND',
+        'Diese Regeln setzen eine Tinte der dunklen Spalte, ohne dass ein '
+            . 'dunkler Grund darunter liegt: '
+            . implode(' | ', array_slice($ohneGrund, 0, 6))
+    )
+);
+
+// Beisst die Pruefung? Genau der Fall, der sie noetig gemacht hat.
+$probe = '.estab-probe-heller-kopf { color: var(--tinte-spalte); '
+    . 'border-bottom: 1px solid var(--linie); }';
+$probeOffen = 0;
+foreach (estab_test_css_regeln($probe) as $regel) {
+    foreach ($regel['deklarationen'] as $erklaerung) {
+        if ($erklaerung['eigenschaft'] === 'color'
+            && in_array(trim($erklaerung['wert']), $spaltentinten, true)) {
+            $probeOffen++;
+        }
+    }
+}
+$assert(
+    $probeOffen === 1,
+    estab_ux_requirement(
+        'GES-TINTE-BRAUCHT-GRUND',
+        'Die Pruefung findet eine Spaltentinte ohne dunklen Grund nicht '
+            . 'wieder -- genau den Fall, fuer den es sie gibt.'
+    )
+);
+
+/*
  * Keine gedaempfte Schrift.
  *
  * `opacity` senkt den Kontrast unkontrolliert und entzieht ihn der Messung:

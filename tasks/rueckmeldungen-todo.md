@@ -12,22 +12,25 @@ Reihenfolge: **Test zuerst, dann die Änderung, dann das Bild ansehen.**
 
 ## P1 — Blocker: was gerade an der Arbeit hindert
 
-- [ ] **R01** `·` **XS** Weiße Schrift bei BOS-Info
+- [x] **R01** `·` **XS** Weiße Schrift bei BOS-Info
       → `estab-ui.css`
-      - [ ] `.estab-bos-document-header` und sein `h1` tragen `--tinte` auf hellem Grund
-      - [ ] Der Bereichsmarker darüber trägt `--tinte-neben`, nicht `--marke-standort` (Gold auf Hell erreicht 1.67)
+      - [x] `.estab-bos-document-header` und sein `h1` tragen `--tinte` auf hellem Grund
+      - [x] Der Bereichsmarker darüber trägt `--tinte-neben`, nicht `--marke-standort` (Gold auf Hell erreicht 1.67)
       - **Prüfung:** `ges_kontrast.php`; Bild der BOS-Info-Seite
       - **Abhängigkeit:** keine — **Fehler der Gestaltungsumstellung, nicht des Bestands**
 
-- [ ] **R02** `!` **S** `GES-TINTE-BRAUCHT-GRUND`
+- [x] **R02** `!` **S** `GES-TINTE-BRAUCHT-GRUND`
       → `tests/php/ges_kontrast.php`, `app/ux_rules.php`, `docs/GESTALTUNG.md`
-      - [ ] `--tinte-spalte` und `--tinte-spalte-neben` nur dort, wo ein dunkler Grund gesetzt ist — auf derselben Regel oder unter einem benannten dunklen Bereich
-      - [ ] Selbstprobe: eine Regel mit heller Fläche und Spaltentinte muss auffallen
-      - [ ] Spec Abschnitt 2.4 nennt die Regel
+      - [x] `--tinte-spalte` und `--tinte-spalte-neben` nur dort, wo ein dunkler Grund gesetzt ist — auf derselben Regel oder unter einem benannten dunklen Bereich
+      - [x] Selbstprobe: eine Regel mit heller Fläche und Spaltentinte muss auffallen
+      - [x] Spec Abschnitt 2.4 nennt die Regel
       - **Prüfung:** volle Suite; R01 rückgängig gemacht muss rot werden
 
-> **Prüfpunkt D0** — Baut man die weiße Schrift wieder ein, muss der Wächter
-> sie finden. Sonst behebt R01 einen Fall und lässt den nächsten zu.
+> **Prüfpunkt D0 — bestanden.** Der Wächter fand den Fehler beim ersten Lauf
+> und zwar **fünfmal**: Nicht nur der Dokumentkopf der Infosammlung, sondern
+> auch die Köpfe von Verwaltung, Ausgabe, Werkzeugseiten und E-Mail-Ansicht
+> trugen weiße Tinte ohne ihren Grund. Sie hatten alle dasselbe entfernte
+> Banner. Gemeldet war einer. Dazu trägt er eine Selbstprobe.
 
 - [ ] **R03** `!` **S** Der LdF trägt die Fernmelder-Funktionen
       → `app/read_authorization.php`, `tests/php/…`

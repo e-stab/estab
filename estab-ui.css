@@ -2128,7 +2128,10 @@ audio[data-estab-sidebar-audio] {
        Banner -- die Kopfzeilenregel setzte sie ohnehin auf `none`. */
     border-radius: var(--radius-3);
     box-shadow: var(--schatten-tafel);
-    color: var(--tinte-spalte);
+    /* Stand auf var(--tinte-spalte): Rest des dunklen Banners,
+       dessen Grund die Kopfzeilenregel entfernt hat. Weisse Schrift
+       auf hellem Grund. */
+    color: var(--handlung-dunkel);
     padding: var(--abstand-7);
 }
 
@@ -2146,7 +2149,10 @@ audio[data-estab-sidebar-audio] {
 }
 
 .estab-admin-dashboard-hero > p:last-child {
-    color: var(--tinte-spalte);
+    /* Stand auf var(--tinte-spalte): Rest des dunklen Banners,
+       dessen Grund die Kopfzeilenregel entfernt hat. Weisse Schrift
+       auf hellem Grund. */
+    color: var(--handlung-dunkel);
     margin-bottom: 0;
     max-width: 54rem;
 }
@@ -2302,7 +2308,10 @@ audio[data-estab-sidebar-audio] {
        Banner -- die Kopfzeilenregel setzte sie ohnehin auf `none`. */
     border-radius: var(--radius-3);
     box-shadow: var(--schatten-tafel);
-    color: var(--tinte-spalte);
+    /* Stand auf var(--tinte-spalte): Rest des dunklen Banners,
+       dessen Grund die Kopfzeilenregel entfernt hat. Weisse Schrift
+       auf hellem Grund. */
+    color: var(--handlung-dunkel);
     padding: var(--abstand-7);
 }
 
@@ -2324,7 +2333,10 @@ audio[data-estab-sidebar-audio] {
 }
 
 .estab-export-hero > p:last-child {
-    color: var(--tinte-spalte);
+    /* Stand auf var(--tinte-spalte): Rest des dunklen Banners,
+       dessen Grund die Kopfzeilenregel entfernt hat. Weisse Schrift
+       auf hellem Grund. */
+    color: var(--handlung-dunkel);
     margin-bottom: 0;
     max-width: 65rem;
 }
@@ -2340,7 +2352,10 @@ audio[data-estab-sidebar-audio] {
 }
 
 .estab-export-hero .estab-export-eyebrow {
-    color: var(--tinte-spalte);
+    /* Stand auf var(--tinte-spalte): Rest des dunklen Banners,
+       dessen Grund die Kopfzeilenregel entfernt hat. Weisse Schrift
+       auf hellem Grund. */
+    color: var(--tinte-neben);
 }
 
 .estab-export-alert {
@@ -2936,7 +2951,10 @@ form[data-estab-incident-disabled="true"]::before {
        Banner -- die Kopfzeilenregel setzte sie ohnehin auf `none`. */
     border-radius: var(--radius-3);
     box-shadow: var(--schatten-tafel);
-    color: var(--tinte-spalte);
+    /* Stand auf var(--tinte-spalte): Rest des dunklen Banners,
+       dessen Grund die Kopfzeilenregel entfernt hat. Weisse Schrift
+       auf hellem Grund. */
+    color: var(--handlung-dunkel);
     padding: var(--abstand-7);
 }
 
@@ -2957,7 +2975,10 @@ form[data-estab-incident-disabled="true"]::before {
 }
 
 .estab-tool-hero > p:last-child {
-    color: var(--tinte-spalte);
+    /* Stand auf var(--tinte-spalte): Rest des dunklen Banners,
+       dessen Grund die Kopfzeilenregel entfernt hat. Weisse Schrift
+       auf hellem Grund. */
+    color: var(--handlung-dunkel);
     margin-bottom: 0;
     max-width: 65rem;
 }
@@ -7291,7 +7312,10 @@ section.estab-message-timeline[data-estab-message-timeline] * {
 .estab-email-preview-header {
     background: var(--grund-kachel-zeigen);
     border-bottom: 4px solid var(--marke-standort);
-    color: var(--tinte-spalte);
+    /* Stand auf var(--tinte-spalte): Rest des dunklen Banners,
+       dessen Grund die Kopfzeilenregel entfernt hat. Weisse Schrift
+       auf hellem Grund. */
+    color: var(--handlung-dunkel);
     padding: var(--abstand-6);
 }
 
@@ -7305,7 +7329,10 @@ section.estab-message-timeline[data-estab-message-timeline] * {
 }
 
 .estab-email-preview-header h1 {
-    color: var(--tinte-spalte);
+    /* Stand auf var(--tinte-spalte): Rest des dunklen Banners,
+       dessen Grund die Kopfzeilenregel entfernt hat. Weisse Schrift
+       auf hellem Grund. */
+    color: var(--handlung-dunkel);
     font-size: var(--schrift-7);
     line-height: 1.2;
     margin: 0;
@@ -7313,7 +7340,10 @@ section.estab-message-timeline[data-estab-message-timeline] * {
 }
 
 .estab-email-preview-header > p:last-child {
-    color: var(--tinte-spalte-neben);
+    /* Stand auf var(--tinte-spalte): Rest des dunklen Banners,
+       dessen Grund die Kopfzeilenregel entfernt hat. Weisse Schrift
+       auf hellem Grund. */
+    color: var(--tinte-neben);
     margin: var(--abstand-4) 0 0;
     overflow-wrap: anywhere;
 }
@@ -8124,13 +8154,14 @@ section.estab-message-timeline[data-estab-message-timeline]
     min-width: 0;
 }
 
+/* Vom Banner blieben Rand, Schatten und Polster stehen, nachdem seine
+   Flaeche entfernt war -- ein Kasten ohne Grund um eine Zeile. Der Kopf
+   traegt jetzt dieselbe Unterlinie wie jeder andere. */
 .estab-bos-document-header {
-    /* Verlaufsflaeche entfernt: Der Seitenkopf ist eine Zeile, kein
-       Banner -- die Kopfzeilenregel setzte sie ohnehin auf `none`. */
-    border: 1px solid var(--handlung-kante);
-    border-radius: var(--radius-3);
-    box-shadow: var(--schatten-tafel);
-    color: var(--tinte-spalte);
+    /* Stand auf var(--tinte-spalte): Rest des dunklen Banners,
+       dessen Grund die Kopfzeilenregel entfernt hat. Weisse Schrift
+       auf hellem Grund. */
+    color: var(--handlung-dunkel);
     padding: var(--abstand-6);
 }
 
@@ -8144,14 +8175,20 @@ section.estab-message-timeline[data-estab-message-timeline]
 }
 
 .estab-bos-document-header h1 {
-    color: var(--tinte-spalte);
+    /* Stand auf var(--tinte-spalte): Rest des dunklen Banners,
+       dessen Grund die Kopfzeilenregel entfernt hat. Weisse Schrift
+       auf hellem Grund. */
+    color: var(--handlung-dunkel);
     font-size: var(--schrift-7);
     line-height: 1.12;
     margin: var(--abstand-3) 0 var(--abstand-5);
 }
 
 .estab-bos-document-header p {
-    color: var(--tinte-spalte);
+    /* Stand auf var(--tinte-spalte): Rest des dunklen Banners,
+       dessen Grund die Kopfzeilenregel entfernt hat. Weisse Schrift
+       auf hellem Grund. */
+    color: var(--handlung-dunkel);
     margin: 0;
     max-width: 65rem;
 }
