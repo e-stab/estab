@@ -99,7 +99,7 @@ Reihenfolge: **Test zuerst, dann die Änderung, dann das Bild ansehen.**
       - [ ] `NV-09-VORRANGSTUFE` verlangt das bereits — **hier wird ein Verstoß behoben, keine Regel geändert**
       - **Prüfung:** Regeltest; leeren Vordruck öffnen
 
-- [ ] **R08** `·` **S** Der Aufnahmevermerk bekommt sein Datum
+- [x] **R08** `·` **S** Der Aufnahmevermerk bekommt sein Datum
       → `4fach/4fachform.php`
       - [ ] Die Vorbelegung ist `date("Hi")` — nur Stunde und Minute. Sie bekommt die taktische Zeitgruppe mit Tag, wie Annahme- und Beförderungsvermerk
       - [ ] Das Feld bleibt frei korrigierbar

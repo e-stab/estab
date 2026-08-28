@@ -128,9 +128,22 @@ class nachrichten4fach {
         $editableTimestampField !== ""
         && $this->formdata [$editableTimestampField] === ""
       ) {
-        // Der sichtbare Standard entspricht dem bisherigen serverseitigen
-        // Leerwert-Fallback, bleibt im Formular aber frei korrigierbar.
-        $this->formdata [$editableTimestampField] = date ("Hi");
+        // Der sichtbare Standard bleibt im Formular frei korrigierbar; er
+        // ist ein Vorschlag, keine Feststellung.
+        //
+        // Hier stand date ("Hi") -- Stunde und Minute, sonst nichts. Die
+        // Datumszelle des Vermerks blieb damit leer, obwohl sie als
+        // Pflichtangabe gekennzeichnet ist. Am selben Tag faellt das nicht
+        // auf, am naechsten sehr wohl: Ein Einsatz laeuft ueber Mitternacht,
+        // und "2110" sagt nicht, welcher Tag gemeint ist.
+        //
+        // Vorbelegt wird deshalb die taktische Zeitgruppe TThhmmMMMyyyy --
+        // dieselbe Schreibweise, in der Annahme- und Befoerderungsvermerk
+        // aus der Datenbank kommen. Der Annahmevermerk (02_zeit) stellt
+        // davon nur die Uhrzeit dar; das ist seine Bauart, keine
+        // Auslassung.
+        $this->formdata [$editableTimestampField] =
+          konv_datetime_taktime (date ("Y-m-d H:i:s"));
       }
       if ((!isset($this->formdata ["17_vermerke"]))  or ($this->formdata ["17_vermerke"] == "0000-00-00 00:00:00")) { $this->formdata ["17_vermerke"] = ""; }
       $conversationNote = $this->formdata ["11_gesprnotiz"] ?? "";
