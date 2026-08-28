@@ -428,15 +428,20 @@ foreach ([
     'Meldungsübersicht' => $overviewTable,
     'Zweite Sichtung' => $secondSightingTable,
 ] as $surface => $table) {
+    /*
+     * Die Kopfzellen tragen seit der Umstellung auf das Tabellenbauteil
+     * ihre Breite als Attribut -- `<th scope="col" style="width:12%">`.
+     * Geprueft wird deshalb der Anfang, nicht die geschlossene Klammer.
+     */
     $assert(
         substr_count($table, '<caption class="estab-visually-hidden">') === 1
-            && substr_count($table, '<th scope="col">') === 8
+            && substr_count($table, '<th scope="col"') === 8
             && substr_count($table, 'data-label=') === 24,
         $surface . ' result table lacks semantic or responsive labels'
     );
     $assert(
-        str_contains($table, '<th scope="col">Zeit und Verweildauer</th>')
-            && str_contains($table, '<th scope="col">Kenntnis</th>')
+        str_contains($table, '>Zeit und Verweildauer</th>')
+            && str_contains($table, '>Kenntnis</th>')
             && substr_count($table, 'data-estab-message-dwell="') === 3
             && substr_count(
                 $table,
@@ -445,7 +450,7 @@ foreach ([
         $surface . ' hides dwell time or reading state from the row'
     );
     $assert(
-        str_contains($table, '<th scope="col">Überschrift und Inhalt</th>')
+        str_contains($table, '>Überschrift und Inhalt</th>')
             && substr_count(
                 $table,
                 'data-estab-message-list-heading '

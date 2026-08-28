@@ -187,16 +187,15 @@ Reihenfolge: **Test zuerst, dann die Änderung, dann das Bild ansehen.**
 - [ ] **R19** `!` **M** Meldungsübersicht und Vordruckliste
       → `app/message_list_ui.php`, `4fach/vordrucke.php`
       - [x] **Vordruckliste** auf dem Bauteil
-      - [ ] **Meldungsübersicht** — offen, siehe unten. Ihre sechs Bänder sieben
-            in SQL (Vorrang, Stand, Kenntnis, Erledigt, Volltext, Verteiler),
-            mit vorbereiteten Anweisungen und EXISTS-Unterabfragen auf die
-            Zustandstabellen des Kontos. Das Bauteil siebt im Speicher. Beides
-            zusammenzubringen ist keine Umstellung, sondern eine Entscheidung:
-            entweder das Bauteil lernt eine von aussen gesetzte Auswahl
-            (Seite siebt in SQL, Bauteil stellt dar), oder die Übersicht lädt
-            den ganzen Einsatz und siebt im Speicher wie die Nachweisung.
-            Der zweite Weg verlagert die Berechtigungsprüfung aus SQL in PHP —
-            in der meistbenutzten Liste der Anwendung
+      - [x] **Meldungsübersicht** auf dem Bauteil, in dessen **zweiter
+            Betriebsart**: Die Seite siebt und blättert weiter in SQL — mit
+            vorbereiteten Anweisungen, EXISTS-Unterabfragen auf die
+            Zustandstabellen des Kontos und der Berechtigungsprüfung daran —
+            und reicht dem Bauteil eine fertige Auswahl. Das Bauteil stellt
+            dar: Rahmen, klebender Kopf, Beschriftung, Zellenbezeichnungen,
+            Kartenumbruch. Ihre sechs Bänder und ihr Blätterer bleiben ihre
+            eigenen (`baender => false`) — so entschieden, damit die
+            Berechtigungsprüfung bleibt, wo sie ist
       - [ ] `ges_filter.php` und `ges_tabelle.php` prüfen danach dieselbe Sache am Bauteil statt an der Seite
       - **Prüfung:** wie R17; zusätzlich bleiben `ges_tabelle.php` und `ges_filter.php` grün
       - **Abhängigkeit:** R14

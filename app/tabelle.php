@@ -185,12 +185,18 @@ function estab_tabelle_vergleichen(
  * Jede Tabelle trägt ihre Kennung im Feldnamen. Zwei Tabellen auf einer Seite
  * blättern sonst gemeinsam, und das fällt erst auf, wenn es beide gibt.
  *
+ * `$eigene` überschreibt einzelne Namen. Das braucht eine Seite, die ihre
+ * Auswahl selbst trifft -- die Meldungsübersicht siebt in der Datenbank und
+ * kennt ihre Adressfelder seit jeher unter `ml_`. Sie soll deswegen nicht
+ * ihre Adressen ändern müssen; das Bauteil lernt stattdessen ihre Namen.
+ *
+ * @param array<string,string> $eigene
  * @return array<string,string>
  */
-function estab_tabelle_felder(string $id): array
+function estab_tabelle_felder(string $id, array $eigene = []): array
 {
     $marke = preg_replace('~[^a-z0-9]+~', '_', mb_strtolower($id)) ?? 't';
-    return [
+    return array_merge([
         'sortierung' => $marke . '_sort',
         'richtung' => $marke . '_richtung',
         'seite' => $marke . '_seite',
@@ -198,7 +204,10 @@ function estab_tabelle_felder(string $id): array
         'suche' => $marke . '_suche',
         'spalte' => $marke . '_s_',
         'filter' => $marke . '_f_',
-    ];
+    ], array_filter(
+        $eigene,
+        static fn (mixed $wert): bool => is_string($wert) && $wert !== ''
+    ));
 }
 
 /**
@@ -242,9 +251,13 @@ function estab_tabelle_spalte(array $spalte): array
  * @param array<string,mixed> $quelle
  * @return array<string,mixed>
  */
-function estab_tabelle_zustand(string $id, array $spalten, array $quelle): array
-{
-    $felder = estab_tabelle_felder($id);
+function estab_tabelle_zustand(
+    string $id,
+    array $spalten,
+    array $quelle,
+    array $eigeneFelder = []
+): array {
+    $felder = estab_tabelle_felder($id, $eigeneFelder);
     $lies = static function (array $quelle, string $name): string {
         $wert = $quelle[$name] ?? '';
         return is_string($wert) ? trim($wert) : '';
@@ -794,20 +807,60 @@ function estab_tabelle_markup(array $tabelle): string
     $leer = (string) ($tabelle['leer'] ?? 'Kein Eintrag entspricht den gesetzten Filtern.');
     $quelle = (array) ($tabelle['quelle'] ?? $_GET);
 
-    $zustand = estab_tabelle_zustand($id, $spalten, $quelle);
-    $gesiebt = estab_tabelle_sieben($alle, $spalten, $zustand);
-    $gesiebt = estab_tabelle_sortieren($gesiebt, $spalten, $zustand);
+    /*
+     * Zwei Betriebsarten.
+     *
+     * Im Regelfall siebt, sortiert und blättert das Bauteil selbst über die
+     * übergebenen Zeilen. Das ist der einfachere und der häufigere Fall.
+     *
+     * Trifft die Seite ihre Auswahl selbst -- weil sie in der Datenbank
+     * siebt und dabei die Berechtigungsprüfung mitführt --, gibt sie unter
+     * `fremd` an, was ihre Auswahl ergeben hat: wie viele Zeilen sie gefunden
+     * hat, wie viele es insgesamt gibt und auf welcher Seite von wievielen
+     * sie steht. Das Bauteil stellt dann nur dar.
+     *
+     * Der Preis dieser zweiten Betriebsart ist bekannt und gewollt: Eine
+     * Seite, die selbst siebt, bringt auch ihre eigenen Suchbänder mit. Sie
+     * schaltet die des Bauteils mit `baender => false` ab, und die
+     * Adressfelder ihrer bestehenden Bedienung reicht sie unter `felder`
+     * herein -- so muss sie ihre Adressen nicht ändern, und der Blätterer des
+     * Bauteils spricht trotzdem ihre Sprache.
+     */
+    $fremd = $tabelle['fremd'] ?? null;
+    $zustand = estab_tabelle_zustand(
+        $id,
+        $spalten,
+        $quelle,
+        (array) ($tabelle['felder'] ?? [])
+    );
 
-    $treffer = count($gesiebt);
-    $seiten = max(1, (int) ceil($treffer / $zustand['groesse']));
-    $seite = min($zustand['seite'], $seiten);
-    $zustand['seite'] = $seite;
-    $sichtbar = array_slice($gesiebt, ($seite - 1) * $zustand['groesse'], $zustand['groesse']);
+    if (is_array($fremd)) {
+        $sichtbar = $alle;
+        $treffer = (int) ($fremd['treffer'] ?? count($alle));
+        $gesamt = (int) ($fremd['gesamt'] ?? $treffer);
+        $seiten = max(1, (int) ($fremd['seiten'] ?? 1));
+        $zustand['seite'] = max(1, min((int) ($fremd['seite'] ?? 1), $seiten));
+    } else {
+        $gesiebt = estab_tabelle_sieben($alle, $spalten, $zustand);
+        $gesiebt = estab_tabelle_sortieren($gesiebt, $spalten, $zustand);
+        $treffer = count($gesiebt);
+        $gesamt = count($alle);
+        $seiten = max(1, (int) ceil($treffer / $zustand['groesse']));
+        $zustand['seite'] = min($zustand['seite'], $seiten);
+        $sichtbar = array_slice(
+            $gesiebt,
+            ($zustand['seite'] - 1) * $zustand['groesse'],
+            $zustand['groesse']
+        );
+    }
 
+    $eigeneBaender = ($tabelle['baender'] ?? true) === false;
     $markup = '<section class="estab-tabelle" data-estab-tabelle="'
         . estab_message_html($id) . '">'
-        . estab_tabelle_suchband($spalten, $zustand)
-        . estab_tabelle_ergebnisleiste($zustand, $spalten, $treffer, count($alle));
+        . ($eigeneBaender ? '' : estab_tabelle_suchband($spalten, $zustand))
+        . ($eigeneBaender
+            ? ''
+            : estab_tabelle_ergebnisleiste($zustand, $spalten, $treffer, $gesamt));
 
     if ($sichtbar === []) {
         // Der Leerzustand nennt den Grund und bietet den Weg zurück an. Eine
@@ -818,6 +871,12 @@ function estab_tabelle_markup(array $tabelle): string
         }
         foreach (array_keys($zustand['filter']) as $schluessel) {
             $zuruecksetzen[$zustand['felder']['filter'] . $schluessel] = '';
+        }
+        if ($eigeneBaender) {
+            // Ohne eigene Bänder gibt es hier auch keinen Weg zurück, den
+            // das Bauteil kennt -- die Seite hat ihren eigenen Leerzustand.
+            return $markup . '<div class="estab-tabelle-leer"><p>'
+                . estab_message_html($leer) . '</p></div></section>';
         }
         return $markup . '<div class="estab-tabelle-leer"><p>'
             . estab_message_html($leer) . '</p>'
@@ -834,7 +893,18 @@ function estab_tabelle_markup(array $tabelle): string
      * Seite dasselbe schon sagt.
      */
     $beschriftung = (string) ($tabelle['beschriftung'] ?? '');
-    $markup .= '<div class="estab-tabelle-rahmen"><table class="estab-tabelle-blatt">'
+    /*
+     * Die Mindestbreite gehoert zur Tabelle, nicht zum Bauteil: Eine Liste
+     * mit drei Spalten braucht eine andere als eine mit acht. Ist sie zu
+     * klein, quetscht `table-layout: fixed` eine Spalte auf ein Zeichen je
+     * Zeile; ist sie zu gross, scrollt der Rahmen ohne Not.
+     */
+    $mindestbreite = (string) ($tabelle['mindestbreite'] ?? '');
+    $markup .= '<div class="estab-tabelle-rahmen"><table class="estab-tabelle-blatt"'
+        . ($mindestbreite === ''
+            ? ''
+            : ' style="min-width:' . estab_message_html($mindestbreite) . '"')
+        . '>'
         . ($beschriftung === ''
             ? ''
             : '<caption class="estab-visually-hidden">'
@@ -846,7 +916,10 @@ function estab_tabelle_markup(array $tabelle): string
     if ($aktion !== null) {
         $markup .= '<th scope="col" style="width:8%">Aktion</th>';
     }
-    $markup .= '</tr>' . estab_tabelle_maskenzeile($spalten, $zustand, $aktion !== null)
+    $markup .= '</tr>'
+        . ($eigeneBaender
+            ? ''
+            : estab_tabelle_maskenzeile($spalten, $zustand, $aktion !== null))
         . '</thead><tbody>';
 
     $zeilenmarke = $tabelle['zeilenmarke'] ?? null;
@@ -876,7 +949,10 @@ function estab_tabelle_markup(array $tabelle): string
         $markup .= '</tr>';
     }
 
+    // Wer seine eigenen Baender mitbringt, blaettert auch selbst: Zwei
+    // Blaetterer nebeneinander, die verschiedene Adressen ansprechen, sind
+    // schlimmer als einer.
     return $markup . '</tbody></table></div>'
-        . estab_tabelle_blaetterer($zustand, $seiten)
+        . ($eigeneBaender ? '' : estab_tabelle_blaetterer($zustand, $seiten))
         . '</section>';
 }

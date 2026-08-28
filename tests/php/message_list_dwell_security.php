@@ -365,9 +365,9 @@ $table = $render(static function () use ($rows): void {
     });
 });
 $assert(
-    substr_count($table, '<th scope="col">') === 8
-        && str_contains($table, '<th scope="col">Zeit und Verweildauer</th>')
-        && str_contains($table, '<th scope="col">Kenntnis</th>'),
+    substr_count($table, '<th scope="col"') === 8
+        && str_contains($table, '>Zeit und Verweildauer</th>')
+        && str_contains($table, '>Kenntnis</th>'),
     'The list has no dwell or reading-state column'
 );
 $assert(

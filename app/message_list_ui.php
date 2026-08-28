@@ -9,6 +9,7 @@ require_once __DIR__ . '/message_priority.php';
 require_once __DIR__ . '/message_repository.php';
 require_once __DIR__ . '/message_list.php';
 require_once __DIR__ . '/message_status.php';
+require_once __DIR__ . '/tabelle.php';
 require_once __DIR__ . '/message_timeline.php';
 
 /** Human-readable workflow state without relying on colour alone. */
@@ -630,19 +631,24 @@ function estab_message_list_clamped_text(mixed $value, int $limit = 160): string
  */
 function estab_message_list_render_table(array $rows, callable $openControl): void
 {
-    echo '<div class="estab-message-list-table-wrap estab-tool-table-wrap">';
-    echo '<table class="estab-message-list-table estab-tool-table">';
-    echo '<caption class="estab-visually-hidden">Gefilterte Nachrichtenvordrucke '
-        . 'des aktiven Einsatzes</caption>';
-    echo '<thead><tr>';
-    foreach ([
-        'TBB-Nachweis', 'Zeit und Verweildauer', 'Von und An',
-        'Überschrift und Inhalt', 'Bearbeitungsstand', 'Kenntnis',
-        'Verteilung', 'Aktion',
-    ] as $heading) {
-        echo '<th scope="col">' . estab_auth_html($heading) . '</th>';
-    }
-    echo '</tr></thead><tbody>';
+    /*
+     * Die Meldungsuebersicht kommt aus dem Tabellenbauteil (app/tabelle.php)
+     * -- in dessen zweiter Betriebsart.
+     *
+     * Sie siebt in der Datenbank: sechs Baender ueber vorbereitete
+     * Anweisungen, darunter EXISTS-Unterabfragen auf die Kenntnis- und
+     * Erledigt-Tabellen des jeweiligen Kontos, und die Berechtigungspruefung
+     * haengt mit daran. Das bleibt, wo es ist. Das Bauteil bekommt deshalb
+     * eine fertige Auswahl und stellt sie dar: Rahmen, klebender Kopf,
+     * Beschriftung, Zellenbezeichnungen, Kartenumbruch unter 48rem.
+     *
+     * Seine eigenen Baender und seinen Blaetterer schaltet sie ab -- die hat
+     * sie selbst, und zwei Blaetterer nebeneinander, die verschiedene
+     * Adressen ansprechen, sind schlimmer als einer.
+     *
+     * Das Markup jeder Zelle bleibt Zeile fuer Zeile, wie es war.
+     */
+    $zeilen = [];
     foreach ($rows as $row) {
         $recordId = estab_message_positive_id($row['00_lfd'] ?? null);
         $direction = (string) ($row['04_richtung'] ?? '');
@@ -674,36 +680,31 @@ function estab_message_list_render_table(array $rows, callable $openControl): vo
         $attachmentCount = count(estab_message_list_attachment_tokens(
             $row['12_anhang'] ?? null
         ));
-
-        echo '<tr class="estab-message-list-row'
-            . ($urgent ? ' estab-message-list-row--priority' : '')
-            . '" data-message-id="' . $recordId . '">';
         $storedPriority = estab_message_priority_storage_value(
             $row['09_vorrangstufe'] ?? null
         );
-        echo '<td data-label="TBB-Nachweis"><strong class="estab-message-list-route">'
+
+        $nachweis = '<strong class="estab-message-list-route">'
             . estab_auth_html(estab_message_list_direction_label($direction))
             . ' · ' . estab_auth_html(estab_message_list_tbb_evidence_label($row))
             . '</strong><span class="estab-message-list-priority'
             . ($urgent ? ' estab-message-list-priority--urgent' : '')
             . '" data-priority="'
             . estab_auth_html($storedPriority ?? 'unknown') . '">'
-            . estab_auth_html($priorityLabel) . '</span></td>';
-        echo '<td data-label="Zeit und Verweildauer" '
-            . 'class="estab-tool-table-number">'
-            . '<span class="estab-message-list-time">'
+            . estab_auth_html($priorityLabel) . '</span>';
+
+        $zeit = '<span class="estab-message-list-time">'
             . estab_auth_html(estab_message_list_datetime_label(
                 $row['12_abfzeit'] ?? null
             )) . '</span>'
-            . estab_message_list_dwell_markup($row) . '</td>';
-        echo '<td data-label="Von und An"><span '
-            . 'class="estab-message-list-correspondents"><span>'
+            . estab_message_list_dwell_markup($row);
+
+        $beteiligte = '<span class="estab-message-list-correspondents"><span>'
             . '<strong>Von:</strong> '
             . estab_message_html($from) . '</span><span><strong>An:</strong> '
-            . estab_message_html($to) . '</span></span></td>';
-        echo '<td data-label="Überschrift und Inhalt" '
-            . 'class="estab-message-list-summary">'
-            . '<span class="estab-message-list-field-label">'
+            . estab_message_html($to) . '</span></span>';
+
+        $inhalt = '<span class="estab-message-list-field-label">'
             . 'Vordruck-Überschrift</span><strong '
             . 'class="estab-message-list-subject'
             . ($subjectMissing ? ' estab-message-list-subject--empty' : '')
@@ -719,39 +720,96 @@ function estab_message_list_render_table(array $rows, callable $openControl): vo
             $attachmentLabel = estab_message_list_attachment_label(
                 $attachmentCount
             );
-            echo '<span class="estab-tool-badge estab-tool-badge-warning '
+            $inhalt .= '<span class="estab-tool-badge estab-tool-badge-warning '
                 . 'estab-message-list-attachments" '
                 . 'data-estab-message-attachment-badge '
                 . 'data-estab-message-attachment-count="' . $attachmentCount
                 . '" aria-label="' . estab_auth_html($attachmentLabel) . '">'
                 . estab_auth_html($attachmentLabel) . '</span>';
         }
-        echo '</td>';
-        echo '<td data-label="Bearbeitungsstand"><span '
-            . 'class="estab-message-list-status '
+
+        $stand = '<span class="estab-message-list-status '
             . estab_message_list_status_class($row['x00_status'] ?? null)
             . '" data-status="'
             . estab_auth_html((string) ($row['x00_status'] ?? 'unknown')) . '">'
-            . estab_auth_html($statusLabel) . '</span></td>';
-        echo '<td data-label="Kenntnis"><span '
-            . 'class="estab-message-list-awareness-group">'
-            . estab_message_list_awareness_markup($row) . '</span></td>';
-        echo '<td data-label="Verteilung"><span '
-            . 'class="estab-message-list-recipients">';
+            . estab_auth_html($statusLabel) . '</span>';
+
+        $kenntnis = '<span class="estab-message-list-awareness-group">'
+            . estab_message_list_awareness_markup($row) . '</span>';
+
+        $verteilung = '<span class="estab-message-list-recipients">';
         if ($recipients === []) {
-            echo '<span>Keine Verteilung</span>';
+            $verteilung .= '<span>Keine Verteilung</span>';
         } else {
             foreach ($recipients as $recipient) {
-                echo '<span class="estab-tool-badge estab-tool-badge-neutral">'
+                $verteilung .= '<span class="estab-tool-badge estab-tool-badge-neutral">'
                     . estab_auth_html($recipient) . '</span>';
             }
         }
-        echo '</span></td>';
-        echo '<td data-label="Aktion" class="estab-message-list-action">';
+        $verteilung .= '</span>';
+
+        ob_start();
         $openControl($row);
-        echo '</td></tr>';
+        $aktion = (string) ob_get_clean();
+
+        $zeilen[] = [
+            'id' => (string) $recordId,
+            'vorrang' => $urgent ? '1' : '',
+            'z_nachweis' => $nachweis,
+            'z_zeit' => $zeit,
+            'z_beteiligte' => $beteiligte,
+            'z_inhalt' => $inhalt,
+            'z_stand' => $stand,
+            'z_kenntnis' => $kenntnis,
+            'z_verteilung' => $verteilung,
+            'z_aktion' => $aktion,
+        ];
     }
-    echo '</tbody></table></div>';
+
+    $spalte = static fn (string $kopf, int $breite, string $feld): array => [
+        'schluessel' => 'id',
+        'kopf' => $kopf,
+        'breite' => $breite,
+        // Sortiert wird ueber das Sortierband der Seite, nicht je Spalte:
+        // Die Uebersicht sortiert in der Datenbank ueber alle Seiten, nicht
+        // nur ueber die angezeigte.
+        'sortierbar' => false,
+        'suchbar' => false,
+        'art' => 'text',
+        'zelle' => static fn (array $z): string => $z[$feld],
+    ];
+
+    echo estab_tabelle_markup([
+        'id' => 'meldungen',
+        'beschriftung' => 'Gefilterte Nachrichtenvordrucke des aktiven Einsatzes',
+        'baender' => false,
+        // Acht Spalten brauchen Platz. Ohne diese Angabe quetscht
+        // `table-layout: fixed` die Aktionsspalte auf ein Zeichen je Zeile.
+        //
+        // 56rem und nicht mehr: Die Inhaltsspalte einer Fuehrungsstelle misst
+        // bei 1440 Bildpunkten rund 61rem. Wer hier 68rem verlangt, schiebt
+        // die Aktionsspalte aus dem Bild und laesst den Bediener zu jedem
+        // Oeffnen erst quer scrollen. Enger wird es nur auf schmaleren
+        // Fenstern -- und darunter wird die Tabelle ohnehin zu Karten.
+        'mindestbreite' => '56rem',
+        'fremd' => ['treffer' => count($zeilen), 'gesamt' => count($zeilen)],
+        'zeilenmarke' => static fn (array $z): string =>
+            'class="estab-message-list-row'
+                . ($z['vorrang'] !== '' ? ' estab-message-list-row--priority' : '')
+                . '" data-message-id="' . estab_auth_html($z['id']) . '"',
+        'spalten' => [
+            $spalte('TBB-Nachweis', 11, 'z_nachweis'),
+            $spalte('Zeit und Verweildauer', 11, 'z_zeit'),
+            $spalte('Von und An', 13, 'z_beteiligte'),
+            $spalte('Überschrift und Inhalt', 22, 'z_inhalt'),
+            $spalte('Bearbeitungsstand', 11, 'z_stand'),
+            $spalte('Kenntnis', 9, 'z_kenntnis'),
+            $spalte('Verteilung', 10, 'z_verteilung'),
+            $spalte('Aktion', 13, 'z_aktion'),
+        ],
+        'zeilen' => $zeilen,
+        'leer' => 'Keine Meldung entspricht den gesetzten Filtern.',
+    ]);
 }
 
 function estab_message_list_render_empty(array $filters): void

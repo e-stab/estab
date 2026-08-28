@@ -193,11 +193,22 @@ $assert(
     'overview controls contain an unbalanced or nested form'
 );
 
-$headerStart = strpos($tableSource, "echo '<thead><tr>'");
-$headerEnd = strpos($tableSource, "echo '</tr></thead><tbody>'");
-$bodyEnd = strpos($tableSource, "echo '</tbody></table></div>'");
+/*
+ * Die Uebersicht baut ihr Tabellenmarkup nicht mehr selbst -- es kommt aus
+ * dem Tabellenbauteil. Geprueft wird deshalb, dass sie es dort holt und
+ * dass die Reihenfolge im Bauteil steht: Kopf vor Rumpf. Das ist dieselbe
+ * Aussage an der Stelle, an der sie jetzt gilt.
+ */
+$bauteilSource = (string) file_get_contents(
+    __DIR__ . '/../../app/tabelle.php'
+);
+$headerStart = strpos($bauteilSource, "'<thead><tr>'");
+$headerEnd = strpos($bauteilSource, "'</thead><tbody>'");
+$bodyEnd = strpos($bauteilSource, "'</tbody></table></div>'");
 $assert(
-    $headerStart !== false
+    str_contains($tableSource, 'estab_tabelle_markup(')
+        && !str_contains($tableSource, '<thead>')
+        && $headerStart !== false
         && $headerEnd !== false
         && $bodyEnd !== false
         && $headerStart < $headerEnd
@@ -220,9 +231,13 @@ $assert(
         && str_contains($tableSource, '$openControl($row)'),
     'shared table bypasses priority, recipient or authenticated detail controls'
 );
+/*
+ * Das Schliessen der Tabelle liegt jetzt im Bauteil; die Uebersicht
+ * schliesst weiterhin ihr eigenes Dokument. Beides wird geprueft -- an der
+ * Stelle, an der es jeweils steht.
+ */
 $assert(
-    str_contains($tableSource, "echo '</td></tr>'")
-        && str_contains($tableSource, "echo '</tbody></table></div>'")
+    str_contains($bauteilSource, "'</tbody></table></div>'")
         && str_contains($listSource, '</body>\\n</html>'),
     'message table or list document is not closed'
 );
