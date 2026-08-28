@@ -105,7 +105,7 @@ Reihenfolge: **Test zuerst, dann die Änderung, dann das Bild ansehen.**
       - [ ] Das Feld bleibt frei korrigierbar
       - **Prüfung:** Eingang erfassen, Bild des Aufnahmevermerks
 
-- [ ] **R09** `·` **S** Das Infofähnchen liegt obenauf
+- [x] **R09** `·` **S** Das Infofähnchen liegt obenauf
       → `estab-ui.css`
       - [ ] Ein geöffnetes Fähnchen überlagert alle anderen Infopunkte und wird nicht angeschnitten
       - **Prüfung:** Messung im Browser — kein Infopunkt überdeckt das offene Fähnchen

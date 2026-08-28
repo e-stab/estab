@@ -2684,6 +2684,22 @@ HTML;
       return;
     }
     closeAll(button);
+    /*
+     * Das Blatt verlaesst den Vordruck, bevor es sichtbar wird.
+     *
+     * Der Vordruck traegt container-type und zoom, damit er sich der Spalte
+     * anpasst, ohne gestaucht zu werden. Beides macht ihn zum enthaltenden
+     * Block fuer fest gestellte Nachfahren und zu einem eigenen
+     * Stapelkontext: Die z-index 1000 des Blattes gilt dann nur innerhalb
+     * des Vordrucks, und die Aktionsleiste daneben gewinnt mit 30.
+     *
+     * Am Dokument gelten beide wieder -- die 1000 und die
+     * Bildschirmkoordinaten, mit denen positionDialog rechnet. Das Blatt
+     * bleibt dort; die Bedienung findet es ueber seine Kennung.
+     */
+    if (dialog.parentNode !== document.body) {
+      document.body.appendChild(dialog);
+    }
     dialog.hidden = false;
     button.setAttribute("aria-expanded", "true");
     positionDialog(button, dialog);

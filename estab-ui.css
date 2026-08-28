@@ -7818,6 +7818,9 @@ section.estab-message-timeline[data-estab-message-timeline]
     .estab-message-distribution-extras,
     .estab-message-attachment-list,
     .estab-message-attachments,
+    /* Das Blatt der Ausfuellhilfe haengt am Dokument, nicht am Anker; die
+       Regel fuer den Anker erreicht es dort nicht mehr. */
+    .estab-official-help-dialog,
     .estab-official-help-anchor,
     .estab-official-field-error,
     .estab-message-error-summary,

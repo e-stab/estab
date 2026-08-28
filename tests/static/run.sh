@@ -209,6 +209,7 @@ for test_name in \
     rm_uebersicht_fuer_alle \
     rm_buchfuehrung \
     rm_aufnahmevermerk \
+    rm_infofaehnchen \
     ux_keyboard \
     ux_without_javascript \
     fuest_formal_review \
