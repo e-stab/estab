@@ -204,7 +204,10 @@ $assert(
             'estab_read_filter_generated_forms_for_incident'
         )
         && substr_count($list, '$incidentId') >= 3
-        && str_contains($list, ") . '&layout=current';")
+        // Die Adresse traegt das aktuelle Layout. Sie steht seit der
+        // Umstellung auf das Tabellenbauteil in einem Feld der Zeile statt
+        // in einer eigenen Anweisung -- die Aussage ist dieselbe.
+        && str_contains($list, "'&layout=current'")
         && str_contains($list, 'Meldung als PDF öffnen')
         && !str_contains($list, 'PDF im aktuellen Layout öffnen')
         && str_contains($download, 'estab_generated_form_fetch_active')

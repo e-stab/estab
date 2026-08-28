@@ -1,6 +1,7 @@
 <?php
 
 require_once __DIR__ . '/../app/generated_form.php';
+require_once __DIR__ . '/../app/tabelle.php';
 require_once __DIR__ . '/../app/navigation.php';
 require_once __DIR__ . '/../app/read_authorization.php';
 require_once __DIR__ . '/../app/session_ui.php';
@@ -116,66 +117,61 @@ try {
         </p>
       </section>
     <?php else: ?>
-      <div class="estab-tool-table-wrap estab-tool-table-responsive">
-        <table class="estab-tool-table">
-          <caption class="estab-visually-hidden">
-            Generierte Nachrichtenvordrucke des aktiven Einsatzes
-          </caption>
-          <thead>
-            <tr>
-              <th scope="col">Meldung</th>
-              <th scope="col">Aktuelles PDF</th>
-              <th scope="col">Archivgröße</th>
-              <th scope="col">Archivdatei geändert</th>
-            </tr>
-          </thead>
-          <tbody>
-          <?php foreach ($files as $file): ?>
-          <?php
-              $url = estab_file_download_url(
+      <?php
+      /*
+       * Die Vordruckliste kommt aus dem Tabellenbauteil (app/tabelle.php).
+       *
+       * Sie hatte ihre eigene Gestaltung und keine Suche. Bei einem Einsatz
+       * mit tausend Meldungen ist eine Liste ohne Suche kein Verzeichnis,
+       * sondern ein Stapel.
+       */
+      $vordruckZeilen = [];
+      foreach ($files as $file) {
+          $vordruckZeilen[] = [
+              'meldung' => (string) $file['direction'] . ' ' . (string) $file['number'],
+              'richtung' => (string) $file['direction'],
+              'datei' => (string) $file['name'],
+              'adresse' => estab_file_download_url(
                   (string) $conf_4f['download_uri'],
                   'vordruck',
                   $file['name']
-              ) . '&layout=current';
-          ?>
-            <tr>
-              <td data-label="Meldung">
-                <strong>
-                  <?= estab_auth_html($file['direction'] . ' ' . $file['number']) ?>
-                </strong>
-              </td>
-              <td data-label="Aktuelles PDF">
-                <a
-                  class="estab-button"
-                  href="<?= estab_auth_html($url) ?>"
-                  target="_blank"
-                  rel="noopener">
-                  Meldung als PDF öffnen
-                  <span class="estab-visually-hidden">
-                    (öffnet in neuem Tab)
-                  </span>
-                </a>
-                <br>
-                <small>
-                  Dateiname:
-                  <code><?= estab_auth_html($file['name']) ?></code>
-                </small>
-              </td>
-              <td class="estab-tool-table-number" data-label="Archivgröße">
-                <?= estab_auth_html(
-                    number_format($file['size'] / 1024, 1, ',', '.')
-                ) ?> KiB
-              </td>
-              <td data-label="Archivdatei geändert">
-                <?= estab_auth_html(
-                    date('d.m.Y H:i:s', $file['modified'])
-                ) ?>
-              </td>
-            </tr>
-          <?php endforeach; ?>
-          </tbody>
-        </table>
-      </div>
+              ) . '&layout=current',
+              // Die Groesse als Zahl, damit die Spalte nach Groesse sortiert
+              // und nicht nach Zeichenkette -- 9,8 KiB stuende sonst hinter
+              // 10,1 KiB.
+              'groesse' => number_format($file['size'] / 1024, 1, ',', '.') . ' KiB',
+              'geaendert' => date('d.m.Y H:i:s', (int) $file['modified']),
+          ];
+      }
+      echo estab_tabelle_markup([
+          'id' => 'vordrucke',
+          'beschriftung' => 'Generierte Nachrichtenvordrucke des aktiven Einsatzes',
+          'spalten' => [
+              ['schluessel' => 'meldung', 'kopf' => 'Meldung', 'breite' => 14,
+                  'sortierbar' => true, 'suchbar' => true, 'art' => 'zahl'],
+              ['schluessel' => 'richtung', 'kopf' => 'E/A', 'breite' => 7,
+                  'sortierbar' => true, 'suchbar' => false, 'art' => 'text',
+                  'filter' => ['E', 'A'], 'filtername' => 'Ein- und Ausgang'],
+              ['schluessel' => 'datei', 'kopf' => 'Aktuelles PDF', 'breite' => 41,
+                  'sortierbar' => true, 'suchbar' => true, 'art' => 'text',
+                  'zelle' => static fn (array $z): string =>
+                      '<a class="estab-button" href="'
+                          . estab_auth_html($z['adresse'])
+                          . '" target="_blank" rel="noopener">Meldung als PDF öffnen'
+                          . '<span class="estab-visually-hidden">'
+                          . ' (öffnet in neuem Tab)</span></a>'
+                          . '<small>Dateiname: <code>'
+                          . estab_auth_html($z['datei']) . '</code></small>'],
+              ['schluessel' => 'groesse', 'kopf' => 'Archivgröße', 'breite' => 13,
+                  'sortierbar' => true, 'suchbar' => false, 'art' => 'zahl'],
+              ['schluessel' => 'geaendert', 'kopf' => 'Archivdatei geändert',
+                  'breite' => 25, 'sortierbar' => true, 'suchbar' => true,
+                  'art' => 'zeit'],
+          ],
+          'zeilen' => $vordruckZeilen,
+          'leer' => 'Kein Vordruck entspricht den gesetzten Filtern.',
+      ]);
+      ?>
     <?php endif; ?>
 
     <footer class="estab-tool-footer">

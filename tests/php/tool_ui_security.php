@@ -241,17 +241,20 @@ $assert(
 
 $forms = $sources['4fach/vordrucke.php'];
 $assert(
-    substr_count($forms, '<table') === 1
-        && substr_count($forms, '</table>') === 1
-        && str_contains($forms, '<caption class="estab-visually-hidden">')
-        && substr_count($forms, 'data-label=') >= 4
-        && str_contains($forms, 'estab-tool-table-number')
+    substr_count($forms, '<table') === 0
+        // Auch die Vordruckliste kommt aus dem Tabellenbauteil: kein
+        // eigenes Tabellenmarkup mehr, Beschriftung und
+        // Zellenbezeichnungen von dort. Was der Seite bleibt, ist ihr
+        // Verweis -- und der muss sicher und angekuendigt sein.
+        && substr_count($forms, '</table>') === 0
+        && str_contains($forms, "'beschriftung' => 'Generierte Nachrichtenvordrucke")
         && str_contains($forms, 'rel="noopener"')
         && str_contains($forms, 'target="_blank"')
         && str_contains($forms, '(öffnet in neuem Tab)')
-        && str_contains($forms, '<code><?= estab_auth_html($file[\'name\']) ?>')
-        && str_contains($forms, '<th scope="col">Aktuelles PDF</th>')
-        && str_contains($forms, '<th scope="col">Archivdatei geändert</th>')
+        && str_contains($forms, '<small>Dateiname: <code>')
+        && str_contains($forms, "estab_auth_html(\$z['datei']) . '</code>")
+        && str_contains($forms, "'kopf' => 'Aktuelles PDF'")
+        && str_contains($forms, "'kopf' => 'Archivdatei geändert'")
         && str_contains(
             $stylesheet,
             ".estab-tool-main code {\n    overflow-wrap: anywhere;"
