@@ -160,7 +160,13 @@ und Schriftraum. Freigabefähig ist die Seite erst nach allen drei Aufgaben.
       - [x] Rahmen als Tafel, klebender Kopf, feste Spaltenbreiten in Prozent
       - [x] Zellenpolster `--abstand-2 --abstand-4`, zwei Textzeilen je Zelle
       - [~] Die Liste steht jetzt in der Arbeitsgröße `--schrift-3` statt `--schrift-1`; die eigene Inhaltsspalte trägt noch keine eigene Stufe
-      - [ ] **Eine** Aktionsspalte statt eines Formulars je Zelle — **offen**, siehe unten
+      - [ ] **Eine** Aktionsspalte statt eines Formulars je Zelle — **bewusst nicht umgesetzt**
+
+            26 Aufrufstellen über vier Listenvarianten mit je eigener Spaltenzahl und eigenem Kopf. Der Umbau ist machbar, aber er ist keine Gestaltungs-, sondern eine **Bedienänderung**: Heute öffnet ein Klick irgendwo in der Zeile die Meldung. Danach gäbe es genau einen Griff dafür. Wer die Liste täglich benutzt, greift nach Gewohnheit — und diese Gewohnheit stillschweigend zu ändern ist genau das, was die Spec an anderer Stelle verbietet.
+
+            Der Nutzen ist echt: acht Bedienelemente je Zeile sind für ein Vorleseprogramm acht Ansagen, und sie sind die Ursache der Überlaufbefunde. Aber er wiegt die Änderung nicht auf, solange niemand vor dem Bildschirm gesessen hat.
+
+            **Gehört an Prüfpunkt C3**, zusammen mit der Bedienprüfung — dort sitzen drei Personen davor, und dort entscheidet sich, ob der eine Griff besser ist als acht. Halb umgesetzt wäre es schlechter als gar nicht: Eine Liste, die in einer Variante anders zu öffnen ist als in der nächsten, verstößt gegen `UX-ELEMENTKONSTANZ`.
       - [~] Zeigekante 3px steht. **Kein Zebrastreifen und keine Zeigefläche:** Der Zeilengrund trägt hier die Durchschriftenfarbe (`NV-4FACH-VERTEILUNG`); ein Streifenmuster darüber machte aus einer Angabe ein Muster. Die Vorschrift schlägt die Gestaltungsspec
       - [ ] Leerzustand mit Ausweg
       - [ ] Regel `GES-TABELLE`
