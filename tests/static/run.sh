@@ -214,6 +214,7 @@ for test_name in \
     rm_rueckweisung \
     ges_tabelle_bauteil \
     rm_blaettern \
+    rm_handbuch \
     ux_keyboard \
     ux_without_javascript \
     fuest_formal_review \

@@ -216,11 +216,21 @@ Reihenfolge: **Test zuerst, dann die Änderung, dann das Bild ansehen.**
 
 - [ ] **R21** `!` **M** Das Handbuch bekommt die Hülle
       → `handbuch/index.php`, `handbuch/handbuch.css`
-      - [ ] Steht in der Hülle wie jede andere Seite
-      - [ ] Seitenkopf ist eine Zeile nach `GES-SEITENKOPF` — kein Balken, der die halbe Höhe frisst
-      - [ ] Das Inhaltsverzeichnis ist die bereichseigene Auswahl in der Menüspalte, keine zweite Spalte im Inhalt
-      - [ ] `handbuch.css` benutzt die Marken; Fließtext auf 34rem
-      - [ ] **Kein Satz wird umgeschrieben** — ein Test hält die Textmenge vor und nach der Umstellung gegeneinander
+      - [x] Steht in der Hülle wie jede andere Seite — das tat sie bereits
+      - [x] Seitenkopf ist eine Zeile nach `GES-SEITENKOPF`. Gemessen bei
+            1440×768: **528 → 80 Bildpunkte**, 69 % → 10 % der Höhe
+      - [ ] Das Inhaltsverzeichnis ist die bereichseigene Auswahl in der
+            Menüspalte, keine zweite Spalte im Inhalt — **offen**. Die
+            Menüspalte kommt aus `app/sidebar.php` in einem eigenen Rahmen und
+            weiß nichts von den Kapiteln der Seite darin. Dafür braucht es
+            eine gemeinsame Kapitelliste und einen bereichseigenen Abschnitt
+            in der Spalte
+      - [x] Fließtext auf 34rem; der Kopf benutzt die Marken
+      - [ ] `handbuch.css` **ganz** auf Marken — offen: 910 Zeilen, die
+            Wächter (`GES-MARKEN`, `GES-ABSTANDSSKALA`, `GES-KONTRAST`) lesen
+            heute nur `estab-ui.css` und müssten die Datei mit aufnehmen
+      - [x] **Kein Satz wird umgeschrieben** — `rm_handbuch.php` hält Wortzahl
+            und Prüfsumme über die Wortmenge fest (5614 Wörter)
       - **Prüfung:** Wächter greifen auf `handbuch.css`; Höhenbudget; Bild bei 768 px
 
 - [ ] **R22** `·` **S** Dokumentation nachziehen

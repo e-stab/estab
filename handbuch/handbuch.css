@@ -63,36 +63,37 @@
     transform: translateY(0);
 }
 
+/* Der Kopf ist eine Zeile, kein Banner.
+
+   Hier stand ein Farbverlauf mit einem dekorativen Kreis, einem Titel in bis
+   zu 4.8rem und einem Werbesatz darunter. Auf einem Bildschirm mit 768
+   Bildpunkten Hoehe -- dem ueblichen Laptop in einer Fuehrungsstelle -- nahm
+   das 528 Bildpunkte ein, 69 Prozent. Wer das Handbuch oeffnete, sah einen
+   Banner und musste scrollen, um den ersten Satz zu lesen.
+
+   GES-SEITENKOPF verlangt fuer jede Seite dasselbe: Bereichsmarke, Titel,
+   Unterlinie. Das Handbuch hatte sich davon ausgenommen, weil es eigene
+   Klassennamen traegt. */
 .estab-handbook-hero {
-    background:
-        radial-gradient(circle at 82% 12%, rgba(229, 178, 71, 0.18), transparent 22rem),
-        linear-gradient(135deg, #102641 0%, #173e66 70%, #1d4f7d 100%);
-    border-bottom: 5px solid var(--handbook-yellow);
-    color: #ffffff;
-    overflow: hidden;
+    background: none;
+    border-bottom: 1px solid var(--linie-kraeftig);
+    box-shadow: none;
+    color: var(--tinte);
 }
 
 .estab-handbook-hero-inner {
+    align-items: baseline;
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--abstand-4);
     margin: 0 auto;
     max-width: 92rem;
-    padding: clamp(2.5rem, 7vw, 5.5rem) clamp(1rem, 4vw, 3rem);
-    position: relative;
-}
-
-.estab-handbook-hero-inner::after {
-    border: 2px solid rgba(255, 255, 255, 0.18);
-    border-radius: 50%;
-    content: "";
-    height: 20rem;
-    position: absolute;
-    right: -5rem;
-    top: -8rem;
-    width: 20rem;
+    padding: var(--abstand-3) var(--abstand-5);
 }
 
 .estab-handbook-eyebrow {
-    color: inherit;
-    font-size: 0.78rem;
+    color: var(--tinte-neben);
+    font-size: var(--schrift-1);
     font-weight: 800;
     letter-spacing: 0.11em;
     margin: 0 0 0.55rem;
@@ -100,74 +101,70 @@
 }
 
 .estab-handbook-hero h1 {
-    font-size: clamp(2.3rem, 6vw, 4.8rem);
-    line-height: 0.98;
+    font-size: var(--schrift-6);
+    line-height: 1.2;
     margin: 0;
-    max-width: 20ch;
 }
 
 .estab-handbook-hero h1 span {
     white-space: nowrap;
 }
 
+/* Der Satz bleibt im Markup -- er wird vorgelesen und beschreibt, was das
+   Handbuch ist. Sichtbar kostet er nur Hoehe: Wer die Seite geoeffnet hat,
+   weiss, dass er im Handbuch ist. */
 .estab-handbook-lead {
-    color: #dce8f4;
-    font-size: clamp(1.05rem, 2vw, 1.35rem);
-    line-height: 1.55;
-    margin: 1.4rem 0 0;
-    max-width: 47rem;
+    display: none;
 }
 
 .estab-handbook-meta {
     display: flex;
     flex-wrap: wrap;
-    gap: 0.55rem;
-    margin-top: 1.6rem;
+    gap: var(--abstand-2);
+    margin: 0;
 }
 
 .estab-handbook-meta span {
-    background: rgba(255, 255, 255, 0.1);
-    border: 1px solid rgba(255, 255, 255, 0.32);
-    border-radius: 999px;
-    color: #ffffff;
-    font-size: 0.82rem;
+    color: var(--tinte-neben);
+    font-size: var(--schrift-1);
     font-weight: 700;
-    padding: 0.4rem 0.72rem;
 }
 
 .estab-handbook-hero-actions {
     display: flex;
     flex-wrap: wrap;
-    gap: 0.7rem;
-    margin-top: 1.6rem;
+    gap: var(--abstand-2);
+    margin: 0;
+    margin-left: auto;
 }
 
 .estab-handbook-hero-actions a {
     align-items: center;
-    border: 2px solid #ffffff;
-    border-radius: 0.45rem;
+    border: 1px solid var(--rand-bedienelement);
+    border-radius: var(--radius-2);
     display: inline-flex;
-    font-weight: 800;
+    font-size: var(--schrift-2);
+    font-weight: 700;
     justify-content: center;
-    min-height: 2.8rem;
-    padding: 0.65rem 1rem;
+    min-height: 1.75rem;
+    padding: 0 var(--abstand-3);
     text-decoration: none;
 }
 
 .estab-handbook-primary-action {
-    background: var(--handbook-yellow);
-    border-color: var(--handbook-yellow) !important;
-    color: var(--handbook-navy) !important;
+    background: var(--handlung);
+    border-color: var(--handlung) !important;
+    color: var(--tinte-spalte) !important;
 }
 
 .estab-handbook-secondary-action {
-    background: transparent;
-    color: #ffffff !important;
+    background: var(--grund-tafel);
+    color: var(--handlung-dunkel) !important;
 }
 
 .estab-handbook-hero-actions a:hover,
 .estab-handbook-hero-actions a:focus-visible {
-    box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.25);
+    background: var(--handlung-sanft);
 }
 
 .estab-handbook-main {
@@ -381,6 +378,14 @@
 
 .estab-handbook-chapter[hidden] {
     display: none;
+}
+
+/* Fliesstext auf 34rem. Eine Zeile ueber neunzig Zeichen verliert beim
+   Ruecksprung ihren Anfang -- man liest dieselbe Zeile zweimal und merkt es
+   erst am dritten Wort. Die Kapitel selbst bleiben so breit wie die Spalte,
+   damit Tabellen und Aufzaehlungen darin Platz haben. */
+.estab-handbook-chapter p {
+    max-width: 34rem;
 }
 
 .estab-handbook-chapter > header {
