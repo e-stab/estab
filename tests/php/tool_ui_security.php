@@ -193,11 +193,24 @@ $assert(
 );
 
 $users = $sources['4fadm/users.php'];
+/*
+ * Die Benutzertabelle kommt aus dem Tabellenbauteil. Sie schreibt deshalb
+ * kein eigenes Tabellenmarkup mehr -- und darf es auch nicht, sonst liefe
+ * sie wieder auseinander. Beschriftung und Zellenbezeichnungen, an denen
+ * ein Vorleseprogramm sich orientiert, kommen von dort; hier steht, dass
+ * diese Tabelle ihre Beschriftung mitgibt.
+ */
+$tabellenbauteil = (string) file_get_contents(
+    __DIR__ . '/../../app/tabelle.php'
+);
 $assert(
-    substr_count($users, '<table') === 1
-        && substr_count($users, '</table>') === 1
-        && str_contains($users, '<caption class="estab-visually-hidden">')
-        && substr_count($users, 'data-label=') >= 5
+    substr_count($users, '<table') === 0
+        && str_contains($users, "'beschriftung' => 'Benutzerkonten mit Status und '")
+        && str_contains(
+            $tabellenbauteil,
+            '<caption class="estab-visually-hidden">'
+        )
+        && str_contains($tabellenbauteil, "'<td data-label=\"'")
         && substr_count($users, 'autocomplete="new-password"') === 4
         && str_contains($users, 'aria-labelledby="estab-create-user-title"')
         && str_contains($users, 'name="admin_action" value="create"')

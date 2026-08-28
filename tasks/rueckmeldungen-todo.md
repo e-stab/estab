@@ -178,7 +178,7 @@ Reihenfolge: **Test zuerst, dann die Änderung, dann das Bild ansehen.**
       - **Prüfung:** `ges_tabelle_bauteil.php`; Sortieren und Spaltensuche einmal mit, einmal ohne Skript; Bild
       - **Abhängigkeit:** R14
 
-- [ ] **R18** `·` **M** Benutzerliste
+- [x] **R18** `·` **M** Benutzerliste
       → `4fadm/users.php`
       - [ ] dito
       - **Prüfung:** wie R17

@@ -172,6 +172,7 @@ function estab_anhang_tabelle(
 
     return estab_tabelle_markup([
         'id' => 'anhaenge',
+        'beschriftung' => 'Verfügbare Anhänge mit Vorschau und Herkunft',
         'spalten' => $spalten,
         'zeilen' => $zeilen,
         'leer' => 'Keine Datei entspricht den gesetzten Filtern.',

@@ -181,6 +181,7 @@ function estab_nachweisung_ausgeben(
         . estab_message_html($titel) . "</h2>\n";
     estab_tabelle_ausgeben([
         'id' => $id,
+        'beschriftung' => $titel,
         'spalten' => estab_nachweisung_spalten($mitRichtung),
         'zeilen' => estab_nachweisung_zeilen($databaseConfig, $incidentId, $richtung),
         'leer' => 'Kein Nachweis entspricht den gesetzten Filtern.',

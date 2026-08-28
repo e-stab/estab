@@ -9,6 +9,7 @@ require_once __DIR__ . '/../app/admin_operations.php';
 require_once __DIR__ . '/../app/csrf.php';
 require_once __DIR__ . '/../app/session_ui.php';
 require_once __DIR__ . '/../app/user_admin.php';
+require_once __DIR__ . '/../app/tabelle.php';
 
 estab_admin_require_http_auth($_SERVER);
 estab_session_ui_start($_SESSION);
@@ -508,23 +509,22 @@ if (
         <p class="estab-tool-empty">Es sind keine Benutzerkonten vorhanden.</p>
       </section>
     <?php else: ?>
-      <div class="estab-tool-table-wrap estab-tool-table-responsive">
-        <table class="estab-tool-table">
-          <caption class="estab-visually-hidden">
-            Benutzerkonten mit Status und administrativen Aktionen
-          </caption>
-          <thead>
-            <tr>
-              <th scope="col">Benutzer</th>
-              <th scope="col">Funktion</th>
-              <th scope="col">Rolle</th>
-              <th scope="col">Persönliche Zusatzfunktionen</th>
-              <th scope="col">Status</th>
-              <th scope="col">Aktionen</th>
-            </tr>
-          </thead>
-          <tbody>
-          <?php foreach ($users as $user): ?>
+      <?php
+      /*
+       * Die Benutzerliste kommt aus dem Tabellenbauteil (app/tabelle.php).
+       *
+       * Sie hatte ihre eigene Gestaltung und keine Suche. Bei einem
+       * Ortsverband mit dreissig Konten geht das; bei einer Uebung mit
+       * hundert sucht man ein Kuerzel mit dem Finger am Bildschirm.
+       *
+       * Das Markup jeder Zelle bleibt Zeile fuer Zeile, wie es war -- es
+       * wird hier nur zwischengespeichert statt unmittelbar ausgegeben.
+       * Gesiebt und sortiert wird ueber die Werte daneben, nicht ueber
+       * dieses Markup: Sonst faende eine Suche nach "badge" jedes Konto.
+       */
+      $benutzerZeilen = [];
+      ?>
+      <?php foreach ($users as $user): ?>
             <?php
               $rawCode = is_string($user['kuerzel'] ?? null)
                   ? (string) $user['kuerzel']
@@ -593,26 +593,28 @@ if (
                                   : 'Abgemeldet')))
                   );
             ?>
-            <tr data-estab-user="<?= estab_admin_html($code) ?>"
-              <?= $orphaned ? 'data-estab-assignment-orphaned' : '' ?>>
-              <td data-label="Benutzer" class="estab-tool-identity">
+      <?php ob_start(); ?>
+
                 <strong><?= estab_admin_html($user['benutzer'] ?? '') ?></strong>
                 <span>Kürzel <?= estab_admin_html($code) ?></span>
-              </td>
-              <td data-label="Funktion">
+      <?php $zelle_benutzer = (string) ob_get_clean(); ?>
+      <?php ob_start(); ?>
+
                 <?= estab_admin_html(estab_function_display_name(
                     (string) ($user['funktion'] ?? '')
                 )) ?>
-              </td>
-              <td data-label="Rolle">
+      <?php $zelle_funktion = (string) ob_get_clean(); ?>
+      <?php ob_start(); ?>
+
                 <?= estab_admin_html($user['rolle'] ?? '') ?>
                 <?php if ($orphaned): ?>
                   <span class="estab-tool-badge estab-tool-badge-danger">
                     Neu zuweisen
                   </span>
                 <?php endif; ?>
-              </td>
-              <td data-label="Persönliche Zusatzfunktionen">
+      <?php $zelle_rolle = (string) ob_get_clean(); ?>
+      <?php ob_start(); ?>
+
                 <?php if ($extraAssignments === []): ?>
                   <span class="estab-tool-badge estab-tool-badge-neutral">
                     Keine
@@ -651,13 +653,15 @@ if (
                     <?php endforeach; ?>
                   </div>
                 <?php endif; ?>
-              </td>
-              <td data-label="Status">
+      <?php $zelle_zusatz = (string) ob_get_clean(); ?>
+      <?php ob_start(); ?>
+
                 <span class="estab-tool-badge estab-tool-badge-<?= $statusClass === 'online' ? 'success' : ($statusClass === 'idle' ? 'warning' : ($statusClass === 'blocked' ? 'danger' : 'neutral')) ?>">
                   <?= $statusLabel ?>
                 </span>
-              </td>
-              <td data-label="Aktionen">
+      <?php $zelle_status = (string) ob_get_clean(); ?>
+      <?php ob_start(); ?>
+
                 <div class="estab-tool-action-stack">
                   <?php if (!$manageable): ?>
                     <p>Dieses historische Kürzel entspricht nicht den
@@ -917,12 +921,73 @@ if (
                     </details>
                   <?php endif; ?>
                 </div>
-              </td>
-            </tr>
-          <?php endforeach; ?>
-          </tbody>
-        </table>
-      </div>
+      <?php $zelle_aktion = (string) ob_get_clean(); ?>
+      <?php
+      $benutzerZeilen[] = [
+          'kuerzel' => $code,
+          'benutzer' => (string) ($user['benutzer'] ?? '') . ' ' . $code,
+          'funktion' => estab_function_display_name(
+              (string) ($user['funktion'] ?? '')
+          ),
+          'rolle' => (string) ($user['rolle'] ?? ''),
+          'zusatz' => implode(', ', array_map(
+              static fn (array $z): string => (string) ($z['funktion'] ?? ''),
+              $extraAssignments
+          )),
+          'status' => $statusLabel,
+          'verwaist' => $orphaned ? '1' : '',
+          'z_benutzer' => $zelle_benutzer,
+          'z_funktion' => $zelle_funktion,
+          'z_rolle' => $zelle_rolle,
+          'z_zusatz' => $zelle_zusatz,
+          'z_status' => $zelle_status,
+          'z_aktion' => $zelle_aktion,
+      ];
+      endforeach;
+
+      // Die Zustaende, die es in dieser Liste wirklich gibt -- ein Filter
+      // fuer einen Zustand, den kein Konto traegt, fuehrt ins Leere.
+      $benutzerStati = [];
+      foreach ($benutzerZeilen as $benutzerZeile) {
+          $benutzerStati[$benutzerZeile['status']] = true;
+      }
+      ksort($benutzerStati);
+
+      echo estab_tabelle_markup([
+          'id' => 'benutzer',
+          'beschriftung' => 'Benutzerkonten mit Status und '
+              . 'administrativen Aktionen',
+          'zeilenmarke' => static fn (array $z): string =>
+              'data-estab-user="' . estab_admin_html($z['kuerzel']) . '"'
+                  . ($z['verwaist'] !== ''
+                      ? ' data-estab-assignment-orphaned' : ''),
+          'spalten' => [
+              ['schluessel' => 'benutzer', 'kopf' => 'Benutzer', 'breite' => 15,
+                  'sortierbar' => true, 'suchbar' => true, 'art' => 'text',
+                  'zelle' => static fn (array $z): string => $z['z_benutzer']],
+              ['schluessel' => 'funktion', 'kopf' => 'Funktion', 'breite' => 12,
+                  'sortierbar' => true, 'suchbar' => true, 'art' => 'text',
+                  'zelle' => static fn (array $z): string => $z['z_funktion']],
+              ['schluessel' => 'rolle', 'kopf' => 'Rolle', 'breite' => 9,
+                  'sortierbar' => true, 'suchbar' => true, 'art' => 'text',
+                  'zelle' => static fn (array $z): string => $z['z_rolle']],
+              ['schluessel' => 'zusatz',
+                  'kopf' => 'Persönliche Zusatzfunktionen', 'breite' => 18,
+                  'sortierbar' => false, 'suchbar' => true, 'art' => 'text',
+                  'zelle' => static fn (array $z): string => $z['z_zusatz']],
+              ['schluessel' => 'status', 'kopf' => 'Status', 'breite' => 16,
+                  'sortierbar' => true, 'suchbar' => true, 'art' => 'text',
+                  'filter' => array_keys($benutzerStati),
+                  'filtername' => 'Alle Zustände',
+                  'zelle' => static fn (array $z): string => $z['z_status']],
+              ['schluessel' => 'kuerzel', 'kopf' => 'Aktionen', 'breite' => 30,
+                  'sortierbar' => false, 'suchbar' => false, 'art' => 'text',
+                  'zelle' => static fn (array $z): string => $z['z_aktion']],
+          ],
+          'zeilen' => $benutzerZeilen,
+          'leer' => 'Kein Konto entspricht den gesetzten Filtern.',
+      ]);
+      ?>
     <?php endif; ?>
 
     <footer class="estab-tool-footer">

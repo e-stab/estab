@@ -826,7 +826,19 @@ function estab_tabelle_markup(array $tabelle): string
             . '">Filter zurücksetzen</a></div></section>';
     }
 
+    /*
+     * Die Beschriftung nennt einem Vorleseprogramm, was diese Tabelle ist,
+     * bevor es die erste Zelle vorliest. Ohne sie heisst es nur "Tabelle mit
+     * sieben Spalten" -- und auf einer Seite mit zwei Tabellen weiss niemand,
+     * welche gemeint ist. Sie steht unsichtbar, weil die Ueberschrift der
+     * Seite dasselbe schon sagt.
+     */
+    $beschriftung = (string) ($tabelle['beschriftung'] ?? '');
     $markup .= '<div class="estab-tabelle-rahmen"><table class="estab-tabelle-blatt">'
+        . ($beschriftung === ''
+            ? ''
+            : '<caption class="estab-visually-hidden">'
+                . estab_message_html($beschriftung) . '</caption>')
         . '<thead><tr>';
     foreach ($spalten as $spalte) {
         $markup .= estab_tabelle_kopfzelle($spalte, $zustand);
