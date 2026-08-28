@@ -268,6 +268,17 @@ function estab_ux_rules(): array
                 . 'eingebettete Dokumente. Sonst gilt am Ende nicht, was '
                 . 'zuletzt geschrieben steht, sondern wer lauter gerufen hat.',
         ],
+        'GES-TABELLE-EINHEITLICH' => [
+            'origin' => ESTAB_UX_ORIGIN_GESTALTUNG,
+            'reference' => 'docs/TABELLEN.md Abschnitt 5 und 6',
+            'requirement' => 'Jede Liste der Anwendung kommt aus dem '
+                . 'Tabellenbauteil. Eine Seite, die ihr eigenes '
+                . 'Tabellenmarkup schreibt, ist ein Befund -- eine Vorlage '
+                . 'wird kopiert und läuft auseinander, und genau das war die '
+                . 'gemeinsame Ursache der Rückmeldungen aus dem Betrieb. Was '
+                . 'noch nicht umgestellt ist, steht namentlich in einer '
+                . 'Ausnahmeliste, die nur schrumpfen darf.',
+        ],
         'GES-TABELLE-SORTIERUNG' => [
             'origin' => ESTAB_UX_ORIGIN_GESTALTUNG,
             'reference' => 'docs/TABELLEN.md Abschnitt 2',

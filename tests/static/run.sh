@@ -213,6 +213,7 @@ for test_name in \
     rm_feldfreigabe \
     rm_rueckweisung \
     ges_tabelle_bauteil \
+    ges_tabelle_einheitlich \
     rm_blaettern \
     rm_handbuch \
     ux_keyboard \

@@ -200,10 +200,19 @@ Reihenfolge: **Test zuerst, dann die Änderung, dann das Bild ansehen.**
       - **Prüfung:** wie R17; zusätzlich bleiben `ges_tabelle.php` und `ges_filter.php` grün
       - **Abhängigkeit:** R14
 
-- [ ] **R20** `!` **S** Jede Tabelle kommt aus dem Bauteil
-      → `tests/php/ges_tabelle_bauteil.php`, `app/ux_rules.php`
-      - [ ] `GES-TABELLE-EINHEITLICH`: Die Prüfung zählt die Tabellen der Anwendung; eine, die das Bauteil nicht benutzt, ist ein Befund
-      - [ ] Die Ausnahmeliste ist leer
+- [x] **R20** `!` **S** Jede Tabelle kommt aus dem Bauteil
+      → `tests/php/ges_tabelle_einheitlich.php`, `app/ux_rules.php`
+      - [x] `GES-TABELLE-EINHEITLICH`: Die Prüfung zählt die Datentabellen der
+            Anwendung; eine, die das Bauteil nicht benutzt und nicht
+            namentlich in der Ausnahmeliste steht, ist ein Befund. Die Zahl
+            darf sinken, nicht steigen
+      - [ ] **Die Ausnahmeliste ist nicht leer: 22 Tabellen in 8 Dateien.**
+            Die sieben Flächen aus `docs/TABELLEN.md` Abschnitt 5 sind alle
+            umgestellt. Beim Zählen sind weitere Datentabellen aufgetaucht,
+            die dort nicht stehen und in keiner Rückmeldung vorkamen: ETB und
+            TBB, Führungsstellenübersicht und -verwaltung, Systemstand,
+            Empfängermatrix, Kategorienpflege und die übrigen Listenarten in
+            `liste.php`. Sie stehen mit Grund in der Prüfung
       - **Prüfung:** volle Suite
 
 > **Prüfpunkt D4** — Kommt **jede** Tabelle aus dem Bauteil, oder gibt es noch
