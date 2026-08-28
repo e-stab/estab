@@ -157,7 +157,7 @@ Reihenfolge: **Test zuerst, dann die Änderung, dann das Bild ansehen.**
       - **Prüfung:** an **einer** Tabelle fertig gebaut (R15), erst dann verallgemeinert
       - **Risiko:** ein Bauteil, das alles kann, kann nichts gut
 
-- [ ] **R15** `!` **M** Nachweisung Ein- und Ausgang
+- [x] **R15** `!` **M** Nachweisung Ein- und Ausgang
       → `4fach/vordrucke.php` oder die Nachweisungsseite, `app/tabelle.php`
       - [ ] Die erste Tabelle aus dem Bauteil. Suche und Filter je Spalte, die heute ganz fehlen
       - **Prüfung:** Sortieren, Spaltensuche, Blättern — je einmal mit und ohne Skript

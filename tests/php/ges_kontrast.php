@@ -122,6 +122,74 @@ $paarungen[] = [
     ESTAB_GES_NICHTTEXT, 'Kachelrand beim Zeigen',
 ];
 
+/*
+ * Und dazu jede Paarung, die eine Regel selbst aufmacht.
+ *
+ * Die Liste oben ist eine Feststellung dessen, was die Oberflaeche tut -- und
+ * sie kennt nur, was jemand eingetragen hat. Eine neue Regel darf beliebige
+ * zwei Marken zusammenbringen, ohne dass die Liste davon erfaehrt.
+ *
+ * Genau so entstand die Filtermarke des Tabellenbauteils: Sie setzte
+ * `background: var(--grund-kachel)` -- die dunkle Kachelfarbe der
+ * Menuespalte -- und `color: var(--tinte)`. Dunkel auf dunkel, 1.34:1, und
+ * die Liste oben blieb still, weil diese Paarung in ihr nicht vorkam.
+ *
+ * Deshalb wird zusaetzlich gemessen, was im Stylesheet steht: Jede Regel, die
+ * Tinte und Grund gemeinsam aus Marken setzt, sagt selbst, was auf was
+ * gehoert. Was eine Regel ausspricht, muss sie auch aushalten.
+ */
+$regelPaarungen = [];
+foreach (estab_test_css_regeln($stylesheet) as $regel) {
+    if (str_contains($regel['auswaehler'], ':root')) {
+        continue;
+    }
+    if (estab_test_ist_vordruck($regel['auswaehler'])) {
+        continue;
+    }
+    $tinte = null;
+    $grund = null;
+    foreach ($regel['deklarationen'] as $erklaerung) {
+        if (preg_match(
+            '~\Avar\(\s*(--[a-z0-9-]+)\s*\)\z~',
+            trim($erklaerung['wert']),
+            $treffer
+        ) !== 1) {
+            continue;
+        }
+        if ($erklaerung['eigenschaft'] === 'color') {
+            $tinte = $treffer[1];
+        }
+        if (in_array($erklaerung['eigenschaft'], ['background', 'background-color'], true)) {
+            $grund = $treffer[1];
+        }
+    }
+    if ($tinte === null || $grund === null) {
+        continue;
+    }
+    if (!isset($marken[$tinte]) || !isset($marken[$grund])) {
+        continue;
+    }
+    // Nur echte Farbmarken: --schatten-tafel etwa ist keine.
+    if (preg_match('~\A#[0-9a-fA-F]{3,8}\z~', $marken[$tinte]) !== 1
+        || preg_match('~\A#[0-9a-fA-F]{3,8}\z~', $marken[$grund]) !== 1) {
+        continue;
+    }
+    $regelPaarungen[] = [
+        $tinte, $grund, ESTAB_GES_SOLL,
+        'Regel ' . $regel['auswaehler'] . ' Zeile ' . $regel['zeile'],
+    ];
+}
+$assert(
+    count($regelPaarungen) >= 10,
+    estab_ux_requirement(
+        'GES-KONTRAST-TEXT',
+        'Es werden nur ' . count($regelPaarungen) . ' selbst aufgemachte '
+            . 'Paarungen gefunden. Die Ableitung aus dem Stylesheet greift '
+            . 'nicht mehr, und ihre Ruhe waere kein Beweis.'
+    )
+);
+$paarungen = array_merge($paarungen, $regelPaarungen);
+
 $schlecht = [];
 $niedrigsterText = 99.0;
 foreach ($paarungen as [$vorn, $hinten, $soll, $zweck]) {

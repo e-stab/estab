@@ -410,6 +410,42 @@ function estab_tabelle_adresse(array $zustand, array $aenderung): string
     return $abfrage === '' ? '?' : '?' . $abfrage;
 }
 
+/** Ab wieviel Zeichen eine Zelle einen Aufklapp bekommt. */
+const ESTAB_TABELLE_KLAMMER = 160;
+
+/**
+ * Der Inhalt einer Zelle: gekürzt auf zwei Zeilen, mit Aufklapp für den Rest.
+ *
+ * Text in einer Zelle steht auf höchstens zwei Zeilen. Eine Zeile, die zehn
+ * Zeilen hoch ist, macht die Liste unbrauchbar. Der Rest ist deshalb nicht
+ * verloren, sondern eingeklappt -- in derselben Zelle, ohne Skript.
+ *
+ * Das Kürzen gehört ins Bauteil und nicht in die Seite. Eine Seite, die
+ * fertiges Markup liefert, umgeht die Maskierung; eine, die selbst kürzt,
+ * kürzt beim nächsten Mal anders.
+ */
+function estab_tabelle_zelleninhalt(string $wert): string
+{
+    $wert = trim($wert);
+    if ($wert === '') {
+        return '<span class="estab-tabelle-klammer">–</span>';
+    }
+    if (mb_strlen($wert) <= ESTAB_TABELLE_KLAMMER) {
+        return '<span class="estab-tabelle-klammer">'
+            . estab_message_html($wert) . '</span>';
+    }
+    $anfang = mb_substr($wert, 0, ESTAB_TABELLE_KLAMMER);
+    // An der letzten Wortgrenze trennen, nicht mitten im Wort.
+    $luecke = mb_strrpos($anfang, ' ');
+    if ($luecke !== false && $luecke > ESTAB_TABELLE_KLAMMER - 30) {
+        $anfang = mb_substr($anfang, 0, $luecke);
+    }
+    return '<span class="estab-tabelle-klammer">'
+        . estab_message_html(rtrim($anfang)) . ' …</span>'
+        . '<details class="estab-tabelle-mehr"><summary>Ganzer Text</summary>'
+        . '<p>' . estab_message_html($wert) . '</p></details>';
+}
+
 /** Ein Knopf, der eine Zeile öffnet. */
 function estab_tabelle_knopf(string $beschriftung, string $ziel, array $felder): string
 {
@@ -803,9 +839,11 @@ function estab_tabelle_markup(array $tabelle): string
             // ohne Bezeichnungen ist eine Reihe nackter Werte.
             $markup .= '<td data-label="' . estab_message_html($spalte['kopf']) . '"'
                 . ($spalte['zahlenspalte'] ? ' class="estab-tabelle-zahl"' : '')
-                . '><span class="estab-tabelle-klammer">'
-                . estab_message_html((string) ($zeile[$spalte['schluessel']] ?? ''))
-                . '</span></td>';
+                . '>'
+                . estab_tabelle_zelleninhalt(
+                    (string) ($zeile[$spalte['schluessel']] ?? '')
+                )
+                . '</td>';
         }
         if ($aktion !== null) {
             $markup .= '<td data-label="Aktion">' . $aktion($zeile) . '</td>';

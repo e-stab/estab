@@ -1727,7 +1727,9 @@ audio[data-estab-sidebar-audio] {
 .estab-sidebar-action-badge {
     background: var(--marke-standort);
     border-radius: var(--radius-pille);
-    color: var(--achtung-tinte);
+    /* Auf der Goldflaeche ist nur die Haupttinte zulaessig; --achtung-tinte
+       erreichte dort 4.69 statt 7. */
+    color: var(--tinte);
     display: inline-block;
     font-size: var(--schrift-1);
     font-weight: var(--stark-voll);
@@ -5250,8 +5252,11 @@ body.estab-message-form-body {
     gap: var(--abstand-2);
 }
 
+/* Hier stand --grund-kachel: die dunkle Kachelfarbe der Menuespalte. Auf der
+   Seite ergab das dunkle Schrift auf dunklem Grund -- 1.34:1, unlesbar. Eine
+   Marke der Spalte gehoert nicht auf die Tafel. */
 .estab-tabelle-marke {
-    background: var(--grund-kachel);
+    background: var(--grund-gedaempft);
     border: 1px solid var(--linie-kraeftig);
     border-radius: var(--radius-pille);
     color: var(--tinte);
@@ -5262,7 +5267,7 @@ body.estab-message-form-body {
 
 .estab-tabelle-marke:hover,
 .estab-tabelle-marke:focus-visible {
-    background: var(--grund-kachel-zeigen);
+    background: var(--handlung-sanft);
 }
 
 /* Der Rahmen scrollt quer, nicht die Seite. */
@@ -5346,6 +5351,18 @@ body.estab-message-form-body {
     -webkit-line-clamp: 2;
     display: -webkit-box;
     overflow: hidden;
+}
+
+/* Der Rest eines langen Textes ist nicht verloren, sondern eingeklappt --
+   in derselben Zelle, ohne Skript. */
+.estab-tabelle-mehr > summary {
+    color: var(--handlung-dunkel);
+    cursor: pointer;
+    font-size: var(--schrift-2);
+}
+
+.estab-tabelle-mehr > p {
+    margin: var(--abstand-2) 0 0;
 }
 
 .estab-tabelle-masken td {
@@ -7651,10 +7668,11 @@ section.estab-message-timeline[data-estab-message-timeline] * {
 .estab-email-preview-header {
     background: var(--grund-kachel-zeigen);
     border-bottom: 4px solid var(--marke-standort);
-    /* Stand auf var(--tinte-spalte): Rest des dunklen Banners,
-       dessen Grund die Kopfzeilenregel entfernt hat. Weisse Schrift
-       auf hellem Grund. */
-    color: var(--handlung-dunkel);
+    /* Hier stand --handlung-dunkel. Der Kommentar dazu nahm an, die
+       Kopfzeilenregel habe den dunklen Grund entfernt -- diese Regel setzt
+       ihn aber selbst, zwei Zeilen darueber. Dunkelblau auf Dunkelblau,
+       1.07:1. Auf dunklem Grund traegt die Spaltentinte. */
+    color: var(--tinte-spalte);
     padding: var(--abstand-6);
 }
 

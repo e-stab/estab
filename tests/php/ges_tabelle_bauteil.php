@@ -356,6 +356,54 @@ $assert(
     )
 );
 
+/* --- Lange Texte werden gekürzt, nicht abgeschnitten --- */
+
+/*
+ * Text in einer Zelle steht auf höchstens zwei Zeilen -- der Rest ist
+ * eingeklappt, nicht verloren. Das gehört ins Bauteil: Eine Seite, die
+ * fertiges Markup liefert, umgeht die Maskierung, und eine, die selbst
+ * kürzt, kürzt beim nächsten Mal anders.
+ */
+$lang = str_repeat('Lagemeldung Abschnitt Nord ', 20);
+$mitLangtext = estab_tabelle_markup([
+    'id' => 'probe', 'spalten' => $spalten,
+    'zeilen' => [['nummer' => '1', 'zeit' => '', 'vorrang' => '', 'inhalt' => $lang]],
+    'quelle' => [],
+]);
+$assert(
+    str_contains($mitLangtext, '<details class="estab-tabelle-mehr">')
+        && str_contains($mitLangtext, 'Ganzer Text'),
+    estab_ux_requirement(
+        'GES-TABELLE-SUCHE',
+        'Ein langer Text bekommt keinen Aufklapp; der Rest wäre verloren.'
+    )
+);
+$assert(
+    str_contains($mitLangtext, ' …</span>'),
+    estab_ux_requirement(
+        'GES-TABELLE-SUCHE',
+        'Der gekürzte Anfang ist nicht als gekürzt erkennbar.'
+    )
+);
+
+/*
+ * Und die Maskierung bleibt beim Bauteil. Eine Seite, die Auszeichnung in
+ * eine Zelle gibt, bekommt sie als Text zu sehen -- nicht als Auszeichnung.
+ */
+$boese = estab_tabelle_markup([
+    'id' => 'probe', 'spalten' => $spalten,
+    'zeilen' => [[
+        'nummer' => '1', 'zeit' => '', 'vorrang' => '',
+        'inhalt' => '<img src=x onerror=alert(1)>',
+    ]],
+    'quelle' => [],
+]);
+$assert(
+    !str_contains($boese, '<img src=x')
+        && str_contains($boese, '&lt;img src=x'),
+    'Das Bauteil gibt Auszeichnung aus einer Zelle unmaskiert weiter.'
+);
+
 /* --- Der Leerzustand nennt den Grund und den Weg zurück --- */
 
 $nichts = estab_tabelle_markup([
