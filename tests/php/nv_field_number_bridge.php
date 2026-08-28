@@ -42,6 +42,29 @@ $assert(
     )
 );
 
+/*
+ * Die obere Grenze steht an zwei Stellen: hier und in der Schleife, die alle
+ * Zugriffsbits zuruecksetzt. Weichen sie voneinander ab, bleibt ein Bit von
+ * der vorigen Nachricht stehen -- und ein Feld steht offen, das zu sein
+ * haette. Das ist kein sichtbarer Fehler, sondern ein stiller.
+ */
+$zuruecksetzen = file_get_contents($root . '/4fach/4fachform.php');
+$assert(is_string($zuruecksetzen), '4fachform.php ist nicht lesbar.');
+$hoechster = max(array_column($map, 'zugriff'));
+$assert(
+    preg_match(
+        '~for \( \$i = 1; \$i <= (\d+); \$i\+\+ \)\{\s*\$this->bg~',
+        (string) $zuruecksetzen,
+        $grenze
+    ) === 1 && (int) $grenze[1] >= $hoechster,
+    estab_dv_requirement(
+        'NV-NUMMERNBRUECKE',
+        'Die Zugriffsbits werden bis ' . ($grenze[1] ?? '?') . ' '
+            . 'zurueckgesetzt, die Bruecke reicht aber bis ' . $hoechster
+            . '. Ein Bit der vorigen Nachricht bliebe stehen.'
+    )
+);
+
 foreach ($map as $number => $entry) {
     $assert(
         isset($entry['bezeichnung']) && is_string($entry['bezeichnung'])

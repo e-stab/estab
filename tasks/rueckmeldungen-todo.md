@@ -110,13 +110,13 @@ Reihenfolge: **Test zuerst, dann die Änderung, dann das Bild ansehen.**
       - [ ] Ein geöffnetes Fähnchen überlagert alle anderen Infopunkte und wird nicht angeschnitten
       - **Prüfung:** Messung im Browser — kein Infopunkt überdeckt das offene Fähnchen
 
-- [ ] **R10** `!` **S** Der Fernmelder darf den Absender ausfüllen
+- [x] **R10** `!` **S** Der Fernmelder darf den Absender ausfüllen
       → `4fach/4fachform.php`
       - [ ] Feld **Absender** ist für die Station Fernmelder freigegeben, optional
       - [ ] Was der Fernmelder ausgefüllt hat, prüft der LdF nur noch
       - **Prüfung:** Feldfreigabe **aller** Stationen — keine darf verlieren, was sie hatte
 
-- [ ] **R11** `·` **S** Zeichen nur beim Ausgang
+- [x] **R11** `·` **S** Zeichen nur beim Ausgang
       → `4fach/4fachform.php`
       - [ ] Feld **Zeichen** ist beim Eingang für den Fernmelder gesperrt; es füllt der Verfasser beim Ausgang
       - **Prüfung:** wie R10

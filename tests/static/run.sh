@@ -210,6 +210,7 @@ for test_name in \
     rm_buchfuehrung \
     rm_aufnahmevermerk \
     rm_infofaehnchen \
+    rm_feldfreigabe \
     ux_keyboard \
     ux_without_javascript \
     fuest_formal_review \

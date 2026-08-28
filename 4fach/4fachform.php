@@ -910,8 +910,16 @@ HTML;
         }
         $this->bg   [11] = $this->feldbg [11]["i"] ;
         $this->feld [11] = false;
-        $this->bg   [13] = $this->feldbg [13]["i"] ;
-        $this->feld [13] = false;
+        // Der Absender stand hier gesperrt. Der Fernmelder kennt ihn aber --
+        // bei einer eingehenden Nachricht steht er im Spruchkopf --, und der
+        // LdF musste ihn danach von Hand nachtragen. Die Angabe bleibt
+        // freiwillig; der LdF prueft sie nur noch.
+        //
+        // Das Verfasserzeichen gehoert dagegen dem, der die Nachricht
+        // abgefasst hat. Der Fernmelder nimmt sie auf, er verfasst sie
+        // nicht.
+        $this->bg   [14] = $this->feldbg [14]["i"] ;
+        $this->feld [14] = false;
 
       break;
       case "LdF-Eingang":
