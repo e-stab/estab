@@ -960,13 +960,20 @@ $assert(
 );
 $assert(
     preg_match(
+        /*
+         * Die Luecken standen hier als Literale -- 0.5rem und 0.45rem. Seit
+         * die Masse aus Marken kommen, waere das eine Pruefung auf die
+         * Schreibweise. Geprueft wird die Sache: Blaetterer und Markenreihe
+         * legen sich auf eine Zeile, brechen um und halten Abstand aus der
+         * Skala.
+         */
         '/\.estab-message-list-pager > form\s*\{[^}]*display:\s*flex;'
-            . '[^}]*gap:\s*0\.5rem;[^}]*width:\s*100%;/s',
+            . '[^}]*gap:\s*var\(--abstand-\d\);[^}]*width:\s*100%;/s',
         $stylesheet
     ) === 1
         && preg_match(
             '/\.estab-message-list-active > div\s*\{[^}]*display:\s*flex;'
-                . '[^}]*flex-wrap:\s*wrap;[^}]*gap:\s*0\.45rem;/s',
+                . '[^}]*flex-wrap:\s*wrap;[^}]*gap:\s*var\(--abstand-\d\);/s',
             $stylesheet
         ) === 1
         && substr_count(

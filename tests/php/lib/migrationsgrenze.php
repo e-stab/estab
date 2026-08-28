@@ -31,64 +31,18 @@ declare(strict_types=1);
 function estab_test_migrationsgrenze(): array
 {
     return [
-        // P2 -- Musterseite 1: Vordruck.
-        // Hülle, Menü und Cockpit sind mit G07 umgestellt und stehen nicht
-        // mehr hier; die Wächter sind für sie scharf.
+        /*
+         * Der Nachrichtenvordruck steht hier als Einziger -- und er bleibt.
+         * Er ist keine unfertige Umstellung, sondern die begruendete Ausnahme
+         * aus docs/GESTALTUNG.md Abschnitt 12: ein Papierfaksimile mit
+         * eigenem Raster. Schrift-, Radien- und Abstandsskala gelten darin
+         * nicht; sein Raster ist Geometrie, keine Skala. Wer dort ein Mass
+         * zieht, verschiebt ein Feld.
+         *
+         * Kontrast, Fokus und die Zustaende ohne Farbe gelten sehr wohl --
+         * die pruefen ux_form_contrast, ges_fokus und ges_vordruck.
+         */
         'estab-official',
-
-        // P3 -- Musterseite 2 ist umgestellt; hier steht nichts mehr.
-
-        // P4 -- der Rest.
-        // 'estab-message' stand hier als ein Eintrag. Mit G08 ist das Umfeld
-        // des Vordrucks umgestellt, die Liste aber noch nicht -- deshalb
-        // steht jetzt jede Familie fuer sich.
-        'estab-message-list',
-        'estab-message-timeline',
-        'estab-message-attachment',
-        'estab-message-categor',
-        'estab-message-suggestion',
-        'estab-message-transport',
-        'estab-message-recipient',
-        'estab-message-sidebar',
-        'estab-message-workspace',
-        'estab-message-mapping',
-        'estab-message-content-frame',
-        'estab-message-distribution',
-        'estab-message-print-annex',
-        'estab-message-task-badge',
-        'estab-mobile-sidebar',
-        'estab-tool-',
-        'estab-admin-',
-        'estab-export-',
-        'estab-telecom-',
-        'estab-incident-',
-        'estab-bos-',
-        'estab-email-',
-        'estab-auth-',
-        'estab-login',
-        'estab-password-policy',
-        'estab-button',
-        'estab-visually-hidden',
-        'estab-actions-page',
-        'estab-assignment',
-        'estab-readiness',
-        'estab-situation',
-        'estab-logbook',
-        'estab-handbook',
-        'estab-guidance',
-        'estab-print',
-        'estab-skip',
-        'estab-error',
-        'estab-account',
-        'estab-copy-',
-        'estab-danger',
-        'estab-shift',
-        'estab-attachment',
-        'estab-field-',
-        'estab-form-',
-
-        // Übernommene Kennungen ohne Bereichspräfix.
-        '#f_incoming_transport_correction_reason',
     ];
 }
 

@@ -136,8 +136,8 @@
    versehentlich wie eine von ihnen behandelt -- mit deren Innenabstaenden
    lief sie seitlich ueber. */
 .estab-auth-page {
-    background: #eef2f6;
-    color: #172033;
+    background: var(--handlung-sanft);
+    color: var(--tinte);
     font-family: Arial, Helvetica, sans-serif;
     margin: 0;
 }
@@ -172,20 +172,20 @@
 }
 
 .estab-message-suggestion-list {
-    background: #ffffff;
-    border: 2px solid #45627f;
-    border-radius: 6px;
-    box-shadow: 0 5px 14px rgba(5, 14, 26, 0.3);
+    background: var(--grund-tafel);
+    border: 2px solid var(--linie-spalte);
+    border-radius: var(--radius-3);
+    box-shadow: var(--schatten-tafel);
     box-sizing: border-box;
-    color: #172033;
+    color: var(--tinte);
     font-family: Arial, Helvetica, sans-serif;
-    font-size: 0.9rem;
-    margin-top: 0.2rem;
+    font-size: var(--schrift-3);
+    margin-top: var(--abstand-2);
     max-height: 14rem;
     max-width: 100%;
     overflow-y: auto;
     overscroll-behavior: contain;
-    padding: 0.2rem;
+    padding: var(--abstand-2);
     scrollbar-width: thin;
     width: 100%;
 }
@@ -196,37 +196,37 @@
 }
 
 .estab-message-suggestion-option {
-    border-radius: 4px;
+    border-radius: var(--radius-2);
     cursor: pointer;
     display: grid;
-    gap: 0.1rem;
+    gap: var(--abstand-1);
     line-height: 1.35;
     overflow-wrap: anywhere;
-    padding: 0.45rem 0.55rem;
+    padding: var(--abstand-4) var(--abstand-4);
 }
 
 .estab-message-mapping-option {
-    background: #edf6ff;
-    border-left: 4px solid #2563eb;
-    padding-left: 0.45rem;
+    background: var(--handlung-sanft);
+    border-left: 4px solid var(--handlung-kante);
+    padding-left: var(--abstand-4);
 }
 
 .estab-message-suggestion-value {
-    font-weight: 700;
+    font-weight: var(--stark-voll);
 }
 
 .estab-message-suggestion-source {
-    color: #36536f;
-    font-size: 0.72rem;
-    font-weight: 700;
+    color: var(--tinte-neben);
+    font-size: var(--schrift-1);
+    font-weight: var(--stark-voll);
     letter-spacing: 0.01em;
 }
 
 .estab-message-suggestion-option:hover,
 .estab-message-suggestion-option-active {
-    background: #dbeafe;
-    color: #102641;
-    outline: 2px solid #2563eb;
+    background: var(--handlung-sanft);
+    color: var(--tinte);
+    outline: 2px solid var(--handlung-kante);
     outline-offset: -2px;
 }
 
@@ -234,49 +234,49 @@
     color: inherit;
     display: block;
     font-family: Arial, Helvetica, sans-serif;
-    font-size: 0.78rem;
-    font-weight: 400;
+    font-size: var(--schrift-1);
+    font-weight: var(--stark-normal);
     line-height: 1.3;
-    margin-top: 0.2rem;
-    opacity: 0.78;
+    margin-top: var(--abstand-2);
+    /* opacity entfernt: Rangfolge entsteht ueber Groesse, Staerke und Ort, nie ueber Blaesse. */
 }
 
 .estab-message-transport-confirmation {
-    background: #eef5fc;
-    border-left: 4px solid #2563eb;
-    border-radius: 4px;
-    color: #172033;
+    background: var(--handlung-sanft);
+    border-left: 4px solid var(--handlung-kante);
+    border-radius: var(--radius-2);
+    color: var(--tinte);
     font-family: Arial, Helvetica, sans-serif;
-    font-size: 0.78rem;
+    font-size: var(--schrift-1);
     line-height: 1.35;
-    margin: 0.5rem 0 0.35rem;
-    padding: 0.45rem 0.55rem;
+    margin: var(--abstand-4) 0 var(--abstand-3);
+    padding: var(--abstand-4) var(--abstand-4);
     text-align: left;
 }
 
 .estab-message-transport-confirmation
     [data-estab-incoming-transport-original] {
     display: inline-block;
-    margin-top: 0.3rem;
+    margin-top: var(--abstand-2);
 }
 
 .estab-message-transport-confirm-checkbox,
 .estab-message-transport-reason-label {
-    color: #172033;
+    color: var(--tinte);
     display: block;
     font-family: Arial, Helvetica, sans-serif;
-    font-size: 0.78rem;
+    font-size: var(--schrift-1);
     line-height: 1.35;
-    margin-top: 0.35rem;
+    margin-top: var(--abstand-3);
     text-align: left;
 }
 
 .estab-message-transport-confirm-checkbox {
-    font-weight: 700;
+    font-weight: var(--stark-voll);
 }
 
 .estab-message-transport-confirm-checkbox input {
-    margin: 0 0.3rem 0 0;
+    margin: 0 var(--abstand-2) 0 0;
     min-height: 1rem;
     min-width: 1rem;
     vertical-align: middle;
@@ -285,7 +285,7 @@
 #f_incoming_transport_correction_reason {
     box-sizing: border-box;
     font-family: Arial, Helvetica, sans-serif;
-    margin-top: 0.15rem;
+    margin-top: var(--abstand-1);
     max-width: 100%;
     width: 100%;
 }
@@ -624,7 +624,7 @@
 }
 
 .estab-message-workspace {
-    background: #eef2f6;
+    background: var(--handlung-sanft);
 }
 
 /* ------------------------------------------------------------------ *
@@ -694,12 +694,12 @@
 }
 
 .estab-bos-list-frame {
-    background: #16283c;
-    border-right: 1px solid #45627f;
+    background: var(--grund-kachel);
+    border-right: 1px solid var(--linie-spalte);
 }
 
 .estab-bos-content-frame {
-    background: #ffffff;
+    background: var(--grund-tafel);
 }
 
 .estab-shell-menu {
@@ -774,7 +774,7 @@
 }
 
 .estab-actions-page {
-    background: #0b1d31;
+    background: var(--grund-spalte);
     margin: 0;
 }
 
@@ -872,12 +872,12 @@
 }
 
 .estab-message-sidebar-frame {
-    background: #0b1d31;
-    border-right: 2px solid #45627f;
+    background: var(--grund-spalte);
+    border-right: 2px solid var(--linie-spalte);
 }
 
 .estab-message-content-frame {
-    background: #eef2f6;
+    background: var(--handlung-sanft);
 }
 
 .estab-mobile-sidebar-return {
@@ -902,9 +902,9 @@
     box-sizing: border-box;
     display: flex;
     flex-direction: column;
-    gap: 0.75rem;
+    gap: var(--abstand-5);
     min-height: 100dvh;
-    padding: 0.75rem;
+    padding: var(--abstand-5);
 }
 
 /* Hier klebte die Bereichsnavigation mit `position: sticky` am unteren Rand
@@ -1811,13 +1811,13 @@ audio[data-estab-sidebar-audio] {
 }
 
 .estab-login-cta {
-    background: #ffffff;
-    border: 2px solid #355b8c;
-    border-radius: 10px;
+    background: var(--grund-tafel);
+    border: 2px solid var(--handlung);
+    border-radius: var(--radius-3);
     box-shadow: var(--schatten-tafel);
-    margin: 2rem auto;
+    margin: var(--abstand-7) auto;
     max-width: 46rem;
-    padding: 1.5rem 2rem;
+    padding: var(--abstand-7) var(--abstand-7);
     text-align: center;
 }
 
@@ -1833,27 +1833,27 @@ audio[data-estab-sidebar-audio] {
 }
 
 .estab-auth-shell {
-    margin: 1.5rem auto;
+    margin: var(--abstand-7) auto;
     max-width: 52rem;
-    padding: 0 1rem 2rem;
+    padding: 0 var(--abstand-6) var(--abstand-7);
 }
 
 .estab-auth-card {
-    background: #ffffff;
-    border: 1px solid #8da2bd;
-    border-radius: 10px;
+    background: var(--grund-tafel);
+    border: 1px solid var(--linie-kraeftig);
+    border-radius: var(--radius-3);
     box-shadow: var(--schatten-tafel);
-    margin-bottom: 1.25rem;
+    margin-bottom: var(--abstand-6);
     overflow-x: auto;
-    padding: 1.5rem;
+    padding: var(--abstand-7);
 }
 
 .estab-auth-actions {
     align-items: stretch;
     display: flex;
     flex-wrap: wrap;
-    gap: 0.75rem;
-    margin-top: 1.25rem;
+    gap: var(--abstand-5);
+    margin-top: var(--abstand-6);
 }
 
 .estab-auth-actions form {
@@ -1978,58 +1978,58 @@ audio[data-estab-sidebar-audio] {
 }
 
 .estab-button {
-    background: #eef3f8;
-    border: 2px solid #355b8c;
-    border-radius: 6px;
+    background: var(--handlung-sanft);
+    border: 2px solid var(--handlung);
+    border-radius: var(--radius-3);
     box-sizing: border-box;
-    color: #183454;
+    color: var(--tinte);
     cursor: pointer;
     display: inline-block;
-    font-size: 1rem;
-    font-weight: 700;
+    font-size: var(--schrift-4);
+    font-weight: var(--stark-voll);
     line-height: 1.25;
-    padding: 0.7rem 1rem;
+    padding: var(--abstand-5) var(--abstand-6);
     text-align: center;
     text-decoration: none;
 }
 
 .estab-button:hover,
 .estab-button:focus {
-    background: #dbe8f5;
+    background: var(--handlung-sanft);
 }
 
 .estab-button-primary {
-    background: #245a92;
-    color: #ffffff;
+    background: var(--handlung);
+    color: var(--tinte-spalte);
 }
 
 .estab-button-primary:hover,
 .estab-button-primary:focus {
-    background: #184471;
+    background: var(--handlung-dunkel);
 }
 
 .estab-button[disabled] {
-    background: #e5e5e5;
-    border-color: #888888;
-    color: #555555;
+    background: var(--grund-gedaempft);
+    border-color: var(--linie-spalte);
+    color: var(--tinte-neben);
     cursor: not-allowed;
 }
 
 .estab-auth-error {
-    background: #fff1f0;
-    border: 2px solid #a9231d;
-    border-radius: 6px;
-    color: #711712;
-    font-weight: 700;
-    margin: 1rem 0;
-    padding: 0.8rem 1rem;
+    background: var(--fehler-flaeche);
+    border: 2px solid var(--fehler-kante);
+    border-radius: var(--radius-3);
+    color: var(--fehler-tinte);
+    font-weight: var(--stark-voll);
+    margin: var(--abstand-6) 0;
+    padding: var(--abstand-5) var(--abstand-6);
 }
 
 .estab-auth-note {
-    background: #f4f7fa;
-    border-left: 4px solid #355b8c;
-    margin: 1rem 0;
-    padding: 0.75rem 1rem;
+    background: var(--handlung-sanft);
+    border-left: 4px solid var(--handlung);
+    margin: var(--abstand-6) 0;
+    padding: var(--abstand-5) var(--abstand-6);
 }
 
 .estab-auth-form {
@@ -2039,9 +2039,9 @@ audio[data-estab-sidebar-audio] {
 }
 
 .estab-auth-form legend {
-    font-size: 1.35rem;
-    font-weight: 700;
-    margin-bottom: 0.75rem;
+    font-size: var(--schrift-6);
+    font-weight: var(--stark-voll);
+    margin-bottom: var(--abstand-5);
 }
 
 .estab-auth-fields {
@@ -2051,7 +2051,7 @@ audio[data-estab-sidebar-audio] {
 
 .estab-auth-fields th,
 .estab-auth-fields td {
-    padding: 0.45rem 0.35rem;
+    padding: var(--abstand-4) var(--abstand-3);
     text-align: left;
     vertical-align: top;
 }
@@ -2062,53 +2062,53 @@ audio[data-estab-sidebar-audio] {
 
 .estab-auth-fields label {
     display: inline-block;
-    font-weight: 700;
-    padding-top: 0.55rem;
+    font-weight: var(--stark-voll);
+    padding-top: var(--abstand-4);
 }
 
 .estab-auth-fields input,
 .estab-auth-fields select {
-    border: 1px solid #5f6f82;
-    border-radius: 4px;
+    border: 1px solid var(--linie-spalte);
+    border-radius: var(--radius-2);
     box-sizing: border-box;
     font: inherit;
     max-width: 100%;
-    padding: 0.55rem;
+    padding: var(--abstand-4);
     width: 24rem;
 }
 
 .estab-account-list {
     border-collapse: collapse;
-    margin-top: 0.75rem;
+    margin-top: var(--abstand-5);
     width: 100%;
 }
 
 .estab-account-list th,
 .estab-account-list td {
-    border: 1px solid #7f8da0;
-    padding: 0.55rem;
+    border: 1px solid var(--linie-spalte);
+    padding: var(--abstand-4);
     text-align: left;
 }
 
 .estab-account-list th {
-    background: #e6edf5;
+    background: var(--handlung-sanft);
 }
 
 .estab-account-active {
-    background: #e3f6d5;
+    background: var(--erledigt-flaeche);
 }
 
 .estab-account-idle {
-    background: #fff4d6;
+    background: var(--achtung-flaeche);
 }
 
 .estab-account-inactive {
-    background: #f0f0f0;
+    background: var(--grund-gedaempft);
 }
 
 .estab-admin-dashboard-page {
-    background: #f3f6f9;
-    color: #17263a;
+    background: var(--handlung-sanft);
+    color: var(--tinte);
     font: 16px/1.5 Arial, Helvetica, sans-serif;
     margin: 0;
     min-height: 100vh;
@@ -2117,19 +2117,19 @@ audio[data-estab-sidebar-audio] {
 .estab-admin-dashboard {
     box-sizing: border-box;
     display: grid;
-    gap: 1.5rem;
+    gap: var(--abstand-7);
     margin: 0 auto;
     max-width: 82rem;
-    padding: 2rem 1rem 3rem;
+    padding: var(--abstand-7) var(--abstand-6) var(--abstand-7);
 }
 
 .estab-admin-dashboard-hero {
-    background:
-        linear-gradient(135deg, rgba(17, 47, 79, 0.97), rgba(39, 86, 130, 0.94));
-    border-radius: 14px;
-    box-shadow: 0 10px 28px rgba(17, 38, 63, 0.18);
-    color: #ffffff;
-    padding: clamp(1.35rem, 3vw, 2.3rem);
+    /* Verlaufsflaeche entfernt: Der Seitenkopf ist eine Zeile, kein
+       Banner -- die Kopfzeilenregel setzte sie ohnehin auf `none`. */
+    border-radius: var(--radius-3);
+    box-shadow: var(--schatten-tafel);
+    color: var(--tinte-spalte);
+    padding: var(--abstand-7);
 }
 
 .estab-admin-dashboard-hero h1,
@@ -2140,94 +2140,94 @@ audio[data-estab-sidebar-audio] {
 }
 
 .estab-admin-dashboard-hero h1 {
-    font-size: clamp(2rem, 5vw, 3.2rem);
+    font-size: var(--schrift-7);
     line-height: 1.05;
-    margin-bottom: 0.7rem;
+    margin-bottom: var(--abstand-5);
 }
 
 .estab-admin-dashboard-hero > p:last-child {
-    color: #e5eef7;
+    color: var(--tinte-spalte);
     margin-bottom: 0;
     max-width: 54rem;
 }
 
 .estab-admin-dashboard-eyebrow {
-    color: #f4ca70;
-    font-size: 0.78rem;
-    font-weight: 800;
+    color: var(--marke-standort);
+    font-size: var(--schrift-1);
+    font-weight: var(--stark-voll);
     letter-spacing: 0.12em;
-    margin-bottom: 0.45rem;
+    margin-bottom: var(--abstand-4);
     text-transform: uppercase;
 }
 
 .estab-admin-dashboard-notice {
-    background: #fff8dd;
-    border: 1px solid #d5b45a;
-    border-left: 5px solid #b47a05;
-    border-radius: 10px;
-    color: #5b430e;
-    padding: 1rem 1.1rem;
+    background: var(--achtung-flaeche);
+    border: 1px solid var(--marke-standort);
+    border-left: 5px solid var(--achtung-kante);
+    border-radius: var(--radius-3);
+    color: var(--achtung-tinte);
+    padding: var(--abstand-6) var(--abstand-6);
 }
 
 .estab-admin-dashboard-section {
-    background: #ffffff;
-    border: 1px solid #c5d1dd;
-    border-radius: 12px;
-    box-shadow: 0 5px 18px rgba(31, 58, 86, 0.08);
-    padding: clamp(1rem, 2.5vw, 1.5rem);
+    background: var(--grund-tafel);
+    border: 1px solid var(--linie);
+    border-radius: var(--radius-3);
+    box-shadow: var(--schatten-tafel);
+    padding: var(--abstand-6);
 }
 
 .estab-admin-dashboard-section-heading {
-    margin-bottom: 1rem;
+    margin-bottom: var(--abstand-6);
 }
 
 .estab-admin-dashboard-section-heading h2 {
-    color: #153c64;
-    font-size: 1.3rem;
-    margin-bottom: 0.25rem;
+    color: var(--handlung-dunkel);
+    font-size: var(--schrift-6);
+    margin-bottom: var(--abstand-2);
 }
 
 .estab-admin-dashboard-section-heading p {
-    color: #52657a;
+    color: var(--tinte-neben);
     margin-bottom: 0;
     max-width: 58rem;
 }
 
 .estab-admin-dashboard-grid {
     display: grid;
-    gap: 0.9rem;
+    gap: var(--abstand-6);
     grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr));
 }
 
 .estab-admin-dashboard-card {
     align-items: center;
-    background: #f8fafc;
-    border: 2px solid #c3d0de;
-    border-radius: 10px;
+    background: var(--handlung-sanft);
+    border: 2px solid var(--linie);
+    border-radius: var(--radius-3);
     box-sizing: border-box;
-    color: #17263a;
+    color: var(--tinte);
     display: grid;
-    gap: 0.9rem;
+    gap: var(--abstand-6);
     grid-template-columns: 3.25rem minmax(0, 1fr) auto;
     min-height: 9.5rem;
-    padding: 1rem;
+    padding: var(--abstand-6);
     text-decoration: none;
 }
 
 .estab-admin-dashboard-card:hover {
-    background: #eef5fc;
-    border-color: #2b659a;
-    box-shadow: 0 7px 18px rgba(31, 75, 116, 0.15);
+    background: var(--handlung-sanft);
+    border-color: var(--handlung-kante);
+    box-shadow: var(--schatten-tafel);
 }
 
 .estab-admin-dashboard-number {
     align-items: center;
-    background: #173f67;
-    border-radius: 999px;
-    color: #ffffff;
+    background: var(--handlung-dunkel);
+    border-radius: var(--radius-pille);
+    color: var(--tinte-spalte);
     display: inline-flex;
-    font-size: 0.95rem;
-    font-weight: 800;
+    font-size: var(--schrift-4);
+    font-weight: var(--stark-voll);
     height: 3.25rem;
     justify-content: center;
     width: 3.25rem;
@@ -2235,54 +2235,54 @@ audio[data-estab-sidebar-audio] {
 
 .estab-admin-dashboard-card-content {
     display: grid;
-    gap: 0.35rem;
+    gap: var(--abstand-3);
     min-width: 0;
 }
 
 .estab-admin-dashboard-card-content strong {
-    color: #123a62;
-    font-size: 1.12rem;
+    color: var(--handlung-dunkel);
+    font-size: var(--schrift-5);
     line-height: 1.25;
 }
 
 .estab-admin-dashboard-card-content > span:last-child {
-    color: #506176;
+    color: var(--tinte-neben);
     overflow-wrap: anywhere;
 }
 
 .estab-admin-dashboard-badge {
-    color: #7a5100;
-    font-size: 0.72rem;
-    font-weight: 800;
+    color: var(--achtung-tinte);
+    font-size: var(--schrift-1);
+    font-weight: var(--stark-voll);
     letter-spacing: 0.07em;
     text-transform: uppercase;
 }
 
 .estab-admin-dashboard-arrow {
-    color: #245c91;
-    font-size: 1.6rem;
-    font-weight: 800;
+    color: var(--handlung-dunkel);
+    font-size: var(--schrift-7);
+    font-weight: var(--stark-voll);
 }
 
 .estab-admin-dashboard-footer {
     align-items: baseline;
-    color: #5b6a7c;
+    color: var(--tinte-neben);
     display: flex;
     flex-wrap: wrap;
-    gap: 0.5rem 1rem;
+    gap: var(--abstand-4) var(--abstand-6);
     justify-content: space-between;
 }
 
 .estab-admin-dashboard-footer a {
-    color: #214f7d;
-    font-weight: 800;
+    color: var(--handlung-dunkel);
+    font-weight: var(--stark-voll);
     min-height: 2.75rem;
-    padding: 0.55rem 0;
+    padding: var(--abstand-4) 0;
 }
 
 .estab-export-page {
-    background: #f3f6f9;
-    color: #17263a;
+    background: var(--handlung-sanft);
+    color: var(--tinte);
     font: 16px/1.5 Arial, Helvetica, sans-serif;
     margin: 0;
     min-height: 100vh;
@@ -2291,19 +2291,19 @@ audio[data-estab-sidebar-audio] {
 .estab-export-main {
     box-sizing: border-box;
     display: grid;
-    gap: 1.5rem;
+    gap: var(--abstand-7);
     margin: 0 auto;
     max-width: 82rem;
-    padding: 2rem 1rem 3rem;
+    padding: var(--abstand-7) var(--abstand-6) var(--abstand-7);
 }
 
 .estab-export-hero {
-    background:
-        linear-gradient(135deg, rgba(17, 47, 79, 0.96), rgba(39, 86, 130, 0.94));
-    border-radius: 14px;
-    box-shadow: 0 10px 28px rgba(17, 38, 63, 0.18);
-    color: #ffffff;
-    padding: clamp(1.35rem, 3vw, 2.3rem);
+    /* Verlaufsflaeche entfernt: Der Seitenkopf ist eine Zeile, kein
+       Banner -- die Kopfzeilenregel setzte sie ohnehin auf `none`. */
+    border-radius: var(--radius-3);
+    box-shadow: var(--schatten-tafel);
+    color: var(--tinte-spalte);
+    padding: var(--abstand-7);
 }
 
 .estab-export-hero h1,
@@ -2318,49 +2318,49 @@ audio[data-estab-sidebar-audio] {
 }
 
 .estab-export-hero h1 {
-    font-size: clamp(1.8rem, 4vw, 2.8rem);
+    font-size: var(--schrift-7);
     line-height: 1.1;
-    margin-bottom: 0.75rem;
+    margin-bottom: var(--abstand-5);
 }
 
 .estab-export-hero > p:last-child {
-    color: #e4edf7;
+    color: var(--tinte-spalte);
     margin-bottom: 0;
     max-width: 65rem;
 }
 
 .estab-export-eyebrow,
 .estab-export-card-kicker {
-    color: #47627f;
-    font-size: 0.78rem;
-    font-weight: 800;
+    color: var(--tinte-neben);
+    font-size: var(--schrift-1);
+    font-weight: var(--stark-voll);
     letter-spacing: 0.08em;
-    margin-bottom: 0.35rem;
+    margin-bottom: var(--abstand-3);
     text-transform: uppercase;
 }
 
 .estab-export-hero .estab-export-eyebrow {
-    color: #c4dbf0;
+    color: var(--tinte-spalte);
 }
 
 .estab-export-alert {
     border: 2px solid;
-    border-radius: 10px;
-    font-weight: 700;
+    border-radius: var(--radius-3);
+    font-weight: var(--stark-voll);
     margin: 0;
-    padding: 0.9rem 1rem;
+    padding: var(--abstand-6) var(--abstand-6);
 }
 
 .estab-export-alert-success {
-    background: #e7f6eb;
-    border-color: #2b7a42;
-    color: #174d2a;
+    background: var(--erledigt-flaeche);
+    border-color: var(--erledigt-kante);
+    color: var(--erledigt-tinte);
 }
 
 .estab-export-alert-error {
-    background: #fff0ef;
-    border-color: #b52a24;
-    color: #741a16;
+    background: var(--fehler-flaeche);
+    border-color: var(--fehler-kante);
+    color: var(--fehler-tinte);
 }
 
 .estab-incident-export-main {
@@ -2374,102 +2374,102 @@ audio[data-estab-sidebar-audio] {
 
 .estab-incident-export-form {
     display: grid;
-    gap: 1rem;
+    gap: var(--abstand-6);
     margin: 0;
 }
 
 .estab-incident-export-field {
     display: grid;
-    gap: 0.35rem;
+    gap: var(--abstand-3);
 }
 
 .estab-incident-export-field > span,
 .estab-incident-export-sections legend {
-    color: #183454;
-    font-weight: 800;
+    color: var(--tinte);
+    font-weight: var(--stark-voll);
 }
 
 .estab-incident-export-field select {
-    background: #ffffff;
-    border: 1px solid #7d91a7;
-    border-radius: 8px;
+    background: var(--grund-tafel);
+    border: 1px solid var(--linie-spalte);
+    border-radius: var(--radius-3);
     box-sizing: border-box;
-    color: #17263a;
+    color: var(--tinte);
     font: inherit;
     min-height: 3rem;
-    padding: 0.65rem 0.75rem;
+    padding: var(--abstand-5) var(--abstand-5);
     width: 100%;
 }
 
 .estab-incident-export-sections {
-    border: 1px solid #c6d2df;
-    border-radius: 10px;
+    border: 1px solid var(--linie);
+    border-radius: var(--radius-3);
     display: grid;
-    gap: 0.65rem;
+    gap: var(--abstand-5);
     margin: 0;
-    padding: 1rem;
+    padding: var(--abstand-6);
 }
 
 .estab-incident-export-sections legend {
-    padding: 0 0.35rem;
+    padding: 0 var(--abstand-3);
 }
 
 .estab-incident-export-option {
     align-items: start;
-    background: #f4f7fa;
-    border: 1px solid #d5dee8;
-    border-radius: 8px;
+    background: var(--handlung-sanft);
+    border: 1px solid var(--linie);
+    border-radius: var(--radius-3);
     cursor: pointer;
     display: grid;
-    gap: 0.75rem;
+    gap: var(--abstand-5);
     grid-template-columns: auto minmax(0, 1fr);
     min-height: 3rem;
-    padding: 0.75rem;
+    padding: var(--abstand-5);
 }
 
 .estab-incident-export-option:hover {
-    background: #eaf1f8;
-    border-color: #7d91a7;
+    background: var(--handlung-sanft);
+    border-color: var(--linie-spalte);
 }
 
 .estab-incident-export-option input {
     height: 1.35rem;
-    margin: 0.1rem 0 0;
+    margin: var(--abstand-1) 0 0;
     width: 1.35rem;
 }
 
 .estab-incident-export-option span {
     display: grid;
-    gap: 0.15rem;
+    gap: var(--abstand-1);
 }
 
 .estab-incident-export-option small,
 .estab-incident-export-limit {
-    color: #42546a;
+    color: var(--tinte-neben);
 }
 
 .estab-incident-export-limit {
-    background: #eef4fa;
-    border-left: 5px solid #2b6397;
+    background: var(--handlung-sanft);
+    border-left: 5px solid var(--handlung-kante);
     margin: 0;
-    padding: 0.8rem 0.9rem;
+    padding: var(--abstand-5) var(--abstand-6);
 }
 
 .estab-incident-indicator {
     align-items: center;
     border: 2px solid;
-    border-radius: 10px;
+    border-radius: var(--radius-3);
     box-sizing: border-box;
     display: grid;
-    gap: 0.2rem 1rem;
+    gap: var(--abstand-2) var(--abstand-6);
     grid-template-columns: minmax(0, 1fr) auto;
-    margin: 0.75rem 1rem;
-    padding: 0.7rem 0.85rem;
+    margin: var(--abstand-5) var(--abstand-6);
+    padding: var(--abstand-5) var(--abstand-5);
 }
 
 .estab-incident-indicator-label {
-    font-size: 0.66rem;
-    font-weight: 800;
+    font-size: var(--schrift-1);
+    font-weight: var(--stark-voll);
     grid-column: 1 / -1;
     letter-spacing: 0.03em;
     text-transform: uppercase;
@@ -2487,7 +2487,7 @@ audio[data-estab-sidebar-audio] {
 
 .estab-incident-indicator > span:last-child,
 .estab-incident-indicator > a {
-    font-size: 0.84rem;
+    font-size: var(--schrift-2);
     justify-self: end;
 }
 
@@ -2497,54 +2497,54 @@ audio[data-estab-sidebar-audio] {
 }
 
 .estab-incident-indicator-active {
-    background: #163c2a;
-    border-color: #4fbd7a;
-    color: #f0fff5;
+    background: var(--erledigt-spalte-flaeche);
+    border-color: var(--erledigt-spalte);
+    color: var(--tinte-spalte);
 }
 
 .estab-incident-indicator-active .estab-incident-indicator-label {
-    color: #9ee0b7;
+    color: var(--erledigt-spalte);
 }
 
 .estab-incident-indicator-permission-loose {
-    background: #5a3a0d;
-    border-color: #f0b429;
-    color: #fff9e8;
+    background: var(--marke-standort-flaeche);
+    border-color: var(--marke-standort);
+    color: var(--tinte-spalte);
 }
 
 .estab-incident-indicator-permission-loose .estab-incident-indicator-label {
-    color: #ffe19a;
+    color: var(--marke-standort);
 }
 
 .estab-incident-indicator-alert {
-    background: #5b1f24;
-    border-color: #ff737b;
-    color: #fff5f5;
+    background: var(--fehler-spalte-flaeche);
+    border-color: var(--fehler-spalte);
+    color: var(--tinte-spalte);
 }
 
 .estab-incident-indicator-alert .estab-incident-indicator-label {
-    color: #ffb7bb;
+    color: var(--tinte-spalte);
 }
 
 .estab-incident-indicator-alert > a {
-    background: #ffffff;
-    border-radius: 7px;
-    color: #721c24;
-    font-weight: 800;
+    background: var(--grund-tafel);
+    border-radius: var(--radius-3);
+    color: var(--fehler-tinte);
+    font-weight: var(--stark-voll);
     min-height: 2.4rem;
-    padding: 0.55rem 0.7rem;
+    padding: var(--abstand-4) var(--abstand-5);
     text-align: center;
     text-decoration: none;
 }
 
 .estab-incident-indicator-alert > a:hover,
 .estab-incident-indicator-alert > a:focus-visible {
-    background: #fff0f0;
+    background: var(--fehler-flaeche);
 }
 
 .estab-incident-indicator-compact {
     grid-template-columns: 1fr;
-    margin: 0.6rem 0.75rem;
+    margin: var(--abstand-4) var(--abstand-5);
 }
 
 .estab-incident-indicator-compact > span:last-child,
@@ -2553,29 +2553,29 @@ audio[data-estab-sidebar-audio] {
 }
 
 .estab-incident-indicator-sidebar {
-    margin: 0.75rem 0 0;
+    margin: var(--abstand-5) 0 0;
 }
 
 form[data-estab-incident-disabled="true"] {
-    opacity: 0.58;
+    /* opacity entfernt: Rangfolge entsteht ueber Groesse, Staerke und Ort, nie ueber Blaesse. */
 }
 
 form[data-estab-incident-disabled="true"]::before {
-    background: #fff0ef;
-    border: 2px solid #b52a24;
-    border-radius: 8px;
-    color: #741a16;
+    background: var(--fehler-flaeche);
+    border: 2px solid var(--fehler-kante);
+    border-radius: var(--radius-3);
+    color: var(--fehler-tinte);
     content: "Kein aktiver Einsatz – Eingaben sind gesperrt.";
     display: block;
     font: 700 0.95rem/1.4 Arial, Helvetica, sans-serif;
-    margin: 0 0 0.75rem;
-    padding: 0.75rem;
+    margin: 0 0 var(--abstand-5);
+    padding: var(--abstand-5);
 }
 
 @media (max-width: 56rem) {
     .estab-incident-indicator {
         grid-template-columns: 1fr;
-        margin: 0.6rem 0.75rem;
+        margin: var(--abstand-4) var(--abstand-5);
     }
 
     .estab-incident-indicator > span:last-child,
@@ -2586,23 +2586,23 @@ form[data-estab-incident-disabled="true"]::before {
 
 .estab-export-create {
     align-items: center;
-    background: #ffffff;
-    border: 1px solid #c6d2df;
-    border-left: 6px solid #2b6397;
-    border-radius: 10px;
-    box-shadow: 0 5px 18px rgba(26, 50, 76, 0.08);
+    background: var(--grund-tafel);
+    border: 1px solid var(--linie);
+    border-left: 6px solid var(--handlung-kante);
+    border-radius: var(--radius-3);
+    box-shadow: var(--schatten-tafel);
     display: grid;
-    gap: 1rem;
+    gap: var(--abstand-6);
     grid-template-columns: minmax(0, 1fr) auto;
-    padding: 1.25rem;
+    padding: var(--abstand-6);
 }
 
 .estab-export-create h2 {
-    margin-bottom: 0.3rem;
+    margin-bottom: var(--abstand-2);
 }
 
 .estab-export-create p {
-    color: #42546a;
+    color: var(--tinte-neben);
     margin-bottom: 0;
     max-width: 58rem;
 }
@@ -2613,13 +2613,13 @@ form[data-estab-incident-disabled="true"]::before {
 
 .estab-export-overview {
     display: grid;
-    gap: 1rem;
+    gap: var(--abstand-6);
 }
 
 .estab-export-section-heading {
     align-items: end;
     display: flex;
-    gap: 1rem;
+    gap: var(--abstand-6);
     justify-content: space-between;
 }
 
@@ -2629,113 +2629,113 @@ form[data-estab-incident-disabled="true"]::before {
 
 .estab-export-count {
     align-items: center;
-    background: #173a60;
-    border-radius: 999px;
-    color: #ffffff;
+    background: var(--handlung-dunkel);
+    border-radius: var(--radius-pille);
+    color: var(--tinte-spalte);
     display: inline-flex;
-    font-size: 1rem;
-    font-weight: 800;
+    font-size: var(--schrift-4);
+    font-weight: var(--stark-voll);
     justify-content: center;
     min-height: 2.5rem;
     min-width: 2.5rem;
-    padding: 0 0.65rem;
+    padding: 0 var(--abstand-5);
 }
 
 .estab-export-empty {
     align-items: center;
-    background: #ffffff;
-    border: 2px dashed #9aabbd;
-    border-radius: 10px;
-    color: #42546a;
+    background: var(--grund-tafel);
+    border: 2px dashed var(--linie-kraeftig);
+    border-radius: var(--radius-3);
+    color: var(--tinte-neben);
     display: grid;
-    gap: 0.3rem;
+    gap: var(--abstand-2);
     justify-items: center;
-    padding: 2.4rem 1rem;
+    padding: var(--abstand-7) var(--abstand-6);
     text-align: center;
 }
 
 .estab-export-empty strong {
-    color: #183454;
-    font-size: 1.1rem;
+    color: var(--tinte);
+    font-size: var(--schrift-5);
 }
 
 .estab-export-list {
     display: grid;
-    gap: 1rem;
+    gap: var(--abstand-6);
 }
 
 .estab-export-card {
-    background: #ffffff;
-    border: 1px solid #c6d2df;
-    border-radius: 12px;
-    box-shadow: 0 5px 18px rgba(26, 50, 76, 0.08);
+    background: var(--grund-tafel);
+    border: 1px solid var(--linie);
+    border-radius: var(--radius-3);
+    box-shadow: var(--schatten-tafel);
     display: grid;
-    gap: 1rem;
-    padding: 1.2rem;
+    gap: var(--abstand-6);
+    padding: var(--abstand-6);
 }
 
 .estab-export-card-new {
-    border: 3px solid #2f7a46;
-    box-shadow: 0 7px 22px rgba(34, 105, 57, 0.16);
+    border: 3px solid var(--erledigt-kante);
+    box-shadow: var(--schatten-tafel);
 }
 
 .estab-export-card-header {
     align-items: start;
     display: flex;
-    gap: 1rem;
+    gap: var(--abstand-6);
     justify-content: space-between;
 }
 
 .estab-export-card h3 {
-    color: #183454;
-    font-size: 1.3rem;
+    color: var(--tinte);
+    font-size: var(--schrift-6);
     line-height: 1.25;
     margin-bottom: 0;
 }
 
 .estab-export-state {
-    background: #e4f4e8;
-    border: 1px solid #77a783;
-    border-radius: 999px;
-    color: #1d5b31;
+    background: var(--erledigt-flaeche);
+    border: 1px solid var(--erledigt-spalte);
+    border-radius: var(--radius-pille);
+    color: var(--erledigt-tinte);
     flex: 0 0 auto;
-    font-size: 0.82rem;
-    font-weight: 800;
-    padding: 0.35rem 0.65rem;
+    font-size: var(--schrift-2);
+    font-weight: var(--stark-voll);
+    padding: var(--abstand-3) var(--abstand-5);
 }
 
 .estab-export-state-warning {
-    background: #fff3cf;
-    border-color: #bd8b1c;
-    color: #6c4b00;
+    background: var(--achtung-flaeche);
+    border-color: var(--achtung-kante);
+    color: var(--achtung-tinte);
 }
 
 .estab-export-metadata {
     display: grid;
-    gap: 0.7rem;
+    gap: var(--abstand-5);
     grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
     margin: 0;
 }
 
 .estab-export-metadata > div {
-    background: #f4f7fa;
-    border-radius: 7px;
+    background: var(--handlung-sanft);
+    border-radius: var(--radius-3);
     min-width: 0;
-    padding: 0.65rem 0.75rem;
+    padding: var(--abstand-5) var(--abstand-5);
 }
 
 .estab-export-metadata dt {
-    color: #56677a;
-    font-size: 0.76rem;
-    font-weight: 800;
+    color: var(--tinte-neben);
+    font-size: var(--schrift-1);
+    font-weight: var(--stark-voll);
     letter-spacing: 0.04em;
     text-transform: uppercase;
 }
 
 .estab-export-metadata dd {
-    color: #17263a;
-    font-weight: 700;
-    margin: 0.25rem 0 0;
+    color: var(--tinte);
+    font-weight: var(--stark-voll);
+    margin: var(--abstand-2) 0 0;
     overflow-wrap: anywhere;
 }
 
@@ -2743,7 +2743,7 @@ form[data-estab-incident-disabled="true"]::before {
     align-items: flex-start;
     display: flex;
     flex-wrap: wrap;
-    gap: 0.75rem;
+    gap: var(--abstand-5);
 }
 
 .estab-export-actions .estab-button {
@@ -2755,27 +2755,27 @@ form[data-estab-incident-disabled="true"]::before {
 
 .estab-button-danger,
 .estab-button-danger-outline {
-    border-color: #a9231d;
+    border-color: var(--fehler-kante);
 }
 
 .estab-button-danger {
-    background: #a9231d;
-    color: #ffffff;
+    background: var(--fehler-kante);
+    color: var(--tinte-spalte);
 }
 
 .estab-button-danger:hover,
 .estab-button-danger:focus {
-    background: #7e1713;
+    background: var(--fehler-spalte-flaeche);
 }
 
 .estab-button-danger-outline {
-    background: #ffffff;
-    color: #851c17;
+    background: var(--grund-tafel);
+    color: var(--fehler-tinte);
 }
 
 .estab-button-danger-outline:hover,
 .estab-button-danger-outline:focus {
-    background: #fff0ef;
+    background: var(--fehler-flaeche);
 }
 
 .estab-export-delete-confirm {
@@ -2800,16 +2800,16 @@ form[data-estab-incident-disabled="true"]::before {
 }
 
 .estab-export-delete-panel {
-    background: #fff4f3;
-    border: 2px solid #b52a24;
-    border-radius: 8px;
-    color: #641713;
-    margin-top: 0.65rem;
-    padding: 0.9rem;
+    background: var(--fehler-flaeche);
+    border: 2px solid var(--fehler-kante);
+    border-radius: var(--radius-3);
+    color: var(--fehler-tinte);
+    margin-top: var(--abstand-5);
+    padding: var(--abstand-6);
 }
 
 .estab-export-delete-panel p {
-    margin: 0.35rem 0 0.8rem;
+    margin: var(--abstand-3) 0 var(--abstand-5);
 }
 
 .estab-export-delete-panel form {
@@ -2817,11 +2817,11 @@ form[data-estab-incident-disabled="true"]::before {
 }
 
 .estab-export-card-note {
-    background: #fff8dd;
-    border-left: 4px solid #bd8b1c;
-    color: #664a09;
+    background: var(--achtung-flaeche);
+    border-left: 4px solid var(--achtung-kante);
+    color: var(--achtung-tinte);
     margin-bottom: 0;
-    padding: 0.7rem 0.8rem;
+    padding: var(--abstand-5) var(--abstand-5);
 }
 
 .estab-export-card-note-warning {
@@ -2829,44 +2829,44 @@ form[data-estab-incident-disabled="true"]::before {
 }
 
 .estab-export-manifest {
-    border-top: 1px solid #c6d2df;
-    padding-top: 0.85rem;
+    border-top: 1px solid var(--linie);
+    padding-top: var(--abstand-5);
 }
 
 .estab-export-manifest > summary {
-    color: #214f7d;
+    color: var(--handlung-dunkel);
     cursor: pointer;
-    font-weight: 800;
+    font-weight: var(--stark-voll);
     min-height: 2.75rem;
-    padding: 0.55rem 0;
+    padding: var(--abstand-4) 0;
 }
 
 .estab-export-manifest > summary:hover,
 .estab-export-manifest > summary:focus-visible {
-    color: #102f50;
+    color: var(--tinte);
 }
 
 .estab-export-manifest-list {
     display: grid;
-    gap: 0.55rem;
+    gap: var(--abstand-4);
     list-style: none;
-    margin: 0.5rem 0 0;
+    margin: var(--abstand-4) 0 0;
     padding: 0;
 }
 
 .estab-export-manifest-list li {
     align-items: start;
-    background: #f4f7fa;
-    border-radius: 7px;
+    background: var(--handlung-sanft);
+    border-radius: var(--radius-3);
     display: grid;
-    gap: 0.25rem 0.8rem;
+    gap: var(--abstand-2) var(--abstand-5);
     grid-template-columns: minmax(8rem, 1fr) auto;
-    padding: 0.65rem 0.75rem;
+    padding: var(--abstand-5) var(--abstand-5);
 }
 
 .estab-export-manifest-list code {
-    color: #3c4d60;
-    font-size: 0.78rem;
+    color: var(--tinte-neben);
+    font-size: var(--schrift-1);
     grid-column: 1 / -1;
     overflow-wrap: anywhere;
 }
@@ -2876,8 +2876,8 @@ form[data-estab-incident-disabled="true"]::before {
 }
 
 .estab-export-back a {
-    color: #214f7d;
-    font-weight: 700;
+    color: var(--handlung-dunkel);
+    font-weight: var(--stark-voll);
 }
 
 /*
@@ -2888,8 +2888,8 @@ form[data-estab-incident-disabled="true"]::before {
  * introducing page-local colour systems, controls and responsive behaviour.
  */
 .estab-tool-page {
-    background: #f3f6f9;
-    color: #17263a;
+    background: var(--handlung-sanft);
+    color: var(--tinte);
     font: 16px/1.5 Arial, Helvetica, sans-serif;
     margin: 0;
     min-height: 100vh;
@@ -2898,14 +2898,14 @@ form[data-estab-incident-disabled="true"]::before {
 .estab-tool-main {
     box-sizing: border-box;
     display: grid;
-    gap: 1.25rem;
+    gap: var(--abstand-6);
     /* Ohne diese Spalte waere die Spur "auto", und eine Auto-Spur waechst
        mit ihrem breitesten Kind. Eine breite Tabelle schoebe dann die ganze
        Seite auseinander, statt in ihrem eigenen Kasten zu rollen. */
     grid-template-columns: minmax(0, 1fr);
     margin: 0 auto;
     max-width: 82rem;
-    padding: 2rem 1rem 3rem;
+    padding: var(--abstand-7) var(--abstand-6) var(--abstand-7);
 }
 
 .estab-tool-main > * {
@@ -2932,12 +2932,12 @@ form[data-estab-incident-disabled="true"]::before {
 }
 
 .estab-tool-hero {
-    background:
-        linear-gradient(135deg, rgba(17, 47, 79, 0.97), rgba(39, 86, 130, 0.94));
-    border-radius: 14px;
-    box-shadow: 0 10px 28px rgba(17, 38, 63, 0.18);
-    color: #ffffff;
-    padding: clamp(1.35rem, 3vw, 2.3rem);
+    /* Verlaufsflaeche entfernt: Der Seitenkopf ist eine Zeile, kein
+       Banner -- die Kopfzeilenregel setzte sie ohnehin auf `none`. */
+    border-radius: var(--radius-3);
+    box-shadow: var(--schatten-tafel);
+    color: var(--tinte-spalte);
+    padding: var(--abstand-7);
 }
 
 .estab-tool-hero h1,
@@ -2949,30 +2949,30 @@ form[data-estab-incident-disabled="true"]::before {
 }
 
 .estab-tool-hero h1 {
-    font-size: clamp(1.5rem, 3.2vw, 2.8rem);
+    font-size: var(--schrift-7);
     hyphens: auto;
     line-height: 1.1;
-    margin-bottom: 0.7rem;
+    margin-bottom: var(--abstand-5);
     overflow-wrap: break-word;
 }
 
 .estab-tool-hero > p:last-child {
-    color: #e5eef7;
+    color: var(--tinte-spalte);
     margin-bottom: 0;
     max-width: 65rem;
 }
 
 .estab-tool-eyebrow {
-    color: #47627f;
-    font-size: 0.78rem;
-    font-weight: 800;
+    color: var(--tinte-neben);
+    font-size: var(--schrift-1);
+    font-weight: var(--stark-voll);
     letter-spacing: 0.1em;
-    margin: 0 0 0.4rem;
+    margin: 0 0 var(--abstand-3);
     text-transform: uppercase;
 }
 
 .estab-tool-hero .estab-tool-eyebrow {
-    color: #f4ca70;
+    color: var(--marke-standort);
 }
 
 /* ---------------------------------------------------------------------
@@ -3559,32 +3559,32 @@ form[data-estab-incident-disabled="true"]::before {
 .estab-tool-panel,
 .estab-tool-card,
 .estab-tool-table-wrap {
-    background: #ffffff;
-    border: 1px solid #c5d1dd;
-    border-radius: 12px;
-    box-shadow: 0 5px 18px rgba(31, 58, 86, 0.08);
+    background: var(--grund-tafel);
+    border: 1px solid var(--linie);
+    border-radius: var(--radius-3);
+    box-shadow: var(--schatten-tafel);
 }
 
 .estab-tool-panel {
-    padding: clamp(1rem, 2.5vw, 1.5rem);
+    padding: var(--abstand-6);
 }
 
 .estab-tool-panel > .estab-tool-form {
-    margin-top: 1rem;
+    margin-top: var(--abstand-6);
 }
 
 .estab-tool-panel-heading {
-    margin-bottom: 1rem;
+    margin-bottom: var(--abstand-6);
 }
 
 .estab-tool-panel-heading h2 {
-    color: #153c64;
-    font-size: 1.35rem;
-    margin-bottom: 0.25rem;
+    color: var(--handlung-dunkel);
+    font-size: var(--schrift-6);
+    margin-bottom: var(--abstand-2);
 }
 
 .estab-tool-panel-heading > :last-child {
-    color: #52657a;
+    color: var(--tinte-neben);
     margin-bottom: 0;
     max-width: 62rem;
 }
@@ -3597,12 +3597,12 @@ form[data-estab-incident-disabled="true"]::before {
     align-items: baseline;
     display: flex;
     flex-wrap: wrap;
-    gap: 0.15rem 0.55rem;
-    margin-bottom: 0.55rem;
+    gap: var(--abstand-1) var(--abstand-4);
+    margin-bottom: var(--abstand-4);
 }
 
 .estab-tool-panel-heading h2 {
-    font-size: 1.05rem;
+    font-size: var(--schrift-4);
     margin: 0;
 }
 
@@ -3623,7 +3623,7 @@ form[data-estab-incident-disabled="true"]::before {
     align-items: baseline;
     display: flex;
     flex-wrap: wrap;
-    gap: 0.1rem 0.6rem;
+    gap: var(--abstand-1) var(--abstand-4);
 }
 
 .estab-tool-status:not(.estab-tool-status-summary) > div > span,
@@ -3635,16 +3635,16 @@ form[data-estab-incident-disabled="true"]::before {
 .estab-tool-feedback,
 .estab-tool-status {
     border: 2px solid;
-    border-radius: 10px;
+    border-radius: var(--radius-3);
     margin: 0;
-    padding: 0.9rem 1rem;
+    padding: var(--abstand-6) var(--abstand-6);
 }
 
 .estab-tool-notice {
-    background: #eef4fa;
-    border-color: #7d9bbb;
-    border-left: 6px solid #2b6397;
-    color: #29435f;
+    background: var(--handlung-sanft);
+    border-color: var(--linie-spalte);
+    border-left: 6px solid var(--handlung-kante);
+    color: var(--handlung-dunkel);
 }
 
 .estab-tool-notice > :first-child,
@@ -3657,32 +3657,32 @@ form[data-estab-incident-disabled="true"]::before {
 }
 
 .estab-tool-notice-warning {
-    background: #fff8dd;
-    border-color: #d5b45a;
-    border-left-color: #b47a05;
-    color: #5b430e;
+    background: var(--achtung-flaeche);
+    border-color: var(--marke-standort);
+    border-left-color: var(--achtung-kante);
+    color: var(--achtung-tinte);
 }
 
 .estab-tool-feedback {
-    font-weight: 700;
+    font-weight: var(--stark-voll);
 }
 
 .estab-tool-feedback-success {
-    background: #e7f6eb;
-    border-color: #2b7a42;
-    color: #174d2a;
+    background: var(--erledigt-flaeche);
+    border-color: var(--erledigt-kante);
+    color: var(--erledigt-tinte);
 }
 
 .estab-tool-feedback-error {
-    background: #fff0ef;
-    border-color: #b52a24;
-    color: #741a16;
+    background: var(--fehler-flaeche);
+    border-color: var(--fehler-kante);
+    color: var(--fehler-tinte);
 }
 
 .estab-tool-feedback-warning {
-    background: #fff8dd;
-    border-color: #b47a05;
-    color: #5b430e;
+    background: var(--achtung-flaeche);
+    border-color: var(--achtung-kante);
+    color: var(--achtung-tinte);
 }
 
 /* Rueckmeldung nach einer abgeschlossenen Nachrichtenaktion: was geschehen
@@ -3723,23 +3723,23 @@ form[data-estab-incident-disabled="true"]::before {
 }
 
 .estab-error-hero {
-    background:
-        linear-gradient(135deg, rgba(68, 28, 35, 0.98), rgba(139, 43, 46, 0.94));
+    /* Verlaufsflaeche entfernt: Der Seitenkopf ist eine Zeile, kein
+       Banner -- die Kopfzeilenregel setzte sie ohnehin auf `none`. */
 }
 
 .estab-error-panel {
     display: grid;
-    gap: 1rem;
+    gap: var(--abstand-6);
 }
 
 .estab-error-message {
-    font-weight: 400;
+    font-weight: var(--stark-normal);
 }
 
 .estab-error-message strong {
     display: block;
-    font-size: 1.08rem;
-    margin-bottom: 0.35rem;
+    font-size: var(--schrift-5);
+    margin-bottom: var(--abstand-3);
 }
 
 .estab-error-message p,
@@ -3748,18 +3748,18 @@ form[data-estab-incident-disabled="true"]::before {
 }
 
 .estab-error-guidance {
-    color: #435970;
+    color: var(--tinte-neben);
 }
 
 .estab-error-actions {
-    margin-top: 0.1rem;
+    margin-top: var(--abstand-1);
 }
 
 .estab-password-policy-summary {
-    color: #183454;
-    font-size: 1.08rem;
-    font-weight: 800;
-    margin-bottom: 0.55rem;
+    color: var(--tinte);
+    font-size: var(--schrift-5);
+    font-weight: var(--stark-voll);
+    margin-bottom: var(--abstand-4);
 }
 
 .estab-password-policy-options {
@@ -3769,7 +3769,7 @@ form[data-estab-incident-disabled="true"]::before {
 .estab-password-policy-option {
     align-items: flex-start;
     display: flex;
-    gap: 0.65rem;
+    gap: var(--abstand-5);
     line-height: 1.45;
     min-width: 0;
 }
@@ -3777,29 +3777,29 @@ form[data-estab-incident-disabled="true"]::before {
 .estab-password-policy-option input[type="checkbox"] {
     flex: 0 0 auto;
     height: 1.2rem;
-    margin-top: 0.1rem;
+    margin-top: var(--abstand-1);
     width: 1.2rem;
 }
 
 .estab-password-policy-comparison {
     display: grid;
-    gap: 0.8rem;
+    gap: var(--abstand-5);
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    margin: 0 0 1rem;
+    margin: 0 0 var(--abstand-6);
 }
 
 .estab-password-policy-comparison > div {
-    background: #f8fafc;
-    border: 1px solid #c5d1dd;
-    border-radius: 9px;
+    background: var(--handlung-sanft);
+    border: 1px solid var(--linie);
+    border-radius: var(--radius-3);
     min-width: 0;
-    padding: 0.85rem;
+    padding: var(--abstand-5);
 }
 
 .estab-password-policy-comparison dt {
-    color: #183454;
-    font-weight: 800;
-    margin-bottom: 0.35rem;
+    color: var(--tinte);
+    font-weight: var(--stark-voll);
+    margin-bottom: var(--abstand-3);
 }
 
 .estab-password-policy-comparison dd {
@@ -3810,7 +3810,7 @@ form[data-estab-incident-disabled="true"]::before {
 .estab-tool-status {
     align-items: center;
     display: grid;
-    gap: 1rem;
+    gap: var(--abstand-6);
     grid-template-columns: minmax(0, 1fr) auto;
 }
 
@@ -3832,15 +3832,15 @@ form[data-estab-incident-disabled="true"]::before {
 }
 
 .estab-tool-status-active {
-    background: #e7f6eb;
-    border-color: #2b7a42;
-    color: #174d2a;
+    background: var(--erledigt-flaeche);
+    border-color: var(--erledigt-kante);
+    color: var(--erledigt-tinte);
 }
 
 .estab-tool-status-danger {
-    background: #fff0ef;
-    border-color: #b52a24;
-    color: #741a16;
+    background: var(--fehler-flaeche);
+    border-color: var(--fehler-kante);
+    color: var(--fehler-tinte);
 }
 
 .estab-tool-status strong,
@@ -3849,7 +3849,7 @@ form[data-estab-incident-disabled="true"]::before {
 }
 
 .estab-tool-status strong {
-    font-size: 1.08rem;
+    font-size: var(--schrift-5);
 }
 
 .estab-tool-status form {
@@ -3867,14 +3867,14 @@ form[data-estab-incident-disabled="true"]::before {
 
 .estab-tool-form {
     display: grid;
-    gap: 1rem;
+    gap: var(--abstand-6);
     margin: 0;
 }
 
 .estab-tool-form-grid,
 .estab-tool-counter-grid {
     display: grid;
-    gap: 1rem;
+    gap: var(--abstand-6);
     grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
@@ -3888,7 +3888,7 @@ form[data-estab-incident-disabled="true"]::before {
 .estab-tool-form > label,
 .estab-tool-form-grid > label {
     display: grid;
-    gap: 0.35rem;
+    gap: var(--abstand-3);
     min-width: 0;
 }
 
@@ -3902,8 +3902,8 @@ form[data-estab-incident-disabled="true"]::before {
 .estab-tool-form > label,
 .estab-tool-form-grid > label,
 .estab-tool-form > fieldset > legend {
-    color: #183454;
-    font-weight: 800;
+    color: var(--tinte);
+    font-weight: var(--stark-voll);
 }
 
 .estab-tool-field input:not([type="checkbox"]):not([type="radio"]),
@@ -3916,13 +3916,13 @@ form[data-estab-incident-disabled="true"]::before {
 .estab-tool-form-grid > label > textarea,
 .estab-tool-form-grid > label > select,
 .estab-tool-action-stack input[type="password"] {
-    background: #ffffff;
-    border: 1px solid #7d91a7;
-    border-radius: 8px;
-    color: #17263a;
+    background: var(--grund-tafel);
+    border: 1px solid var(--linie-spalte);
+    border-radius: var(--radius-3);
+    color: var(--tinte);
     font: inherit;
     min-height: 2.8rem;
-    padding: 0.6rem 0.7rem;
+    padding: var(--abstand-4) var(--abstand-5);
     width: 100%;
 }
 
@@ -3939,92 +3939,92 @@ form[data-estab-incident-disabled="true"]::before {
 
 .estab-tool-form > fieldset {
     border: 1px solid var(--rand-bedienelement);
-    border-radius: 9px;
+    border-radius: var(--radius-3);
     display: grid;
-    gap: 0.65rem;
+    gap: var(--abstand-5);
     margin: 0;
     min-width: 0;
-    padding: 0.8rem;
+    padding: var(--abstand-5);
 }
 
 .estab-tool-form > fieldset > label {
     align-items: flex-start;
-    color: #183454;
+    color: var(--tinte);
     display: flex;
-    font-weight: 700;
-    gap: 0.55rem;
+    font-weight: var(--stark-voll);
+    gap: var(--abstand-4);
 }
 
 .estab-tool-field small,
 .estab-tool-help {
-    color: #52657a;
+    color: var(--tinte-neben);
 }
 
 .estab-tool-field:is(details),
 .estab-tool-field details,
 .estab-tool-details,
 .estab-tool-action-stack details {
-    background: #f8fafc;
+    background: var(--handlung-sanft);
     border: 1px solid var(--rand-bedienelement);
-    border-radius: 9px;
-    padding: 0.35rem 0.65rem;
+    border-radius: var(--radius-3);
+    padding: var(--abstand-3) var(--abstand-5);
 }
 
 .estab-tool-field summary,
 .estab-tool-details > summary,
 .estab-tool-action-stack summary {
-    color: #214f7d;
+    color: var(--handlung-dunkel);
     cursor: pointer;
-    font-weight: 800;
+    font-weight: var(--stark-voll);
     min-height: 2.75rem;
-    padding: 0.55rem 0.25rem;
+    padding: var(--abstand-4) var(--abstand-2);
 }
 
 .estab-tool-actions {
     align-items: center;
     display: flex;
     flex-wrap: wrap;
-    gap: 0.75rem;
+    gap: var(--abstand-5);
 }
 
 .estab-telecom-plan-meta {
     display: grid;
-    gap: 0.75rem;
+    gap: var(--abstand-5);
     grid-template-columns: repeat(4, minmax(0, 1fr));
-    margin: 0 0 1rem;
+    margin: 0 0 var(--abstand-6);
 }
 
 .estab-telecom-plan-meta > div {
-    background: #f1f5f9;
-    border: 1px solid #c5d1dd;
-    border-radius: 9px;
+    background: var(--handlung-sanft);
+    border: 1px solid var(--linie);
+    border-radius: var(--radius-3);
     min-width: 0;
-    padding: 0.8rem;
+    padding: var(--abstand-5);
 }
 
 .estab-telecom-plan-meta dt {
-    color: #52657a;
-    font-size: 0.78rem;
-    font-weight: 800;
+    color: var(--tinte-neben);
+    font-size: var(--schrift-1);
+    font-weight: var(--stark-voll);
     letter-spacing: 0.05em;
-    margin-bottom: 0.25rem;
+    margin-bottom: var(--abstand-2);
     text-transform: uppercase;
 }
 
 .estab-telecom-plan-meta dd {
-    color: #183454;
-    font-weight: 800;
+    color: var(--tinte);
+    font-weight: var(--stark-voll);
     margin: 0;
     overflow-wrap: anywhere;
 }
 
 .estab-telecom-start-form {
     align-items: center;
-    background: #eef4fa;
-    border: 1px solid #7d9bbb;
-    border-radius: 10px;
+    background: var(--handlung-sanft);
+    border: 1px solid var(--linie-spalte);
+    border-radius: var(--radius-3);
     grid-template-columns: minmax(0, 1fr) auto;
-    padding: 1rem;
+    padding: var(--abstand-6);
 }
 
 .estab-telecom-start-form p {
@@ -4032,13 +4032,13 @@ form[data-estab-incident-disabled="true"]::before {
 }
 
 .estab-telecom-draft {
-    background: #f8fafc;
-    border: 2px solid #d5b45a;
-    border-radius: 12px;
+    background: var(--handlung-sanft);
+    border: 2px solid var(--marke-standort);
+    border-radius: var(--radius-3);
     display: grid;
-    gap: 1rem;
-    margin-top: 1.25rem;
-    padding: clamp(0.85rem, 2vw, 1.25rem);
+    gap: var(--abstand-6);
+    margin-top: var(--abstand-6);
+    padding: var(--abstand-5);
 }
 
 .estab-telecom-draft-heading,
@@ -4047,7 +4047,7 @@ form[data-estab-incident-disabled="true"]::before {
     align-items: center;
     display: flex;
     flex-wrap: wrap;
-    gap: 0.75rem 1rem;
+    gap: var(--abstand-5) var(--abstand-6);
     justify-content: space-between;
 }
 
@@ -4061,22 +4061,22 @@ form[data-estab-incident-disabled="true"]::before {
 
 .estab-telecom-section > .estab-tool-form,
 .estab-telecom-route > .estab-tool-form {
-    border-top: 1px solid #c5d1dd;
-    margin-top: 0.25rem;
-    padding: 1rem 0.25rem 0.5rem;
+    border-top: 1px solid var(--linie);
+    margin-top: var(--abstand-2);
+    padding: var(--abstand-6) var(--abstand-2) var(--abstand-4);
 }
 
 .estab-telecom-route-list {
     display: grid;
-    gap: 0.75rem;
-    margin-top: 0.75rem;
+    gap: var(--abstand-5);
+    margin-top: var(--abstand-5);
 }
 
 .estab-telecom-route > summary {
     align-items: center;
     display: flex;
     flex-wrap: wrap;
-    gap: 0.4rem 1rem;
+    gap: var(--abstand-3) var(--abstand-6);
     list-style: none;
 }
 
@@ -4086,7 +4086,7 @@ form[data-estab-incident-disabled="true"]::before {
 
 .estab-telecom-route > summary::before {
     border-bottom: 0.32rem solid transparent;
-    border-left: 0.48rem solid #214f7d;
+    border-left: 0.48rem solid var(--handlung);
     border-top: 0.32rem solid transparent;
     content: "";
     flex: 0 0 auto;
@@ -4102,27 +4102,27 @@ form[data-estab-incident-disabled="true"]::before {
 }
 
 .estab-telecom-route > summary > span:last-child {
-    color: #52657a;
-    font-size: 0.9rem;
+    color: var(--tinte-neben);
+    font-size: var(--schrift-3);
     margin-left: auto;
 }
 
 .estab-telecom-delete-form {
-    border-top: 1px solid #d9e1e8;
-    margin: 0.5rem 0 0;
-    padding: 0.75rem 0.25rem 0.25rem;
+    border-top: 1px solid var(--linie);
+    margin: var(--abstand-4) 0 0;
+    padding: var(--abstand-5) var(--abstand-2) var(--abstand-2);
 }
 
 .estab-telecom-legacy-note {
-    font-size: 0.92rem;
+    font-size: var(--schrift-3);
 }
 
 .estab-telecom-publish {
-    background: #eef4fa;
-    border: 1px solid #7d9bbb;
-    border-left: 6px solid #2b6397;
-    border-radius: 10px;
-    padding: 1rem;
+    background: var(--handlung-sanft);
+    border: 1px solid var(--linie-spalte);
+    border-left: 6px solid var(--handlung-kante);
+    border-radius: var(--radius-3);
+    padding: var(--abstand-6);
 }
 
 .estab-telecom-publish > div {
@@ -4136,7 +4136,7 @@ form[data-estab-incident-disabled="true"]::before {
 .estab-telecom-publish-actions {
     align-items: flex-end;
     display: grid;
-    gap: 0.65rem;
+    gap: var(--abstand-5);
     justify-items: stretch;
 }
 
@@ -4159,76 +4159,76 @@ form[data-estab-incident-disabled="true"]::before {
 
 .estab-telecom-draft-warning p + p,
 .estab-telecom-warning-actions {
-    margin-top: 0.65rem;
+    margin-top: var(--abstand-5);
 }
 
 .estab-telecom-unsaved {
-    background: #fff8e5;
-    border-radius: 8px;
-    outline: 3px solid #d39b20;
+    background: var(--achtung-flaeche);
+    border-radius: var(--radius-3);
+    outline: 3px solid var(--achtung-kante);
     outline-offset: 3px;
 }
 
 .estab-telecom-history-list {
     display: grid;
-    gap: 0.7rem;
+    gap: var(--abstand-5);
 }
 
 .estab-telecom-history-item {
-    background: #f8fafc;
-    border: 1px solid #c5d1dd;
-    border-radius: 10px;
+    background: var(--handlung-sanft);
+    border: 1px solid var(--linie);
+    border-radius: var(--radius-3);
     overflow: hidden;
 }
 
 .estab-telecom-history-item > summary {
     align-items: center;
     display: flex;
-    gap: 0.75rem 1rem;
+    gap: var(--abstand-5) var(--abstand-6);
     justify-content: space-between;
     list-style-position: inside;
-    padding: 0.8rem 1rem;
+    padding: var(--abstand-5) var(--abstand-6);
 }
 
 .estab-telecom-history-item > summary > span:first-child {
     display: grid;
-    gap: 0.2rem;
+    gap: var(--abstand-2);
     min-width: 0;
 }
 
 .estab-telecom-history-item > summary small {
-    color: #52657a;
-    font-size: 0.86rem;
-    font-weight: 600;
+    color: var(--tinte-neben);
+    font-size: var(--schrift-3);
+    font-weight: var(--stark-halb);
     overflow-wrap: anywhere;
 }
 
 .estab-telecom-history-summary-meta {
     align-items: center;
-    color: #52657a;
+    color: var(--tinte-neben);
     display: flex;
     flex: 0 0 auto;
     flex-wrap: wrap;
-    font-size: 0.9rem;
-    gap: 0.5rem;
+    font-size: var(--schrift-3);
+    gap: var(--abstand-4);
     justify-content: flex-end;
 }
 
 .estab-telecom-history-content {
-    border-top: 1px solid #c5d1dd;
-    padding: 1rem;
+    border-top: 1px solid var(--linie);
+    padding: var(--abstand-6);
 }
 
 .estab-telecom-history-content .estab-telecom-plan-meta {
-    margin-bottom: 0.75rem;
+    margin-bottom: var(--abstand-5);
 }
 
 .estab-telecom-plan-note,
 .estab-telecom-history-note {
-    background: #eef4fa;
-    border-left: 4px solid #7d9bbb;
-    margin: 0.75rem 0;
-    padding: 0.7rem 0.8rem;
+    background: var(--handlung-sanft);
+    border-left: 4px solid var(--linie-spalte);
+    margin: var(--abstand-5) 0;
+    padding: var(--abstand-5) var(--abstand-5);
 }
 
 .estab-telecom-plan-note span,
@@ -4242,41 +4242,41 @@ form[data-estab-incident-disabled="true"]::before {
     display: grid;
     gap: 0;
     list-style: none;
-    margin: 0.75rem 0 0;
+    margin: var(--abstand-5) 0 0;
     padding: 0;
 }
 
 .estab-telecom-history-routes li {
     align-items: start;
-    border-top: 1px solid #d9e1e8;
+    border-top: 1px solid var(--linie);
     display: grid;
-    gap: 0.35rem 1rem;
+    gap: var(--abstand-3) var(--abstand-6);
     grid-template-columns: minmax(12rem, 0.8fr) minmax(0, 1.2fr);
-    padding: 0.65rem 0;
+    padding: var(--abstand-5) 0;
 }
 
 .estab-telecom-history-routes li > span:first-child {
     display: grid;
-    gap: 0.1rem;
+    gap: var(--abstand-1);
 }
 
 .estab-telecom-history-routes small,
 .estab-telecom-history-routes li > span:last-child {
-    color: #52657a;
+    color: var(--tinte-neben);
 }
 
 .estab-telecom-history-route-notes {
-    background: #eef4fa;
-    border-radius: 8px;
+    background: var(--handlung-sanft);
+    border-radius: var(--radius-3);
     display: grid;
-    gap: 0.4rem;
+    gap: var(--abstand-3);
     grid-column: 1 / -1;
-    padding: 0.65rem 0.75rem;
+    padding: var(--abstand-5) var(--abstand-5);
 }
 
 .estab-telecom-history-route-notes p {
     display: grid;
-    gap: 0.15rem;
+    gap: var(--abstand-1);
     margin: 0;
 }
 
@@ -4284,8 +4284,8 @@ form[data-estab-incident-disabled="true"]::before {
     align-items: center;
     cursor: pointer;
     display: inline-flex;
-    font-weight: 800;
-    gap: 0.55rem;
+    font-weight: var(--stark-voll);
+    gap: var(--abstand-4);
     min-height: 2.75rem;
 }
 
@@ -4297,18 +4297,18 @@ form[data-estab-incident-disabled="true"]::before {
 .estab-tool-list,
 .estab-tool-action-stack {
     display: grid;
-    gap: 0.85rem;
+    gap: var(--abstand-5);
 }
 
 .estab-tool-card {
     display: grid;
-    gap: 1rem;
+    gap: var(--abstand-6);
     grid-template-columns: minmax(0, 1fr) auto;
-    padding: 1rem 1.1rem;
+    padding: var(--abstand-6) var(--abstand-6);
 }
 
 .estab-tool-card h3 {
-    margin-bottom: 0.45rem;
+    margin-bottom: var(--abstand-4);
 }
 
 .estab-tool-card p {
@@ -4316,23 +4316,23 @@ form[data-estab-incident-disabled="true"]::before {
 }
 
 .estab-tool-card-active {
-    border: 2px solid #2b7a42;
+    border: 2px solid var(--erledigt-kante);
 }
 
 .estab-tool-card-code {
-    color: #214f7d;
+    color: var(--handlung-dunkel);
     display: inline-block;
     font: 800 0.85rem/1.2 ui-monospace, SFMono-Regular, Consolas, monospace;
-    margin-bottom: 0.35rem;
+    margin-bottom: var(--abstand-3);
     overflow-wrap: anywhere;
 }
 
 .estab-tool-card-meta {
-    color: #52657a;
+    color: var(--tinte-neben);
     display: flex;
     flex-wrap: wrap;
-    font-size: 0.93rem;
-    gap: 0.35rem 1rem;
+    font-size: var(--schrift-3);
+    gap: var(--abstand-3) var(--abstand-6);
 }
 
 .estab-tool-card-actions {
@@ -4363,7 +4363,7 @@ form[data-estab-incident-disabled="true"]::before {
 .estab-incident-card-heading {
     align-items: flex-start;
     display: flex;
-    gap: 0.75rem 1rem;
+    gap: var(--abstand-5) var(--abstand-6);
     justify-content: space-between;
 }
 
@@ -4389,28 +4389,28 @@ form[data-estab-incident-disabled="true"]::before {
 
 .estab-incident-card-actions {
     align-items: stretch;
-    border-top: 1px solid #c5d1dd;
+    border-top: 1px solid var(--linie);
     display: grid;
-    gap: 1rem;
+    gap: var(--abstand-6);
     grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
     justify-content: stretch;
-    padding-top: 1rem;
+    padding-top: var(--abstand-6);
     width: 100%;
 }
 
 .estab-incident-card-actions-title {
-    color: #183454;
-    font-size: 1rem;
+    color: var(--tinte);
+    font-size: var(--schrift-4);
     grid-column: 1 / -1;
     margin: 0;
 }
 
 .estab-incident-action {
     align-content: start;
-    background: #f8fafc;
+    background: var(--handlung-sanft);
     border: 1px solid var(--rand-bedienelement);
-    border-radius: 9px;
-    padding: 0.85rem;
+    border-radius: var(--radius-3);
+    padding: var(--abstand-5);
 }
 
 .estab-incident-action .estab-button {
@@ -4418,34 +4418,34 @@ form[data-estab-incident-disabled="true"]::before {
 }
 
 .estab-tool-badge {
-    border-radius: 999px;
+    border-radius: var(--radius-pille);
     display: inline-flex;
-    font-size: 0.85rem;
-    font-weight: 800;
+    font-size: var(--schrift-3);
+    font-weight: var(--stark-voll);
     max-width: 100%;
     overflow-wrap: anywhere;
-    padding: 0.3rem 0.65rem;
+    padding: var(--abstand-2) var(--abstand-5);
     white-space: normal;
 }
 
 .estab-tool-badge-success {
-    background: #ddf5e6;
-    color: #145d35;
+    background: var(--erledigt-flaeche);
+    color: var(--erledigt-tinte);
 }
 
 .estab-tool-badge-danger {
-    background: #ffe3e7;
-    color: #8c1424;
+    background: var(--fehler-flaeche);
+    color: var(--fehler-tinte);
 }
 
 .estab-tool-badge-warning {
-    background: #fff0c7;
-    color: #72510c;
+    background: var(--achtung-flaeche);
+    color: var(--achtung-tinte);
 }
 
 .estab-tool-badge-neutral {
-    background: #e8edf3;
-    color: #455368;
+    background: var(--handlung-sanft);
+    color: var(--tinte-neben);
 }
 
 .estab-tool-table-wrap {
@@ -4460,16 +4460,16 @@ form[data-estab-incident-disabled="true"]::before {
 
 .estab-tool-table th,
 .estab-tool-table td {
-    border-bottom: 1px solid #cbd5e1;
-    padding: 0.85rem 1rem;
+    border-bottom: 1px solid var(--linie);
+    padding: var(--abstand-5) var(--abstand-6);
     text-align: left;
     vertical-align: top;
 }
 
 .estab-tool-table thead th {
-    background: #e8eef6;
-    color: #24344a;
-    font-size: 0.9rem;
+    background: var(--handlung-sanft);
+    color: var(--tinte);
+    font-size: var(--schrift-3);
     letter-spacing: 0.02em;
 }
 
@@ -4489,8 +4489,8 @@ form[data-estab-incident-disabled="true"]::before {
 }
 
 .estab-tool-identity span {
-    color: #52657a;
-    font-size: 0.9rem;
+    color: var(--tinte-neben);
+    font-size: var(--schrift-3);
 }
 
 .estab-tool-action-stack {
@@ -4499,37 +4499,37 @@ form[data-estab-incident-disabled="true"]::before {
 
 .estab-tool-action-stack form {
     display: grid;
-    gap: 0.65rem;
-    margin: 0.45rem 0;
+    gap: var(--abstand-5);
+    margin: var(--abstand-4) 0;
 }
 
 .estab-tool-action-stack label {
     display: grid;
-    font-weight: 700;
-    gap: 0.25rem;
+    font-weight: var(--stark-voll);
+    gap: var(--abstand-2);
 }
 
 .estab-tool-empty {
-    color: #52657a;
+    color: var(--tinte-neben);
     margin: 0;
-    padding: 2rem 1rem;
+    padding: var(--abstand-7) var(--abstand-6);
     text-align: center;
 }
 
 .estab-tool-footer {
     align-items: baseline;
-    color: #5b6a7c;
+    color: var(--tinte-neben);
     display: flex;
     flex-wrap: wrap;
-    gap: 0.5rem 1rem;
+    gap: var(--abstand-4) var(--abstand-6);
     justify-content: space-between;
 }
 
 .estab-tool-footer a {
-    color: #214f7d;
-    font-weight: 800;
+    color: var(--handlung-dunkel);
+    font-weight: var(--stark-voll);
     min-height: 2.75rem;
-    padding: 0.55rem 0;
+    padding: var(--abstand-4) 0;
 }
 
 .estab-tool-main code {
@@ -4544,14 +4544,14 @@ form[data-estab-incident-disabled="true"]::before {
     border: 0;
     display: flex;
     flex-wrap: wrap;
-    gap: 0.35rem 0.8rem;
+    gap: var(--abstand-3) var(--abstand-5);
     margin: 0;
     min-width: 0;
     padding: 0;
 }
 
 .estab-tool-matrix-options .estab-tool-check {
-    font-weight: 700;
+    font-weight: var(--stark-voll);
     min-height: 2.5rem;
 }
 
@@ -4564,7 +4564,7 @@ form[data-estab-incident-disabled="true"]::before {
     max-width: 100%;
     overflow-x: auto;
     overscroll-behavior-inline: contain;
-    padding-bottom: 0.35rem;
+    padding-bottom: var(--abstand-3);
     scrollbar-width: thin;
 }
 
@@ -4582,7 +4582,7 @@ form[data-estab-incident-disabled="true"]::before {
 
 .estab-tool-legacy-content th,
 .estab-tool-legacy-content td {
-    padding: 0.45rem;
+    padding: var(--abstand-4);
 }
 
 .estab-tool-legacy-content input:not([type="checkbox"]):not([type="radio"]):not([type="image"]),
@@ -4623,26 +4623,26 @@ form[data-estab-incident-disabled="true"]::before {
     }
 
     .estab-message-sidebar-frame {
-        border-bottom: 2px solid #45627f;
+        border-bottom: 2px solid var(--linie-spalte);
         border-right: 0;
     }
 
     .estab-mobile-sidebar-return {
         align-items: center;
-        background: #172f4d;
-        border: 2px solid #ffffff;
-        border-radius: 999px;
+        background: var(--grund-kachel-zeigen);
+        border: 2px solid var(--tinte-spalte);
+        border-radius: var(--radius-pille);
         bottom: 1rem;
-        box-shadow: 0 4px 14px rgba(5, 14, 26, 0.45);
-        color: #ffffff;
+        box-shadow: var(--schatten-tafel);
+        color: var(--tinte-spalte);
         cursor: pointer;
         display: inline-flex;
         font: 700 0.95rem Arial, Helvetica, sans-serif;
-        gap: 0.4rem;
+        gap: var(--abstand-3);
         justify-content: center;
         min-height: 2.75rem;
         min-width: 6.5rem;
-        padding: 0.55rem 0.85rem;
+        padding: var(--abstand-4) var(--abstand-5);
         position: fixed;
         right: 1rem;
         z-index: 2000;
@@ -4650,7 +4650,7 @@ form[data-estab-incident-disabled="true"]::before {
 
     .estab-mobile-sidebar-return:hover,
     .estab-mobile-sidebar-return:focus-visible {
-        background: #294b70;
+        background: var(--grund-kachel-zeigen);
     }
 
     .estab-session-topline {
@@ -4707,10 +4707,10 @@ form[data-estab-incident-disabled="true"]::before {
     }
 
     .estab-login-cta {
-        margin: 1rem auto;
+        margin: var(--abstand-6) auto;
         max-width: 100%;
         overflow-wrap: anywhere;
-        padding: 1.1rem;
+        padding: var(--abstand-6);
         width: 100%;
     }
 
@@ -4750,15 +4750,15 @@ form[data-estab-incident-disabled="true"]::before {
     }
 
     .estab-admin-dashboard {
-        padding: 1rem 0.75rem 2rem;
+        padding: var(--abstand-6) var(--abstand-5) var(--abstand-7);
     }
 
     .estab-admin-dashboard-card {
         align-items: start;
-        gap: 0.75rem;
+        gap: var(--abstand-5);
         grid-template-columns: 2.75rem minmax(0, 1fr);
         min-height: 0;
-        padding: 0.9rem;
+        padding: var(--abstand-6);
     }
 
     .estab-admin-dashboard-number {
@@ -4776,7 +4776,7 @@ form[data-estab-incident-disabled="true"]::before {
     }
 
     .estab-export-main {
-        padding: 1rem 0.75rem 2rem;
+        padding: var(--abstand-6) var(--abstand-5) var(--abstand-7);
     }
 
     .estab-export-create {
@@ -4820,7 +4820,7 @@ form[data-estab-incident-disabled="true"]::before {
     }
 
     .estab-tool-main {
-        padding: 1rem 0.75rem 2rem;
+        padding: var(--abstand-6) var(--abstand-5) var(--abstand-7);
     }
 
     .estab-tool-form-grid,
@@ -4925,21 +4925,21 @@ form[data-estab-incident-disabled="true"]::before {
 
     .estab-tool-table-responsive .estab-tool-table tbody {
         display: grid;
-        gap: 1rem;
+        gap: var(--abstand-6);
     }
 
     .estab-tool-table-responsive .estab-tool-table tbody tr {
-        background: #ffffff;
-        border: 1px solid #c5d1dd;
-        border-radius: 10px;
-        box-shadow: 0 5px 18px rgba(31, 58, 86, 0.08);
+        background: var(--grund-tafel);
+        border: 1px solid var(--linie);
+        border-radius: var(--radius-3);
+        box-shadow: var(--schatten-tafel);
         overflow: hidden;
     }
 
     .estab-tool-table-responsive .estab-tool-table tbody th,
     .estab-tool-table-responsive .estab-tool-table td {
-        border-bottom: 1px solid #cbd5e1;
-        padding: 0.75rem 1rem;
+        border-bottom: 1px solid var(--linie);
+        padding: var(--abstand-5) var(--abstand-6);
         text-align: left !important;
     }
 
@@ -4949,13 +4949,13 @@ form[data-estab-incident-disabled="true"]::before {
 
     .estab-tool-table-responsive .estab-tool-table tbody th::before,
     .estab-tool-table-responsive .estab-tool-table td::before {
-        color: #52657a;
+        color: var(--tinte-neben);
         content: attr(data-label);
         display: block;
-        font-size: 0.76rem;
-        font-weight: 800;
+        font-size: var(--schrift-1);
+        font-weight: var(--stark-voll);
         letter-spacing: 0.05em;
-        margin-bottom: 0.2rem;
+        margin-bottom: var(--abstand-2);
         text-transform: uppercase;
     }
 
@@ -5157,30 +5157,30 @@ body.estab-message-form-body {
 }
 
 .estab-message-attachment-badge {
-    background: #e4b443;
-    border: 1px solid #f3d68e;
-    border-radius: 999px;
-    color: #172033;
-    font-size: 0.78rem;
-    font-weight: 900;
-    padding: 0.45rem 0.7rem;
+    background: var(--marke-standort);
+    border: 1px solid var(--marke-standort);
+    border-radius: var(--radius-pille);
+    color: var(--tinte);
+    font-size: var(--schrift-1);
+    font-weight: var(--stark-voll);
+    padding: var(--abstand-4) var(--abstand-5);
     text-decoration: none;
 }
 
 .estab-message-attachment-badge:hover,
 .estab-message-attachment-badge:focus-visible {
-    background: #f1ca69;
+    background: var(--marke-standort);
 }
 
 .estab-message-attachment-badge--empty {
-    background: #e8f1f8;
-    border-color: #9eb6ca;
-    color: #173a5e;
+    background: var(--handlung-sanft);
+    border-color: var(--linie-kraeftig);
+    color: var(--handlung-dunkel);
 }
 
 .estab-message-attachment-badge--empty:hover,
 .estab-message-attachment-badge--empty:focus-visible {
-    background: #d5e7f4;
+    background: var(--handlung-sanft);
 }
 
 /* Vier Knoepfe in Vollgroesse assen auf einem schmalen Schirm fast ein
@@ -5224,61 +5224,61 @@ body.estab-message-form-body {
 }
 
 .estab-button-secondary {
-    background: #eef4fa;
-    border-color: #45698e;
-    color: #173a5e;
+    background: var(--handlung-sanft);
+    border-color: var(--handlung-kante);
+    color: var(--handlung-dunkel);
 }
 
 .estab-button-ghost {
     background: transparent;
-    border-color: #7d8d9e;
-    color: #34495e;
+    border-color: var(--linie-spalte);
+    color: var(--tinte-neben);
 }
 
 .estab-message-categories {
-    background: #ffffff;
-    border: 1px solid #bdcad8;
-    border-radius: 8px;
-    margin: 0 0 0.85rem;
-    padding: 0.15rem 0.8rem;
+    background: var(--grund-tafel);
+    border: 1px solid var(--linie-kraeftig);
+    border-radius: var(--radius-3);
+    margin: 0 0 var(--abstand-5);
+    padding: var(--abstand-1) var(--abstand-5);
 }
 
 .estab-message-categories > summary {
-    color: #173a5e;
+    color: var(--handlung-dunkel);
     cursor: pointer;
-    font-weight: 800;
-    padding: 0.65rem 0;
+    font-weight: var(--stark-voll);
+    padding: var(--abstand-5) 0;
 }
 
 .estab-message-category-grid {
     display: grid;
-    gap: 0.75rem;
+    gap: var(--abstand-5);
     grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
-    padding: 0 0 0.8rem;
+    padding: 0 0 var(--abstand-5);
 }
 
 .estab-message-category-grid section {
-    background: #f3f7fb;
-    border: 1px solid #ced9e4;
-    border-radius: 6px;
+    background: var(--handlung-sanft);
+    border: 1px solid var(--linie);
+    border-radius: var(--radius-3);
     display: grid;
-    gap: 0.35rem;
-    padding: 0.65rem;
+    gap: var(--abstand-3);
+    padding: var(--abstand-5);
 }
 
 .estab-message-category-grid a {
-    color: #1d5d91;
+    color: var(--handlung-dunkel);
 }
 
 .estab-message-category-current {
-    color: #40566d;
+    color: var(--tinte-neben);
     display: grid;
-    font-size: 0.82rem;
-    gap: 0.1rem;
+    font-size: var(--schrift-2);
+    gap: var(--abstand-1);
 }
 
 .estab-message-category-description {
-    color: #5c6f82;
+    color: var(--tinte-neben);
     line-height: 1.35;
 }
 
@@ -5370,20 +5370,15 @@ body.estab-message-form-body {
  * deliberately stay visible so review and transport return loops remain
  * understandable instead of being collapsed into a linear progress meter. */
 section.estab-message-timeline[data-estab-message-timeline] {
-    --estab-timeline-blue: #173a5e;
-    --estab-timeline-gold: #e4b443;
-    --estab-timeline-green: #246b43;
-    --estab-timeline-red: #9b2634;
-    --estab-timeline-muted: #5c6d80;
-    background: #ffffff;
-    border: 1px solid #b9c8d7;
-    border-left: 6px solid var(--estab-timeline-gold);
-    border-radius: 10px;
-    box-shadow: 0 6px 20px rgba(31, 58, 86, 0.11);
-    color: #172033;
-    margin: 0 0 1rem;
+    background: var(--grund-tafel);
+    border: 1px solid var(--linie-kraeftig);
+    border-left: 6px solid var(--marke-standort);
+    border-radius: var(--radius-3);
+    box-shadow: var(--schatten-tafel);
+    color: var(--tinte);
+    margin: 0 0 var(--abstand-6);
     max-width: 100%;
-    padding: clamp(0.9rem, 2vw, 1.25rem);
+    padding: var(--abstand-6);
     width: 100%;
 }
 
@@ -5395,9 +5390,9 @@ section.estab-message-timeline[data-estab-message-timeline] * {
 .estab-message-timeline__header {
     align-items: end;
     display: grid;
-    gap: 0.35rem 1rem;
+    gap: var(--abstand-3) var(--abstand-6);
     grid-template-columns: minmax(0, 1fr) auto;
-    margin-bottom: 0.85rem;
+    margin-bottom: var(--abstand-5);
 }
 
 .estab-message-timeline__header > div {
@@ -5405,14 +5400,14 @@ section.estab-message-timeline[data-estab-message-timeline] * {
 }
 
 .estab-message-timeline__header h2 {
-    color: var(--estab-timeline-blue);
-    font-size: 1.2rem;
+    color: var(--handlung-dunkel);
+    font-size: var(--schrift-6);
     line-height: 1.25;
     margin: 0;
 }
 
 .estab-message-timeline__summary {
-    color: #445b72;
+    color: var(--tinte-neben);
     line-height: 1.45;
     margin: 0;
     max-width: 65rem;
@@ -5422,7 +5417,7 @@ section.estab-message-timeline[data-estab-message-timeline] * {
 .estab-message-timeline__track {
     align-items: stretch;
     display: flex;
-    gap: 2.6rem;
+    gap: var(--abstand-7);
     list-style: none;
     margin: 0;
     max-height: none;
@@ -5430,10 +5425,10 @@ section.estab-message-timeline[data-estab-message-timeline] * {
     overflow-x: auto;
     overflow-y: hidden;
     overscroll-behavior-inline: contain;
-    padding: 0.25rem 0.25rem 1rem;
+    padding: var(--abstand-2) var(--abstand-2) var(--abstand-6);
     scroll-padding-inline: 0.25rem;
     scroll-snap-type: inline proximity;
-    scrollbar-color: #527394 #e5ecf3;
+    scrollbar-color: var(--tinte-neben) var(--tinte-spalte);
     scrollbar-gutter: stable;
     scrollbar-width: auto;
     touch-action: pan-x;
@@ -5445,34 +5440,34 @@ section.estab-message-timeline[data-estab-message-timeline] * {
 }
 
 .estab-message-timeline__track::-webkit-scrollbar-track {
-    background: #e5ecf3;
-    border-radius: 999px;
+    background: var(--handlung-sanft);
+    border-radius: var(--radius-pille);
 }
 
 .estab-message-timeline__track::-webkit-scrollbar-thumb {
-    background: #527394;
-    border: 2px solid #e5ecf3;
-    border-radius: 999px;
+    background: var(--handlung);
+    border: 2px solid var(--linie);
+    border-radius: var(--radius-pille);
 }
 
 .estab-message-timeline__step {
     align-content: start;
-    background: #f7f9fb;
-    border: 2px solid #9aabbd;
-    border-radius: 9px;
+    background: var(--handlung-sanft);
+    border: 2px solid var(--linie-kraeftig);
+    border-radius: var(--radius-3);
     display: grid;
     flex: 0 0 clamp(11rem, 18vw, 14rem);
-    gap: 0.35rem;
+    gap: var(--abstand-3);
     min-width: 0;
     overflow-wrap: anywhere;
-    padding: 0.75rem 0.8rem;
+    padding: var(--abstand-5) var(--abstand-5);
     position: relative;
     scroll-snap-align: start;
 }
 
 /* The line is decorative; station order and duration remain explicit text. */
 .estab-message-timeline__step:not(:last-child)::after {
-    background: #7f93a7;
+    background: var(--handlung);
     content: "";
     height: 3px;
     left: calc(100% + 0.3rem);
@@ -5482,89 +5477,89 @@ section.estab-message-timeline[data-estab-message-timeline] * {
 }
 
 .estab-message-timeline__step--completed {
-    background: #eef8f2;
-    border-color: var(--estab-timeline-green);
+    background: var(--erledigt-flaeche);
+    border-color: var(--erledigt-kante);
 }
 
 .estab-message-timeline__step--current,
 .estab-message-timeline__step[aria-current="step"] {
-    background: #eaf3fb;
-    border-color: var(--estab-timeline-blue);
+    background: var(--handlung-sanft);
+    border-color: var(--handlung-dunkel);
     box-shadow:
-        inset 0 0.3rem 0 var(--estab-timeline-gold),
-        0 0 0 3px rgba(23, 58, 94, 0.14);
+        inset 0 0.3rem 0 var(--marke-standort),
+        0 0 0 3px var(--marke-standort);
 }
 
 .estab-message-timeline__step--pending {
-    background: #f6f7f9;
-    border-color: #8998a8;
+    background: var(--handlung-sanft);
+    border-color: var(--linie-spalte);
     border-style: dashed;
 }
 
 .estab-message-timeline__step--returned {
-    background: #fff0f2;
-    border-color: var(--estab-timeline-red);
+    background: var(--fehler-flaeche);
+    border-color: var(--fehler-kante);
     border-style: double;
     border-width: 3px;
 }
 
 .estab-message-timeline__step--returned:not(:last-child)::after {
-    background: var(--estab-timeline-red);
+    background: var(--fehler-kante);
 }
 
 .estab-message-timeline__step--terminal {
-    background: #e4f5ea;
-    border-color: var(--estab-timeline-green);
+    background: var(--erledigt-flaeche);
+    border-color: var(--erledigt-kante);
     border-style: double;
     border-width: 3px;
-    box-shadow: inset 0 0.3rem 0 var(--estab-timeline-green);
+    box-shadow: inset 0 0.3rem 0 var(--erledigt-kante);
 }
 
 .estab-message-timeline__step--legacy {
-    background-color: #f4f1e8;
+    background-color: var(--achtung-flaeche);
     background-image: repeating-linear-gradient(
         135deg,
-        rgba(102, 89, 57, 0.06) 0,
-        rgba(102, 89, 57, 0.06) 0.35rem,
+        var(--marke-standort) 0,
+        var(--marke-standort) 0.35rem,
         transparent 0.35rem,
         transparent 0.7rem
     );
-    border-color: #776c50;
+    border-color: var(--achtung-kante);
     border-style: dotted;
 }
 
 .estab-message-timeline__station {
-    color: var(--estab-timeline-blue);
+    color: var(--handlung-dunkel);
     display: block;
-    font-size: 1rem;
-    font-weight: 900;
+    font-size: var(--schrift-4);
+    font-weight: var(--stark-voll);
     line-height: 1.25;
 }
 
 .estab-message-timeline__state {
     align-items: center;
     border: 1px solid currentColor;
-    border-radius: 999px;
-    color: var(--estab-timeline-muted);
+    border-radius: var(--radius-pille);
+    color: var(--tinte-neben);
     display: inline-flex;
-    font-size: 0.75rem;
-    font-weight: 800;
-    gap: 0.3rem;
+    font-size: var(--schrift-1);
+    font-weight: var(--stark-voll);
+    gap: var(--abstand-2);
     justify-self: start;
     line-height: 1.2;
     max-width: 100%;
-    padding: 0.22rem 0.5rem;
+    padding: var(--abstand-2) var(--abstand-4);
 }
 
 .estab-message-timeline__state::before {
     display: inline-block;
-    font-weight: 900;
+    font-weight: var(--stark-voll);
     line-height: 1;
 }
 
 .estab-message-timeline__step--completed .estab-message-timeline__state,
 .estab-message-timeline__step--terminal .estab-message-timeline__state {
-    color: var(--estab-timeline-green);
+    color: var(--erledigt-kante);
 }
 
 .estab-message-timeline__step--completed .estab-message-timeline__state::before,
@@ -5574,8 +5569,8 @@ section.estab-message-timeline[data-estab-message-timeline] * {
 
 .estab-message-timeline__step--current .estab-message-timeline__state,
 .estab-message-timeline__step[aria-current="step"] .estab-message-timeline__state {
-    background: var(--estab-timeline-blue);
-    color: #ffffff;
+    background: var(--handlung-dunkel);
+    color: var(--tinte-spalte);
 }
 
 .estab-message-timeline__step--current .estab-message-timeline__state::before,
@@ -5588,7 +5583,7 @@ section.estab-message-timeline[data-estab-message-timeline] * {
 }
 
 .estab-message-timeline__step--returned .estab-message-timeline__state {
-    color: var(--estab-timeline-red);
+    color: var(--fehler-kante);
 }
 
 .estab-message-timeline__step--returned .estab-message-timeline__state::before {
@@ -5601,8 +5596,8 @@ section.estab-message-timeline[data-estab-message-timeline] * {
 
 .estab-message-timeline__time,
 .estab-message-timeline__duration {
-    color: #4a5e73;
-    font-size: 0.8rem;
+    color: var(--tinte-neben);
+    font-size: var(--schrift-2);
     font-variant-numeric: tabular-nums;
     line-height: 1.35;
 }
@@ -5612,61 +5607,61 @@ section.estab-message-timeline[data-estab-message-timeline] * {
 }
 
 .estab-message-timeline__duration {
-    background: #edf2f7;
-    border-radius: 5px;
+    background: var(--handlung-sanft);
+    border-radius: var(--radius-2);
     display: inline-block;
-    font-weight: 800;
+    font-weight: var(--stark-voll);
     justify-self: start;
-    padding: 0.2rem 0.4rem;
+    padding: var(--abstand-2) var(--abstand-3);
 }
 
 .estab-message-timeline__connector {
     align-items: center;
-    border-top: 1px dashed #9aabbd;
-    color: #52657a;
+    border-top: 1px dashed var(--linie-kraeftig);
+    color: var(--tinte-neben);
     display: flex;
     flex-wrap: wrap;
-    font-size: 0.78rem;
-    gap: 0.3rem;
-    margin-top: 0.2rem;
+    font-size: var(--schrift-1);
+    gap: var(--abstand-2);
+    margin-top: var(--abstand-2);
     min-width: 0;
-    padding-top: 0.4rem;
+    padding-top: var(--abstand-3);
 }
 
 .estab-message-timeline__reason {
-    background: #fff7f8;
-    border-left: 4px solid var(--estab-timeline-red);
-    color: #6f1e29;
-    font-size: 0.82rem;
+    background: var(--fehler-flaeche);
+    border-left: 4px solid var(--fehler-kante);
+    color: var(--fehler-tinte);
+    font-size: var(--schrift-2);
     line-height: 1.4;
-    margin: 0.15rem 0 0;
+    margin: var(--abstand-1) 0 0;
     overflow-wrap: anywhere;
-    padding: 0.45rem 0.55rem;
+    padding: var(--abstand-4) var(--abstand-4);
 }
 
 .estab-message-timeline__cycle {
-    background: #fff0c7;
-    border: 1px solid #b98512;
-    border-radius: 999px;
-    color: #654600;
-    font-size: 0.7rem;
-    font-weight: 900;
+    background: var(--achtung-flaeche);
+    border: 1px solid var(--achtung-kante);
+    border-radius: var(--radius-pille);
+    color: var(--achtung-tinte);
+    font-size: var(--schrift-1);
+    font-weight: var(--stark-voll);
     justify-self: start;
     letter-spacing: 0.035em;
-    padding: 0.2rem 0.45rem;
+    padding: var(--abstand-2) var(--abstand-4);
     text-transform: uppercase;
 }
 
 .estab-message-timeline__notice {
-    background: #eef4fa;
-    border: 1px solid #8faac4;
-    border-left: 4px solid #2b6397;
-    border-radius: 7px;
-    color: #29435f;
+    background: var(--handlung-sanft);
+    border: 1px solid var(--linie-kraeftig);
+    border-left: 4px solid var(--handlung-kante);
+    border-radius: var(--radius-3);
+    color: var(--handlung-dunkel);
     line-height: 1.45;
-    margin: 0.75rem 0 0;
+    margin: var(--abstand-5) 0 0;
     overflow-wrap: anywhere;
-    padding: 0.65rem 0.75rem;
+    padding: var(--abstand-5) var(--abstand-5);
 }
 
 .estab-message-timeline__notice > :first-child,
@@ -5707,7 +5702,7 @@ section.estab-message-timeline[data-estab-message-timeline] * {
     --estab-official-blue: #a2d9f7;
     --estab-official-line: #000000;
     background: var(--estab-official-blue);
-    box-shadow: 0 12px 30px rgba(22, 37, 52, 0.2);
+    box-shadow: 0 12px 30px var(--marke-standort);
     color: #000000;
     font-family: Arial, Helvetica, sans-serif;
     font-size: 1rem;
@@ -6587,18 +6582,18 @@ section.estab-message-timeline[data-estab-message-timeline] * {
 
 .estab-copy-blue,
 .estab-copy-green {
-    border-radius: 50%;
+    border-radius: var(--radius-pille);
     display: inline-block;
     height: 0.55rem;
     width: 0.55rem;
 }
 
 .estab-copy-blue {
-    background: #215cbd;
+    background: var(--handlung);
 }
 
 .estab-copy-green {
-    background: #13833b;
+    background: var(--erledigt-spalte-flaeche);
 }
 
 .estab-official-distribution-record {
@@ -6702,7 +6697,7 @@ section.estab-message-timeline[data-estab-message-timeline] * {
 
 .estab-official-input[data-estab-required="true"],
 .estab-official-textarea[data-estab-required="true"] {
-    box-shadow: inset 0.16rem 0 0 0 rgba(157, 28, 22, 0.62);
+    box-shadow: inset 0.16rem 0 0 0 var(--marke-standort);
 }
 
 /*
@@ -6860,7 +6855,7 @@ section.estab-message-timeline[data-estab-message-timeline] * {
     background: #ffffff;
     border: 2px solid #173a5e;
     border-radius: 8px;
-    box-shadow: 0 12px 32px rgba(10, 25, 42, 0.3);
+    box-shadow: 0 12px 32px var(--marke-standort);
     color: #172033;
     display: flex;
     flex-direction: column;
@@ -6908,47 +6903,47 @@ section.estab-message-timeline[data-estab-message-timeline] * {
 }
 
 .estab-message-attachment-list {
-    background: #ffffff;
-    border: 1px solid #b8c7d5;
-    border-radius: 8px;
-    margin-top: 1rem;
-    padding: 0.85rem 1rem;
+    background: var(--grund-tafel);
+    border: 1px solid var(--linie-kraeftig);
+    border-radius: var(--radius-3);
+    margin-top: var(--abstand-6);
+    padding: var(--abstand-5) var(--abstand-6);
 }
 
 .estab-message-attachments {
-    background: #ffffff;
-    border: 1px solid #aebfce;
-    border-left: 6px solid #315f8b;
-    border-radius: 10px;
-    box-shadow: 0 7px 22px rgba(31, 58, 86, 0.1);
-    color: #172033;
-    margin-top: 1rem;
-    padding: clamp(0.85rem, 2.5vw, 1.25rem);
+    background: var(--grund-tafel);
+    border: 1px solid var(--linie-kraeftig);
+    border-left: 6px solid var(--handlung);
+    border-radius: var(--radius-3);
+    box-shadow: var(--schatten-tafel);
+    color: var(--tinte);
+    margin-top: var(--abstand-6);
+    padding: var(--abstand-5);
     scroll-margin-top: 5rem;
 }
 
 .estab-message-attachments-header {
-    border-bottom: 1px solid #d3dde6;
-    margin-bottom: 1rem;
-    padding-bottom: 0.8rem;
+    border-bottom: 1px solid var(--linie);
+    margin-bottom: var(--abstand-6);
+    padding-bottom: var(--abstand-5);
 }
 
 .estab-message-attachments-header .estab-section-kicker {
-    color: #9a6c00;
-    font-size: 0.7rem;
-    font-weight: 900;
+    color: var(--achtung-tinte);
+    font-size: var(--schrift-1);
+    font-weight: var(--stark-voll);
     letter-spacing: 0.1em;
     text-transform: uppercase;
 }
 
 .estab-message-attachments-header h2 {
-    color: #173a5e;
-    font-size: 1.3rem;
-    margin: 0.2rem 0 0.3rem;
+    color: var(--handlung-dunkel);
+    font-size: var(--schrift-6);
+    margin: var(--abstand-2) 0 var(--abstand-2);
 }
 
 .estab-message-attachments-header p {
-    color: #536476;
+    color: var(--tinte-neben);
     line-height: 1.45;
     margin: 0;
     max-width: 55rem;
@@ -6956,162 +6951,162 @@ section.estab-message-timeline[data-estab-message-timeline] * {
 
 .estab-message-attachments > .estab-alert {
     border: 1px solid;
-    border-radius: 7px;
-    font-weight: 700;
+    border-radius: var(--radius-3);
+    font-weight: var(--stark-voll);
     line-height: 1.4;
-    margin: 0 0 0.85rem;
-    padding: 0.75rem 0.85rem;
+    margin: 0 0 var(--abstand-5);
+    padding: var(--abstand-5) var(--abstand-5);
 }
 
 .estab-message-attachments > .estab-alert--danger {
-    background: #fff0ef;
-    border-color: #b6433e;
-    color: #741914;
+    background: var(--fehler-flaeche);
+    border-color: var(--fehler-kante);
+    color: var(--fehler-tinte);
 }
 
 .estab-message-attachments > .estab-alert--success {
-    background: #eaf7ee;
-    border-color: #438459;
-    color: #245c37;
+    background: var(--erledigt-flaeche);
+    border-color: var(--erledigt-kante);
+    color: var(--erledigt-tinte);
 }
 
 .estab-message-attachment-upload {
-    background: #eef5fb;
-    border: 1px solid #b5c8d9;
-    border-radius: 8px;
-    margin: 0 0 1rem;
+    background: var(--handlung-sanft);
+    border: 1px solid var(--linie-kraeftig);
+    border-radius: var(--radius-3);
+    margin: 0 0 var(--abstand-6);
     min-width: 0;
-    padding: 0.85rem;
+    padding: var(--abstand-5);
 }
 
 .estab-message-attachment-upload legend {
-    color: #173a5e;
-    font-weight: 900;
-    padding: 0 0.35rem;
+    color: var(--handlung-dunkel);
+    font-weight: var(--stark-voll);
+    padding: 0 var(--abstand-3);
 }
 
 .estab-message-attachment-upload-grid {
     display: grid;
-    gap: 0.75rem;
+    gap: var(--abstand-5);
     grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .estab-message-attachment-upload-grid label {
-    color: #253b52;
+    color: var(--tinte);
     display: grid;
-    gap: 0.35rem;
+    gap: var(--abstand-3);
     min-width: 0;
 }
 
 .estab-message-attachment-upload-grid label strong {
-    font-size: 0.9rem;
+    font-size: var(--schrift-3);
 }
 
 .estab-message-attachment-upload-grid label strong span {
-    color: #607286;
-    font-weight: 500;
+    color: var(--tinte-neben);
+    font-weight: var(--stark-halb);
 }
 
 .estab-message-attachment-upload-grid input {
-    background: #ffffff;
-    border: 1px solid #7f94a8;
-    border-radius: 6px;
-    color: #172033;
+    background: var(--grund-tafel);
+    border: 1px solid var(--linie-spalte);
+    border-radius: var(--radius-3);
+    color: var(--tinte);
     font: inherit;
     min-height: 2.75rem;
     min-width: 0;
-    padding: 0.5rem 0.6rem;
+    padding: var(--abstand-4) var(--abstand-4);
     width: 100%;
 }
 
 .estab-message-attachment-upload-grid input[type="file"] {
     cursor: pointer;
-    padding: 0.35rem;
+    padding: var(--abstand-3);
 }
 
 .estab-message-attachment-upload-grid input[type="file"]::file-selector-button {
-    background: #173a5e;
+    background: var(--grund-kachel-zeigen);
     border: 0;
-    border-radius: 5px;
-    color: #ffffff;
+    border-radius: var(--radius-2);
+    color: var(--tinte-spalte);
     cursor: pointer;
     font: inherit;
-    font-weight: 800;
-    margin-right: 0.7rem;
-    padding: 0.55rem 0.7rem;
+    font-weight: var(--stark-voll);
+    margin-right: var(--abstand-5);
+    padding: var(--abstand-4) var(--abstand-5);
 }
 
 .estab-message-attachment-upload > small {
-    color: #536476;
+    color: var(--tinte-neben);
     display: block;
     line-height: 1.4;
-    margin-top: 0.65rem;
+    margin-top: var(--abstand-5);
 }
 
 .estab-attachment-client-error {
-    background: #fff0ef;
-    border: 1px solid #b6433e;
-    border-radius: 7px;
-    color: #741914;
-    font-weight: 700;
-    margin: 0.75rem 0 0;
-    padding: 0.7rem 0.8rem;
+    background: var(--fehler-flaeche);
+    border: 1px solid var(--fehler-kante);
+    border-radius: var(--radius-3);
+    color: var(--fehler-tinte);
+    font-weight: var(--stark-voll);
+    margin: var(--abstand-5) 0 0;
+    padding: var(--abstand-5) var(--abstand-5);
 }
 
 .estab-message-attachment-upload-actions,
 .estab-message-attachment-actions {
     display: flex;
     flex-wrap: wrap;
-    gap: 0.55rem;
+    gap: var(--abstand-4);
 }
 
 .estab-message-attachment-upload-actions {
-    margin-top: 0.75rem;
+    margin-top: var(--abstand-5);
 }
 
 .estab-message-attachments-empty {
-    background: #f5f8fb;
-    border: 1px dashed #9eb0c1;
-    border-radius: 7px;
-    color: #536476;
+    background: var(--handlung-sanft);
+    border: 1px dashed var(--linie-kraeftig);
+    border-radius: var(--radius-3);
+    color: var(--tinte-neben);
     margin: 0;
-    padding: 0.85rem;
+    padding: var(--abstand-5);
 }
 
 .estab-message-attachment-cards {
     display: grid;
-    gap: 0.85rem;
+    gap: var(--abstand-5);
 }
 
 .estab-message-attachment-card {
-    background: #f8fafc;
-    border: 1px solid #c3cfda;
-    border-radius: 9px;
+    background: var(--handlung-sanft);
+    border: 1px solid var(--linie);
+    border-radius: var(--radius-3);
     display: grid;
-    gap: 0.9rem;
+    gap: var(--abstand-6);
     grid-template-columns: minmax(9rem, 14rem) minmax(0, 1fr);
     overflow: hidden;
-    padding: 0.85rem;
+    padding: var(--abstand-5);
 }
 
 .estab-message-attachment-card[data-estab-attachment-unavailable] {
-    background: #fff8ed;
-    border-color: #bb7925;
+    background: var(--achtung-flaeche);
+    border-color: var(--achtung-kante);
 }
 
 .estab-message-attachment-unavailable {
-    background: #fff0d9;
-    border-left: 4px solid #a96213;
-    color: #613a0c;
-    padding: 0.65rem 0.75rem;
+    background: var(--achtung-flaeche);
+    border-left: 4px solid var(--achtung-kante);
+    color: var(--achtung-tinte);
+    padding: var(--abstand-5) var(--abstand-5);
 }
 
 .estab-message-attachment-preview,
 .estab-message-attachment-filetype {
     align-items: center;
-    background: #dfeaf3;
-    border: 1px solid #b4c5d4;
-    border-radius: 7px;
+    background: var(--handlung-sanft);
+    border: 1px solid var(--linie-kraeftig);
+    border-radius: var(--radius-3);
     display: flex;
     justify-content: center;
     min-height: 8rem;
@@ -7127,25 +7122,25 @@ section.estab-message-timeline[data-estab-message-timeline] * {
 }
 
 .estab-message-attachment-filetype span {
-    background: #173a5e;
-    border-radius: 6px;
-    color: #ffffff;
-    font-size: 1.05rem;
-    font-weight: 900;
+    background: var(--grund-kachel-zeigen);
+    border-radius: var(--radius-3);
+    color: var(--tinte-spalte);
+    font-size: var(--schrift-4);
+    font-weight: var(--stark-voll);
     letter-spacing: 0.08em;
-    padding: 0.6rem 0.75rem;
+    padding: var(--abstand-4) var(--abstand-5);
 }
 
 .estab-message-attachment-details {
     align-content: start;
     display: grid;
-    gap: 0.45rem;
+    gap: var(--abstand-4);
     min-width: 0;
 }
 
 .estab-message-attachment-details h3 {
-    color: #173a5e;
-    font-size: 1.08rem;
+    color: var(--handlung-dunkel);
+    font-size: var(--schrift-5);
     margin: 0;
     overflow-wrap: anywhere;
 }
@@ -7158,8 +7153,8 @@ section.estab-message-timeline[data-estab-message-timeline] * {
 
 .estab-message-attachment-meta,
 .estab-message-attachment-reference {
-    color: #5b6d80;
-    font-size: 0.82rem;
+    color: var(--tinte-neben);
+    font-size: var(--schrift-2);
 }
 
 .estab-message-attachment-reference {
@@ -7167,39 +7162,39 @@ section.estab-message-timeline[data-estab-message-timeline] * {
 }
 
 .estab-message-attachment-actions {
-    margin-top: 0.35rem;
+    margin-top: var(--abstand-3);
 }
 
 .estab-message-attachment-actions .estab-button {
     align-items: center;
     display: inline-flex;
     min-height: 2.45rem;
-    padding: 0.5rem 0.7rem;
+    padding: var(--abstand-4) var(--abstand-5);
     text-decoration: none;
 }
 
 .estab-message-attachment-pdf,
 .estab-message-attachment-email {
-    border-top: 1px solid #cbd6df;
+    border-top: 1px solid var(--linie);
     grid-column: 1 / -1;
-    padding-top: 0.7rem;
+    padding-top: var(--abstand-5);
 }
 
 .estab-message-attachment-pdf summary,
 .estab-message-attachment-email summary {
-    color: #173a5e;
+    color: var(--handlung-dunkel);
     cursor: pointer;
-    font-weight: 800;
-    padding: 0.35rem 0;
+    font-weight: var(--stark-voll);
+    padding: var(--abstand-3) 0;
 }
 
 .estab-message-attachment-pdf iframe,
 .estab-message-attachment-email iframe {
-    background: #ffffff;
-    border: 1px solid #9eb0c1;
-    border-radius: 6px;
+    background: var(--grund-tafel);
+    border: 1px solid var(--linie-kraeftig);
+    border-radius: var(--radius-3);
     height: min(38rem, 70vh);
-    margin-top: 0.55rem;
+    margin-top: var(--abstand-4);
     width: 100%;
 }
 
@@ -7208,80 +7203,80 @@ section.estab-message-timeline[data-estab-message-timeline] * {
 }
 
 .estab-email-preview-page {
-    background: #edf2f6;
+    background: var(--handlung-sanft);
     box-sizing: border-box;
-    color: #172033;
+    color: var(--tinte);
     font-family: Arial, Helvetica, sans-serif;
     margin: 0;
     min-height: 100vh;
-    padding: clamp(0.75rem, 3vw, 1.5rem);
+    padding: var(--abstand-5);
 }
 
 .estab-email-preview {
-    background: #ffffff;
-    border: 1px solid #b8c7d5;
-    border-radius: 10px;
-    box-shadow: 0 8px 24px rgba(23, 58, 94, 0.12);
+    background: var(--grund-tafel);
+    border: 1px solid var(--linie-kraeftig);
+    border-radius: var(--radius-3);
+    box-shadow: var(--schatten-tafel);
     margin: 0 auto;
     max-width: 68rem;
     overflow: hidden;
 }
 
 .estab-email-preview-header {
-    background: #173a5e;
-    border-bottom: 4px solid #e4b443;
-    color: #ffffff;
-    padding: clamp(1rem, 3vw, 1.5rem);
+    background: var(--grund-kachel-zeigen);
+    border-bottom: 4px solid var(--marke-standort);
+    color: var(--tinte-spalte);
+    padding: var(--abstand-6);
 }
 
 .estab-email-preview-header .estab-section-kicker {
-    color: #f5d882;
-    font-size: 0.72rem;
-    font-weight: 900;
+    color: var(--marke-standort);
+    font-size: var(--schrift-1);
+    font-weight: var(--stark-voll);
     letter-spacing: 0.1em;
-    margin: 0 0 0.35rem;
+    margin: 0 0 var(--abstand-3);
     text-transform: uppercase;
 }
 
 .estab-email-preview-header h1 {
-    color: #ffffff;
-    font-size: clamp(1.25rem, 4vw, 1.8rem);
+    color: var(--tinte-spalte);
+    font-size: var(--schrift-7);
     line-height: 1.2;
     margin: 0;
     overflow-wrap: anywhere;
 }
 
 .estab-email-preview-header > p:last-child {
-    color: #c9d8e6;
-    margin: 0.55rem 0 0;
+    color: var(--tinte-spalte-neben);
+    margin: var(--abstand-4) 0 0;
     overflow-wrap: anywhere;
 }
 
 .estab-email-preview-headers {
-    background: #f4f7fa;
-    border-bottom: 1px solid #d3dde6;
+    background: var(--handlung-sanft);
+    border-bottom: 1px solid var(--linie);
     margin: 0;
-    padding: 0.75rem clamp(1rem, 3vw, 1.5rem);
+    padding: var(--abstand-5) var(--abstand-6);
 }
 
 .estab-email-preview-trust {
-    background: #fff7dd;
-    border-bottom: 1px solid #dbc075;
-    color: #5f4106;
+    background: var(--achtung-flaeche);
+    border-bottom: 1px solid var(--marke-standort);
+    color: var(--achtung-tinte);
     line-height: 1.45;
-    padding: 0.75rem clamp(1rem, 3vw, 1.5rem);
+    padding: var(--abstand-5) var(--abstand-6);
 }
 
 .estab-email-preview-headers > div {
     display: grid;
-    gap: 0.5rem;
+    gap: var(--abstand-4);
     grid-template-columns: minmax(4.5rem, 7rem) minmax(0, 1fr);
-    padding: 0.35rem 0;
+    padding: var(--abstand-3) 0;
 }
 
 .estab-email-preview-headers dt {
-    color: #536476;
-    font-weight: 800;
+    color: var(--tinte-neben);
+    font-weight: var(--stark-voll);
 }
 
 .estab-email-preview-headers dd {
@@ -7293,14 +7288,14 @@ section.estab-message-timeline[data-estab-message-timeline] * {
 .estab-email-preview-contained,
 .estab-email-preview-footer,
 .estab-email-preview--error {
-    padding: clamp(1rem, 3vw, 1.5rem);
+    padding: var(--abstand-6);
 }
 
 .estab-email-preview-body h2,
 .estab-email-preview-contained h2 {
-    color: #173a5e;
-    font-size: 1.05rem;
-    margin: 0 0 0.75rem;
+    color: var(--handlung-dunkel);
+    font-size: var(--schrift-4);
+    margin: 0 0 var(--abstand-5);
 }
 
 .estab-email-preview-text {
@@ -7310,28 +7305,28 @@ section.estab-message-timeline[data-estab-message-timeline] * {
 }
 
 .estab-email-preview-empty {
-    color: #536476;
+    color: var(--tinte-neben);
     font-style: italic;
 }
 
 .estab-email-preview-contained {
-    border-top: 1px solid #d3dde6;
+    border-top: 1px solid var(--linie);
 }
 
 .estab-email-preview-contained ul {
     display: grid;
-    gap: 0.5rem;
+    gap: var(--abstand-4);
     list-style: none;
     margin: 0;
     padding: 0;
 }
 
 .estab-email-preview-contained li {
-    background: #f4f7fa;
-    border-left: 4px solid #315f8b;
+    background: var(--handlung-sanft);
+    border-left: 4px solid var(--handlung);
     display: grid;
-    gap: 0.2rem;
-    padding: 0.65rem 0.75rem;
+    gap: var(--abstand-2);
+    padding: var(--abstand-5) var(--abstand-5);
 }
 
 .estab-email-preview-contained li strong {
@@ -7340,64 +7335,64 @@ section.estab-message-timeline[data-estab-message-timeline] * {
 
 .estab-email-preview-contained li span,
 .estab-email-preview-contained > p {
-    color: #536476;
-    font-size: 0.86rem;
+    color: var(--tinte-neben);
+    font-size: var(--schrift-3);
 }
 
 .estab-email-preview-warning {
-    background: #fff7dd;
-    border-left: 5px solid #b47a09;
-    color: #5f4106;
-    margin: 0 clamp(1rem, 3vw, 1.5rem) 1rem;
-    padding: 0.75rem 0.85rem;
+    background: var(--achtung-flaeche);
+    border-left: 5px solid var(--achtung-kante);
+    color: var(--achtung-tinte);
+    margin: 0 var(--abstand-6) var(--abstand-6);
+    padding: var(--abstand-5) var(--abstand-5);
 }
 
 .estab-email-preview-footer {
-    background: #eef5fb;
-    border-top: 1px solid #b5c8d9;
+    background: var(--handlung-sanft);
+    border-top: 1px solid var(--linie-kraeftig);
 }
 
 .estab-email-preview-footer p {
     line-height: 1.45;
-    margin: 0 0 0.85rem;
+    margin: 0 0 var(--abstand-5);
 }
 
 .estab-email-preview--error h1 {
-    color: #741914;
+    color: var(--fehler-tinte);
 }
 
 @media (max-width: 36rem) {
     .estab-email-preview-headers > div {
-        gap: 0.2rem;
+        gap: var(--abstand-2);
         grid-template-columns: 1fr;
     }
 }
 
 .estab-message-distribution-extras {
-    background: #ffffff;
-    border: 1px solid #b8c7d5;
-    border-left: 5px solid #45698e;
-    border-radius: 8px;
-    color: #172033;
-    margin-top: 1rem;
-    padding: 0.85rem 1rem;
+    background: var(--grund-tafel);
+    border: 1px solid var(--linie-kraeftig);
+    border-left: 5px solid var(--handlung-kante);
+    border-radius: var(--radius-3);
+    color: var(--tinte);
+    margin-top: var(--abstand-6);
+    padding: var(--abstand-5) var(--abstand-6);
 }
 
 .estab-message-distribution-extras h2 {
-    color: #173a5e;
-    font-size: 1.05rem;
-    margin: 0.15rem 0 0.25rem;
+    color: var(--handlung-dunkel);
+    font-size: var(--schrift-4);
+    margin: var(--abstand-1) 0 var(--abstand-2);
 }
 
 .estab-message-distribution-extras p {
-    color: #536476;
-    font-size: 0.86rem;
-    margin: 0 0 0.7rem;
+    color: var(--tinte-neben);
+    font-size: var(--schrift-3);
+    margin: 0 0 var(--abstand-5);
 }
 
 .estab-message-distribution-extra-grid {
     display: grid;
-    gap: 0.45rem 1rem;
+    gap: var(--abstand-4) var(--abstand-6);
     grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
 }
 
@@ -7406,14 +7401,14 @@ section.estab-message-timeline[data-estab-message-timeline] * {
 }
 
 .estab-message-attachment-list h2 {
-    color: #173a5e;
-    font-size: 1.05rem;
-    margin: 0 0 0.45rem;
+    color: var(--handlung-dunkel);
+    font-size: var(--schrift-4);
+    margin: 0 0 var(--abstand-4);
 }
 
 .estab-message-attachment-list a {
-    color: #155b91;
-    font-size: 1rem !important;
+    color: var(--handlung-dunkel);
+    font-size: var(--schrift-4) !important;
     overflow-wrap: anywhere;
 }
 
@@ -7445,8 +7440,8 @@ section.estab-message-timeline[data-estab-message-timeline] {
        Stationen statt daneben -- sonst wird sie so weit zusammengedrueckt,
        dass "Bearbeitungsweg" mitten durchbricht. */
     flex-wrap: wrap;
-    gap: 0.25rem 0.6rem;
-    padding: 0.3rem 0.45rem;
+    gap: var(--abstand-2) var(--abstand-4);
+    padding: var(--abstand-2) var(--abstand-4);
 }
 
 section.estab-message-timeline[data-estab-message-timeline]
@@ -7466,12 +7461,12 @@ section.estab-message-timeline[data-estab-message-timeline]
     align-items: baseline;
     display: flex;
     flex-wrap: wrap;
-    gap: 0.1rem 0.5rem;
+    gap: var(--abstand-1) var(--abstand-4);
     margin-bottom: 0;
 }
 
 .estab-message-timeline__header h2 {
-    font-size: 0.75rem;
+    font-size: var(--schrift-1);
     hyphens: auto;
     min-width: 0;
     overflow-wrap: break-word;
@@ -7486,8 +7481,8 @@ section.estab-message-timeline[data-estab-message-timeline]
 
 .estab-message-timeline__track {
     align-items: center;
-    gap: 0.8rem;
-    padding: 0.1rem 0.1rem 0.25rem;
+    gap: var(--abstand-5);
+    padding: var(--abstand-1) var(--abstand-1) var(--abstand-2);
 }
 
 /* Eine Station ist eine Zeile: Name, Zustand, gegebenenfalls ein Wort dazu.
@@ -7505,7 +7500,7 @@ section.estab-message-timeline[data-estab-message-timeline]
    Raster mit zwei Zeilen ist die Marke so breit wie ihre breiteste Zeile. */
 .estab-message-timeline__content {
     align-items: baseline;
-    column-gap: 0.3rem;
+    column-gap: var(--abstand-2);
     display: grid;
     grid-template-columns: auto auto;
     justify-content: start;
@@ -7520,11 +7515,11 @@ section.estab-message-timeline[data-estab-message-timeline]
 
 .estab-message-timeline__step {
     align-content: center;
-    border-radius: 6px;
+    border-radius: var(--radius-3);
     border-width: 1px;
     display: block;
     flex: 0 0 auto;
-    padding: 0.15rem 0.4rem;
+    padding: var(--abstand-1) var(--abstand-3);
 }
 
 .estab-message-timeline__step:not(:last-child)::after {
@@ -7535,7 +7530,7 @@ section.estab-message-timeline[data-estab-message-timeline]
 }
 
 .estab-message-timeline__station {
-    font-size: 0.68rem;
+    font-size: var(--schrift-1);
     line-height: 1.2;
     margin: 0;
     min-width: 0;
@@ -7545,21 +7540,21 @@ section.estab-message-timeline[data-estab-message-timeline]
 /* Zustand und Vermerk stehen klein unter dem Namen -- sie ordnen ein, sie
    rufen nicht. */
 .estab-message-timeline__state {
-    font-size: 0.56rem;
+    font-size: var(--schrift-1);
     line-height: 1.2;
-    padding: 0 0.2rem;
+    padding: 0 var(--abstand-2);
     white-space: nowrap;
 }
 
 .estab-message-timeline__time,
 .estab-message-timeline__duration {
-    font-size: 0.56rem;
+    font-size: var(--schrift-1);
     line-height: 1.2;
     white-space: nowrap;
 }
 
 .estab-message-timeline__reason {
-    font-size: 0.56rem;
+    font-size: var(--schrift-1);
     line-height: 1.2;
     margin: 0;
 }
@@ -7602,8 +7597,8 @@ section.estab-message-timeline[data-estab-message-timeline]
        laesst sich schieben; vier bis sechs kurze Marken sind dafuer die
        richtige Form. */
     .estab-message-timeline__track {
-        gap: 1.1rem;
-        padding: 0.15rem 0.15rem 0.45rem;
+        gap: var(--abstand-6);
+        padding: var(--abstand-1) var(--abstand-1) var(--abstand-4);
     }
 
     .estab-message-timeline__step {
@@ -7641,13 +7636,13 @@ section.estab-message-timeline[data-estab-message-timeline]
 
     section.estab-message-timeline[data-estab-message-timeline]
         > .estab-message-timeline__header {
-        margin-bottom: 0.4rem;
+        margin-bottom: var(--abstand-3);
         max-width: none;
         min-width: 0;
     }
 
     .estab-message-timeline__header h2 {
-        font-size: 0.82rem;
+        font-size: var(--schrift-2);
     }
 
     .estab-message-form-page > form,
@@ -7658,7 +7653,7 @@ section.estab-message-timeline[data-estab-message-timeline]
     section.estab-message-timeline[data-estab-message-timeline]
         .estab-message-timeline__track {
         display: grid;
-        gap: 0.3rem;
+        gap: var(--abstand-2);
         overflow-x: visible;
         padding: 0;
     }
@@ -7978,9 +7973,9 @@ section.estab-message-timeline[data-estab-message-timeline]
     box-sizing: border-box;
     display: flex;
     flex-direction: column;
-    gap: 0.75rem;
+    gap: var(--abstand-5);
     min-height: 100%;
-    padding: 0.75rem;
+    padding: var(--abstand-5);
 }
 
 .estab-bos-document-navigation {
@@ -7989,7 +7984,7 @@ section.estab-message-timeline[data-estab-message-timeline]
 
 .estab-bos-document-list {
     list-style: none;
-    margin: 0.65rem 0 0;
+    margin: var(--abstand-5) 0 0;
     padding: 0;
 }
 
@@ -8007,7 +8002,7 @@ section.estab-message-timeline[data-estab-message-timeline]
 }
 
 .estab-bos-document-link[aria-current="page"] {
-    border-left-color: #e5b247;
+    border-left-color: var(--marke-standort);
 }
 
 .estab-bos-embedded-document {
@@ -8018,16 +8013,16 @@ section.estab-message-timeline[data-estab-message-timeline]
 }
 
 .estab-bos-embedded-content {
-    background: #f4f7fa !important;
+    background: var(--handlung-sanft) !important;
     box-sizing: border-box;
-    color: #172033;
+    color: var(--tinte);
     font: 1rem/1.55 Arial, Helvetica, sans-serif;
     margin: 0;
     max-width: 100% !important;
     min-width: 0;
     overflow-wrap: anywhere;
     overflow-x: hidden;
-    padding: clamp(0.75rem, 2.5vw, 2rem);
+    padding: var(--abstand-5);
     width: auto !important;
 }
 
@@ -8057,51 +8052,51 @@ section.estab-message-timeline[data-estab-message-timeline]
 .estab-bos-document-shell {
     box-sizing: border-box;
     display: grid;
-    gap: 1rem;
+    gap: var(--abstand-6);
     margin: 0 auto;
     max-width: 90rem;
     min-width: 0;
 }
 
 .estab-bos-document-header {
-    background:
-        linear-gradient(135deg, rgba(17, 47, 79, 0.98), rgba(39, 86, 130, 0.96));
-    border: 1px solid #456f98;
-    border-radius: 12px;
-    box-shadow: 0 7px 22px rgba(17, 38, 63, 0.18);
-    color: #ffffff;
-    padding: clamp(1.15rem, 3vw, 2rem);
+    /* Verlaufsflaeche entfernt: Der Seitenkopf ist eine Zeile, kein
+       Banner -- die Kopfzeilenregel setzte sie ohnehin auf `none`. */
+    border: 1px solid var(--handlung-kante);
+    border-radius: var(--radius-3);
+    box-shadow: var(--schatten-tafel);
+    color: var(--tinte-spalte);
+    padding: var(--abstand-6);
 }
 
 .estab-bos-document-kicker {
-    color: #f4ca70;
+    color: var(--marke-standort);
     display: block;
-    font-size: 0.76rem;
-    font-weight: 800;
+    font-size: var(--schrift-1);
+    font-weight: var(--stark-voll);
     letter-spacing: 0.1em;
     text-transform: uppercase;
 }
 
 .estab-bos-document-header h1 {
-    color: #ffffff;
-    font-size: clamp(1.65rem, 4vw, 2.6rem);
+    color: var(--tinte-spalte);
+    font-size: var(--schrift-7);
     line-height: 1.12;
-    margin: 0.35rem 0 0.65rem;
+    margin: var(--abstand-3) 0 var(--abstand-5);
 }
 
 .estab-bos-document-header p {
-    color: #e5eef7;
+    color: var(--tinte-spalte);
     margin: 0;
     max-width: 65rem;
 }
 
 .estab-bos-document-content {
-    background: #ffffff;
-    border: 1px solid #c5d1dd;
-    border-radius: 12px;
-    box-shadow: 0 5px 18px rgba(31, 58, 86, 0.08);
+    background: var(--grund-tafel);
+    border: 1px solid var(--linie);
+    border-radius: var(--radius-3);
+    box-shadow: var(--schatten-tafel);
     min-width: 0;
-    padding: clamp(1rem, 2.5vw, 1.6rem);
+    padding: var(--abstand-6);
 }
 
 .estab-bos-document-content > :first-child {
@@ -8137,7 +8132,7 @@ section.estab-message-timeline[data-estab-message-timeline]
 }
 
 .estab-bos-document-content big {
-    font-size: 1.05em;
+    font-size: var(--schrift-4);
 }
 
 .estab-bos-document-content small {
@@ -8148,22 +8143,22 @@ section.estab-message-timeline[data-estab-message-timeline]
 .estab-bos-document-content h2,
 .estab-bos-document-content h3,
 .estab-bos-document-content h4 {
-    color: #153c64;
+    color: var(--handlung-dunkel);
     font-family: Arial, Helvetica, sans-serif;
     line-height: 1.22;
 }
 
 .estab-bos-document-content h1 {
-    font-size: clamp(1.45rem, 3vw, 2rem);
+    font-size: var(--schrift-7);
 }
 
 .estab-bos-document-content h2 {
-    font-size: clamp(1.2rem, 2.5vw, 1.55rem);
+    font-size: var(--schrift-7);
 }
 
 .estab-bos-document-content h3,
 .estab-bos-document-content h4 {
-    font-size: 1.05rem;
+    font-size: var(--schrift-4);
 }
 
 .estab-bos-document-content p,
@@ -8173,31 +8168,31 @@ section.estab-message-timeline[data-estab-message-timeline]
 }
 
 .estab-bos-document-content p {
-    margin: 0.55rem 0 !important;
+    margin: var(--abstand-4) 0 !important;
 }
 
 .estab-bos-document-content ul,
 .estab-bos-document-content ol {
-    padding-left: 1.5rem;
+    padding-left: var(--abstand-7);
 }
 
 .estab-bos-document-content a {
-    color: #145a93;
+    color: var(--handlung-dunkel);
     text-decoration-thickness: 0.1em;
     text-underline-offset: 0.15em;
 }
 
 .estab-bos-table-scroll {
-    border: 1px solid #bdcad8;
-    border-radius: 8px;
-    margin: 0.9rem 0;
+    border: 1px solid var(--linie-kraeftig);
+    border-radius: var(--radius-3);
+    margin: var(--abstand-6) 0;
     max-width: 100%;
     overflow-x: auto;
     overscroll-behavior-inline: contain;
 }
 
 .estab-bos-document-content .estab-bos-table-scroll > table {
-    background: #ffffff !important;
+    background: var(--grund-tafel) !important;
     border: 0 !important;
     border-collapse: collapse;
     border-spacing: 0;
@@ -8215,50 +8210,50 @@ section.estab-message-timeline[data-estab-message-timeline]
 
 .estab-bos-document-content th,
 .estab-bos-document-content td {
-    border: 1px solid #cad5e1 !important;
+    border: 1px solid var(--linie) !important;
     font-family: Arial, Helvetica, sans-serif;
     height: auto !important;
     line-height: 1.4;
-    padding: 0.55rem 0.65rem !important;
+    padding: var(--abstand-4) var(--abstand-5) !important;
     width: auto !important;
 }
 
 .estab-bos-document-content th {
-    background: #eaf1f8;
-    color: #153c64;
-    font-weight: 800;
+    background: var(--handlung-sanft);
+    color: var(--handlung-dunkel);
+    font-weight: var(--stark-voll);
 }
 
 .estab-bos-document-content tr:nth-child(even) > td:not([bgcolor]) {
-    background: #f4f7fa;
+    background: var(--handlung-sanft);
 }
 
 .estab-bos-document-content td[bgcolor="#006600" i] {
-    background: #166534;
+    background: var(--erledigt-spalte-flaeche);
 }
 
 .estab-bos-document-content td[bgcolor="#00cc00" i] {
-    background: #26733d;
+    background: var(--erledigt-spalte-flaeche);
 }
 
 .estab-bos-document-content td[bgcolor="#ff0000" i] {
-    background: #a9231d;
+    background: var(--fehler-kante);
 }
 
 .estab-bos-document-content
     td:not([bgcolor])
     font[color="#ffffff" i] {
-    background: #245b87;
-    border-radius: 0.25rem;
-    color: #ffffff !important;
+    background: var(--handlung);
+    border-radius: var(--radius-2);
+    color: var(--tinte-spalte) !important;
     display: inline-block;
-    padding: 0.08em 0.35em;
+    padding: var(--abstand-1) var(--abstand-3);
 }
 
 .estab-bos-document-content img {
-    border-radius: 6px;
+    border-radius: var(--radius-3);
     display: block;
-    margin: 0.75rem auto;
+    margin: var(--abstand-5) auto;
 }
 
 .estab-bos-welcome-page {
@@ -8270,32 +8265,32 @@ section.estab-message-timeline[data-estab-message-timeline]
 }
 
 .estab-bos-welcome-hint {
-    background: #eef3f8;
-    border-left: 4px solid #e5b247;
-    border-radius: 5px;
-    color: #3b4a5d;
-    margin-top: 1.25rem !important;
-    padding: 0.8rem 0.9rem;
+    background: var(--handlung-sanft);
+    border-left: 4px solid var(--marke-standort);
+    border-radius: var(--radius-2);
+    color: var(--tinte-neben);
+    margin-top: var(--abstand-6) !important;
+    padding: var(--abstand-5) var(--abstand-6);
 }
 
 @media (max-width: 42rem) {
     .estab-bos-embedded-content {
-        padding: 0.65rem;
+        padding: var(--abstand-5);
     }
 
     .estab-bos-document-header,
     .estab-bos-document-content {
-        border-radius: 8px;
+        border-radius: var(--radius-3);
     }
 
     .estab-bos-document-content {
-        padding: 0.8rem;
+        padding: var(--abstand-5);
     }
 
     .estab-bos-document-content th,
     .estab-bos-document-content td {
         min-width: 3.5rem;
-        padding: 0.45rem 0.5rem !important;
+        padding: var(--abstand-4) var(--abstand-4) !important;
     }
 }
 
@@ -8308,14 +8303,14 @@ section.estab-message-timeline[data-estab-message-timeline]
  * ---------------------------------------------------------------------- */
 
 .estab-message-list-controls {
-    background: #f8fafc;
-    border: 1px solid #c5d1dd;
-    border-radius: 12px;
-    box-shadow: 0 4px 14px rgba(31, 58, 86, 0.07);
+    background: var(--handlung-sanft);
+    border: 1px solid var(--linie);
+    border-radius: var(--radius-3);
+    box-shadow: var(--schatten-tafel);
     display: grid;
-    gap: 1rem;
-    margin-bottom: 1rem;
-    padding: clamp(0.9rem, 2vw, 1.25rem);
+    gap: var(--abstand-6);
+    margin-bottom: var(--abstand-6);
+    padding: var(--abstand-6);
 }
 
 .estab-message-list-controls *,
@@ -8331,7 +8326,7 @@ section.estab-message-timeline[data-estab-message-timeline]
 
 .estab-message-list-search-form {
     display: grid;
-    gap: 0.9rem;
+    gap: var(--abstand-6);
     margin: 0;
     min-width: 0;
 }
@@ -8339,38 +8334,38 @@ section.estab-message-timeline[data-estab-message-timeline]
 .estab-message-list-search-row {
     align-items: end;
     display: grid;
-    gap: 0.75rem;
+    gap: var(--abstand-5);
     grid-template-columns: minmax(16rem, 1fr) auto;
     min-width: 0;
 }
 
 .estab-message-list-search-row > label,
 .estab-message-list-query:is(label) {
-    color: #183454;
+    color: var(--tinte);
     display: grid;
-    font-weight: 800;
-    gap: 0.35rem;
+    font-weight: var(--stark-voll);
+    gap: var(--abstand-3);
     min-width: 0;
 }
 
 .estab-message-list-query:not(label),
 .estab-message-list-search-row input[type="search"] {
     appearance: none;
-    background: #ffffff;
-    border: 2px solid #6f859c;
-    border-radius: 9px;
+    background: var(--grund-tafel);
+    border: 2px solid var(--linie-spalte);
+    border-radius: var(--radius-3);
     box-sizing: border-box;
-    color: #17263a;
+    color: var(--tinte);
     font: inherit;
     min-height: 2.75rem;
     min-width: 0;
-    padding: 0.62rem 0.8rem;
+    padding: var(--abstand-4) var(--abstand-5);
     width: 100%;
 }
 
 .estab-message-list-query:not(label)::placeholder,
 .estab-message-list-search-row input[type="search"]::placeholder {
-    color: #647589;
+    color: var(--tinte-neben);
     opacity: 1;
 }
 
@@ -8397,29 +8392,29 @@ section.estab-message-timeline[data-estab-message-timeline]
     border: 0;
     display: flex;
     flex-wrap: wrap;
-    gap: 0.75rem;
+    gap: var(--abstand-5);
     margin: 0;
     min-width: 0;
     padding: 0;
 }
 
 .estab-message-list-quick-filters > legend {
-    color: #183454;
-    font-size: 0.94rem;
-    font-weight: 800;
-    margin-bottom: 0.5rem;
+    color: var(--tinte);
+    font-size: var(--schrift-4);
+    font-weight: var(--stark-voll);
+    margin-bottom: var(--abstand-4);
     padding: 0;
     width: 100%;
 }
 
 .estab-message-list-quick-filters > label,
 .estab-message-list-filter-grid > label {
-    color: #183454;
+    color: var(--tinte);
     display: grid;
     flex: 1 1 10rem;
-    font-size: 0.94rem;
-    font-weight: 800;
-    gap: 0.3rem;
+    font-size: var(--schrift-4);
+    font-weight: var(--stark-voll);
+    gap: var(--abstand-2);
     min-width: 9rem;
 }
 
@@ -8427,55 +8422,55 @@ section.estab-message-timeline[data-estab-message-timeline]
 .estab-message-list-quick-filters select,
 .estab-message-list-filter-grid input,
 .estab-message-list-filter-grid select {
-    background: #ffffff;
-    border: 1px solid #7d91a7;
-    border-radius: 8px;
+    background: var(--grund-tafel);
+    border: 1px solid var(--linie-spalte);
+    border-radius: var(--radius-3);
     box-sizing: border-box;
-    color: #17263a;
+    color: var(--tinte);
     font: inherit;
     min-height: 2.75rem;
     min-width: 0;
-    padding: 0.58rem 0.7rem;
+    padding: var(--abstand-4) var(--abstand-5);
     width: 100%;
 }
 
 .estab-message-list-more {
-    background: #ffffff;
+    background: var(--grund-tafel);
     border: 1px solid var(--rand-bedienelement);
-    border-radius: 9px;
+    border-radius: var(--radius-3);
     min-width: 0;
-    padding: 0.2rem 0.75rem 0.7rem;
+    padding: var(--abstand-2) var(--abstand-5) var(--abstand-5);
 }
 
 .estab-message-list-more:not([open]) {
-    padding-bottom: 0.2rem;
+    padding-bottom: var(--abstand-2);
 }
 
 .estab-message-list-more > summary {
     align-items: center;
-    color: #214f7d;
+    color: var(--handlung-dunkel);
     cursor: pointer;
     display: flex;
-    font-weight: 800;
+    font-weight: var(--stark-voll);
     min-height: 2.75rem;
-    padding: 0.45rem 0;
+    padding: var(--abstand-4) 0;
 }
 
 .estab-message-list-filter-grid {
     display: grid;
-    gap: 0.8rem;
+    gap: var(--abstand-5);
     grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
-    padding-top: 0.6rem;
+    padding-top: var(--abstand-4);
 }
 
 .estab-message-list-active {
     align-items: center;
-    border-top: 1px solid #d7e0e9;
+    border-top: 1px solid var(--linie);
     display: flex;
     flex-wrap: wrap;
-    gap: 0.45rem;
+    gap: var(--abstand-4);
     margin: 0;
-    padding-top: 0.85rem;
+    padding-top: var(--abstand-5);
 }
 
 .estab-message-list-active:empty {
@@ -8486,23 +8481,23 @@ section.estab-message-timeline[data-estab-message-timeline]
     display: flex;
     flex: 1 1 20rem;
     flex-wrap: wrap;
-    gap: 0.45rem;
+    gap: var(--abstand-4);
     min-width: 0;
 }
 
 .estab-message-list-chip {
     align-items: center;
-    background: #e4eef8;
+    background: var(--handlung-sanft);
     border: 1px solid var(--rand-bedienelement);
-    border-radius: 999px;
+    border-radius: var(--radius-pille);
     box-sizing: border-box;
-    color: #173f68;
+    color: var(--handlung-dunkel);
     display: inline-flex;
     font: 800 0.86rem/1.25 Arial, Helvetica, sans-serif;
-    gap: 0.35rem;
+    gap: var(--abstand-3);
     min-height: 2.75rem;
     overflow-wrap: anywhere;
-    padding: 0.48rem 0.75rem;
+    padding: var(--abstand-4) var(--abstand-5);
     text-decoration: none;
 }
 
@@ -8513,50 +8508,50 @@ a.estab-message-list-chip {
 
 button.estab-message-list-chip:hover,
 a.estab-message-list-chip:hover {
-    background: #cfdfef;
-    border-color: #52789c;
+    background: var(--handlung-sanft);
+    border-color: var(--linie-spalte);
 }
 
 .estab-message-list-resultbar {
     align-items: center;
-    background: #eef3f8;
-    border: 1px solid #c5d1dd;
-    border-radius: 10px;
+    background: var(--handlung-sanft);
+    border: 1px solid var(--linie);
+    border-radius: var(--radius-3);
     display: flex;
     flex-wrap: wrap;
-    gap: 0.6rem 1rem;
+    gap: var(--abstand-4) var(--abstand-6);
     justify-content: space-between;
-    margin-bottom: 0.85rem;
+    margin-bottom: var(--abstand-5);
     min-width: 0;
-    padding: 0.75rem 0.9rem;
+    padding: var(--abstand-5) var(--abstand-6);
 }
 
 .estab-message-list-resultcount {
-    color: #153c64;
-    font-size: 1rem;
-    font-weight: 800;
+    color: var(--handlung-dunkel);
+    font-size: var(--schrift-4);
+    font-weight: var(--stark-voll);
     margin: 0;
 }
 
 .estab-message-list-sort-summary {
-    color: #52657a;
-    font-size: 0.9rem;
+    color: var(--tinte-neben);
+    font-size: var(--schrift-3);
     margin: 0;
     overflow-wrap: anywhere;
 }
 
 .estab-message-list-updated {
-    color: #52657a;
-    font-size: 0.9rem;
+    color: var(--tinte-neben);
+    font-size: var(--schrift-3);
     font-variant-numeric: tabular-nums;
     margin: 0;
 }
 
 .estab-message-list-table-wrap {
-    background: #ffffff;
-    border: 1px solid #b9c8d8;
-    border-radius: 12px;
-    box-shadow: 0 6px 20px rgba(31, 58, 86, 0.1);
+    background: var(--grund-tafel);
+    border: 1px solid var(--linie-kraeftig);
+    border-radius: var(--radius-3);
+    box-shadow: var(--schatten-tafel);
     max-height: min(68vh, 50rem);
     max-width: 100%;
     overflow: auto;
@@ -8567,7 +8562,7 @@ a.estab-message-list-chip:hover {
 .estab-message-list-table {
     border-collapse: separate;
     border-spacing: 0;
-    color: #17263a;
+    color: var(--tinte);
     min-width: 68rem;
     table-layout: fixed;
     width: 100%;
@@ -8575,19 +8570,19 @@ a.estab-message-list-chip:hover {
 
 .estab-message-list-table th,
 .estab-message-list-table td {
-    border-bottom: 1px solid #d6dee7;
+    border-bottom: 1px solid var(--linie);
     overflow-wrap: anywhere;
-    padding: 0.8rem 0.75rem;
+    padding: var(--abstand-5) var(--abstand-5);
     text-align: left;
     vertical-align: top;
 }
 
 .estab-message-list-table thead th {
-    background: #e7eef6;
-    box-shadow: 0 1px 0 #aebfd0;
-    color: #24344a;
-    font-size: 0.79rem;
-    font-weight: 800;
+    background: var(--handlung-sanft);
+    box-shadow: var(--schatten-tafel);
+    color: var(--tinte);
+    font-size: var(--schrift-2);
+    font-weight: var(--stark-voll);
     letter-spacing: 0.045em;
     position: sticky;
     text-transform: uppercase;
@@ -8613,62 +8608,62 @@ a.estab-message-list-chip:hover {
 }
 
 .estab-message-list-row {
-    background: #ffffff;
+    background: var(--grund-tafel);
     box-shadow: inset 0 0 0 transparent;
     transition: background-color 140ms ease, box-shadow 140ms ease;
 }
 
 .estab-message-list-row:nth-child(even) {
-    background: #fbfcfe;
+    background: var(--handlung-sanft);
 }
 
 .estab-message-list-row:hover,
 .estab-message-list-row:focus-within {
-    background: #edf5fc;
-    box-shadow: inset 4px 0 0 #2b6397;
+    background: var(--handlung-sanft);
+    box-shadow: inset 4px 0 0 var(--handlung-kante);
 }
 
 .estab-message-list-priority,
 .estab-message-list-status {
     align-items: center;
     border: 1px solid transparent;
-    border-radius: 999px;
+    border-radius: var(--radius-pille);
     box-sizing: border-box;
     display: inline-flex;
-    font-size: 0.78rem;
-    font-weight: 800;
+    font-size: var(--schrift-1);
+    font-weight: var(--stark-voll);
     line-height: 1.2;
     max-width: 100%;
     min-height: 1.8rem;
-    padding: 0.28rem 0.55rem;
+    padding: var(--abstand-2) var(--abstand-4);
     white-space: normal;
 }
 
 .estab-message-list-priority {
-    background: #e7edf4;
-    border-color: #aab9c9;
-    color: #3d4d60;
+    background: var(--handlung-sanft);
+    border-color: var(--linie-kraeftig);
+    color: var(--tinte-neben);
 }
 
 .estab-message-list-priority[data-priority="sss"],
 .estab-message-list-priority[data-priority="sofort"] {
-    background: #fff3c7;
-    border-color: #c89516;
-    color: #654600;
+    background: var(--achtung-flaeche);
+    border-color: var(--achtung-kante);
+    color: var(--achtung-tinte);
 }
 
 .estab-message-list-priority[data-priority="bbb"],
 .estab-message-list-priority[data-priority="blitz"] {
-    background: #ffe4d5;
-    border-color: #cc612d;
-    color: #742b0b;
+    background: var(--achtung-flaeche);
+    border-color: var(--fehler-kante);
+    color: var(--fehler-tinte);
 }
 
 .estab-message-list-priority[data-priority="aaa"],
 .estab-message-list-priority[data-priority="staatsnot"] {
-    background: #ffe1e5;
-    border-color: #b52a3a;
-    color: #7d1422;
+    background: var(--fehler-flaeche);
+    border-color: var(--fehler-kante);
+    color: var(--fehler-tinte);
 }
 
 /* Vorrangverkehr muss ohne Lesen der Zeile auffallen. Die Hervorhebung
@@ -8677,14 +8672,14 @@ a.estab-message-list-chip:hover {
    Klassen, damit sie :nth-child(even) und :hover schlagen. */
 .estab-message-list-row.estab-message-list-row--priority,
 .estab-message-list-row.estab-message-list-row--priority:nth-child(even) {
-    background: #fff7e6;
-    box-shadow: inset 5px 0 0 #b8620d;
+    background: var(--achtung-flaeche);
+    box-shadow: inset 5px 0 0 var(--handlung-kante);
 }
 
 .estab-message-list-row.estab-message-list-row--priority:hover,
 .estab-message-list-row.estab-message-list-row--priority:focus-within {
-    background: #fdeecd;
-    box-shadow: inset 5px 0 0 #8f4b09;
+    background: var(--achtung-flaeche);
+    box-shadow: inset 5px 0 0 var(--handlung-kante);
 }
 
 .estab-message-list-priority--urgent {
@@ -8697,7 +8692,7 @@ a.estab-message-list-chip:hover {
     content: "";
     flex: 0 0 auto;
     height: 0.5rem;
-    margin-right: 0.4rem;
+    margin-right: var(--abstand-3);
     transform: rotate(45deg);
     width: 0.5rem;
 }
@@ -8705,27 +8700,27 @@ a.estab-message-list-chip:hover {
 /* Bearbeitungsstand. Der Text nennt den Stand bereits im Klartext, die Farbe
    verstaerkt ihn nur. */
 .estab-message-list-status--active {
-    background: #e3eefb;
-    border-color: #6f9ecd;
-    color: #12446f;
+    background: var(--handlung-sanft);
+    border-color: var(--linie-spalte);
+    color: var(--handlung-dunkel);
 }
 
 .estab-message-list-status--done {
-    background: #e5f1e9;
-    border-color: #79ac90;
-    color: #1a5133;
+    background: var(--erledigt-flaeche);
+    border-color: var(--erledigt-spalte);
+    color: var(--erledigt-tinte);
 }
 
 .estab-message-list-status--returned {
-    background: #fce9da;
-    border-color: #c9772f;
-    color: #713605;
+    background: var(--achtung-flaeche);
+    border-color: var(--achtung-kante);
+    color: var(--achtung-tinte);
 }
 
 .estab-message-list-status--neutral {
-    background: #ebeef2;
-    border-color: #a8b3c0;
-    color: #3d4956;
+    background: var(--handlung-sanft);
+    border-color: var(--linie-kraeftig);
+    color: var(--tinte-neben);
 }
 
 /* Verweildauer und Faelligkeit. Die Zeile nennt die Bewertung im Klartext
@@ -8739,33 +8734,33 @@ a.estab-message-list-chip:hover {
 
 .estab-message-list-dwell {
     align-items: center;
-    background: #eef2f7;
-    border: 1px solid #b3c0cf;
-    border-radius: 999px;
+    background: var(--handlung-sanft);
+    border: 1px solid var(--linie-kraeftig);
+    border-radius: var(--radius-pille);
     box-sizing: border-box;
-    color: #3d4d60;
+    color: var(--tinte-neben);
     display: inline-flex;
-    font-size: 0.76rem;
+    font-size: var(--schrift-1);
     font-variant-numeric: tabular-nums;
-    font-weight: 700;
+    font-weight: var(--stark-voll);
     line-height: 1.2;
-    margin-top: 0.25rem;
+    margin-top: var(--abstand-2);
     max-width: 100%;
-    padding: 0.16rem 0.45rem;
+    padding: var(--abstand-1) var(--abstand-4);
 }
 
 .estab-message-list-dwell--warn {
-    background: #fff3c7;
-    border-color: #c89516;
-    color: #654600;
+    background: var(--achtung-flaeche);
+    border-color: var(--achtung-kante);
+    color: var(--achtung-tinte);
 }
 
 .estab-message-list-dwell--overdue {
-    background: #ffe1e5;
-    border-color: #b52a3a;
+    background: var(--fehler-flaeche);
+    border-color: var(--fehler-kante);
     border-width: 2px;
-    color: #7d1422;
-    font-weight: 800;
+    color: var(--fehler-tinte);
+    font-weight: var(--stark-voll);
 }
 
 .estab-message-list-dwell--overdue::before {
@@ -8773,16 +8768,16 @@ a.estab-message-list-chip:hover {
     content: "";
     flex: 0 0 auto;
     height: 0.5rem;
-    margin-right: 0.35rem;
+    margin-right: var(--abstand-3);
     transform: rotate(45deg);
     width: 0.5rem;
 }
 
 .estab-message-list-dwell--closed,
 .estab-message-list-dwell--unknown {
-    background: #f1f4f8;
-    border-color: #bcc7d4;
-    color: #4a5768;
+    background: var(--handlung-sanft);
+    border-color: var(--linie-kraeftig);
+    color: var(--tinte-neben);
 }
 
 /* Kenntnisnahme und Erledigung. Beide Angaben stehen als Wort in der Zelle,
@@ -8790,58 +8785,58 @@ a.estab-message-list-chip:hover {
 .estab-message-list-awareness-group {
     display: flex;
     flex-wrap: wrap;
-    gap: 0.25rem;
+    gap: var(--abstand-2);
     min-width: 0;
 }
 
 .estab-message-list-awareness {
     align-items: center;
-    background: #ebeef2;
-    border: 1px solid #a8b3c0;
-    border-radius: 999px;
+    background: var(--handlung-sanft);
+    border: 1px solid var(--linie-kraeftig);
+    border-radius: var(--radius-pille);
     box-sizing: border-box;
-    color: #3d4956;
+    color: var(--tinte-neben);
     display: inline-flex;
-    font-size: 0.76rem;
-    font-weight: 700;
+    font-size: var(--schrift-1);
+    font-weight: var(--stark-voll);
     line-height: 1.2;
     max-width: 100%;
-    padding: 0.16rem 0.45rem;
+    padding: var(--abstand-1) var(--abstand-4);
 }
 
 .estab-message-list-awareness--unread {
-    background: #fff3c7;
-    border-color: #c89516;
-    color: #654600;
-    font-weight: 800;
+    background: var(--achtung-flaeche);
+    border-color: var(--achtung-kante);
+    color: var(--achtung-tinte);
+    font-weight: var(--stark-voll);
 }
 
 .estab-message-list-awareness--unread::before {
     background: currentColor;
-    border-radius: 50%;
+    border-radius: var(--radius-pille);
     content: "";
     flex: 0 0 auto;
     height: 0.45rem;
-    margin-right: 0.35rem;
+    margin-right: var(--abstand-3);
     width: 0.45rem;
 }
 
 .estab-message-list-awareness--open {
-    background: #e3eefb;
-    border-color: #6f9ecd;
-    color: #12446f;
+    background: var(--handlung-sanft);
+    border-color: var(--linie-spalte);
+    color: var(--handlung-dunkel);
 }
 
 .estab-message-list-awareness--done {
-    background: #ddf5e6;
-    border-color: #58a374;
-    color: #145d35;
+    background: var(--erledigt-flaeche);
+    border-color: var(--erledigt-kante);
+    color: var(--erledigt-tinte);
 }
 
 .estab-message-list-awareness--unknown {
-    background: #f1f4f8;
-    border-color: #bcc7d4;
-    color: #4a5768;
+    background: var(--handlung-sanft);
+    border-color: var(--linie-kraeftig);
+    color: var(--tinte-neben);
 }
 
 /* Gekuerzter Nachrichtentext in den Nachweisungen. Die Zeile bleibt niedrig,
@@ -8854,21 +8849,21 @@ a.estab-message-list-chip:hover {
 }
 
 .estab-message-list-clamp--empty {
-    color: #52657a;
+    color: var(--tinte-neben);
     font-style: italic;
 }
 
 .estab-message-list-fulltext > summary {
-    color: #17456f;
+    color: var(--handlung-dunkel);
     cursor: pointer;
-    font-size: 0.78rem;
-    font-weight: 700;
-    margin-top: 0.2rem;
+    font-size: var(--schrift-1);
+    font-weight: var(--stark-voll);
+    margin-top: var(--abstand-2);
 }
 
 .estab-message-list-fulltext > p {
     hyphens: auto;
-    margin: 0.3rem 0 0;
+    margin: var(--abstand-2) 0 0;
     overflow-wrap: break-word;
     white-space: pre-line;
     word-break: normal;
@@ -8878,82 +8873,82 @@ a.estab-message-list-chip:hover {
     align-items: center;
     display: inline-flex;
     flex-wrap: wrap;
-    gap: 0.3rem;
+    gap: var(--abstand-2);
 }
 
 .estab-message-attachment-count {
     font-variant-numeric: tabular-nums;
-    font-weight: 700;
+    font-weight: var(--stark-voll);
 }
 
 .estab-message-list-status {
-    background: #e4eef8;
-    border-color: #8faac4;
-    color: #173f68;
+    background: var(--handlung-sanft);
+    border-color: var(--linie-kraeftig);
+    color: var(--handlung-dunkel);
 }
 
 .estab-message-list-status[data-status="open"],
 .estab-message-list-status[data-status="offen"] {
-    background: #fff3c7;
-    border-color: #c89516;
-    color: #654600;
+    background: var(--achtung-flaeche);
+    border-color: var(--achtung-kante);
+    color: var(--achtung-tinte);
 }
 
 .estab-message-list-status[data-status="complete"],
 .estab-message-list-status[data-status="abgeschlossen"],
 .estab-message-list-status[data-status="8"] {
-    background: #ddf5e6;
-    border-color: #58a374;
-    color: #145d35;
+    background: var(--erledigt-flaeche);
+    border-color: var(--erledigt-kante);
+    color: var(--erledigt-tinte);
 }
 
 .estab-message-list-route {
-    color: #233a55;
+    color: var(--tinte);
     display: flex;
     flex-wrap: wrap;
-    gap: 0.2rem 0.4rem;
+    gap: var(--abstand-2) var(--abstand-3);
     min-width: 0;
 }
 
 .estab-message-list-correspondents {
     display: grid;
-    gap: 0.28rem;
+    gap: var(--abstand-2);
     min-width: 0;
 }
 
 .estab-message-list-field-label {
-    color: #52657a;
+    color: var(--tinte-neben);
     display: block;
-    font-size: 0.68rem;
-    font-weight: 800;
+    font-size: var(--schrift-1);
+    font-weight: var(--stark-voll);
     letter-spacing: 0.045em;
     line-height: 1.35;
-    margin-bottom: 0.12rem;
+    margin-bottom: var(--abstand-1);
     text-transform: uppercase;
 }
 
 .estab-message-list-subject {
-    color: #153c64;
+    color: var(--handlung-dunkel);
     display: block;
-    font-weight: 800;
+    font-weight: var(--stark-voll);
     line-height: 1.35;
     overflow-wrap: anywhere;
 }
 
 .estab-message-list-subject--empty {
-    color: #607086;
+    color: var(--tinte-neben);
     font-style: italic;
-    font-weight: 650;
+    font-weight: var(--stark-halb);
 }
 
 .estab-message-list-content-label {
-    margin-top: 0.55rem;
+    margin-top: var(--abstand-4);
 }
 
 .estab-message-list-excerpt {
     -webkit-box-orient: vertical;
     -webkit-line-clamp: 3;
-    color: #43566b;
+    color: var(--tinte-neben);
     display: -webkit-box;
     line-height: 1.42;
     overflow: hidden;
@@ -8963,39 +8958,39 @@ a.estab-message-list-chip:hover {
     align-items: flex-start;
     display: flex;
     flex-wrap: wrap;
-    gap: 0.28rem;
+    gap: var(--abstand-2);
     min-width: 0;
 }
 
 .estab-message-list-recipients > * {
-    background: #edf2f7;
-    border: 1px solid #b7c5d3;
-    border-radius: 999px;
-    color: #31465d;
+    background: var(--handlung-sanft);
+    border: 1px solid var(--linie-kraeftig);
+    border-radius: var(--radius-pille);
+    color: var(--tinte-neben);
     display: inline-flex;
-    font-size: 0.75rem;
-    font-weight: 800;
+    font-size: var(--schrift-1);
+    font-weight: var(--stark-voll);
     line-height: 1.2;
     max-width: 100%;
-    padding: 0.23rem 0.48rem;
+    padding: var(--abstand-2) var(--abstand-4);
 }
 
 .estab-message-list-open {
-    background: #214f7d;
-    border: 2px solid #214f7d;
-    border-radius: 8px;
-    color: #ffffff;
+    background: var(--handlung);
+    border: 2px solid var(--handlung);
+    border-radius: var(--radius-3);
+    color: var(--tinte-spalte);
     cursor: pointer;
     font: 800 0.9rem/1.2 Arial, Helvetica, sans-serif;
-    padding: 0.55rem 0.75rem;
+    padding: var(--abstand-4) var(--abstand-5);
     text-align: center;
     text-decoration: none;
 }
 
 .estab-message-list-open:hover {
-    background: #153c64;
-    border-color: #153c64;
-    color: #ffffff;
+    background: var(--handlung-dunkel);
+    border-color: var(--handlung-dunkel);
+    color: var(--tinte-spalte);
 }
 
 .estab-message-list-action form {
@@ -9003,14 +8998,14 @@ a.estab-message-list-chip:hover {
 }
 
 .estab-message-list-pager {
-    margin-top: 1rem;
+    margin-top: var(--abstand-6);
 }
 
 .estab-message-list-pager > form {
     align-items: center;
     display: flex;
     flex-wrap: wrap;
-    gap: 0.5rem;
+    gap: var(--abstand-4);
     justify-content: center;
     margin: 0;
     width: 100%;
@@ -9018,50 +9013,50 @@ a.estab-message-list-chip:hover {
 
 .estab-message-list-pager a,
 .estab-message-list-pager button {
-    background: #ffffff;
-    border: 1px solid #7d91a7;
-    border-radius: 8px;
-    color: #214f7d;
+    background: var(--grund-tafel);
+    border: 1px solid var(--linie-spalte);
+    border-radius: var(--radius-3);
+    color: var(--handlung-dunkel);
     cursor: pointer;
     font: 800 0.9rem/1.2 Arial, Helvetica, sans-serif;
-    padding: 0.55rem 0.75rem;
+    padding: var(--abstand-4) var(--abstand-5);
     text-decoration: none;
 }
 
 .estab-message-list-pager a:hover,
 .estab-message-list-pager button:hover {
-    background: #e2ebf4;
-    border-color: #52789c;
+    background: var(--handlung-sanft);
+    border-color: var(--linie-spalte);
 }
 
 .estab-message-list-pager [aria-disabled="true"],
 .estab-message-list-pager button:disabled {
-    background: #eef1f4;
-    border-color: #c3ccd5;
-    color: #778493;
+    background: var(--handlung-sanft);
+    border-color: var(--linie);
+    color: var(--tinte-neben);
     cursor: not-allowed;
     opacity: 1;
 }
 
 .estab-message-list-page-status {
-    color: #43566b;
-    font-size: 0.9rem;
+    color: var(--tinte-neben);
+    font-size: var(--schrift-3);
     font-variant-numeric: tabular-nums;
-    font-weight: 800;
-    margin: 0 0.25rem;
+    font-weight: var(--stark-voll);
+    margin: 0 var(--abstand-2);
     text-align: center;
 }
 
 .estab-message-list-empty {
-    background: #f8fafc;
-    border: 2px dashed #aab9c9;
-    border-radius: 12px;
-    color: #43566b;
+    background: var(--handlung-sanft);
+    border: 2px dashed var(--linie-kraeftig);
+    border-radius: var(--radius-3);
+    color: var(--tinte-neben);
     display: grid;
-    gap: 0.55rem;
+    gap: var(--abstand-4);
     justify-items: center;
-    margin: 1rem 0 0;
-    padding: clamp(1.4rem, 4vw, 2.5rem) 1rem;
+    margin: var(--abstand-6) 0 0;
+    padding: var(--abstand-7);
     text-align: center;
 }
 
@@ -9076,8 +9071,8 @@ a.estab-message-list-chip:hover {
 
 @media (max-width: 42rem) {
     .estab-message-list-controls {
-        border-radius: 10px;
-        padding: 0.85rem;
+        border-radius: var(--radius-3);
+        padding: var(--abstand-5);
     }
 
     .estab-message-list-search-row,
@@ -9119,7 +9114,7 @@ a.estab-message-list-chip:hover {
     }
 
     .estab-message-list-chip {
-        border-radius: 8px;
+        border-radius: var(--radius-3);
         justify-content: space-between;
         width: 100%;
     }
@@ -9167,33 +9162,33 @@ a.estab-message-list-chip:hover {
 
     .estab-message-list-table tbody {
         display: grid;
-        gap: 0.9rem;
+        gap: var(--abstand-6);
     }
 
     .estab-message-list-row,
     .estab-message-list-row:nth-child(even) {
-        background: #ffffff;
-        border: 1px solid #bdcad7;
-        border-radius: 10px;
-        box-shadow: 0 5px 17px rgba(31, 58, 86, 0.09);
+        background: var(--grund-tafel);
+        border: 1px solid var(--linie-kraeftig);
+        border-radius: var(--radius-3);
+        box-shadow: var(--schatten-tafel);
         overflow: hidden;
     }
 
     .estab-message-list-row:hover,
     .estab-message-list-row:focus-within {
-        background: #f7fbff;
+        background: var(--handlung-sanft);
         box-shadow:
-            inset 4px 0 0 #2b6397,
-            0 5px 17px rgba(31, 58, 86, 0.09);
+            inset 3px 0 0 var(--handlung-kante),
+            0 5px 17px var(--marke-standort);
     }
 
     .estab-message-list-table td {
         align-items: start;
-        border-bottom: 1px solid #d6dee7;
+        border-bottom: 1px solid var(--linie);
         display: grid;
-        gap: 0.35rem 0.75rem;
+        gap: var(--abstand-3) var(--abstand-5);
         grid-template-columns: minmax(6.8rem, 36%) minmax(0, 1fr);
-        padding: 0.72rem 0.8rem;
+        padding: var(--abstand-5) var(--abstand-5);
         text-align: left !important;
     }
 
@@ -9202,10 +9197,10 @@ a.estab-message-list-chip:hover {
     }
 
     .estab-message-list-table td::before {
-        color: #52657a;
+        color: var(--tinte-neben);
         content: attr(data-label);
-        font-size: 0.72rem;
-        font-weight: 800;
+        font-size: var(--schrift-1);
+        font-weight: var(--stark-voll);
         letter-spacing: 0.045em;
         line-height: 1.35;
         overflow-wrap: anywhere;
@@ -9255,11 +9250,11 @@ a.estab-message-list-chip:hover {
         grid-column: 1 / -1;
         margin: 0;
         order: -1;
-        padding: 0.4rem;
+        padding: var(--abstand-3);
     }
 
     .estab-message-list-empty {
-        border-radius: 10px;
+        border-radius: var(--radius-3);
     }
 }
 
@@ -9290,11 +9285,11 @@ a.estab-message-list-chip:hover {
     .estab-message-list-resultbar {
         background: transparent;
         border: 0;
-        padding: 0 0 0.5rem;
+        padding: 0 0 var(--abstand-4);
     }
 
     .estab-message-list-table-wrap {
-        border: 1px solid #777777;
+        border: 1px solid var(--linie-spalte);
         box-shadow: none;
         max-height: none;
         overflow: visible;
@@ -9302,7 +9297,7 @@ a.estab-message-list-chip:hover {
 
     .estab-message-list-table {
         display: table !important;
-        font-size: 8.5pt;
+        font-size: var(--schrift-1);
         min-width: 0;
         table-layout: auto;
     }
@@ -9330,14 +9325,14 @@ a.estab-message-list-chip:hover {
     .estab-message-list-table th,
     .estab-message-list-table td {
         display: table-cell !important;
-        padding: 0.35rem;
+        padding: var(--abstand-3);
         width: auto !important;
     }
 
     .estab-message-list-table thead th {
-        background: #eeeeee !important;
+        background: var(--grund-gedaempft) !important;
         box-shadow: none;
-        color: #000000 !important;
+        color: var(--tinte) !important;
         position: static;
     }
 
@@ -9349,7 +9344,7 @@ a.estab-message-list-chip:hover {
     .estab-message-list-row:nth-child(even),
     .estab-message-list-row:hover,
     .estab-message-list-row:focus-within {
-        background: #ffffff !important;
+        background: var(--grund-tafel) !important;
         border: 0;
         border-radius: 0;
         box-shadow: none;
@@ -9366,41 +9361,41 @@ a.estab-message-list-chip:hover {
 /* Hinweise, die eine Bearbeitung blockieren, mussten bisher ohne jede
    Formatierung auskommen und waren dadurch nicht als Fehler erkennbar. */
 .estab-field-error {
-    background: #fdeceb;
-    border-left: 4px solid #a3231b;
-    color: #75190f;
-    font-weight: 600;
-    margin: 0.45rem 0;
-    padding: 0.5rem 0.7rem;
+    background: var(--fehler-flaeche);
+    border-left: 4px solid var(--fehler-kante);
+    color: var(--fehler-tinte);
+    font-weight: var(--stark-halb);
+    margin: var(--abstand-4) 0;
+    padding: var(--abstand-4) var(--abstand-5);
 }
 
 .estab-message-transport-conflict {
-    background: #fdeceb;
-    border: 1px solid #a3231b;
+    background: var(--fehler-flaeche);
+    border: 1px solid var(--fehler-kante);
     border-left-width: 5px;
-    color: #75190f;
-    font-weight: 600;
-    margin: 0.85rem 0;
-    padding: 0.8rem 0.95rem;
+    color: var(--fehler-tinte);
+    font-weight: var(--stark-halb);
+    margin: var(--abstand-5) 0;
+    padding: var(--abstand-5) var(--abstand-6);
 }
 
 .estab-message-transport-conflict p {
-    margin: 0.35rem 0 0;
+    margin: var(--abstand-3) 0 0;
 }
 
 .estab-danger {
-    background: #a3231b;
-    border: 1px solid #7d1810;
-    border-radius: 6px;
-    color: #ffffff;
+    background: var(--fehler-kante);
+    border: 1px solid var(--fehler-kante);
+    border-radius: var(--radius-3);
+    color: var(--tinte-spalte);
     cursor: pointer;
-    font-weight: 700;
-    padding: 0.45rem 0.85rem;
+    font-weight: var(--stark-voll);
+    padding: var(--abstand-4) var(--abstand-5);
 }
 
 .estab-danger:hover,
 .estab-danger:focus-visible {
-    background: #7d1810;
+    background: var(--fehler-spalte-flaeche);
 }
 
 .estab-sidebar-duty-required {
@@ -9418,34 +9413,34 @@ a.estab-message-list-chip:hover {
 }
 
 .estab-auth-exit {
-    margin: 1.25rem 0 0;
+    margin: var(--abstand-6) 0 0;
 }
 
 .estab-tool-shell {
     box-sizing: border-box;
     margin: 0 auto;
     max-width: 82rem;
-    padding: 1rem 1.25rem 2.5rem;
+    padding: var(--abstand-6) var(--abstand-6) var(--abstand-7);
     width: 100%;
 }
 
 .estab-tool-meta {
-    color: #4a5a6d;
-    font-size: 0.85rem;
-    margin: 0.25rem 0 0.75rem;
+    color: var(--tinte-neben);
+    font-size: var(--schrift-3);
+    margin: var(--abstand-2) 0 var(--abstand-5);
 }
 
 .estab-message-suggestion-match-context {
-    color: #4a5a6d;
+    color: var(--tinte-neben);
     display: block;
-    font-size: 0.82rem;
+    font-size: var(--schrift-2);
     line-height: 1.35;
 }
 
 .estab-message-attachment-file {
     display: inline-flex;
     flex-wrap: wrap;
-    gap: 0.35rem;
+    gap: var(--abstand-3);
     max-width: 100%;
 }
 
@@ -9457,11 +9452,11 @@ a.estab-message-list-chip:hover {
 .estab-telecom-routes,
 .estab-telecom-history {
     display: block;
-    margin-top: 1rem;
+    margin-top: var(--abstand-6);
 }
 
 .estab-password-policy-confirm {
-    margin-top: 1rem;
+    margin-top: var(--abstand-6);
 }
 
 /* ---------------------------------------------------------------------------
@@ -9499,109 +9494,109 @@ a.estab-message-list-chip:hover {
 
 .estab-situation {
     box-sizing: border-box;
-    color: #172033;
+    color: var(--tinte);
     display: grid;
     font-family: Arial, Helvetica, sans-serif;
-    gap: 0.6rem;
+    gap: var(--abstand-4);
     grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
     min-height: 0;
 }
 
 .estab-situation-incident {
     align-items: baseline;
-    background: #10314f;
-    border-radius: 8px;
-    color: #f2f7fc;
+    background: var(--grund-kachel-zeigen);
+    border-radius: var(--radius-3);
+    color: var(--tinte-spalte);
     display: flex;
     flex-wrap: wrap;
-    gap: 0.15rem 0.9rem;
+    gap: var(--abstand-1) var(--abstand-6);
     grid-column: 1 / -1;
     line-height: 1.3;
-    padding: 0.45rem 0.75rem;
+    padding: var(--abstand-4) var(--abstand-5);
 }
 
 .estab-situation-post {
-    font-size: 1.05rem;
+    font-size: var(--schrift-4);
 }
 
 .estab-situation-mode {
-    background: #f2f7fc;
-    border-radius: 999px;
-    color: #10314f;
-    font-weight: 700;
-    padding: 0.1rem 0.5rem;
+    background: var(--handlung-sanft);
+    border-radius: var(--radius-pille);
+    color: var(--tinte);
+    font-weight: var(--stark-voll);
+    padding: var(--abstand-1) var(--abstand-4);
 }
 
 .estab-situation-code,
 .estab-situation-since,
 .estab-situation-place {
-    font-size: 0.88rem;
+    font-size: var(--schrift-3);
 }
 
 .estab-situation-work,
 .estab-situation-run {
-    background: #ffffff;
-    border: 1px solid #8da2bd;
-    border-radius: 10px;
+    background: var(--grund-tafel);
+    border: 1px solid var(--linie-kraeftig);
+    border-radius: var(--radius-3);
     box-sizing: border-box;
     display: flex;
     flex-direction: column;
-    gap: 0.5rem;
+    gap: var(--abstand-4);
     min-height: 0;
     overflow-y: auto;
-    padding: 0.7rem 0.8rem;
+    padding: var(--abstand-5) var(--abstand-5);
 }
 
 .estab-situation-heading {
     align-items: baseline;
     display: flex;
     flex-wrap: wrap;
-    gap: 0 0.6rem;
+    gap: 0 var(--abstand-4);
 }
 
 .estab-situation-heading h2 {
-    font-size: 1.05rem;
+    font-size: var(--schrift-4);
     margin: 0;
 }
 
 .estab-situation-heading p {
-    color: #3b4a5d;
-    font-size: 0.85rem;
+    color: var(--tinte-neben);
+    font-size: var(--schrift-3);
     margin: 0;
 }
 
 .estab-situation-step {
-    background: #eef4fb;
-    border-left: 5px solid #6f9ecd;
-    font-size: 0.95rem;
-    font-weight: 700;
+    background: var(--handlung-sanft);
+    border-left: 5px solid var(--linie-spalte);
+    font-size: var(--schrift-4);
+    font-weight: var(--stark-voll);
     line-height: 1.3;
     margin: 0;
-    padding: 0.4rem 0.6rem;
+    padding: var(--abstand-3) var(--abstand-4);
 }
 
 .estab-situation-step[data-estab-situation-step="vorrang"] {
-    background: #fff3e0;
-    border-left-color: #b8620d;
-    color: #6b3400;
+    background: var(--achtung-flaeche);
+    border-left-color: var(--achtung-kante);
+    color: var(--achtung-tinte);
 }
 
 .estab-situation-step[data-estab-situation-step="ruhig"] {
-    background: #edf5ef;
-    border-left-color: #4f8b68;
-    color: #1e4a31;
+    background: var(--erledigt-flaeche);
+    border-left-color: var(--erledigt-kante);
+    color: var(--erledigt-tinte);
 }
 
 .estab-situation-step[data-estab-situation-step="unbekannt"] {
-    background: #f6e9ea;
-    border-left-color: #a03a44;
-    color: #6d1620;
+    background: var(--fehler-flaeche);
+    border-left-color: var(--fehler-kante);
+    color: var(--fehler-tinte);
 }
 
 .estab-situation-enter {
     align-items: center;
     display: flex;
-    gap: 0.6rem;
+    gap: var(--abstand-4);
     justify-content: center;
     text-align: center;
 }
@@ -9611,7 +9606,7 @@ a.estab-message-list-chip:hover {
     background: var(--grund-tafel);
     border: 1px solid var(--linie-spalte);
     border-radius: var(--radius-2);
-    box-shadow: 0 1px 0 #45627f;
+    box-shadow: 0 1px 0 var(--linie-spalte);
     color: var(--tinte);
     font-family: Arial, Helvetica, sans-serif;
     font-size: var(--schrift-1);
@@ -9625,7 +9620,7 @@ a.estab-message-list-chip:hover {
 
 .estab-situation-queues {
     display: grid;
-    gap: 0.4rem;
+    gap: var(--abstand-3);
     grid-template-columns: repeat(auto-fit, minmax(6.5rem, 1fr));
     list-style: none;
     margin: 0;
@@ -9634,54 +9629,54 @@ a.estab-message-list-chip:hover {
 
 .estab-situation-queue {
     align-items: baseline;
-    background: #f1f5fa;
-    border: 1px solid #aebed0;
-    border-radius: 8px;
+    background: var(--handlung-sanft);
+    border: 1px solid var(--linie-kraeftig);
+    border-radius: var(--radius-3);
     display: flex;
     flex-wrap: wrap;
-    gap: 0 0.4rem;
+    gap: 0 var(--abstand-3);
     min-width: 0;
-    padding: 0.3rem 0.5rem;
+    padding: var(--abstand-2) var(--abstand-4);
 }
 
 .estab-situation-queue-count {
-    font-size: 1.5rem;
+    font-size: var(--schrift-7);
     font-variant-numeric: tabular-nums;
     line-height: 1.1;
 }
 
 .estab-situation-queue-label {
-    font-size: 0.82rem;
+    font-size: var(--schrift-2);
 }
 
 .estab-situation-queue-function {
-    color: #3b4a5d;
+    color: var(--tinte-neben);
     flex-basis: 100%;
-    font-size: 0.72rem;
-    font-weight: 700;
+    font-size: var(--schrift-1);
+    font-weight: var(--stark-voll);
 }
 
 /* Wartende Arbeit fällt ohne Farbe allein auf: die Kachel bekommt zusätzlich
    eine kräftige Kante. */
 .estab-situation-queue-has-work {
-    background: #fff5e2;
-    border-color: #b8620d;
-    box-shadow: inset 4px 0 0 #b8620d;
+    background: var(--achtung-flaeche);
+    border-color: var(--achtung-kante);
+    box-shadow: inset 4px 0 0 var(--handlung-kante);
 }
 
 /* Eine leere Warteschlange bleibt lesbar, tritt aber zurück. */
 .estab-situation-queue-empty {
-    background: #f7f9fc;
+    background: var(--handlung-sanft);
 }
 
 .estab-situation-queue-unavailable {
-    background: #f4f5f6;
+    background: var(--grund-seite);
     border-style: dashed;
 }
 
 .estab-situation-stations {
     display: grid;
-    gap: 0.3rem;
+    gap: var(--abstand-2);
     grid-template-columns: repeat(auto-fit, minmax(6.2rem, 1fr));
     list-style: none;
     margin: 0;
@@ -9689,68 +9684,68 @@ a.estab-message-list-chip:hover {
 }
 
 .estab-situation-station {
-    background: #f1f5fa;
-    border: 1px solid #aebed0;
-    border-radius: 6px;
+    background: var(--handlung-sanft);
+    border: 1px solid var(--linie-kraeftig);
+    border-radius: var(--radius-3);
     display: flex;
     flex-direction: column;
     min-width: 0;
-    padding: 0.2rem 0.4rem;
+    padding: var(--abstand-2) var(--abstand-3);
 }
 
 .estab-situation-station-name {
-    font-size: 0.85rem;
-    font-weight: 700;
+    font-size: var(--schrift-3);
+    font-weight: var(--stark-voll);
     hyphens: auto;
     min-width: 0;
     overflow-wrap: anywhere;
 }
 
 .estab-situation-station-state {
-    font-size: 0.72rem;
+    font-size: var(--schrift-1);
 }
 
 .estab-situation-station-staffed {
-    background: #eaf3ec;
-    border-color: #79ac90;
-    color: #1e4a31;
+    background: var(--erledigt-flaeche);
+    border-color: var(--erledigt-spalte);
+    color: var(--erledigt-tinte);
 }
 
 .estab-situation-station-open {
-    background: #fdecec;
-    border-color: #b52a3a;
-    color: #6d1620;
+    background: var(--fehler-flaeche);
+    border-color: var(--fehler-kante);
+    color: var(--fehler-tinte);
 }
 
 .estab-situation-station-note,
 .estab-situation-empty {
-    color: #3b4a5d;
-    font-size: 0.78rem;
+    color: var(--tinte-neben);
+    font-size: var(--schrift-1);
     line-height: 1.3;
     margin: 0;
 }
 
 .estab-situation-facts {
     display: grid;
-    gap: 0.3rem;
+    gap: var(--abstand-2);
     grid-template-columns: repeat(auto-fit, minmax(7rem, 1fr));
     margin: 0;
 }
 
 .estab-situation-facts dt {
-    color: #3b4a5d;
-    font-size: 0.72rem;
+    color: var(--tinte-neben);
+    font-size: var(--schrift-1);
 }
 
 .estab-situation-facts dd {
-    font-size: 1.05rem;
-    font-weight: 700;
+    font-size: var(--schrift-4);
+    font-weight: var(--stark-voll);
     margin: 0;
 }
 
 .estab-situation-hint {
-    color: #3b4a5d;
-    font-size: 0.75rem;
+    color: var(--tinte-neben);
+    font-size: var(--schrift-1);
     grid-column: 1 / -1;
     margin: 0;
 }
@@ -9766,8 +9761,8 @@ a.estab-message-list-chip:hover {
    --------------------------------------------------------------------------- */
 @media (max-height: 56rem) {
     .estab-message-sidebar {
-        gap: 0.5rem;
-        padding: 0.5rem;
+        gap: var(--abstand-4);
+        padding: var(--abstand-4);
     }
 
     .estab-sidebar-status,
@@ -9803,7 +9798,7 @@ a.estab-message-list-chip:hover {
     }
 
     .estab-tool-shell {
-        padding: 0.7rem 1rem 1.5rem;
+        padding: var(--abstand-5) var(--abstand-6) var(--abstand-7);
     }
 
     .estab-root-main-situation {
@@ -9812,13 +9807,13 @@ a.estab-message-list-chip:hover {
     }
 
     .estab-situation {
-        gap: 0.45rem;
+        gap: var(--abstand-4);
     }
 
     .estab-situation-work,
     .estab-situation-run {
-        gap: 0.4rem;
-        padding: 0.5rem 0.6rem;
+        gap: var(--abstand-3);
+        padding: var(--abstand-4) var(--abstand-4);
     }
 
     .estab-root-page-situation .estab-root-header {
@@ -9827,19 +9822,19 @@ a.estab-message-list-chip:hover {
     }
 
     .estab-tool-panel {
-        padding: clamp(0.7rem, 1.6vw, 1rem);
+        padding: var(--abstand-5);
     }
 
     .estab-message-list-table th,
     .estab-message-list-table td {
-        padding: 0.62rem 0.6rem;
+        padding: var(--abstand-4) var(--abstand-4);
     }
 }
 
 @media (max-height: 46rem) {
     .estab-message-sidebar {
-        gap: 0.35rem;
-        padding: 0.35rem;
+        gap: var(--abstand-3);
+        padding: var(--abstand-3);
     }
 
     .estab-sidebar-status,
@@ -9907,25 +9902,25 @@ a.estab-message-list-chip:hover {
     }
 
     .estab-situation {
-        gap: 0.35rem;
+        gap: var(--abstand-3);
     }
 
     .estab-situation-work,
     .estab-situation-run {
-        gap: 0.3rem;
-        padding: 0.4rem 0.5rem;
+        gap: var(--abstand-2);
+        padding: var(--abstand-3) var(--abstand-4);
     }
 
     .estab-situation-incident {
-        padding: 0.3rem 0.6rem;
+        padding: var(--abstand-2) var(--abstand-4);
     }
 
     .estab-situation-queue-count {
-        font-size: 1.3rem;
+        font-size: var(--schrift-6);
     }
 
     .estab-situation-hint {
-        font-size: 0.7rem;
+        font-size: var(--schrift-1);
     }
 
     /* Die Kacheln der Bereiche werden zur Leiste: Symbol und Titel bleiben,
@@ -9994,25 +9989,25 @@ a.estab-message-list-chip:hover {
     }
 
     .estab-tool-shell {
-        padding: 0.5rem 0.85rem 1.25rem;
+        padding: var(--abstand-4) var(--abstand-5) var(--abstand-6);
     }
 
     .estab-tool-panel {
-        padding: 0.6rem 0.75rem;
+        padding: var(--abstand-4) var(--abstand-5);
     }
 
     .estab-tool-page h1 {
-        font-size: 1.2rem;
+        font-size: var(--schrift-6);
     }
 
     .estab-message-list-table th,
     .estab-message-list-table td {
-        padding: 0.45rem 0.5rem;
+        padding: var(--abstand-4) var(--abstand-4);
     }
 
     .estab-message-list-dwell,
     .estab-message-list-awareness {
-        font-size: 0.72rem;
+        font-size: var(--schrift-1);
     }
 }
 
@@ -10027,39 +10022,39 @@ a.estab-message-list-chip:hover {
 @media print {
     .estab-message-print-annex {
         break-before: page;
-        color: #000000;
+        color: var(--tinte);
         display: block;
         font-family: Arial, Helvetica, sans-serif;
-        font-size: 11pt;
+        font-size: var(--schrift-3);
         line-height: 1.4;
-        padding: 1.5rem 1rem;
+        padding: var(--abstand-7) var(--abstand-6);
         page-break-before: always;
     }
 
     .estab-message-print-annex h2 {
-        border-bottom: 1.5px solid #000000;
-        font-size: 13pt;
-        margin: 0 0 0.6rem;
-        padding-bottom: 0.3rem;
+        border-bottom: 1.5px solid var(--linie-spalte);
+        font-size: var(--schrift-5);
+        margin: 0 0 var(--abstand-4);
+        padding-bottom: var(--abstand-2);
     }
 
     .estab-message-print-annex h3 {
-        font-size: 11.5pt;
-        margin: 1rem 0 0.3rem;
+        font-size: var(--schrift-4);
+        margin: var(--abstand-6) 0 var(--abstand-2);
     }
 
     .estab-message-print-annex-subject {
-        margin: 0 0 0.5rem;
+        margin: 0 0 var(--abstand-4);
     }
 
     .estab-message-print-annex ol,
     .estab-message-print-annex ul {
         margin: 0;
-        padding-left: 1.4rem;
+        padding-left: var(--abstand-7);
     }
 
     .estab-message-print-annex li {
         break-inside: avoid;
-        margin-bottom: 0.2rem;
+        margin-bottom: var(--abstand-2);
     }
 }

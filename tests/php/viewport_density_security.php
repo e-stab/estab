@@ -125,8 +125,24 @@ $baseRules = $parseRules(
     ?? ''
 );
 
-$toPixels = static function (string $value): ?float {
+/*
+ * Eine Marke ist eine Laenge.
+ *
+ * Dieser Vergleich las nur rohe Laengen. Als die Masse auf Marken umgestellt
+ * wurden, konnte er keinen einzigen Wert mehr aufloesen und uebersprang jeden
+ * Vergleich -- die Verdichtung waere ungeprueft geblieben, ohne dass es
+ * jemand bemerkt. Ein var()-Aufruf wird deshalb aufgeloest, bevor gerechnet
+ * wird. Die Dichtestufe setzt einige Marken selbst um; der erste Wert ist
+ * der Regelfall und der, gegen den verglichen wird.
+ */
+require_once __DIR__ . '/lib/stylesheet.php';
+$marken = estab_test_css_marken($stylesheet);
+
+$toPixels = static function (string $value) use ($marken): ?float {
     $value = trim($value);
+    if (preg_match('~\Avar\(\s*(--[a-z0-9-]+)\s*\)\z~', $value, $treffer) === 1) {
+        $value = $marken[$treffer[1]] ?? '';
+    }
     if (preg_match('~\A([\d.]+)rem\z~', $value, $match) === 1) {
         return (float) $match[1] * 16;
     }

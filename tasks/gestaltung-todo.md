@@ -202,13 +202,13 @@ und Schriftraum. Freigabefähig ist die Seite erst nach allen drei Aufgaben.
 Ab hier ist keine Entwurfsentscheidung mehr zu treffen. Wer hier eine trifft,
 hat einen Fall gefunden, den das Schema nicht kennt — und trägt ihn nach.
 
-- [ ] **G13** `·` **M** Meldungsübersicht
+- [x] **G13** `·` **M** Meldungsübersicht
       → `estab-ui.css`, `app/message_list_ui.php`, `tests/php/ges_tabelle.php`
       - [ ] Nach dem Schema aus P3; sie ist der leichtere Fall, weil sie schon sechs Bänder hat
       - **Prüfung:** `ges_tabelle.php`, `ges_filter.php`; Bilder
       - **Abhängigkeit:** C3
 
-- [ ] **G14** `·` **M** Werkzeug- und Verwaltungsseiten
+- [x] **G14** `·` **M** Werkzeug- und Verwaltungsseiten
       → `estab-ui.css` (Hauptteil), `tests/php/ges_bedienmasse.php`, `app/ux_rules.php`, dazu die `4fadm`-Dateien mit Maßen im Markup
       - [ ] `estab-tool-*`, `estab-admin-*`, `estab-export-*`, `estab-telecom-*`, `estab-incident-*`
       - [ ] Einzelelement-Tafeln aufgelöst (Spec 4.4)
@@ -217,7 +217,7 @@ hat einen Fall gefunden, den das Schema nicht kennt — und trägt ihn nach.
       - **Prüfung:** `ges_bedienmasse.php`; Bilder der Verwaltungsseiten
       - **Abhängigkeit:** C3
 
-- [ ] **G15** `·` **M** Infosammlung, Handbuch, E-Mail-Ansicht
+- [x] **G15** `·` **M** Infosammlung, Handbuch, E-Mail-Ansicht
       → `estab-ui.css`, `handbuch/handbuch.css`, `tests/php/ges_marken.php`, dazu die `stabinfo`-Dateien mit eigenen Maßen
       - [ ] `estab-bos-*`, `estab-email-preview-*`
       - [ ] `handbuch/handbuch.css` bindet dieselben Marken ein und färbt keine Verweise der Hülle mehr um
@@ -225,14 +225,14 @@ hat einen Fall gefunden, den das Schema nicht kennt — und trägt ihn nach.
       - **Prüfung:** Wächter über beide Stylesheets; Bild der Handbuchseite
       - **Abhängigkeit:** C3
 
-- [ ] **G16** `·` **M** Zeitleiste und Anlagen
+- [x] **G16** `·` **M** Zeitleiste und Anlagen
       → `estab-ui.css`, `app/message_timeline.php`, `tests/php/ges_marken.php`
       - [ ] `estab-message-timeline-*`, `estab-message-attachment-*`
       - [ ] Die sieben alten Custom Properties der Zeitleiste durch Marken ersetzt
       - **Prüfung:** Wächter; Bild einer Nachricht mit Anlage und Rücklauf
       - **Abhängigkeit:** C3
 
-- [ ] **G17** `!` **M** Übrige übernommene Seiten
+- [x] **G17** `!` **M** Übrige übernommene Seiten
       → `estab-ui.css`, `tests/php/ges_migrationsgrenze.php`, dazu die `4fach`-Dateien mit Bildknöpfen
       - [ ] Anhangseite und die verbliebenen `.estab-list-*`-Ansichten nach dem Schema aus P3
       - [ ] `.estab-legacy-page` als eigener Farb- und Schriftraum entfällt vollständig
