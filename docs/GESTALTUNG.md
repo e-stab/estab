@@ -1804,179 +1804,133 @@ Schrift der Bilderzeugung ist eine kursive Serifenschrift.
 
 ---
 
-## 14. Was sich gegenüber dem Bestand ändert
+## 14. Was sich gegenüber dem Bestand geändert hat
 
-Gemessen an `estab-ui.css` (9 887 Zeilen, 1 375 Regelblöcke, Stand
-26.08.2026).
+Diese Spec war zuerst eine Sollvorgabe. Sie ist umgesetzt; der Abschnitt
+führt jetzt, was daraus geworden ist. Gemessen an `estab-ui.css`.
 
 ### 14.1 Ordnung
 
-| Gegenstand | Bestand | Soll |
+| Gegenstand | vorher | jetzt |
 | --- | --- | --- |
-| Farben | **359** verschiedene Hexwerte | **37** benannte Marken über **28** Werte |
+| Farbliterale außerhalb des Vordrucks | **359** | **0** |
+| Marken (Custom Properties) | 7, alle für die Zeitleiste | **73** im `:root`-Block |
 | Schriftgrößen | **61** verschiedene Werte | **7** Stufen |
-| Schriftstärken | 400 – 900, davon 56 × `800` und 8 × `900` | 400 / 600 / 700 |
+| Schriftstärken | 400 – 900, davon 56 × `800` und 8 × `900` | **3** |
 | Eckradien | **15** Werte | **4** |
-| Abstände / Lücken | **240** verschiedene Angaben für `padding`, `gap` und `margin` | **7** Stufen |
-| Höhen von Bedienelementen | **15** Werte zwischen 1.55rem und 3.5rem | 2rem und 1.75rem |
-| Marken (Custom Properties) | 7, alle für die Zeitleiste | alle Werte dieser Spec |
-| `!important` | 53 Stellen | nur in `@media print` und `prefers-reduced-motion` |
-| Höhenregeln | einzeln je Seite in zwei Media Queries | dicht als Grundeinstellung, **eine** weitere Stufe |
+| Regeln unter Prüfung | 0 | **1213** von 1395; die übrigen 182 sind der Vordruck |
+| Fokusringe | **8** Farben, vier davon unter 2.5:1 auf hellem Grund | **einer**, ≥ 3:1 auf jedem Grund |
+| `!important` | 53, ungeordnet | 53, alle in einem der **vier** benannten Fälle (Abschnitt 2.5) |
 
 ### 14.2 Dichte (L1)
 
-| Gegenstand | Bestand | Soll | Ersparnis |
-| --- | --- | --- | --- |
-| Zellenpolster senkrecht | `0.8rem` × 2 = 25.6 px | `--abstand-2` × 2 = 8 px | 17.6 px **je Zeile** |
-| Tafel-Innenabstand senkrecht | bis `1.5rem` × 2 = 48 px | `--abstand-5` × 2 = 24 px | 24 px je Tafel |
-| Knopfhöhe | bis 2.9rem = 46.4 px | 2rem = 32 px | 14.4 px je Leiste |
-| Feldhöhe | 2.75rem = 44 px | 2rem = 32 px | 12 px je Feldreihe |
-| Rand eines Bedienelements | 2 px × 2 | 1 px × 2 | 2 px je Element |
-| Eckradius einer Tafel | 12 px | 6 px | — (Breite) |
-| Menüspalte | bis 18rem | bis 15rem | 3rem Breite |
-| Cockpitspalte | bis 20rem | bis 14rem | 6rem Breite |
-| Überschrift „Schnellfilter" | eine volle Zeile | nur für Vorleseprogramme | ~30 px |
-| Textzeilen je Tabellenzelle | 3 | 2 | ~20 px je Zeile |
+| Gegenstand | vorher | jetzt |
+| --- | --- | --- |
+| Zellenpolster senkrecht | `0.8rem` × 2 = 25.6 px | `--abstand-2` × 2 = 8 px |
+| Tafel-Innenabstand | bis `1.5rem` × 2 = 48 px | `--abstand-5` × 2 = 24 px |
+| Knopfhöhe | 15 Werte zwischen 1.55rem und 3.5rem | 2rem und 1.75rem |
+| Menüspalte | bis 18rem, zweispaltige Kacheln | 13.5–15rem, einspaltig |
+| Cockpitspalte | bis 20rem | 15–16rem |
+| Textzeilen je Tabellenzelle | 3 | 2 |
+| Kategorien über der Liste | 3 Zeilen Marken | 1 Zeile Aufklapp |
 
-Neu hinzu kommt das **Höhenbudget** (Abschnitt 4.1): Jedes wiederkehrende Band
-hat eine Obergrenze, und wer sie reißt, kürzt — er verkleinert nicht.
+Gemessen über vier Bildschirmhöhen: **kein Band über Budget.** Seitenkopf
+29 px, Aktionsleiste 38 px, Kategorienband 38 px.
 
 ### 14.3 Lesbarkeit (L2)
 
-| Gegenstand | Bestand | Soll |
+| Gegenstand | vorher | jetzt |
 | --- | --- | --- |
-| Kontrast für Text | 4.5:1 (AA) als einzige Stufe | **7:1** Sollwert und 4.5:1 Untergrenze; niedrigster Wert im System 7.02 |
-| Kleinste Schrift | `0.52rem` (gut 8 px) | `0.75rem` (12 px), nur Tabellenkopf, Bereichsmarke, Feldnummer |
-| Fließtext / Nachrichteninhalt | `0.78` – `0.9rem` in Listen | `1rem`, und er schrumpft auf keinem Bildschirm |
-| `opacity` auf Text | mehrfach, bis `.78` | verboten |
-| Fokus | **8** verschiedene Ringfarben; die vier goldenen erreichen auf hellem Grund nur **1.86** bis **2.48** — durchgefallen | ein Doppelring, ≥ 3:1 auf jedem Grund |
-| Ränder von Bedienelementen | Eingabefelder halten 3:1 (`#6f859c` **3.81**); Aufklappkästen und Feldgruppen nicht (`#c5d1dd` **1.55**) | `--rand-bedienelement`, ≥ 3.43 auf jedem Grund |
-| Verweisfarbe | `#1a4d7a` / `#2563eb` je nach Bereich | `--handlung-dunkel`, ≥ 9.13 überall |
-| Schreibgeschütztes Feld | gedämpfte Tinte | voller Kontrast, Sperre über Rand und Wort |
-| Maßstab des Vordrucks | `min(1, …)` — nach unten unbegrenzt | Untergrenze **0.75**, darunter scrollt der Rahmen |
-| Kleinste Schrift im Vordruck | `0.43rem` (6.9 px bei Maßstab 1) | tragende Angaben mind. `0.875rem`; Kleinstdruck nur als Papierbild und nur, wenn er anderswo lesbar steht |
+| Kontrast für Text | 4.5:1 als einzige Stufe | **7:1** Sollwert, 4.5:1 Untergrenze; niedrigster Wert im System 7.02 |
+| Kleinste Schrift | `0.52rem` (gut 8 px) | `0.75rem`, und nur für Tabellenkopf, Bereichsmarke, Feldnummer |
+| Listen | `0.78rem` (12.5 px) | **Arbeitsgröße** 0.875rem |
+| Nachrichteninhalt | 0.78 – 0.9rem | **1rem**, schrumpft auf keinem Bildschirm |
+| `opacity` auf Text | mehrfach, bis `.78` | keines |
+| Kontrast im Vordruck | 4.5:1 über 14 Paarungen | **7:1** über dieselben 14 |
+| Bilder mit Bedeutung in Listen | 7 GIFs, eine Ampel aus drei Farben | Zeichen **und** Wort je Zustand |
+| Maßstab des Vordrucks | nach unten unbegrenzt | zwischen **0.75 und 1**; gemessen 0.969 |
 
-**Die Arbeitsgröße geht hinauf, nicht herunter.** Der Bestand setzt Listen in
-`0.78rem` (12.5 px); diese Spec setzt `0.875rem` (14 px) und den
-Nachrichteninhalt auf `1rem` (16 px). Die Dichte kommt aus dem Polster, nicht
-aus der Schrift — deswegen wird die Anwendung gleichzeitig enger und besser
-lesbar.
+### 14.4 Was die Umsetzung an der Spec korrigiert hat
 
-### 14.4 Was übernommen wird
+Sechs Stellen, an denen die Messung den Entwurf widerlegt hat. Sie stehen
+hier, weil eine Spec, die ihre eigenen Irrtümer verschweigt, beim nächsten
+Mal dieselben produziert.
 
-Nicht alles ist schlecht. Was der Bestand bereits richtig macht:
-
-- **`outline: none` kommt kein einziges Mal vor.** Der Fokus wird nirgends
-  entfernt.
-- Die dreispaltige Hülle mit drei eigenen Scrollbereichen. Sie ist die Antwort
-  auf `UX-MENUE-ORTSKONSTANZ` und beseitigt die Überlagerungen, die
-  `position: sticky` in einer mitscrollenden Spalte erzeugte.
-- Der Seitenkopf als Zeile statt als Banner — der Bestand hat den Banner
-  bereits abgeschafft, aus genau demselben Grund, aus dem L1 hier steht.
-- Der Rollenkatalog der Aktionsleiste in `app/ui_elements.php` samt
-  gespreizten Rängen.
-- Der sechsbandige Aufbau von Suche und Filter der Meldungsliste. Abschnitt 7
-  schreibt ihn fest und zieht ihn enger, statt ihn zu ändern.
-- Vorrang wird bereits nicht allein über Farbe getragen (Kante plus Raute).
-
-### 14.5 Lückenliste
-
-In Baureihenfolge. Jede Stufe ist für sich lauffähig und für sich prüfbar.
-**Nach jeder Stufe läuft `tools/bedienpruefung/blick` über vier
-Bildschirmbreiten und vier Bildschirmhöhen** — bei dichtem Satz ist Überlauf
-die Regressionsart, die zuerst auftritt.
-
-**G1 — Marken einführen.** `:root`-Block mit allen Marken dieser Spec am Kopf
-von `estab-ui.css`. Noch keine Regel geändert. Verhaltensneutral.
-
-**G2 — Fokus und Ränder.** Doppelring nach Abschnitt 2.6, überall
-`--rand-bedienelement` als Rand von Bedienelementen. Dies ist die einzige
-Stufe, die einen **Verstoß gegen WCAG 1.4.11 behebt**, und steht deshalb vorn.
-
-**G3 — Lesbarkeit.** Kontrast auf 7:1 heben, jedes `opacity` von Text
-entfernen, jede Größe unter `0.75rem` anheben, Verweisfarbe vereinheitlichen,
-Nachrichteninhalt auf `1rem`. **Diese Stufe kostet Höhe** — sie steht
-absichtlich vor G4, damit die Dichtestufe auf lesbarem Satz aufsetzt und nicht
-umgekehrt.
-
-**G4 — Dichte.** Abstands-, Radien- und Höhenskala umsetzen: Polster,
-Knopf- und Feldhöhen, Ränder, Spaltenbreiten, zwei Textzeilen je Zelle. Holt
-zurück, was G3 gekostet hat, und mehr.
-
-**G5 — Höhenbudget.** Jedes Band gegen seine Obergrenze messen und kürzen, was
-sie reißt. Hier entfallen die verbliebenen Erklärsätze und Bandüberschriften.
-
-**G6 — Farben.** Die 359 Hexwerte auf die 37 Marken abbilden. Größte Stufe;
-lässt sich Bereich für Bereich abarbeiten, weil die Marken seit G1 stehen.
-
-**G7 — Aufräumen.** Die verstreuten Höhenregeln durch die eine Dichtestufe aus
-Abschnitt 2.7 ersetzen; die 53 `!important` fallen dabei größtenteils weg, weil
-sie Abstandskorrekturen sind. Zellenformulare der Listen durch **eine**
-Aktionsspalte ersetzen (Abschnitt 6.4) — behebt zugleich die Überlaufbefunde
-aus `tools/bedienpruefung/blick`.
-
-**G8 — Übernommene Seiten.** Stufen 1 bis 4 aus Abschnitt 13.
+1. **Die Cockpitspalte trägt keine 12.5rem.** Das Anwesenheitsraster fiel auf
+   eine Spalte zusammen, die Bezeichnungen liefen über, „Führungsstelle"
+   brach mitten durch. Sie bleibt bei 15rem — die Ersparnis liegt dort im
+   Polster, nicht in der Breite.
+2. **Die Menükacheln stehen einspaltig.** Zwei nebeneinander bräuchten 210
+   Bildpunkte, die Spalte gibt 182 her.
+3. **Drei Angaben im Vordruck bleiben unter der Lesbarkeitsgrenze.** Sie
+   stehen im festen Raster und sprengen es in Arbeitsgröße. Dort schlägt die
+   Dienstvorschrift diese Spec (Abschnitt 1.4).
+4. **In der übernommenen Liste gibt es keinen Zebrastreifen.** Der Zeilengrund
+   trägt dort die Durchschriftenfarbe; ein Streifenmuster darüber machte aus
+   einer Angabe ein Muster.
+5. **`!important` hat vier zulässige Fälle, nicht zwei.** Ein Inline-Stil
+   steht in der Ordnung über jeder Regel; ihn ohne `!important` zu schlagen
+   ist unmöglich, nicht unsauber.
+6. **Die Aktionsleiste braucht 2.5rem, nicht 2rem.** Ein Balken mit Rand und
+   Polster um 2rem-Knöpfe ist nie 2rem.
 
 ---
 
-## 15. Regeln für den Bedienkatalog
+## 15. Die Regeln im Bedienkatalog
 
-Der Nachweis läuft nach `SPEC.md` Abschnitt 10: erst der Test, dann die Regel.
-Diese Spec trägt **noch keine** Regeln ein; hier steht, welche gehören und wie
-sie zu prüfen wären.
+Diese Spec ist festgesetzt. Der Abschnitt hieß einmal „Regeln **für** den
+Bedienkatalog" und listete Vorschläge; er führt jetzt, was eingetragen ist.
 
-Vorschlag zur Herkunft: Diese Regeln stammen **nicht** aus P1, sondern aus
-diesem Dokument. Sie gehören deshalb mit Herkunft `docs/GESTALTUNG.md` und
-Kennung `GES-` in `app/ux_rules.php` — dieselbe Mechanik, ehrliche Herkunft.
-Der Vorschriftenkatalog bleibt unberührt.
+Herkunft: `docs/GESTALTUNG.md`, Kennung `GES-`, Konstante
+`ESTAB_UX_ORIGIN_GESTALTUNG` in `app/ux_rules.php`. Sie teilen sich den
+Katalog mit den Bedienregeln, weil sie dieselbe Autorität haben — beide sind
+die Entscheidung des Betreibers und dürfen geändert werden. Der
+Vorschriftenkatalog bleibt unberührt. Die Registry erzwingt, dass Präfix und
+Herkunft zusammenpassen.
 
-### Ordnung
+| Kennung | Prüfung |
+| --- | --- |
+| `GES-MARKEN` | `tests/php/ges_marken.php` — null Farbliterale außerhalb `:root`, keine Marke, die es nicht gibt |
+| `GES-SCHRIFTSKALA` | `tests/php/ges_schriftskala.php` — sieben Stufen, keine unter 0.75rem |
+| `GES-SCHRIFTSTAERKE` | dieselbe Datei — 400, 600, 700 |
+| `GES-ABSTANDSSKALA` | `tests/php/ges_abstandsskala.php` — sieben Stufen, vier Radien, auch im zweiten Wert einer Kurzschreibweise |
+| `GES-KONTRAST-TEXT` | `tests/php/ges_kontrast.php` — 50 Paarungen gegen 7:1, Untergrenze 4.5:1 |
+| `GES-KONTRAST-RAND` | dieselbe Datei — Ränder und Fokusringe ≥ 3:1 auf jedem Grund |
+| `GES-KEINE-BLASSE-SCHRIFT` | dieselbe Datei — kein `opacity` unter 1 |
+| `GES-FOKUS-DOPPELRING` | `tests/php/ges_fokus.php` — eine Regel, zwei Ringe, Systemring bei erzwungenen Farben |
+| `GES-DURCHSETZUNG` | `tests/php/ges_durchsetzung.php` — `!important` nur in den vier Fällen aus Abschnitt 2.5 |
+| `GES-SEITENKOPF` | `tests/php/ges_seitenaufbau.php` — eine Zeile mit Unterlinie, ein `h1`, Bereichsmarke darüber |
+| `GES-BAENDER` | dieselbe Datei — die klebende Leiste deckt und trägt eine Unterlinie |
+| `GES-VORDRUCK-MASSSTAB` | `tests/php/ges_vordruck.php` — skaliert, nie abgeschnitten, zwischen 0.75 und 1 |
+| `GES-VORDRUCK-LESBAR` | dieselbe Datei — tragende Angaben ≥ 0.875rem, jede Ausnahme begründet |
+| `GES-INHALT-BLEIBT-GROSS` | dieselbe Datei — Nachrichteninhalt auf 1rem |
 
-| Kennung | Soll | Abnahme |
-| --- | --- | --- |
-| `GES-MARKEN` | Jeder Farb-, Schrift-, Abstands- und Radiuswert im Stylesheet kommt aus einer Marke. | Ein Test liest `estab-ui.css`, zählt Literale außerhalb des `:root`-Blocks und fordert null. |
-| `GES-SCHRIFTSKALA` | Es gibt genau sieben Schriftgrößen; keine Angabe unterschreitet 0.75rem. | Test über alle `font-size`-Angaben. |
-| `GES-SCHRIFTSTAERKE` | Es gibt genau die Stärken 400, 600, 700. | Test über alle `font-weight`-Angaben. |
-| `GES-ABSTANDSSKALA` | Abstände, Lücken und Innenabstände stammen aus den sieben Stufen. | Test über `margin`, `padding`, `gap`. |
+**Jeder Wächter trägt eine Selbstprobe.** Er muss ein eingebautes Literal,
+eine zu kleine Größe, eine falsche Stärke, den zweiten Wert einer
+Kurzschreibweise, ein `opacity` oder ein grundloses `!important`
+wiederfinden. Ein Wächter, der nicht beißt, ist schlimmer als keiner — er
+beruhigt.
 
-### Lesbarkeit (L2)
+### Was nicht im Katalog steht, und warum
 
-| Kennung | Soll | Abnahme |
-| --- | --- | --- |
-| `GES-KONTRAST-TEXT` | Jede Vorder-/Hintergrundpaarung erreicht **7:1**; keine unterschreitet 4.5:1. | Rechnung über alle Paarungen der Markentabelle × alle zulässigen Gründe. `UX-KONTRAST` trägt beide Stufen; vermerkte Ausnahmen werden gegen 4.5 gerechnet. |
-| `GES-KONTRAST-RAND` | Jeder Rand eines Bedienelements und jeder Fokusring erreicht 3:1 gegen **jeden** Grund, auf dem er vorkommen kann. | Rechnung Rand × zulässige Gründe. |
-| `GES-KEINE-BLASSE-SCHRIFT` | Kein `opacity` unter 1 auf einem Element, das Text trägt; kein Grau außerhalb der beiden Tinten. | Test über das Stylesheet und Messung der tatsächlich gerenderten Farbe je Textknoten. |
-| `GES-INHALT-BLEIBT-GROSS` | Betreff und Nachrichteninhalt sind auf jedem Bildschirm 1rem groß. | Messung bei vier Bildschirmhöhen, in Liste und Vordruck. |
-| `GES-GESPERRT-LESBAR` | Ein `readonly`-Feld behält vollen Textkontrast. | Messung über alle Stationen des Laufwegs. |
-| `GES-FOKUS-DOPPELRING` | Jedes fokussierbare Element trägt den Doppelring; `outline: none` ohne Ersatz kommt nicht vor. | Test über das Stylesheet und ein Durchlauf mit dem Tabulator über jede Seite. |
-| `GES-OHNE-FARBE` | Jeder Zustand aus Abschnitt 9 bleibt in Graustufen unterscheidbar. | Bildschirmfotos in Graustufen, Vergleich der Merkmale. |
+Drei Anforderungen dieser Spec brauchen einen Browser, und die PHP-Suite kann
+keinen starten:
 
-### Dichte (L1)
+| Anforderung | Gemessen von |
+| --- | --- |
+| Höhenbudget (Abschnitt 4.1) | `tools/bedienpruefung/blick/budget.mjs` über vier Bildschirmhöhen |
+| Kein Überlauf, kein Wortbruch | `tools/bedienpruefung/blick/aufnahme.mjs` über vier Breiten |
+| Zustände ohne Farbe (Abschnitt 9) | Graustufenbilder desselben Werkzeugs |
 
-| Kennung | Soll | Abnahme |
-| --- | --- | --- |
-| `GES-KNOPFMASSE` | Es gibt zwei Knopfgrößen; keine Klickfläche unterschreitet 1.75rem. | Messung im Browser über alle Seiten und vier Bildschirmbreiten. |
-| `GES-HOEHENBUDGET` | Kein Band überschreitet im Ruhezustand seine Obergrenze aus Abschnitt 4.1. | Messung der Bandhöhen je Seite bei vier Bildschirmhöhen. |
-| `GES-DICHTE` | Bei 34rem Höhe verkleinern sich genau die Marken aus Abschnitt 2.7; Arbeitsgröße, Nachrichteninhalt, Kontrast, Fokusring und Klickflächen bleiben. | Messung bei vier Bildschirmhöhen. |
-| `GES-KEIN-UEBERLAUF` | Kein Inhalt ist breiter als sein Kasten; kein Wort bricht ohne Trennstrich. | `tools/bedienpruefung/blick/aufnahme.mjs` über alle Rahmen, vier Breiten, vier Höhen. |
+Sie stehen deshalb **nicht** im Katalog. Die Registry verlangt zu jeder Regel
+einen Test; ein vorgetäuschter Test wäre schlimmer als keine Regel. Sie
+werden gehandhabt wie `UX-EINARBEITUNG`: gemessen, protokolliert, vor jeder
+Freigabe.
 
-### Aufbau
-
-| Kennung | Soll | Abnahme |
-| --- | --- | --- |
-| `GES-SEITENKOPF` | Jede Seite trägt genau ein `h1` mit Bereichsmarke und Unterlinie, ohne Erklärsatz. | Test über alle gerenderten Seiten. |
-| `GES-BAENDER` | Die Bänder der Inhaltsspalte stehen in der Reihenfolge aus Abschnitt 4.1. | Test über die Reihenfolge im DOM. |
-| `GES-TABELLE` | Jede Liste erfüllt Abschnitt 6: klebender Kopf, feste Spaltenbreiten, zwei Textzeilen je Zelle, eine Aktionsspalte, Leerzustand mit Ausweg. | Test über die gerenderten Listen. |
-| `GES-FILTER-BAENDER` | Jede filterbare Liste trägt die sechs Bänder aus Abschnitt 7 in einem Formular, und kein Filter greift ohne „Filter anwenden". | Test über die gerenderten Listen, einmal mit und einmal ohne JavaScript. |
-| `GES-VORDRUCK-MASSSTAB` | Der Vordruck wird skaliert, nie abgeschnitten und nie gestaucht; der Maßstab liegt zwischen 0.75 und 1; unter 0.75 scrollt der Rahmen. | Messung der Rasterverhältnisse und des Maßstabs bei vier Bildschirmbreiten, mit und ohne Bearbeitungsweg daneben. |
-| `GES-VORDRUCK-LESBAR` | Jede tragende Angabe im Vordruck ist im kleinsten Maßstab mindestens 10.5 px groß; jede Kleinstdruck-Angabe steht anderswo lesbar. | Messung der tatsächlich gerenderten Größen bei Maßstab 0.75. |
-| `GES-DRUCK` | Ein Ausdruck erfüllt Abschnitt 11; der Vordruck druckt in festem Maßstab. | Druckausgabe je Bereich. |
-
-Die Werkzeuge dafür stehen schon: `tools/bedienpruefung/blick/aufnahme.mjs`
-misst über alle Rahmen und vier Bildschirmbreiten und meldet Überlauf und
-Wortbruch. `GES-KNOPFMASSE`, `GES-HOEHENBUDGET`, `GES-DICHTE`,
-`GES-INHALT-BLEIBT-GROSS` und `GES-OHNE-FARBE` sind Erweiterungen desselben
-Durchlaufs, keine neue Werkzeugkette.
+Das Werkzeug zählt dabei, wie viel es gefunden hat, und sagt es laut, wenn es
+nichts war. Der erste Lauf des Höhenbudgets meldete null Befunde, weil er auf
+der falschen Seite maß — eine Ruhe, die kein Beweis ist, ist schlimmer als
+ein Befund.
 
 ---
 

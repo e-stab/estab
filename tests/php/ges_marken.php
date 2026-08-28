@@ -121,11 +121,9 @@ foreach ($regeln as $regel) {
     if (estab_test_ist_vordruck($regel['auswaehler'])) {
         continue;
     }
-    // Ein Keyframe-Schritt ist kein Bereich, sondern ein Zwischenstand einer
-    // Bewegung; er gehoert zu der Regel, die ihn auslöst.
-    if (estab_test_css_ist_keyframe($regel)) {
-        continue;
-    }
+    // Keyframes sind hier nicht ausgenommen: Ein Zwischenstand einer
+    // Bewegung, der faerbt, faerbt aus einer Marke wie jede andere Regel.
+    // Nur die Skalenwaechter lassen sie aus -- dort ist "50%" kein Bereich.
     $geprueft++;
     foreach ($regel['deklarationen'] as $erklaerung) {
         if (str_starts_with($erklaerung['eigenschaft'], '--')) {

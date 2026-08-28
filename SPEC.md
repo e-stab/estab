@@ -574,7 +574,7 @@ nachgewiesen:
 | Katalog | `app/dv_rules.php` | `app/ux_rules.php` |
 | Aufruf im Test | `estab_dv_requirement('<ID>')` | `estab_ux_requirement('<ID>')` |
 | Registry | `tests/php/dv_rule_registry.php` | `tests/php/ux_rule_registry.php` |
-| Kennungen | `NV-`, `ETB-`, `TBB-`, `FUEST-`, `LW-`, `MW-`, `TKM-`, `LM-`, `REG-` | `UX-` |
+| Kennungen | `NV-`, `ETB-`, `TBB-`, `FUEST-`, `LW-`, `MW-`, `TKM-`, `LM-`, `REG-` | `UX-` (Bedienung), `GES-` (Gestaltung) |
 
 Die Trennung ist kein Selbstzweck. Der Vorschriftenkatalog beantwortet die
 Frage einer Prüfung — *was verlangt die Dienstvorschrift und wo steht das?* —
@@ -585,6 +585,21 @@ Bedienung als schlecht erweist; eine Vorschriftenregel darf das nicht.
 Der Bedienkatalog übernimmt Aufbau und Mechanik des vorhandenen
 Vorschriftenkatalogs unverändert: Herkunft, Fundstelle, Anforderungstext,
 lautes Scheitern bei unbekannter Kennung, erzwungene Testabdeckung.
+
+**Zwei Körper in einem Katalog.** Seit `docs/GESTALTUNG.md` führt der
+Bedienkatalog zwei Herkünfte: `ESTAB_UX_ORIGIN_BETREIBER` für die
+Bedienanforderungen dieser Spec, Kennung `UX-`, und
+`ESTAB_UX_ORIGIN_GESTALTUNG` für die Gestaltungsanforderungen, Kennung
+`GES-`. Sie teilen sich den Katalog, weil sie dieselbe **Autorität** haben --
+beide sind die Entscheidung des Betreibers und dürfen geändert werden, wenn
+sie sich als schlecht erweisen. Genau das ist das Kriterium dieses
+Abschnitts; das Thema ist es nicht.
+
+Die Registry erzwingt, dass Präfix und Herkunft zusammenpassen: Eine
+`GES-`-Regel mit Bedienherkunft fällt auf. Ohne das wäre nach kurzer Zeit
+nicht mehr zu beantworten, aus welchem Dokument eine Anforderung stammt --
+und das ist dieselbe Frage, um derentwillen der Vorschriftenkatalog getrennt
+bleibt.
 
 ### 10.2 Ablauf
 

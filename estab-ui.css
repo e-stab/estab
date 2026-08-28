@@ -973,11 +973,11 @@
 @keyframes estab-sidebar-notification {
     0%,
     100% {
-        background: #172f4d;
+        background: var(--grund-kachel);
     }
 
     50% {
-        background: #4b3d18;
+        background: var(--marke-standort-flaeche);
     }
 }
 

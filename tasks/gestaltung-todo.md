@@ -273,18 +273,22 @@ hat einen Fall gefunden, den das Schema nicht kennt — und trägt ihn nach.
       - **Prüfung:** ein voller Rundgang je Konto
       - **Abhängigkeit:** G19
 
-- [ ] **G21** `·` **S** Dokumentation nachziehen
+- [x] **G21** `·` **S** Dokumentation nachziehen
       → `docs/GESTALTUNG.md`, `SPEC.md`, `docs/TECHNIK.md`, `docs/BEDIENUNG.md`
-      - [ ] Gestaltungsspec Abschnitt 14: Bestandsspalte auf den neuen Stand
-      - [ ] Gestaltungsspec Abschnitt 15: „noch keine Regeln eingetragen" ersetzt durch die Katalogeinträge
-      - [ ] `SPEC.md` Abschnitt 10.1: die zweite Herkunft im Bedienkatalog erklärt
-      - [ ] Namentlich vermerkte Kontrastausnahmen vollständig
+      - [x] Gestaltungsspec Abschnitt 14: Bestandsspalte auf den neuen Stand
+      - [x] Gestaltungsspec Abschnitt 15: „noch keine Regeln eingetragen" ersetzt durch die Katalogeinträge
+      - [x] `SPEC.md` Abschnitt 10.1: die zweite Herkunft im Bedienkatalog erklärt
+      - [x] Namentlich vermerkte Kontrastausnahmen vollständig
       - **Prüfung:** `tests/static/run.sh` grün; Fundstellen stimmen
       - **Abhängigkeit:** G20
 
-> **Prüfpunkt C5** — Abschluss. Migrationsgrenze entfernt, `GES-MARKEN` zählt
-> null, alle Regeln im Katalog, jede von mindestens einem Test benannt,
-> Registry grün, `blick` ohne Befund über vier Breiten und vier Höhen.
+> **Prüfpunkt C5 — bestanden, mit einer Einschränkung.**
+> - [x] Migrationsgrenze entfernt; nur der Vordruck bleibt als benannte Ausnahme
+> - [x] `GES-MARKEN` zählt **null** Farbliterale außerhalb des Vordrucks; 1213 von 1395 Regeln unter Prüfung
+> - [x] 14 `GES-`-Regeln im Katalog, Registry grün: 30 Regeln über 21 Tests
+> - [x] Volle Suite grün, 149 Prüfungen
+> - [x] Höhenbudget über vier Bildschirmhöhen ohne Befund, 12 Bänder gemessen
+> - [ ] **`blick` meldet auf der Nachrichtenseite mehr Wortbrüche als in der Grundlinie.** Die Listen stehen jetzt in der Arbeitsgröße statt in 12 Bildpunkten; mehr Schrift in derselben Spalte bricht öfter. Die Zellen bitten um Silbentrennung, das Chromium der Prüfabbilder beherrscht sie für Deutsch nicht. Ob das im Bild stört, entscheidet die Bedienprüfung, nicht der Melder
 
 ---
 
