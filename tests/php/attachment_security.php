@@ -3338,10 +3338,17 @@ $assert(
     'the attachment comment column builds its own cell and bypasses escaping'
 );
 $assert(
-    preg_match(
-        '~\$inhalt = \$spalte\[.zelle.\] !== null~',
-        (string) file_get_contents(__DIR__ . '/../../app/tabelle.php')
-    ) === 1
+    // Das Bauteil maskiert jeden Wert, der nicht durch eine selbstgebaute
+    // Zelle laeuft. Geprueft wird beides: dass es die Verzweigung gibt und
+    // dass der Zweig ohne eigene Zelle durch die Maskierung geht.
+    str_contains(
+        (string) file_get_contents(__DIR__ . '/../../app/tabelle.php'),
+        'if ($spalte[\'zelle\'] !== null) {'
+    )
+        && str_contains(
+            (string) file_get_contents(__DIR__ . '/../../app/tabelle.php'),
+            '$inhalt = estab_tabelle_zelleninhalt('
+        )
         && str_contains(
             (string) file_get_contents(__DIR__ . '/../../app/tabelle.php'),
             'estab_message_html(rtrim($anfang))'
