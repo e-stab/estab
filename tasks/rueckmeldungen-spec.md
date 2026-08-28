@@ -33,6 +33,11 @@ laufen.
 
 ## 2. Getroffene Entscheidungen
 
+**Zwei Vorschriftenregeln sind geändert worden**, beide mit Begründung im
+Commit: `NV-08-DURCHSAGE-SPRUCH` (unten) und der Zweig für den Eingang in der
+Prüfung zu `NV-16-ABFASSUNGSZEIT`. Der Vorschriftenkatalog selbst bleibt
+sonst unberührt.
+
 **NV-08 wird korrigiert.** Die Regel sagte: „Der Spruch ist ausdrücklich die
 Ausnahme; die Durchsage ist deshalb vorbelegt." Der Betreiber sagt: Eine
 normale Meldung hat weder das eine noch das andere. Ein Spruch ist eine
@@ -43,6 +48,21 @@ und Sonderfälle werden nicht vorbelegt.
 Der Regeltext war eine **Auslegung** der Ausfüllanleitung, nicht deren
 Wortlaut. Die Fachautorität liegt beim Betreiber; die Regel wird geändert und
 die Änderung im Commit begründet.
+
+**Die Abfassungszeit ist dem Fernmelder gesperrt.** Sie stand ihm beim
+Eingang offen und war dort sogar Pflicht. Wer eine fremde Nachricht aufnimmt,
+hat sie nicht abgefasst; eine Uhrzeit, die er einträgt, ist genauso behauptet
+wie eine, die der Server einsetzt. Der Test zu `NV-16-ABFASSUNGSZEIT`
+verlangte die Pflicht ausdrücklich für den Eingang — der Zweig ist nicht
+gestrichen, sondern umgekehrt, mit dem Grund im Kopf der Datei. Entscheidung
+des Betreibers, nach ausdrücklicher Rückfrage.
+
+**Das Tabellenbauteil hat zwei Betriebsarten.** Die Meldungsübersicht und
+„Stab lesen" sieben in der Datenbank; an der Abfrage der Übersicht hängt die
+Berechtigungsprüfung über EXISTS-Unterabfragen auf die Zustandstabellen des
+Kontos. Sie reichen dem Bauteil eine fertige Auswahl herein und behalten ihre
+eigenen Bänder. Entscheidung des Betreibers, nach ausdrücklicher Rückfrage:
+Die Berechtigungsprüfung bleibt, wo sie ist.
 
 **Tabellen mit JavaScript** — und der Nachrichtenlauf trotzdem ohne.
 `UX-OHNE-JAVASCRIPT` verlangt, dass Aufnehmen, Sichten und Befördern ohne

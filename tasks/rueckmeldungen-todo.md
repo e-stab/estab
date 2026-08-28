@@ -241,7 +241,7 @@ Reihenfolge: **Test zuerst, dann die Änderung, dann das Bild ansehen.**
             und Prüfsumme über die Wortmenge fest (5614 Wörter)
       - **Prüfung:** Wächter greifen auf `handbuch.css`; Höhenbudget; Bild bei 768 px
 
-- [ ] **R22** `·` **S** Dokumentation nachziehen
+- [x] **R22** `·` **S** Dokumentation nachziehen
       → `docs/GESTALTUNG.md`, `docs/TABELLEN.md`, `SPEC.md`, `tasks/rueckmeldungen-spec.md`
       - [ ] Geänderte Vorschriftenregeln vermerkt, mit Begründung
       - [ ] Neue Regeln in der Regelübersicht

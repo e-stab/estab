@@ -1907,7 +1907,7 @@ Herkunft zusammenpassen.
 | `GES-SCHRIFTSKALA` | `tests/php/ges_schriftskala.php` — sieben Stufen, keine unter 0.75rem |
 | `GES-SCHRIFTSTAERKE` | dieselbe Datei — 400, 600, 700 |
 | `GES-ABSTANDSSKALA` | `tests/php/ges_abstandsskala.php` — sieben Stufen, vier Radien, auch im zweiten Wert einer Kurzschreibweise |
-| `GES-KONTRAST-TEXT` | `tests/php/ges_kontrast.php` — 50 Paarungen gegen 7:1, Untergrenze 4.5:1 |
+| `GES-KONTRAST-TEXT` | `tests/php/ges_kontrast.php` — 202 Paarungen gegen 7:1, Untergrenze 4.5:1. Die eingetragene Liste **und** jede Paarung, die eine Regel selbst aufmacht: Wer Tinte und Grund gemeinsam aus Marken setzt, sagt selbst, was auf was gehört — und muss es aushalten |
 | `GES-KONTRAST-RAND` | dieselbe Datei — Ränder und Fokusringe ≥ 3:1 auf jedem Grund |
 | `GES-KEINE-BLASSE-SCHRIFT` | dieselbe Datei — kein `opacity` unter 1 |
 | `GES-FOKUS-DOPPELRING` | `tests/php/ges_fokus.php` — eine Regel, zwei Ringe, Systemring bei erzwungenen Farben |
@@ -1917,12 +1917,36 @@ Herkunft zusammenpassen.
 | `GES-VORDRUCK-MASSSTAB` | `tests/php/ges_vordruck.php` — skaliert, nie abgeschnitten, zwischen 0.75 und 1 |
 | `GES-VORDRUCK-LESBAR` | dieselbe Datei — tragende Angaben ≥ 0.875rem, jede Ausnahme begründet |
 | `GES-INHALT-BLEIBT-GROSS` | dieselbe Datei — Nachrichteninhalt auf 1rem |
+| `GES-TABELLE-EINHEITLICH` | `tests/php/ges_tabelle_einheitlich.php` — jede Datentabelle kommt aus dem Bauteil oder steht namentlich in der Ausnahmeliste; die Zahl darf sinken, nicht steigen |
+| `GES-TABELLE-SORTIERUNG` | `tests/php/ges_tabelle_bauteil.php` — sortiert wird nach der **Art** der Spalte: Zahlen numerisch, Zeiten nach Zeitpunkt, Vorrangstufen nach Dringlichkeit |
+| `GES-TABELLE-SUCHE` | dieselbe Datei — Volltext über alle suchbaren Spalten, je Spalte eine Maske, und ein Satz, der nennt, worin gesucht wird |
+| `GES-TABELLE-BLAETTERN` | dieselbe Datei — der Blätterer wechselt die Seite; die aktuelle trägt `aria-current`, nicht verfügbare Griffe sind gesperrt statt weggelassen |
+| `GES-TABELLE-OHNE-SKRIPT` | dieselbe Datei — Sortieren, Sieben und Blättern über `method="get"`; der Zustand steht in der Adresse |
+| `UX-RUECKWEISUNG-SICHTBAR` | `tests/php/rm_rueckweisung.php` — eine abgewiesene Handlung liegt mittig im Blickfeld, mit Fokus, auch ohne Skript |
 
 **Jeder Wächter trägt eine Selbstprobe.** Er muss ein eingebautes Literal,
 eine zu kleine Größe, eine falsche Stärke, den zweiten Wert einer
 Kurzschreibweise, ein `opacity` oder ein grundloses `!important`
 wiederfinden. Ein Wächter, der nicht beißt, ist schlimmer als keiner — er
 beruhigt.
+
+### Das Tabellenbauteil hat zwei Betriebsarten
+
+`app/tabelle.php` siebt, sortiert und blättert im Regelfall selbst über die
+übergebenen Zeilen. Das ist der häufigere und der einfachere Fall; so
+arbeiten Nachweisung, Anhänge, Benutzerliste und Vordruckliste.
+
+Trifft eine Seite ihre Auswahl selbst — weil sie in der Datenbank siebt und
+dabei die Berechtigungsprüfung mitführt —, gibt sie unter `fremd` an, was ihre
+Auswahl ergeben hat, und schaltet mit `baender => false` die eigenen Bänder
+und den Blätterer des Bauteils ab. So arbeiten die Meldungsübersicht und
+„Stab lesen".
+
+Das ist eine Entscheidung des Betreibers und kein Versehen: Die
+Berechtigungsprüfung der Meldungsübersicht hängt an EXISTS-Unterabfragen auf
+die Zustandstabellen des jeweiligen Kontos. Sie aus SQL nach PHP zu verlagern
+wäre ein größerer Eingriff in die meistbenutzte Liste der Anwendung als die
+Vereinheitlichung wert ist.
 
 ### Was nicht im Katalog steht, und warum
 

@@ -137,18 +137,30 @@ Liste lässt sich weitergeben und als Lesezeichen ablegen.
 
 ## 5. Wo es eingesetzt wird
 
-| Seite | Heute |
-| --- | --- |
-| Nachweisung Eingang | keine Suche, kein Filter |
-| Nachweisung Ausgang | keine Suche, kein Filter |
-| „Stab lesen" | Blättern ohne Wirkung |
-| Anhänge | eigene Gestaltung, keine Suche |
-| Benutzerliste | eigene Gestaltung, keine Suche |
-| Meldungsübersicht | sechs Bänder, aber eigener Aufbau |
-| Vordruckliste | eigene Gestaltung |
+| Seite | Vorher | Jetzt |
+| --- | --- | --- |
+| Nachweisung Eingang | keine Suche, kein Filter | Bauteil, eigene Auswahl |
+| Nachweisung Ausgang | keine Suche, kein Filter | Bauteil, eigene Auswahl |
+| „Stab lesen" | Blättern ohne Wirkung | Bauteil, **fremde** Auswahl |
+| Anhänge | eigene Gestaltung, keine Suche | Bauteil, eigene Auswahl |
+| Benutzerliste | eigene Gestaltung, keine Suche | Bauteil, eigene Auswahl |
+| Meldungsübersicht | sechs Bänder, aber eigener Aufbau | Bauteil, **fremde** Auswahl |
+| Vordruckliste | eigene Gestaltung | Bauteil, eigene Auswahl |
+
+„Eigene Auswahl" heißt: Das Bauteil siebt, sortiert und blättert selbst über
+die übergebenen Zeilen. „Fremde Auswahl" heißt: Die Seite tut das in der
+Datenbank und reicht ein Ergebnis herein — weil an ihrer Abfrage die
+Berechtigungsprüfung hängt. Beide Fälle sehen gleich aus; nur die
+Suchbänder bleiben im zweiten Fall die der Seite.
 
 **Eine Tabelle, die das Bauteil nicht benutzt, ist ein Befund.** Die Prüfung
-zählt die Tabellen der Anwendung und verlangt, dass jede daraus kommt.
+`tests/php/ges_tabelle_einheitlich.php` zählt die Datentabellen der
+Anwendung. Sie ist beim Zählen auf 22 weitere gestoßen, die in diesem
+Abschnitt nicht standen und in keiner Rückmeldung vorkamen: die Bücher ETB
+und TBB, Führungsstellenübersicht und -verwaltung, der Systemstand, die
+Empfängermatrix, die Kategorienpflege und die übrigen Listenarten in
+`liste.php`. Sie stehen namentlich und mit Grund in der Prüfung; die Zahl
+darf sinken, nicht steigen.
 
 ---
 
