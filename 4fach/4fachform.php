@@ -874,6 +874,13 @@ HTML;
     $this->feldbg [16]["i"] = $this->bg_color_inaktv;
     $this->feldbg [17]["a"] = $this->bg_color_si_a;
     $this->feldbg [17]["i"] = $this->bg_color_inaktv;
+
+    // Zugriffsindex 18: die Abfassungszeit. Sie liegt hinter der gedruckten
+    // Zaehlung, weil sie sich ihren Index bis dahin mit Betreff und
+    // Nachrichtentext teilte und deshalb nicht einzeln zu schliessen war.
+    // Sie gehoert zum Nachrichtenteil und traegt dessen Farbe.
+    $this->feldbg [18]["a"] = $this->bg_color_tx_a;
+    $this->feldbg [18]["i"] = $this->bg_color_inaktv;
   }
 
   // Zuordnung der notwendigen Farben
@@ -890,7 +897,7 @@ HTML;
 \*****************************************************************************/
   function get_access_by_task (){
     // Alle Felder auf inaktiv setzen
-    for ( $i = 1; $i <= 17; $i++ ){
+    for ( $i = 1; $i <= 18; $i++ ){
       $this->bg [$i] = $this->feldbg [$i]["i"] ;
       $this->feld [$i] = false;
     }
@@ -915,11 +922,13 @@ HTML;
         // LdF musste ihn danach von Hand nachtragen. Die Angabe bleibt
         // freiwillig; der LdF prueft sie nur noch.
         //
-        // Das Verfasserzeichen gehoert dagegen dem, der die Nachricht
-        // abgefasst hat. Der Fernmelder nimmt sie auf, er verfasst sie
-        // nicht.
+        // Verfasserzeichen und Abfassungszeit gehoeren dagegen dem, der die
+        // Nachricht abgefasst hat. Der Fernmelder nimmt sie auf, er verfasst
+        // sie nicht.
         $this->bg   [14] = $this->feldbg [14]["i"] ;
         $this->feld [14] = false;
+        $this->bg   [18] = $this->feldbg [18]["i"] ;
+        $this->feld [18] = false;
 
       break;
       case "LdF-Eingang":
@@ -953,6 +962,9 @@ HTML;
           $this->bg [$i] = $this->feldbg [$i]["a"] ;
           $this->feld [$i] = true;
         }
+        // Die Abfassungszeit -- wer abfasst, traegt sie ein.
+        $this->bg [18] = $this->feldbg [18]["a"];
+        $this->feld [18] = true;
         // Verfasserzeichen und ausgeübte Funktion come from the login.
         $this->bg [14] = $this->feldbg [14]["a"];
         $this->feld [14] = false;
@@ -975,7 +987,7 @@ HTML;
       break;
 
       case "Stab_lesen" :
-        for ($i=1;$i<=17;$i++){
+        for ($i=1;$i<=18;$i++){
           $this->bg [$i] = $this->formbgcolor ;
           $this->feld [$i] = false;
         }
@@ -1011,6 +1023,11 @@ HTML;
         $this->feld [14] = false;
         $this->bg [15] = $this->feldbg [15]["i"];
         $this->feld [15] = false;
+        // Wer ein Gespraech aufnimmt, ist dessen Verfasser -- die
+        // Abfassungszeit gehoert ihm, anders als beim Eingang einer fremden
+        // Nachricht.
+        $this->bg [18] = $this->feldbg [18]["a"];
+        $this->feld [18] = true;
       break;
 
       case "FM-Admin" :
@@ -1020,7 +1037,7 @@ HTML;
       break;
 
       default :
-        for ($i=1;$i<=17;$i++){
+        for ($i=1;$i<=18;$i++){
           $this->feld [$i] = false;
         }
     } // switch $rolle

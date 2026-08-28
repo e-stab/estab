@@ -75,8 +75,11 @@ foreach ($map as $number => $entry) {
         )
     );
     $access = $entry['zugriff'] ?? null;
+    // Die Zugriffszaehlung reicht ueber die gedruckte hinaus: Die
+    // Abfassungszeit teilte sich Index 12 mit Betreff und Nachrichtentext
+    // und war deshalb nicht einzeln zu schliessen. Sie hat 18 bekommen.
     $assert(
-        is_int($access) && $access >= 1 && $access <= 17,
+        is_int($access) && $access >= 1 && $access <= 18,
         estab_dv_requirement(
             'NV-NUMMERNBRUECKE',
             'Feld ' . $number . ' verweist auf den Zugriffsindex '
@@ -145,14 +148,20 @@ foreach ($unterlage as $number => $expected) {
 
 /*
  * Der Zugriffsindex ist nicht die Zählung der Unterlage. Er trägt einen
- * ausgemusterten Beförderungshinweis auf Platz 8, und drei Kästen teilen
+ * ausgemusterten Beförderungshinweis auf Platz 8, und mehrere Kästen teilen
  * sich einen Index, weil der Arbeitsschritt sie gemeinsam freigibt. Auch
  * diese Liste steht im Test, damit eine Verschiebung auffällt.
+ *
+ * Feld 16, die Abfassungszeit, lag auf 12 -- zusammen mit Betreff und
+ * Nachrichtentext. Damit war sie nicht einzeln zu schliessen, und der
+ * Fernmelder, dem sie beim Eingang nicht zusteht, hätte den Inhalt mit
+ * verloren. Sie liegt jetzt auf 18, einen Platz hinter der gedruckten
+ * Zählung; deshalb reicht die Zugriffszählung bis 18, die Unterlage bis 17.
  */
 $access = [
     1 => 1, 2 => 1, 3 => 2, 4 => 3, 5 => 4, 6 => 5, 7 => 6, 8 => 7,
     9 => 9, 10 => 10, 11 => 10, 12 => 11, 13 => 12, 14 => 12, 15 => 13,
-    16 => 12, 17 => 14, 18 => 15, 19 => 16, 20 => 17,
+    16 => 18, 17 => 14, 18 => 15, 19 => 16, 20 => 17,
 ];
 foreach ($access as $number => $expected) {
     $assert(

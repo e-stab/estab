@@ -121,7 +121,7 @@ Reihenfolge: **Test zuerst, dann die Änderung, dann das Bild ansehen.**
       - [ ] Feld **Zeichen** ist beim Eingang für den Fernmelder gesperrt; es füllt der Verfasser beim Ausgang
       - **Prüfung:** wie R10
 
-- [ ] **R12** `·` **S** Abfassungszeit nur beim Ausgang
+- [x] **R12** `·` **S** Abfassungszeit nur beim Ausgang
       → `4fach/4fachform.php`
       - [ ] Feld **Abfassungszeit** ebenso
       - [ ] Prüfen, ob `LW-NUR-BLAUER-TEIL` nachzuziehen ist

@@ -19,9 +19,15 @@ declare(strict_types=1);
  * the form view speaks only the scale it prints.
  *
  * The access index is not the Unterlage count. It keeps a retired transport
- * hint on slot 8, and three boxes share one index because the workflow step
+ * hint on slot 8, and several boxes share one index because the workflow step
  * releases them together. Both facts are historic and are recorded here
  * rather than rediscovered at each call site.
+ *
+ * The Abfassungszeit held index 12 together with Betreff and Nachrichtentext.
+ * That made it impossible to close on its own -- and closing it with them
+ * would have closed exactly what the Fernmelder writes down when a message
+ * comes in. It therefore holds index 18, one past the printed scale, which is
+ * why the access array runs to 18 while the Unterlage stops at 17.
  */
 
 /**
@@ -62,7 +68,7 @@ function estab_nv_field_map(): array
             'bezeichnung' => 'Nachricht, Text'],
         15 => ['unterlage' => 12, 'zugriff' => 13,
             'bezeichnung' => 'Absender'],
-        16 => ['unterlage' => 12, 'zugriff' => 12,
+        16 => ['unterlage' => 12, 'zugriff' => 18,
             'bezeichnung' => 'Abfassungszeit'],
         17 => ['unterlage' => 14, 'zugriff' => 14,
             'bezeichnung' => 'Zeichen und Funktion des Verfassers'],

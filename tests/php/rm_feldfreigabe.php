@@ -13,9 +13,13 @@ declare(strict_types=1);
  *     musste ihn danach von Hand nachtragen.
  *   * Das Verfasserzeichen stand dem Fernmelder offen. Es gehoert dem, der
  *     die Nachricht abfasst; der Fernmelder nimmt sie nur auf.
+ *   * Die Abfassungszeit ebenso, und sie war beim Eingang sogar Pflicht.
  *
- * Die Abfassungszeit bleibt ihm offen. Sie steht bei einer eingehenden
- * Nachricht im Spruchkopf, den er abschreibt.
+ * Die Abfassungszeit teilte sich ihren Zugriffsindex mit Betreff und
+ * Nachrichtentext. Solange sie das tat, liess sie sich nicht einzeln
+ * schliessen, ohne den Inhalt mit zu schliessen -- und der Inhalt ist genau
+ * das, was der Fernmelder beim Eingang aufschreibt. Sie hat deshalb einen
+ * eigenen Index bekommen, 18, hinter der gedruckten Zaehlung.
  *
  * Geprueft wird die ganze Matrix, nicht die drei geaenderten Felder: Eine
  * Umstellung an der Zugriffstabelle kann einer anderen Station still etwas
@@ -83,19 +87,19 @@ $erwartet = [
     // Der Fernmelder nimmt eine eingehende Nachricht auf: das tatsaechlich
     // benutzte Mittel (1), den Aufnahmevermerk (2), den Rufnamen der
     // Gegenstelle (6) und den Nachrichtenteil samt Absender (15).
-    // Nicht die Gespraechsnotiz (12) -- die ist ein eigener Vorgang -- und
-    // nicht das Verfasserzeichen (17).
-    'FM-Eingang' => [1, 2, 6, 8, 9, 10, 11, 13, 14, 15, 16],
-    'FM-Eingang_Anhang' => [1, 2, 6, 8, 9, 10, 11, 13, 14, 15, 16],
+    // Nicht die Gespraechsnotiz (12) -- die ist ein eigener Vorgang --,
+    // nicht die Abfassungszeit (16) und nicht das Verfasserzeichen (17).
+    'FM-Eingang' => [1, 2, 6, 8, 9, 10, 11, 13, 14, 15],
+    'FM-Eingang_Anhang' => [1, 2, 6, 8, 9, 10, 11, 13, 14, 15],
     // Der LdF bestaetigt oder berichtigt Annahmevermerk und Absender.
     'LdF-Eingang' => [3, 15],
     // Beim Ausgang disponiert er zusaetzlich Gegenstelle und Beforderungsweg.
     'LdF-Ausgang' => [3, 6, 7],
     // Die Weitergabe ist der Befoerderungsvermerk, sonst nichts.
     'FM-Ausgang' => [4],
-    // Der Verfasser schreibt den Nachrichtenteil und legt den Verteiler
-    // fest (19). Absender und Verfasserzeichen kommen aus Anmeldung und
-    // Einrichtung.
+    // Der Verfasser schreibt den Nachrichtenteil, traegt die Abfassungszeit
+    // ein (16) und legt den Verteiler fest (19). Absender und
+    // Verfasserzeichen kommen aus Anmeldung und Einrichtung.
     'Stab_schreiben' => [8, 9, 10, 11, 12, 13, 14, 16, 19],
     // Eine zurueckgegebene Nachricht bleibt eine ausgehende: Sie laesst sich
     // nicht nachtraeglich zur Gespraechsnotiz (12) erklaeren.
@@ -104,7 +108,9 @@ $erwartet = [
     'Stab_lesen' => [],
     // Der Sichter quittiert (18) und vermerkt (20).
     'Stab_sichten' => [18, 20],
-    // Die Gespraechsnotiz haelt ein gefuehrtes Gespraech fest.
+    // Die Gespraechsnotiz haelt ein gefuehrtes Gespraech fest; wer sie
+    // aufnimmt, ist ihr Verfasser und traegt deshalb auch die
+    // Abfassungszeit (16) ein.
     'Stab_gesprnoti' => [1, 2, 8, 9, 10, 11, 12, 13, 14, 16, 19, 20],
 ];
 
@@ -142,26 +148,9 @@ $assert(
     'Der Fernmelder fuellt das Verfasserzeichen. Es gehoert dem, der die '
         . 'Nachricht abfasst.'
 );
-/*
- * Die Abfassungszeit steht dem Eingang weiterhin offen -- absichtlich.
- *
- * Sie zu sperren stand als R12 auf der Liste und ist zurueckgestellt: Bei
- * einer eingehenden Nachricht steht die Abfassungszeit im Spruchkopf, den
- * der Fernmelder abschreibt. Sperrte man das Feld, liesse sie sich gar nicht
- * mehr erfassen. Und die Pflichtpruefung dazu haengt an
- * NV-16-ABFASSUNGSZEIT, dessen Test ausdruecklich sichert, dass sie nicht
- * durch Streichen der Pruefung stillgestellt wird.
- *
- * Bleibt sie offen, ist auch NV-16 gewahrt. Faellt die Entscheidung anders,
- * braucht die Abfassungszeit zuerst einen eigenen Zugriffsindex -- sie teilt
- * sich heute Index 12 mit Betreff und Nachrichtentext, und die sind genau
- * das, was der Fernmelder aufschreibt.
- */
 $assert(
-    in_array($abfassungszeit, $eingang, true),
-    'Die Abfassungszeit ist dem Eingang gesperrt. Bei einer eingehenden '
-        . 'Nachricht steht sie im Spruchkopf; ohne das Feld liesse sie sich '
-        . 'nicht erfassen.'
+    !in_array($abfassungszeit, $eingang, true),
+    'Der Fernmelder fuellt die Abfassungszeit. Sie gehoert dem Verfasser.'
 );
 
 // Der Inhalt bleibt ihm -- das ist der Punkt der ganzen Uebung.
@@ -180,7 +169,17 @@ $spiegel = new ReflectionClass('nachrichten4fach');
 $seite = $spiegel->newInstanceWithoutConstructor();
 $seite->task = 'FM-Eingang';
 $pflicht = $seite->official_message_required_fields();
-foreach (['14_zeichen' => $zeichen] as $name => $nummer) {
+// Dafuer musste die Abfassungszeit ihren eigenen Zugriffsindex bekommen.
+$assert(
+    estab_nv_access_index($abfassungszeit) !== estab_nv_access_index(13)
+        && estab_nv_access_index($abfassungszeit) !== estab_nv_access_index(14),
+    'Die Abfassungszeit teilt sich ihren Zugriffsindex wieder mit Betreff '
+        . 'oder Nachrichtentext. Dann laesst sie sich nicht einzeln '
+        . 'schliessen, ohne den Inhalt mit zu schliessen -- und den schreibt '
+        . 'der Fernmelder beim Eingang auf.'
+);
+
+foreach (['12_abfzeit' => $abfassungszeit, '14_zeichen' => $zeichen] as $name => $nummer) {
     $assert(
         !in_array($name, $pflicht, true),
         'Der Eingang verlangt ' . $name . ' als Pflichtangabe, gibt das Feld '

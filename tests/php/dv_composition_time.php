@@ -3,7 +3,8 @@
 declare(strict_types=1);
 
 /**
- * Feld 16 gehört dem Verfasser, nicht der Serveruhr.
+ * Feld 16 gehört dem Verfasser, nicht der Serveruhr -- und nicht dem
+ * Fernmelder.
  *
  * Die Ausfüllanleitung verlangt in Feld 16 die Abfassungszeit der Nachricht.
  * Die Anwendung beobachtet, wann eine Eingabe bei ihr eintrifft; wann eine
@@ -11,8 +12,19 @@ declare(strict_types=1);
  * mit der Erfassungszeit trägt deshalb eine erfundene Uhrzeit in den
  * Nachweis, in das Einsatztagebuch und in jeden Ausdruck ein, ohne dass der
  * Bearbeiter es bemerkt. Dieser Test hält fest, dass kein Schreibpfad die
- * Abfassungszeit ersetzt und dass die Pflichtfeldprüfung sie stattdessen
- * beim Bearbeiter einfordert.
+ * Abfassungszeit ersetzt und dass die Pflichtfeldprüfung sie bei dem
+ * einfordert, dem sie gehört.
+ *
+ * Das war bis hierher auch der Fernmelder beim Eingang. Der Betreiber hat
+ * entschieden, dass es das nicht mehr ist: Wer eine fremde Nachricht
+ * aufnimmt, hat sie nicht abgefasst, und eine Uhrzeit, die er einträgt, ist
+ * genauso behauptet wie eine, die der Server einsetzt.
+ *
+ * Der Verzicht ist deshalb kein Loch in der Regel, sondern ihre Anwendung
+ * auf eine Station, die sie nie erfüllen konnte. Er steht hier ausdrücklich
+ * und wird in beide Richtungen geprüft -- die drei Verfasserschritte
+ * behalten die Pflicht, der Eingang darf sie nicht zurückbekommen, ohne dass
+ * jemand diesen Absatz liest.
  */
 
 $root = dirname(__DIR__, 2);
@@ -177,11 +189,6 @@ $assert(
  */
 $validatorSource = $read('4fach/vali_data.php');
 $validatorSections = array(
-    'FM-Eingang' => $slice(
-        $validatorSource,
-        'case "FM-Eingang"',
-        'case "Stab_schreiben"'
-    ),
     'Stab_schreiben/Stab_korrigieren' => $slice(
         $validatorSource,
         'case "Stab_schreiben"',
@@ -203,6 +210,39 @@ foreach ($validatorSections as $task => $section) {
         )
     );
 }
+/*
+ * Und der Eingang traegt sie nicht -- weder als Pflicht in der Pruefung noch
+ * als offenes Feld im Vordruck. Beides zusammen, denn eines allein waere ein
+ * Widerspruch: eine Pflicht ohne Feld verschliesst den Arbeitsschritt, ein
+ * Feld ohne Pflicht laedt zu einer Angabe ein, die niemand machen kann.
+ */
+$incomingSection = $slice(
+    $validatorSource,
+    'case "FM-Eingang"',
+    'case "Stab_schreiben"'
+);
+$assert(
+    !str_contains($incomingSection, '$this->validate["12_abfzeit"]'),
+    estab_dv_requirement(
+        'NV-16-ABFASSUNGSZEIT',
+        'Der Eingang verlangt die Abfassungszeit wieder als Pflichtangabe. '
+            . 'Der Fernmelder hat die Nachricht nicht abgefasst, und das Feld '
+            . 'ist ihm gesperrt -- der Arbeitsschritt liesse sich nicht mehr '
+            . 'abschliessen.'
+    )
+);
+$assert(
+    str_contains(
+        $read('4fach/4fachform.php'),
+        '$this->feld [18] = false;'
+    ),
+    estab_dv_requirement(
+        'NV-16-ABFASSUNGSZEIT',
+        'Der Eingang gibt die Abfassungszeit wieder zur Eingabe frei. Wer '
+            . 'eine fremde Nachricht aufnimmt, hat sie nicht abgefasst.'
+    )
+);
+
 $assert(
     str_contains(
         $validatorSections['Stab_schreiben/Stab_korrigieren'],

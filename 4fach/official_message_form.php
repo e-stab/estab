@@ -988,7 +988,11 @@ HTML;
                 '10_anschrift',
                 '12_betreff',
                 '12_inhalt',
-                '12_abfzeit',
+                // Die Abfassungszeit stand hier als Pflichtangabe. Sie
+                // gehoert dem, der die Nachricht abgefasst hat; der
+                // Fernmelder nimmt sie auf. Das Feld ist ihm jetzt gesperrt
+                // -- eine Pflicht, die er nicht erfuellen kann, haette den
+                // Arbeitsschritt verschlossen.
             ],
             'Stab_schreiben', 'Stab_korrigieren' => [
                 '10_anschrift',

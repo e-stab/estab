@@ -389,6 +389,10 @@ class vali_data_form {
     switch ($task) {
       case "FM-Eingang":
       case "FM-Eingang_Anhang" :
+          // Die Abfassungszeit stand hier. Sie gehoert dem, der die
+          // Nachricht abgefasst hat; der Fernmelder nimmt sie auf. Das
+          // Feld ist ihm gesperrt -- eine Bedingung, die er nicht
+          // erfuellen kann, haette den Arbeitsschritt verschlossen.
           $zw = $this->validate["01_medium"] &&
                 $this->validate["01_datum"] &&
                 $this->validate["01_zeichen"] &&
@@ -397,8 +401,7 @@ class vali_data_form {
 	                $this->validate["10_anschrift"] &&
                 $this->validate["11_rufnummer"] &&
                 $this->validate["12_betreff"] &&
-	                $this->validate["12_inhalt"] &&
-                $this->validate["12_abfzeit"] ;
+	                $this->validate["12_inhalt"] ;
 
         break ;
       case "Stab_schreiben":
