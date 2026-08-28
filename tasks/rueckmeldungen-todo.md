@@ -93,7 +93,7 @@ Reihenfolge: **Test zuerst, dann die Änderung, dann das Bild ansehen.**
       - **Prüfung:** Regeltest; leeren Vordruck öffnen; Bild
       - **Risiko:** eine Vorschriftenregel zu ändern ist der schwerste Eingriff der Liste. Begründung steht in der Spec
 
-- [ ] **R07** `!` **S** Die Vorrangstufe hat kein Kästchen „keine"
+- [x] **R07** `!` **S** Die Vorrangstufe hat kein Kästchen „keine"
       → `4fach/official_message_form.php`, `app/message_priority.php`
       - [ ] Kein Kästchen mit dem Wert „keine"; ohne besondere Stufe ist nichts angewählt
       - [ ] `NV-09-VORRANGSTUFE` verlangt das bereits — **hier wird ein Verstoß behoben, keine Regel geändert**

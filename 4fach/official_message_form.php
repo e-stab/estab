@@ -1671,16 +1671,14 @@ HTML;
             . 'estab-official-priority-choices" role="radiogroup" '
             . 'aria-label="Vorrangstufe" '
             . 'aria-describedby="estab-form-help-9-description">';
-        $options = [
-            [
-                'value' => $current === 'eee' ? 'eee' : '',
-                'label' => 'keine',
-                'id' => 'keine',
-                'warning' => '',
-                'clear' => true,
-                'extra' => false,
-            ],
-        ];
+        /*
+         * Hier stand ein viertes Kästchen mit der Aufschrift „keine", und es
+         * war angekreuzt. Der amtliche Vordruck hat kein solches Kästchen:
+         * „keine Vorrangstufe" ist die Abwesenheit eines Kreuzes, keine
+         * eigene Aussage. Und ein vorbelegtes Kreuz ist eine Angabe, die
+         * niemand gemacht hat.
+         */
+        $options = [];
         foreach (estab_message_priority_options() as $option) {
             if ($option['value'] === '') {
                 continue;
@@ -1695,7 +1693,6 @@ HTML;
                     default => $option['value'],
                 },
                 'warning' => $option['warning'],
-                'clear' => false,
                 // Der amtliche Vordruck hat zwei Kästchen: Sofort und Blitz.
                 // Staatsnot ist wählbar, weil eine eingegangene Nachricht sie
                 // tragen kann -- ein gedrucktes Kästchen dafür wäre erfunden.
@@ -1703,14 +1700,10 @@ HTML;
             ];
         }
         foreach ($options as $option) {
-            $isNone = in_array($current, ['', 'eee'], true)
-                && $option['clear'];
-            $isSelected = $isNone
-                || (!$option['clear'] && $current === $option['value']);
-            $labelClasses = array_values(array_filter([
-                $option['clear'] ? 'estab-official-priority-clear' : '',
-                $option['extra'] ? 'estab-official-priority-extra' : '',
-            ], static fn (string $part): bool => $part !== ''));
+            $isSelected = $current === $option['value'];
+            $labelClasses = $option['extra']
+                ? ['estab-official-priority-extra']
+                : [];
             echo '<label'
                 . ($labelClasses === []
                     ? ''

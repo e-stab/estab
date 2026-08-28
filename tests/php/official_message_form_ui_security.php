@@ -334,19 +334,32 @@ $fixture->formdata = ['09_vorrangstufe' => 'eee'];
 ob_start();
 $fixture->official_message_priority();
 $historicNoPriorityMarkup = (string) ob_get_clean();
+/*
+ * "eee" ist ein Altbestand und bedeutet dasselbe wie ein leeres Feld: keine
+ * Vorrangstufe. Er wurde bisher von einem eigenen Kästchen „keine" getragen,
+ * das angekreuzt war. Das Kästchen gibt es nicht mehr, und die Aussage
+ * braucht keines -- sie ist die Abwesenheit eines Kreuzes.
+ *
+ * Der Vordruck zeigt eine solche Nachricht deshalb wie jede ohne Stufe: kein
+ * Kreuz, alle drei Stufen wählbar. Speichert jemand sie in einem
+ * bearbeitenden Schritt erneut, wird aus "eee" ein leerer Wert. Beide sind
+ * für Anzeige, Ausdruck und Dringlichkeit gleichbedeutend, also geht nichts
+ * verloren.
+ */
 $assert(
-    preg_match(
-        '/class="estab-official-priority-clear"[^>]*'
-            . 'for="f_09_vorrangstufe_keine".*?'
-            . 'id="f_09_vorrangstufe_keine"[^>]*'
-            . 'name="09_vorrangstufe"[^>]*value="eee"[^>]*checked/s',
-        $historicNoPriorityMarkup
-    ) === 1
+    !str_contains($historicNoPriorityMarkup, 'checked')
         && str_contains(
             $historicNoPriorityMarkup,
             'id="f_09_vorrangstufe_staatsnot"'
         ),
-    'The compact reset option cannot retain the historic no-priority value'
+    'A historic no-priority value shows as a checked box or hides the scale'
+);
+$assert(
+    estab_message_priority_document_label('eee') === ''
+        && estab_message_priority_document_label('') === ''
+        && estab_message_priority_is_urgent('eee') === false
+        && estab_message_priority_is_urgent('') === false,
+    'The historic no-priority value stopped meaning the same as an empty one'
 );
 
 $fixture->feld[9] = false;

@@ -6287,10 +6287,6 @@ section.estab-message-timeline[data-estab-message-timeline] * {
     inset: 0.18rem;
 }
 
-.estab-official-priority-clear {
-    color: var(--tinte);
-}
-
 .estab-official-priority-note {
     display: none;
 }
@@ -7825,7 +7821,6 @@ section.estab-message-timeline[data-estab-message-timeline]
     .estab-official-help-anchor,
     .estab-official-field-error,
     .estab-message-error-summary,
-    .estab-official-priority-clear,
     .estab-official-priority-extra {
         display: none !important;
     }

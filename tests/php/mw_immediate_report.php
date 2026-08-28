@@ -150,7 +150,12 @@ foreach ($options as [$element, $id]) {
     }
 }
 $assert(
-    $checked === ['keine'],
+    // Hier stand ['keine'] -- so drückte der Vordruck „keine Vorrangstufe"
+    // damals aus: durch ein eigenes, angekreuztes Kästchen. Der amtliche
+    // Vordruck hat kein solches Kästchen; die Aussage ist die Abwesenheit
+    // eines Kreuzes. Geprüft wird unverändert dasselbe: Es ist nichts
+    // vorbelegt.
+    $checked === [],
     estab_dv_requirement(
         'MW-SOFORTMELDUNG',
         'Ein neuer Vordruck belegt die Vorrangstufe mit '

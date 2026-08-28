@@ -271,13 +271,70 @@ preg_match_all(
     PREG_SET_ORDER
 );
 $assert(
-    count($labels) === 4,
+    count($labels) === 3,
     estab_dv_requirement(
         'NV-09-VORRANGSTUFE',
-        'Die Vorrangstufe bietet ' . count($labels) . ' statt vier '
-            . 'Möglichkeiten an.'
+        'Die Vorrangstufe bietet ' . count($labels) . ' statt drei '
+            . 'Möglichkeiten an: Sofort, Blitz und Staatsnot.'
     )
 );
+
+/*
+ * Es gab hier ein viertes Kästchen mit der Aufschrift „keine", und es war
+ * angekreuzt. Beides ist falsch. Der amtliche Vordruck hat kein solches
+ * Kästchen -- „keine Vorrangstufe" ist die Abwesenheit eines Kreuzes, nicht
+ * ein eigenes. Und ein vorbelegtes Kreuz ist eine Angabe, die niemand
+ * gemacht hat.
+ */
+$assert(
+    !str_contains($priorityMarkup, 'f_09_vorrangstufe_keine')
+        && !str_contains($priorityMarkup, '>keine<'),
+    estab_dv_requirement(
+        'NV-09-VORRANGSTUFE',
+        'Die Vorrangstufe bietet weiterhin ein Kästchen „keine“ an. Ohne '
+            . 'besondere Stufe bleibt das Feld frei -- es trägt keine '
+            . 'eigene Aussage.'
+    )
+);
+$assert(
+    !str_contains($priorityMarkup, 'checked'),
+    estab_dv_requirement(
+        'NV-09-VORRANGSTUFE',
+        'Ein Vordruck ohne Vorrangstufe hat eine Stufe angekreuzt.'
+    )
+);
+
+// Eine getragene Stufe steht selbstverständlich weiter angekreuzt da.
+foreach (['sss' => 'sofort', 'bbb' => 'blitz', 'aaa' => 'staatsnot'] as $wert => $kennung) {
+    $gewaehlt = new FormAndPriorityFixture();
+    $gewaehlt->feld = [9 => true];
+    $gewaehlt->formdata = ['09_vorrangstufe' => $wert];
+    $markup = $render(static function () use ($gewaehlt): void {
+        $gewaehlt->official_message_priority();
+    });
+    if (preg_match(
+        '~id="f_09_vorrangstufe_' . $kennung . '"[^>]*~',
+        $markup,
+        $treffer
+    ) !== 1) {
+        throw new RuntimeException('Die Stufe ' . $wert . ' fehlt in der Maske.');
+    }
+    $assert(
+        str_contains($treffer[0], 'checked'),
+        estab_dv_requirement(
+            'NV-09-VORRANGSTUFE',
+            'Die getragene Vorrangstufe ' . $wert . ' steht nicht angekreuzt: '
+                . $treffer[0]
+        )
+    );
+    $assert(
+        substr_count($markup, 'checked') === 1,
+        estab_dv_requirement(
+            'NV-09-VORRANGSTUFE',
+            'Neben der Stufe ' . $wert . ' ist noch etwas angekreuzt.'
+        )
+    );
+}
 
 foreach (estab_message_priority_options() as $option) {
     if ($option['value'] === '' || in_array($option['value'], $printedBoxes, true)) {
@@ -369,9 +426,19 @@ while (($start = strpos($stylesheet, '@media print', $offset)) !== false) {
         break;
     }
 }
+// Die Klasse estab-official-priority-clear gab es nur, um das Kästchen
+// „keine“ im Ausdruck wieder zu verbergen. Ohne das Kästchen hat sie nichts
+// mehr zu verbergen; sie darf im Stylesheet nicht als Leiche stehenbleiben.
+$assert(
+    !str_contains($stylesheet, 'estab-official-priority-clear'),
+    estab_dv_requirement(
+        'NV-09-VORRANGSTUFE',
+        'Das Stylesheet kennt weiterhin eine Regel für das Kästchen „keine“, '
+            . 'das es nicht mehr gibt.'
+    )
+);
 foreach (
-    ['estab-official-priority-clear' => 'die Möglichkeit „keine“',
-        'estab-official-priority-extra' => 'die Stufen ohne Kästchen'] as $class => $what
+    ['estab-official-priority-extra' => 'die Stufen ohne Kästchen'] as $class => $what
 ) {
     $assert(
         str_contains($printBlocks, '.' . $class),
