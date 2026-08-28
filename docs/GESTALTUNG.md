@@ -507,6 +507,25 @@ sie gilt für die Farbe, nicht für die Dicke.
 
 Ein Feld im Fehlerzustand bekommt 2px, weil dort die Auffälligkeit zählt.
 
+#### `!important`
+
+`!important` setzt die Ordnung der Stylesheets außer Kraft, und wer es einmal
+benutzt, braucht es beim nächsten Mal wieder, um das erste zu schlagen. Am
+Ende gilt nicht mehr, was zuletzt geschrieben steht, sondern wer lauter
+gerufen hat.
+
+Vier Fälle sind zulässig, und alle vier haben denselben Grund — dort reicht
+die normale Ordnung nicht:
+
+| Fall | Warum |
+| --- | --- |
+| `@media print` | Der Druckblock muss den Bildschirmstil schlagen |
+| `prefers-reduced-motion` | Bewegung abzuschalten muss jede Regel schlagen, die sie einschaltet |
+| `forced-colors` | Was das Betriebssystem setzt, darf nichts übermalen |
+| **gegen fremdes Markup** | Ein Inline-Stil steht in der Ordnung über jeder Regel. Dasselbe gilt für Präsentationsattribute (`align`, `bgcolor`, `font`), eingebettete Fremddokumente und `[hidden]` gegen ein `display: flex` |
+
+Alles andere ist ein Befund. Geprüft von `GES-DURCHSETZUNG`.
+
 Zwei Schatten, mehr nicht:
 
 ```

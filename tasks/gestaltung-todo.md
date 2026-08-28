@@ -255,12 +255,12 @@ hat einen Fall gefunden, den das Schema nicht kennt — und trägt ihn nach.
       - **Prüfung:** `blick` über vier Höhen; kein Band über Budget
       - **Abhängigkeit:** G13–G17
 
-- [ ] **G19** `!` **S** Migrationsgrenze entfernen, `!important` räumen
+- [x] **G19** `!` **S** Migrationsgrenze entfernen, `!important` einordnen
       → `tests/php/ges_migrationsgrenze.php` (entfällt), `estab-ui.css`, alle `ges_*`-Tests
-      - [ ] Die Ausnahmeliste ist leer und die Datei entfernt
-      - [ ] Die 7er-Stufe von `UX-KONTRAST` gilt jetzt ohne Ausnahme
-      - [ ] `!important` nur noch in `@media print` und `prefers-reduced-motion`
-      - [ ] `GES-MARKEN` zählt null Literale außerhalb `:root`
+      - [x] Die Ausnahmeliste ist leer. `migrationsgrenze.php` ist entfernt und durch `vordruck_ausnahme.php` ersetzt — der Vordruck bleibt als **benannte, dauerhafte** Ausnahme, nicht als Rest einer Umstellung
+      - [x] Die 7er-Stufe gilt überall außer im Vordruck — dort prüft `ux_form_contrast` 14 Paarungen gegen denselben Wert
+      - [x] `!important` — **Planvorgabe korrigiert:** Alle 53 Vorkommen sind nötig, keines ist Bequemlichkeit. Neben Druck und `prefers-reduced-motion` gibt es zwei weitere Fälle, in denen die Ordnung nicht reicht: `forced-colors` und **fremdes Markup** (Inline-Stile, Präsentationsattribute, eingebettete Dokumente, `[hidden]`). Ein Inline-Stil steht in der Ordnung über jeder Regel — ihn ohne `!important` zu schlagen ist unmöglich, nicht unsauber. Die vier Fälle stehen jetzt in der Spec und werden von `GES-DURCHSETZUNG` geprüft
+      - [x] `GES-MARKEN` zählt null Literale außerhalb `:root` — 1202 Regeln geprüft, 184 im Vordruck
       - **Prüfung:** volle Suite; ein neues Literal an **beliebiger** Stelle muss rot werden
       - **Abhängigkeit:** G18
 

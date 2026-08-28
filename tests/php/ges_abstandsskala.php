@@ -15,13 +15,13 @@ declare(strict_types=1);
  * verbraucht, ist eine Zeile Lage, die jemand nicht sieht. Die Flaeche steckt
  * im Beiwerk, nicht in der Schrift -- deshalb wird sie dort geholt.
  *
- * Geprueft wird alles, was die Migrationsgrenze nicht mehr deckt.
+ * Geprueft wird alles, was nicht zum Papierfaksimile gehoert.
  */
 
 $root = dirname(__DIR__, 2);
 require_once $root . '/app/ux_rules.php';
 require_once __DIR__ . '/lib/stylesheet.php';
-require_once __DIR__ . '/lib/migrationsgrenze.php';
+require_once __DIR__ . '/lib/vordruck_ausnahme.php';
 
 $assertions = 0;
 $assert = static function (bool $condition, string $message) use (&$assertions): void {
@@ -124,7 +124,7 @@ foreach ($regeln as $regel) {
     if (str_contains($regel['auswaehler'], ':root')) {
         continue;
     }
-    if (estab_test_in_migrationsgrenze($regel['auswaehler'])) {
+    if (estab_test_ist_vordruck($regel['auswaehler'])) {
         continue;
     }
     // Ein Keyframe-Schritt ist kein Bereich, sondern ein Zwischenstand einer
@@ -178,7 +178,7 @@ $assert(
 
 printf(
     "Gestaltung Abstandsskala: OK (%d assertions, %d Stufen, %d Radien, "
-        . "%d Regeln geprueft, %d noch in der Grenze)\n",
+        . "%d Regeln geprueft, %d im Vordruck)\n",
     $assertions,
     count($abstaende),
     count($radien),

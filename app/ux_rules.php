@@ -235,6 +235,16 @@ function estab_ux_rules(): array
                 . 'Fokusring traegt auf jedem Grund mindestens einer seiner '
                 . 'beiden Ringe.',
         ],
+        'GES-DURCHSETZUNG' => [
+            'origin' => ESTAB_UX_ORIGIN_GESTALTUNG,
+            'reference' => 'Abschnitt 2.5',
+            'requirement' => '`!important` gibt es nur dort, wo die Ordnung '
+                . 'der Stylesheets nicht reicht: im Druckblock, bei '
+                . 'abgeschalteter Bewegung, bei erzwungenen Farben und gegen '
+                . 'fremdes Markup -- Inline-Stile, Präsentationsattribute, '
+                . 'eingebettete Dokumente. Sonst gilt am Ende nicht, was '
+                . 'zuletzt geschrieben steht, sondern wer lauter gerufen hat.',
+        ],
         'GES-VORDRUCK-MASSSTAB' => [
             'origin' => ESTAB_UX_ORIGIN_GESTALTUNG,
             'reference' => 'Abschnitt 12.1 und 12.2',

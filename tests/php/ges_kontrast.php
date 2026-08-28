@@ -27,7 +27,7 @@ $root = dirname(__DIR__, 2);
 require_once $root . '/app/ux_rules.php';
 require_once __DIR__ . '/lib/farbe.php';
 require_once __DIR__ . '/lib/stylesheet.php';
-require_once __DIR__ . '/lib/migrationsgrenze.php';
+require_once __DIR__ . '/lib/vordruck_ausnahme.php';
 
 $assertions = 0;
 $assert = static function (bool $condition, string $message) use (&$assertions): void {
@@ -273,7 +273,7 @@ foreach ($regeln as $regel) {
     if (str_contains($regel['auswaehler'], ':root')) {
         continue;
     }
-    if (estab_test_in_migrationsgrenze($regel['auswaehler'])) {
+    if (estab_test_ist_vordruck($regel['auswaehler'])) {
         continue;
     }
     // Ein Keyframe-Schritt ist kein Bereich, sondern ein Zwischenstand einer

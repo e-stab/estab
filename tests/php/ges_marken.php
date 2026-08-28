@@ -11,7 +11,7 @@ declare(strict_types=1);
  * sich dann nicht mehr nachpruefen, nur noch hoffen.
  *
  * Diese Pruefung verlangt, dass jede Farbangabe aus dem :root-Block kommt.
- * Sie ist scharf fuer alles, was nicht in der Migrationsgrenze steht -- und
+ * Sie ist scharf fuer alles, was nicht zum Papierfaksimile gehoert -- und
  * die schrumpft mit jeder Aufgabe des Umsetzungsplans.
  *
  * Solange der Bestand noch weitgehend in der Grenze steht, faende diese
@@ -23,7 +23,7 @@ declare(strict_types=1);
 $root = dirname(__DIR__, 2);
 require_once $root . '/app/ux_rules.php';
 require_once __DIR__ . '/lib/stylesheet.php';
-require_once __DIR__ . '/lib/migrationsgrenze.php';
+require_once __DIR__ . '/lib/vordruck_ausnahme.php';
 
 $assertions = 0;
 $assert = static function (bool $condition, string $message) use (&$assertions): void {
@@ -79,7 +79,7 @@ $assert(
 // Bekannt sind dabei nicht nur die Marken aus :root: Die Zeitleiste und das
 // Vordruckblatt setzen eigene auf ihrem Wurzelelement, und die gelten dort.
 //
-// Auch diese Pruefung gilt nur ausserhalb der Migrationsgrenze. Der Bestand
+// Auch diese Pruefung gilt nur ausserhalb des Papierfaksimiles. Der Bestand
 // kennt einen solchen Fall bereits: `var(--estab-menu-background, #f0f0f0)`
 // ruft eine Marke auf, die nirgends definiert ist -- der Rueckfallwert ist
 // der eigentliche Wert, also ein Farbliteral in Verkleidung. Er faellt auf,
@@ -88,7 +88,7 @@ $bekannt = estab_test_css_definierte_marken($stylesheet);
 $regeln = estab_test_css_regeln($stylesheet);
 $unbekannt = [];
 foreach ($regeln as $regel) {
-    if (estab_test_in_migrationsgrenze($regel['auswaehler'])) {
+    if (estab_test_ist_vordruck($regel['auswaehler'])) {
         continue;
     }
     foreach ($regel['deklarationen'] as $erklaerung) {
@@ -111,14 +111,14 @@ $assert(
 );
 
 // Die eigentliche Pruefung: kein Farbliteral ausserhalb des :root-Blocks --
-// fuer alles, was die Migrationsgrenze nicht mehr deckt.
+// fuer alles, was nicht zum Papierfaksimile gehoert.
 $offen = [];
 $geprueft = 0;
 foreach ($regeln as $regel) {
     if (str_contains($regel['auswaehler'], ':root')) {
         continue;
     }
-    if (estab_test_in_migrationsgrenze($regel['auswaehler'])) {
+    if (estab_test_ist_vordruck($regel['auswaehler'])) {
         continue;
     }
     // Ein Keyframe-Schritt ist kein Bereich, sondern ein Zwischenstand einer
@@ -155,7 +155,7 @@ foreach (estab_test_css_regeln($probe) as $regel) {
     if (str_contains($regel['auswaehler'], ':root')) {
         continue;
     }
-    if (estab_test_in_migrationsgrenze($regel['auswaehler'])) {
+    if (estab_test_ist_vordruck($regel['auswaehler'])) {
         continue;
     }
     foreach ($regel['deklarationen'] as $erklaerung) {
@@ -178,7 +178,7 @@ $assert(
 
 printf(
     "Gestaltung Marken: OK (%d assertions, %d Marken, %d Regeln geprueft, "
-        . "%d noch in der Grenze)\n",
+        . "%d im Vordruck)\n",
     $assertions,
     count($marken),
     $geprueft,

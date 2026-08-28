@@ -13,7 +13,7 @@ declare(strict_types=1);
  * keinen solchen Schnitt; der Browser rundet auf 700 ab. Die Angabe
  * suggeriert damit einen Unterschied, den niemand sehen kann.
  *
- * Geprueft wird alles, was die Migrationsgrenze nicht mehr deckt. Die
+ * Geprueft wird alles, was nicht zum Papierfaksimile gehoert. Die
  * Selbstprobe am Ende stellt sicher, dass die Pruefung beisst, solange der
  * Bestand noch weitgehend in der Grenze steht.
  */
@@ -21,7 +21,7 @@ declare(strict_types=1);
 $root = dirname(__DIR__, 2);
 require_once $root . '/app/ux_rules.php';
 require_once __DIR__ . '/lib/stylesheet.php';
-require_once __DIR__ . '/lib/migrationsgrenze.php';
+require_once __DIR__ . '/lib/vordruck_ausnahme.php';
 
 $assertions = 0;
 $assert = static function (bool $condition, string $message) use (&$assertions): void {
@@ -100,7 +100,7 @@ foreach ($regeln as $regel) {
     if (str_contains($regel['auswaehler'], ':root')) {
         continue;
     }
-    if (estab_test_in_migrationsgrenze($regel['auswaehler'])) {
+    if (estab_test_ist_vordruck($regel['auswaehler'])) {
         continue;
     }
     // Ein Keyframe-Schritt ist kein Bereich, sondern ein Zwischenstand einer
@@ -140,7 +140,7 @@ $assert(
 );
 
 // Beisst die Pruefung? Ohne diese Probe waere ihre Ruhe kein Beweis, solange
-// der Bestand noch in der Grenze steht.
+// der Bestand im Vordruck steht.
 $probe = '.estab-probe-nicht-in-der-grenze { font-size: 0.62rem; '
     . 'font-weight: 800; }';
 $probeOffen = 0;
@@ -167,7 +167,7 @@ $assert(
 
 printf(
     "Gestaltung Schriftskala: OK (%d assertions, %d Stufen, %d Regeln "
-        . "geprueft, %d noch in der Grenze)\n",
+        . "geprueft, %d im Vordruck)\n",
     $assertions,
     count($stufen),
     $geprueft,

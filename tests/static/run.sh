@@ -204,6 +204,7 @@ for test_name in \
     ges_fokus \
     ges_seitenaufbau \
     ges_vordruck \
+    ges_durchsetzung \
     ux_keyboard \
     ux_without_javascript \
     fuest_formal_review \
