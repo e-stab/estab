@@ -5365,6 +5365,25 @@ body.estab-message-form-body {
     margin: var(--abstand-2) 0 0;
 }
 
+/* Bestandszellen im Bauteil.
+
+   Die Liste "Stab lesen" fuellt ihre Zellen mit Knoepfen aus dem Bestand:
+   Der ganze Nachrichtentext ist die Aufschrift eines Knopfes. In der alten
+   Tabelle teilte der Browser die Spalten nach dem Inhalt ein; das Bauteil
+   setzt feste Breiten. Ohne diese beiden Regeln waere die Folge im Bild
+   sichtbar gewesen -- Zeilen von 450 Bildpunkten Hoehe, und eine
+   Zustandsmarke, die in die Nachbarspalte lief. */
+.estab-tabelle-klammer .estab-list-cell-button {
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    display: -webkit-box;
+    overflow: hidden;
+}
+
+.estab-tabelle-blatt .estab-list-state {
+    white-space: normal;
+}
+
 .estab-tabelle-masken td {
     background: var(--grund-tafel);
     border-bottom: 1px solid var(--linie-kraeftig);

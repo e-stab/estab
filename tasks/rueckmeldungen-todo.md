@@ -165,7 +165,7 @@ Reihenfolge: **Test zuerst, dann die Änderung, dann das Bild ansehen.**
 > **Prüfpunkt D3** — Trägt das Bauteil? Eine Tabelle daraus mit Sortierung,
 > Spaltensuche und Blättern, und ohne JavaScript noch lesbar und bedienbar.
 
-- [ ] **R16** `!!` **M** „Stab lesen" — und das Blättern reparieren
+- [x] **R16** `!!` **M** „Stab lesen" — und das Blättern reparieren
       → `4fach/liste.php`
       - [ ] Das Blättern funktioniert. **Erst den Fehler finden, dann umbauen** — ein Umbau, der einen Fehler mitnimmt, versteckt ihn
       - [ ] Die Liste kommt aus dem Bauteil
@@ -184,7 +184,7 @@ Reihenfolge: **Test zuerst, dann die Änderung, dann das Bild ansehen.**
       - **Prüfung:** wie R17
       - **Abhängigkeit:** R14
 
-- [ ] **R19** `!` **M** Meldungsübersicht und Vordruckliste
+- [x] **R19** `!` **M** Meldungsübersicht und Vordruckliste
       → `app/message_list_ui.php`, `4fach/vordrucke.php`
       - [x] **Vordruckliste** auf dem Bauteil
       - [x] **Meldungsübersicht** auf dem Bauteil, in dessen **zweiter

@@ -241,6 +241,11 @@ function estab_tabelle_spalte(array $spalte): array
         // Wert der Spalte, nicht ueber ihr Markup: Sonst suchte man in
         // Klassennamen statt in Angaben.
         'zelle' => $spalte['zelle'] ?? null,
+        // Eine selbstgebaute Zelle kann trotzdem auf zwei Zeilen geklammert
+        // werden. Eine Zeile, die zehn Zeilen hoch ist, macht die Liste
+        // unbrauchbar -- und der ganze Text steht im Vordruck, den ein Klick
+        // oeffnet.
+        'klammern' => (bool) ($spalte['klammern'] ?? false),
     ];
 }
 
@@ -427,6 +432,37 @@ function estab_tabelle_adresse(array $zustand, array $aenderung): string
     }
     $abfrage = http_build_query($quelle);
     return $abfrage === '' ? '?' : '?' . $abfrage;
+}
+
+/**
+ * Eine fertig ausgegebene Tabellenzeile in ihre Zellen zerlegen.
+ *
+ * Manche Listen des Bestandes bauen ihre Zellen in Verzweigungen auf: Ein und
+ * dieselbe Spalte wird an vier Stellen ausgegeben, je nachdem, ob eine
+ * Nachricht gelesen, erledigt, dringend oder nichts davon ist. Aus dem
+ * Quelltext lässt sich dann nicht ablesen, welches `<td>` zu welcher Spalte
+ * gehört -- aus dem Ergebnis schon: Es sind genau so viele wie Spalten.
+ *
+ * Stimmt die Zahl nicht, bricht das hier ab. Eine Zeile, deren Zellen
+ * verrutscht sind, zeigt die Angaben der falschen Spalte -- und im
+ * Meldewesen ist das schlimmer als eine Fehlermeldung.
+ *
+ * @return list<string>
+ */
+function estab_tabelle_zeile_zerlegen(string $ausgabe, int $spalten): array
+{
+    if (preg_match_all('~<td\b[^>]*>(.*?)</td>~s', $ausgabe, $treffer) === false) {
+        throw new RuntimeException('Die Tabellenzeile ist nicht lesbar.');
+    }
+    $zellen = $treffer[1];
+    if (count($zellen) !== $spalten) {
+        throw new RuntimeException(
+            'Die Tabellenzeile hat ' . count($zellen) . ' Zellen statt '
+                . $spalten . '. Eine Zeile mit verrutschten Zellen zeigt die '
+                . 'Angaben der falschen Spalte.'
+        );
+    }
+    return $zellen;
 }
 
 /** Ab wieviel Zeichen eine Zelle einen Aufklapp bekommt. */
@@ -934,11 +970,17 @@ function estab_tabelle_markup(array $tabelle): string
             // data-label traegt die Kopfbezeichnung mit in die Zelle. Unter
             // 48rem Spaltenbreite wird die Tabelle zu Karten, und eine Karte
             // ohne Bezeichnungen ist eine Reihe nackter Werte.
-            $inhalt = $spalte['zelle'] !== null
-                ? ($spalte['zelle'])($zeile)
-                : estab_tabelle_zelleninhalt(
+            if ($spalte['zelle'] !== null) {
+                $inhalt = ($spalte['zelle'])($zeile);
+                if ($spalte['klammern']) {
+                    $inhalt = '<span class="estab-tabelle-klammer">'
+                        . $inhalt . '</span>';
+                }
+            } else {
+                $inhalt = estab_tabelle_zelleninhalt(
                     (string) ($zeile[$spalte['schluessel']] ?? '')
                 );
+            }
             $markup .= '<td data-label="' . estab_message_html($spalte['kopf']) . '"'
                 . ($spalte['zahlenspalte'] ? ' class="estab-tabelle-zahl"' : '')
                 . '>' . $inhalt . '</td>';

@@ -5,6 +5,7 @@ require_once __DIR__ . "/../app/csrf.php";
 require_once __DIR__ . "/../app/message_repository.php";
 require_once __DIR__ . "/../app/message_priority.php";
 require_once __DIR__ . "/../app/message_transport.php";
+require_once __DIR__ . "/../app/tabelle.php";
 require_once __DIR__ . "/../app/read_authorization.php";
 require_once __DIR__ . "/../app/message_list.php";
 require_once __DIR__ . "/../app/message_list_ui.php";
@@ -1484,30 +1485,32 @@ class Listen extends kategorien {
         $dbschonerledigt = list_of_done_msg ($this->operationalIdentity) ;
         $this->kategoliste ();
         $this->listen_navi () ;  //Navigationsbutton
+        /*
+         * Die Liste "Stab lesen" kommt aus dem Tabellenbauteil
+         * (app/tabelle.php), in dessen zweiter Betriebsart: Gesiebt,
+         * sortiert und geblaettert wird weiter hier -- ueber die
+         * Filterleiste und die Sitzung --, das Bauteil stellt dar.
+         *
+         * Der Inhalt jeder Zelle bleibt Zeile fuer Zeile, wie er war. Er
+         * wird zwischengespeichert und danach zerlegt: Die Zellen entstehen
+         * in Verzweigungen -- dieselbe Spalte wird an vier Stellen
+         * ausgegeben, je nachdem ob gelesen, erledigt, dringend oder nichts
+         * davon --, und aus dem Quelltext ist nicht ablesbar, welches <td>
+         * zu welcher Spalte gehoert. Aus dem Ergebnis schon.
+         */
         if  ($result != "") {
-          echo "<table class=\"estab-tool-table estab-list-table\">\n<tbody>\n";
-          echo "<tr class=\"estab-list-head\">\n";
-            // gelesen ?
-          echo "<th align=\"center\">";
-          echo "Kenntnis";
-          echo "</th>\n";
-            // erledigt
-          echo "<th align=\"center\">";
-          echo "Erledigt";
-          echo "</th>\n";
-            // Transport
-          echo "<th align=\"center\">";
-          echo "Transport";
-          echo "</th>\n";
-          echo "<th>Vorrang</th>\n";
-          echo "<th>E/A</th>\n";
-          echo "<th>TBB-Nachweis</th>\n";
-          echo "<th>Von</th>";
-          echo "<th>An</th>";
-          echo "<th>Abfasszeit</th>\n";
-          echo "<th>Inhalt</th>\n";
-          echo "</tr>";
-          // zeilenweise Anzeige der Datenbankanfrage
+          // Breite und Klammerung je Spalte. Die Angaben stammen aus einer
+          // Messung im Browser: Mit gleich verteilten Breiten ueberlagerte
+          // der Transportstand die Vorrangstufe, und der Nachrichtentext
+          // machte Zeilen von 450 Bildpunkten Hoehe.
+          $stabSpalten = array (
+            array ("Kenntnis", 8, false), array ("Erledigt", 8, false),
+            array ("Transport", 10, false), array ("Vorrang", 8, false),
+            array ("E/A", 4, false), array ("TBB-Nachweis", 10, false),
+            array ("Von", 9, true), array ("An", 9, true),
+            array ("Abfasszeit", 9, false), array ("Inhalt", 25, true),
+          );
+          $stabZeilen = array ();
           foreach ($result as $row){
              $hilf = $this->explodereceiver ( $row ["16_empf"] );
              $receivercolor = $hilf [
@@ -1526,10 +1529,7 @@ class Listen extends kategorien {
                $cfg ["lbg"],
                $cfg ["lbg"] ["dflt"]
              );
-             echo "<tr style=\"background: ".
-               estab_message_html ($receiverbackground).
-               "; color:".estab_message_html ($receiverink).
-               "; font-weight:bold;\">\n";
+             ob_start ();
              // Liegt eine Vorrangstufe vor!!!
              $vorrang = estab_message_priority_requires_attention (
                $row["09_vorrangstufe"]
@@ -1689,10 +1689,60 @@ class Listen extends kategorien {
              }
              estab_list_attachment_badge ($row ["12_anhang"] ?? null);
              echo "</td>\n";
-             echo "</tr>";
+             $stabRoh = (string) ob_get_clean ();
+             $stabZellen = estab_tabelle_zeile_zerlegen (
+               $stabRoh,
+               count ($stabSpalten)
+             );
+             $stabZeile = array (
+               "id" => (string) ($row ["00_lfd"] ?? ""),
+               "grund" => $receiverbackground,
+               "tinte" => $receiverink,
+             );
+             foreach ($stabZellen as $stabNummer => $stabInhalt) {
+               $stabZeile ["z" . $stabNummer] = $stabInhalt;
+             }
+             $stabZeilen[] = $stabZeile;
           }  // foreach $result
+
+          $stabAufbau = array ();
+          foreach ($stabSpalten as $stabNummer => $stabAngabe) {
+            $stabAufbau[] = array (
+              "schluessel" => "id",
+              "kopf" => $stabAngabe [0],
+              "breite" => $stabAngabe [1],
+              "sortierbar" => false,
+              "suchbar" => false,
+              "art" => "text",
+              "klammern" => $stabAngabe [2],
+              "zelle" => static function (array $z) use ($stabNummer): string {
+                return $z ["z" . $stabNummer];
+              },
+            );
+          }
+          echo estab_tabelle_markup (array (
+            "id" => "stab-lesen",
+            "beschriftung" => "Meldungen des aktiven Einsatzes mit "
+              . "Kenntnis-, Erledigt- und Transportstand",
+            "baender" => false,
+            "mindestbreite" => "60rem",
+            "fremd" => array (
+              "treffer" => count ($stabZeilen),
+              "gesamt" => (int) ($_SESSION ["filter_rescount"] ?? count ($stabZeilen)),
+            ),
+            // Die Durchschriftenfarbe der eigenen Funktion. Sie kommt aus der
+            // Einrichtung, nicht aus dem Stylesheet, und sagt auf einen Blick,
+            // ob diese Meldung einen selbst betrifft.
+            "zeilenmarke" => static function (array $z): string {
+              return "style=\"background: " . estab_message_html ($z ["grund"])
+                . "; color:" . estab_message_html ($z ["tinte"])
+                . "; font-weight:bold;\"";
+            },
+            "spalten" => $stabAufbau,
+            "zeilen" => $stabZeilen,
+            "leer" => "Keine Meldung entspricht den gesetzten Filtern.",
+          ));
         }
-        echo "</tbody></table>";
         $this->listen_navi () ;  //Navigationsbutton
       break;
 

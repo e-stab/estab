@@ -591,7 +591,18 @@ $assert(
             'estab_message_list_render_controls ('
         )
         && substr_count($listSource, 'echo "<tr>\n";') >= 3
-        && substr_count($listSource, 'echo "</th>\n";') >= 3,
+        // Die Kopfzellen der Liste "Stab lesen" kommen aus dem
+        // Tabellenbauteil; die Seite schreibt sie nicht mehr selbst. Dass
+        // die Zeile dort vollstaendig ist, prueft das Bauteil haerter als
+        // eine Zaehlung: estab_tabelle_zeile_zerlegen bricht ab, wenn eine
+        // Zeile nicht genau so viele Zellen hat wie die Tabelle Spalten --
+        // eine Zeile mit verrutschten Zellen zeigt die Angaben der falschen
+        // Spalte, und das ist schlimmer als eine Fehlermeldung.
+        && str_contains($listSource, 'estab_tabelle_zeile_zerlegen (')
+        && str_contains(
+            (string) file_get_contents(__DIR__ . '/../../app/tabelle.php'),
+            'Die Tabellenzeile hat '
+        ),
     'message lists contain nested filters or structurally incomplete table rows'
 );
 $assert(

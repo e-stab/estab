@@ -137,12 +137,19 @@ $assert(
     'A copy-coloured background is painted without a matching readable ink'
 );
 
-// A style that computes its background must compute its foreground too. A
-// literal colour next to a computed background is the exact defect that made
-// rows without an own carbon copy render white on white.
+/*
+ * Eine berechnete Flaeche braucht eine berechnete Schrift.
+ *
+ * Eine feste Farbe neben einer berechneten Flaeche ist genau der Fehler, der
+ * Zeilen ohne eigene Durchschrift weiss auf weiss darstellte.
+ *
+ * Geprueft wird an der Farbe, nicht an der Ausgabeform: Seit der Umstellung
+ * auf das Tabellenbauteil gibt die Liste "Stab lesen" ihr style-Attribut
+ * zurueck, statt ein <tr> auszugeben. Die Regel gilt beidem.
+ */
 $styleStatements = 0;
 preg_match_all(
-    '~echo\s+"<t[rd][^\n]*style=.*?;\n~s',
+    '~(?:echo|return)\s+"[^\n]*style=.*?;\n~s',
     $listSource,
     $statements,
     PREG_SET_ORDER
@@ -152,9 +159,10 @@ foreach ($statements as $statement) {
     if (!str_contains($text, 'background')) {
         continue;
     }
-    $computedBackground = str_contains($text, '$receiverbackground')
-        || str_contains($text, 'estab_recipient_copy_background');
-    if (!$computedBackground) {
+    // Eine Flaeche aus einer festen Farbe darf eine feste Schrift haben --
+    // sie ist nachrechenbar. Eine berechnete darf es nicht.
+    $festeFlaeche = preg_match('~background(?:-color)?:\s*(?:\#|rgb\()~i', $text) === 1;
+    if ($festeFlaeche) {
         continue;
     }
     $styleStatements++;
@@ -163,17 +171,35 @@ foreach ($statements as $statement) {
         'A computed background is combined with a fixed foreground colour: '
             . trim(preg_replace('~\s+~', ' ', $text) ?? '')
     );
-    $assert(
-        str_contains($text, '$receiverink')
-            || str_contains($text, 'estab_recipient_copy_ink'),
-        'A computed background is painted without a computed foreground: '
-            . trim(preg_replace('~\s+~', ' ', $text) ?? '')
-    );
 }
 $assert(
     $styleStatements >= 1,
     'The copy-coloured row is no longer being checked for a readable foreground'
 );
+
+/*
+ * Und die beiden Werte werden gemeinsam berechnet. Wer nur die Flaeche
+ * bestimmt und die Schrift stehenlaesst, bekommt genau den Fehler, den die
+ * Pruefung oben nicht mehr sehen kann -- weil er dann gar nicht mehr in
+ * derselben Anweisung steht.
+ */
+preg_match_all(
+    '~estab_recipient_copy_background\s*\(~',
+    $listSource,
+    $flaechen,
+    PREG_OFFSET_CAPTURE
+);
+$assert(
+    $flaechen[0] !== [],
+    'The list no longer computes a recipient copy background at all'
+);
+foreach ($flaechen[0] as [$_treffer, $stelle]) {
+    $umfeld = substr($listSource, $stelle, 1200);
+    $assert(
+        str_contains($umfeld, 'estab_recipient_copy_ink'),
+        'A recipient copy background is computed without its ink nearby'
+    );
+}
 
 // Rows painted with two fixed colours must clear the same contrast bar.
 $fixedPairs = 0;
