@@ -1424,7 +1424,14 @@ $assert(
             'estab_additional_functions' => [
                 ['rolle' => 'Stab', 'funktion' => 'ETB'],
             ],
-        ], 'ROLLE')) === ['ldf_nachrichten', 'm2_benutzer'],
+        // Die Fernmelderschritte stehen dem LdF offen: Er vertritt den
+        // Annahme- und Weitergabeplatz, wenn es klemmt. Geprueft wird hier,
+        // dass die ETB-Zusatzfunktion daneben **keine** Stabsaktionen
+        // aufmacht -- darum geht es in dieser Zusicherung.
+        ], 'ROLLE')) === [
+            'ldf_nachrichten', 'fm_eingang', 'fm_ausgang', 'fm_admin',
+            'fm_anhang', 'm2_benutzer',
+        ],
     'ETB exposed normal Stab/FB message actions in STRICT or LOOSE'
 );
 
@@ -1481,8 +1488,18 @@ $assert(
             'm2_benutzer',
         ]
         && $looseAdminKeys === ['m2_benutzer']
+        // Der LdF traegt seine Dispositionsschritte und die des Annahme-
+        // und Weitergabeplatzes, den er vertritt -- dazu hier die Schritte
+        // der ausdruecklich zugewiesenen Zusatzfunktion S6. Die Zusicherung
+        // prueft die Vereinigung, nicht die Laenge: Es darf nichts
+        // hinzukommen, was weder aus der Grundfunktion noch aus einer
+        // zugewiesenen stammt.
         && $looseLdfWithS6Keys === [
             'ldf_nachrichten',
+            'fm_eingang',
+            'fm_ausgang',
+            'fm_admin',
+            'fm_anhang',
             'stab_schreiben',
             'stab_lesen',
             'm2_benutzer',

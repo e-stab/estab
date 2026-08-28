@@ -957,7 +957,22 @@ function estab_sidebar_workflow_actions(
                 'description' => 'Rufnamen und Beförderungswege festlegen',
             ]);
         }
-        if ($role === 'Fernmelder' && $function === 'A/W') {
+        /*
+         * Die Arbeitsschritte des Annahme- und Weitergabeplatzes -- und der
+         * LdF sieht sie mit.
+         *
+         * Er ist fuer den Betrieb zustaendig: Er ueberwacht die Kennzahlen
+         * seiner Fernmelder, erkennt, wenn es klemmt, und uebernimmt im
+         * Problemfall einzelne Aufgaben selbst. Ohne die Schritte in der
+         * Spalte muesste er dafuer die Funktion wechseln.
+         *
+         * Er bleibt dabei LdF -- seine Dispositionsschritte stehen weiter
+         * darueber, und er traegt weiterhin eine Warteschlange, nicht zwei.
+         */
+        if (
+            $role === 'Fernmelder'
+            && in_array($function, ['A/W', 'LdF'], true)
+        ) {
             $append([
                 'key' => 'fm_eingang',
                 'name' => 'fm_eingang_x',

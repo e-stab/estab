@@ -32,11 +32,11 @@ Reihenfolge: **Test zuerst, dann die Änderung, dann das Bild ansehen.**
 > trugen weiße Tinte ohne ihren Grund. Sie hatten alle dasselbe entfernte
 > Banner. Gemeldet war einer. Dazu trägt er eine Selbstprobe.
 
-- [ ] **R03** `!!` **M** Der LdF trägt die Fernmelder-Tätigkeiten
+- [x] **R03** `!!` **M** Der LdF trägt die Fernmelder-Tätigkeiten
       → `app/sidebar.php`, `app/workflow.php`, `app/read_authorization.php`
-      - [ ] Der LdF bekommt die Arbeitsschritte Eingang, Ausgang, 2. Sichtung und Anhänge
-      - [ ] Und den Leseumfang, den er dafür braucht
-      - [ ] **Er bleibt dabei LdF** — er wird nicht zu einem zweiten A/W
+      - [x] Der LdF bekommt die Arbeitsschritte Eingang, Ausgang, 2. Sichtung und Anhänge
+      - [x] Und den Leseumfang, den er dafür braucht
+      - [x] **Er bleibt dabei LdF** — er wird nicht zu einem zweiten A/W
       - **Prüfung:** bestehende Berechtigungstests bleiben grün, insbesondere die strikte Trennung
       - **Risiko heraufgesetzt auf `!!`.** Der erste Anlauf ist zurückgenommen
 

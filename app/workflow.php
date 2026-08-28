@@ -758,6 +758,40 @@ function estab_workflow_is_telecommunications(
     );
 }
 
+/**
+ * Darf diese Kennung fuer den Annahme- und Weitergabeplatz handeln?
+ *
+ * Der Annahme- und Weitergabeplatz selbst -- und der Leiter des
+ * Fernmeldebetriebs, der ihn vertritt.
+ *
+ * Der LdF ist fuer den Betrieb zustaendig. Er muss die Kennzahlen seiner
+ * Fernmelder ueberwachen, erkennen, wenn es klemmt, und im Problemfall
+ * einzelne Aufgaben selbst uebernehmen. Dafuer braucht er die Ansichten und
+ * die Arbeitsschritte des A/W -- im Einsatz sitzt er oft allein.
+ *
+ * Er wird dadurch **nicht** zu einem A/W, und das ist keine Feinheit:
+ * `estab_workflow_is_telecommunications()` bleibt fuer ihn falsch. Wer die
+ * beiden Identitaeten verschmilzt, bricht die strikte Trennung, die
+ * workflow_security namentlich verlangt -- und laesst ihn nach
+ * FUEST-DOPPELFUNKTION zwei Warteschlangen tragen, was den Unterschied
+ * zwischen "leitet den Betrieb" und "ist an der Annahmestelle eingeteilt"
+ * verwischt.
+ *
+ * Die Identitaet bleibt, die Erlaubnis waechst. Und sie waechst nur in eine
+ * Richtung: Wer die Handgriffe tut, leitet deshalb nicht den Betrieb.
+ */
+function estab_workflow_may_act_for_telecommunications(
+    array $identity,
+    bool $allowLooseWriteMode = false
+): bool
+{
+    return estab_workflow_is_telecommunications($identity, $allowLooseWriteMode)
+        || estab_workflow_is_telecommunications_lead(
+            $identity,
+            $allowLooseWriteMode
+        );
+}
+
 /** Leiter der Fernmeldebetriebsstelle: Rufnamen und Transportwege disponieren. */
 function estab_workflow_is_telecommunications_lead(
     array $identity,
@@ -1624,6 +1658,11 @@ function estab_workflow_route_allowed(array $identity, string $method, array $re
     $isStaffWriter = estab_workflow_is_staff_writer($identity);
     $mayWriteTelecommunications =
         estab_workflow_is_telecommunications($identity, true);
+    // Die Vertretung: der A/W selbst und der LdF, der fuer ihn einspringt.
+    $mayActForTelecommunications =
+        estab_workflow_may_act_for_telecommunications($identity);
+    $mayWriteForTelecommunications =
+        estab_workflow_may_act_for_telecommunications($identity, true);
     $mayWriteTelecommunicationsLead =
         estab_workflow_is_telecommunications_lead($identity, true);
     $mayWriteViewer = estab_workflow_is_viewer($identity, true);
@@ -1963,8 +2002,8 @@ function estab_workflow_route_allowed(array $identity, string $method, array $re
             return false;
         }
         $fmAllowed = match ($request['fm']) {
-            'meldung' => $mayWriteTelecommunications,
-            'FM-Adminmeldung' => $isTelecommunications,
+            'meldung' => $mayWriteForTelecommunications,
+            'FM-Adminmeldung' => $mayActForTelecommunications,
             'SI-Adminmeldung' => $isViewer,
             default => false,
         };
@@ -1982,10 +2021,10 @@ function estab_workflow_route_allowed(array $identity, string $method, array $re
         'stab_lesen_x' => $isStaffWriter,
         'stab_korrekturen_x' => $mayWriteStaff,
         'stab_anhang_x' => $isStaffWriter,
-        'fm_eingang_x' => $mayWriteTelecommunications,
-        'fm_ausgang_x' => $mayWriteTelecommunications,
-        'fm_admin_x' => $isTelecommunications,
-        'fm_anhang_x' => $isTelecommunications,
+        'fm_eingang_x' => $mayWriteForTelecommunications,
+        'fm_ausgang_x' => $mayWriteForTelecommunications,
+        'fm_admin_x' => $mayActForTelecommunications,
+        'fm_anhang_x' => $mayActForTelecommunications,
         'ldf_nachrichten_x' => $mayWriteTelecommunicationsLead,
         'stab_sichten_x' => $mayWriteViewer,
         'si_admin_x' => $isViewer,
