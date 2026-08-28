@@ -192,18 +192,42 @@ function estab_list_size_markup ($url, $label, $active) {
     .estab_message_html ((string) $label)."</a>";
 }
 
+/**
+ * Der Name, unter dem eine Handlung der Meldungsliste ausgewertet wird.
+ *
+ * Diese Bedienelemente waren einmal Bilder. Ein Bildknopf sendet nicht seinen
+ * Namen, sondern die Klickkoordinaten darauf -- flt_for_x und flt_for_y --,
+ * und die ganze Auswertung in mainindex.php sowie die Liste der erlaubten
+ * Handlungen in app/workflow.php fragen deshalb nach dem _x.
+ *
+ * Als die Bilder durch echte Knoepfe ersetzt wurden, fiel das Suffix weg.
+ * Blaettern, Erledigt-Filter, Unerledigt-Filter und Suchmaske sendeten
+ * seither Namen, die niemand liest: Der Knopf sah aus wie ein Knopf, die
+ * Seite lud neu, und es aenderte sich nichts.
+ *
+ * Das Suffix bleibt, weil es der Name der Handlung im ganzen Bestand ist --
+ * nicht, weil es noch ein Bild gaebe.
+ */
+function estab_list_handlungsname ($name) {
+  return estab_message_html ((string) $name)."_x";
+}
+
 /** Ein Schalter der Filterleiste; sein Zustand steht in aria-pressed. */
 function estab_list_toggle_markup ($name, $label, $active) {
   return "<button class=\"estab-list-toggle".($active ? " is-active" : "")."\""
-    ." type=\"submit\" name=\"".estab_message_html ((string) $name)."\" value=\"1\""
+    ." type=\"submit\" name=\"".estab_list_handlungsname ($name)."\" value=\"1\""
     ." aria-pressed=\"".($active ? "true" : "false")."\">"
     .estab_message_html ((string) $label)."</button>";
 }
 
 /** Ein Knopf zum Blaettern. Das Zeichen ist Schmuck, das Wort ist die Angabe. */
 function estab_list_pager_markup ($name, $glyph, $label) {
+  // form= verbindet den Knopf mit der Filterleiste, in der er nicht steht.
+  // Ohne diese Zeile ist er ein Absendeknopf ohne Formular -- und der tut
+  // nichts.
   return "<button class=\"estab-list-pager\" type=\"submit\""
-    ." name=\"".estab_message_html ((string) $name)."\" value=\"1\""
+    ." form=\"estab-list-filter\""
+    ." name=\"".estab_list_handlungsname ($name)."\" value=\"1\""
     ." title=\"".estab_message_html ((string) $label)."\">"
     ."<span aria-hidden=\"true\">".$glyph."</span>"
     ."<span class=\"estab-visually-hidden\">"
@@ -598,7 +622,16 @@ class Listen extends kategorien {
       \*************************************************************************/
       case "Stab_lesen":  // ******  S T A B    l e s e n *****
           if ( debug ) { echo "<b>file:liste.php:_92 fkt:darstellungsart - switch (this->listenart):Stab_lesen </b><br>"; }
-          echo "\n<form action=\"".estab_message_html ($conf_4f ["MainURL"])."\" method=\"POST\" target=\"mainframe\" data-estab-list-filter>\n";
+          /*
+           * Die Kennung verbindet den Blaetterer mit dieser Filterleiste.
+           *
+           * listen_navi() gibt die Blaetterknoepfe nach darstellungs_art()
+           * aus -- also ausserhalb dieses Formulars. Ein type="submit" ohne
+           * Formular tut gar nichts: Das war der eigentliche Grund, warum
+           * das Blaettern in "Stab lesen" wirkungslos blieb. Das
+           * form-Attribut der Knoepfe zeigt hierher.
+           */
+          echo "\n<form id=\"estab-list-filter\" action=\"".estab_message_html ($conf_4f ["MainURL"])."\" method=\"POST\" target=\"mainframe\" data-estab-list-filter>\n";
           echo estab_list_acting_function_field ();
           echo "<table><tbody>";
           echo "<tr>";
@@ -686,7 +719,16 @@ class Listen extends kategorien {
       case "SIADMIN":  // ***************  SICHTER ADMINISTRATOR  *********************
       case "FMADMIN":
           if ( debug ) { echo "<b>file:liste.php:194 fkt:darstellungsart - switch (this->listenart):SIADMIN/FMADMIN </b><br>"; }
-          echo "\n<form action=\"".estab_message_html ($conf_4f ["MainURL"])."\" method=\"POST\" target=\"mainframe\" data-estab-list-filter>\n";
+          /*
+           * Die Kennung verbindet den Blaetterer mit dieser Filterleiste.
+           *
+           * listen_navi() gibt die Blaetterknoepfe nach darstellungs_art()
+           * aus -- also ausserhalb dieses Formulars. Ein type="submit" ohne
+           * Formular tut gar nichts: Das war der eigentliche Grund, warum
+           * das Blaettern in "Stab lesen" wirkungslos blieb. Das
+           * form-Attribut der Knoepfe zeigt hierher.
+           */
+          echo "\n<form id=\"estab-list-filter\" action=\"".estab_message_html ($conf_4f ["MainURL"])."\" method=\"POST\" target=\"mainframe\" data-estab-list-filter>\n";
           echo estab_list_acting_function_field ();
           echo "<table><tbody>";
           echo "<tr>";
