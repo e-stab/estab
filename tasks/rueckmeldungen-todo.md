@@ -84,7 +84,7 @@ Reihenfolge: **Test zuerst, dann die Änderung, dann das Bild ansehen.**
 
 ## P2 — Der Vordruck: Vorschriftentreue
 
-- [ ] **R06** `!!` **M** Durchsage und Spruch sind optional
+- [x] **R06** `!!` **M** Durchsage und Spruch sind optional
       → `app/dv_rules.php`, `4fach/official_message_form.php`, `tests/php/…`
       - [ ] `NV-08-DURCHSAGE-SPRUCH` neu gefasst: beide optional, keines vorbelegt
       - [ ] **Erst der Test, dann die Regel** — der bestehende Test verlangt heute die Vorbelegung

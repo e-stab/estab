@@ -135,8 +135,10 @@ function estab_dv_rules(): array
             'source' => ESTAB_DV_SOURCE_AUSFUELLANLEITUNG,
             'reference' => 'Feld 8',
             'requirement' => 'Der Verfasser bestimmt die Form der Nachricht. '
-                . 'Der Spruch ist ausdrücklich die Ausnahme; die Durchsage '
-                . 'ist deshalb vorbelegt.',
+                . 'Ein Spruch ist 1:1 im selben Wortlaut aufzuschreiben; eine '
+                . 'Durchsage geht an eine Gruppe von Empfängern statt an '
+                . 'jeden einzeln. Beides sind Sonderfälle: Sie sind wählbar, '
+                . 'aber keines ist vorbelegt.',
         ],
         'NV-09-VORRANGSTUFE' => [
             'source' => ESTAB_DV_SOURCE_AUSFUELLANLEITUNG,

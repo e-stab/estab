@@ -154,7 +154,9 @@ $requiredGuideContent = [
     5 => ['Technischen Betriebsbuch', 'Eingang', 'Ausgang'],
     6 => ['Funkrufnamen', 'Gegenstelle'],
     7 => ['Hinweis', 'TK-Mittel'],
-    8 => ['DURCHSAGE', 'Spruch (Ausnahme)'],
+    // Keine der beiden Formen ist die Ausnahme der anderen: Beides sind
+    // Sonderfälle, und der Hinweis muss sagen, welcher wann gilt.
+    8 => ['DURCHSAGE', 'Spruch', '1:1', 'Wortlaut', 'Gruppe von Empfängern'],
     9 => ['Vorrangstufe', 'Sofort', 'Blitz', 'Staatsnot'],
     10 => ['Immer ausfüllen', 'Dienststellen-', 'Eigennamen'],
     11 => ['Rufnummer', 'Gesprächsnotizen'],

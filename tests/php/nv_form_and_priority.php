@@ -5,13 +5,18 @@ declare(strict_types=1);
 /**
  * Die Form der Nachricht und ihre Vorrangstufe.
  *
- * Der Vordruck bietet zwei Formen an: DURCHSAGE und Spruch. Die
- * Ausfüllanleitung nennt den Spruch ausdrücklich die Ausnahme -- er verlangt
- * das buchstabengetreue Verfahren und bindet die Gegenstelle länger. Wer
- * einen Vordruck ohne Vorbelegung vor sich hat, kreuzt jedoch mit gleicher
- * Wahrscheinlichkeit das eine wie das andere an. Die Regel steht damit nur
- * auf dem Papier. Deshalb ist die Durchsage vorbelegt, und der Spruch bleibt
- * eine bewusste Abweichung.
+ * Der Vordruck bietet zwei Formen an: DURCHSAGE und Spruch. Beide sind
+ * Sonderfälle, und eine normale Meldung trägt keinen von beiden.
+ *
+ * Ein Spruch ist eine Nachricht, die 1:1 im selben Wortlaut aufzuschreiben
+ * ist. Eine Durchsage geht an eine Gruppe von Empfängern statt an jeden
+ * einzeln. Wer weder das eine noch das andere vor sich hat, kreuzt nichts an.
+ *
+ * Hier stand die Durchsage vorbelegt, mit der Begründung, sie sei die Regel
+ * und der Spruch die Ausnahme. Das war eine Auslegung der Ausfüllanleitung,
+ * nicht deren Wortlaut, und der Betreiber hat sie berichtigt: Ein
+ * vorbelegtes Kästchen ist eine Angabe, die niemand gemacht hat, und sie
+ * steht später als Aussage des Verfassers im Nachweis.
  *
  * Die Vorrangstufe bleibt frei, wenn es keine gibt -- ein leeres Feld ist die
  * Aussage "kein Vorrang", nicht eine vergessene Eingabe.
@@ -100,51 +105,51 @@ $checkedValue = static function (string $markup, string $field): ?string {
     return null;
 };
 
-/* --- Die Durchsage ist die Regel, der Spruch die Ausnahme --- */
-
-$empty = new FormAndPriorityFixture();
-$empty->feld = [7 => true];
-$empty->official_message_preselect_form_type();
-$assert(
-    ($empty->formdata['07_durchspruch'] ?? null) === 'D',
-    estab_dv_requirement(
-        'NV-08-DURCHSAGE-SPRUCH',
-        'Ein neuer Vordruck belegt die Nachrichtenform mit '
-            . var_export($empty->formdata['07_durchspruch'] ?? null, true)
-            . ' vor. Ohne Vorbelegung wird der Spruch so oft gewählt wie die '
-            . 'Durchsage, und die Ausnahme ist keine mehr.'
-    )
-);
-
-// Eine getroffene Wahl bleibt stehen, auch die des Spruchs.
-$chosen = new FormAndPriorityFixture();
-$chosen->feld = [7 => true];
-$chosen->formdata = ['07_durchspruch' => 'S'];
-$chosen->official_message_preselect_form_type();
-$assert(
-    ($chosen->formdata['07_durchspruch'] ?? null) === 'S',
-    estab_dv_requirement(
-        'NV-08-DURCHSAGE-SPRUCH',
-        'Die Wahl des Spruchs wird von der Vorbelegung überschrieben.'
-    )
-);
+/* --- Keine Form ist vorbelegt --- */
 
 /*
- * Vorbelegt wird nur, wo abgefasst wird. Ein eingegangener Vordruck ohne
- * Eintrag hatte keinen -- ihn nachträglich zur Durchsage zu erklären wäre
- * eine Angabe, die niemand gemacht hat.
+ * Geprüft wird über alle Arbeitsschritte, nicht nur über den einen, in dem
+ * die Vorbelegung stand: Eine Vorbelegung, die aus dem Abfassen verschwindet
+ * und im Sichten wieder auftaucht, wäre derselbe Fehler an anderer Stelle.
  */
-foreach (['FM-Eingang', 'LdF-Eingang', 'Stab_sichten'] as $task) {
-    $received = new FormAndPriorityFixture();
-    $received->task = $task;
-    $received->feld = [7 => false];
-    $received->official_message_preselect_form_type();
+foreach ([
+    'FM-Ausgang',
+    'FM-Eingang',
+    'LdF-Eingang',
+    'LdF-Ausgang',
+    'Stab_sichten',
+] as $task) {
+    foreach ([true, false] as $zugriff) {
+        $leer = new FormAndPriorityFixture();
+        $leer->task = $task;
+        $leer->feld = [7 => $zugriff, 8 => $zugriff];
+        $leer->official_message_preselect_form_type();
+        $assert(
+            ($leer->formdata['07_durchspruch'] ?? null) === null,
+            estab_dv_requirement(
+                'NV-08-DURCHSAGE-SPRUCH',
+                'Der Arbeitsschritt ' . $task . ' belegt die Nachrichtenform '
+                    . 'mit ' . var_export($leer->formdata['07_durchspruch'] ?? null, true)
+                    . ' vor. Durchsage und Spruch sind Sonderfälle; eine '
+                    . 'normale Meldung trägt keinen von beiden, und ein '
+                    . 'gesetztes Kästchen wäre eine Angabe, die niemand '
+                    . 'gemacht hat.'
+            )
+        );
+    }
+}
+
+// Eine getroffene Wahl bleibt stehen -- beide Male.
+foreach (['D', 'S'] as $wahl) {
+    $gewaehlt = new FormAndPriorityFixture();
+    $gewaehlt->feld = [7 => true, 8 => true];
+    $gewaehlt->formdata = ['07_durchspruch' => $wahl];
+    $gewaehlt->official_message_preselect_form_type();
     $assert(
-        ($received->formdata['07_durchspruch'] ?? null) === null,
+        ($gewaehlt->formdata['07_durchspruch'] ?? null) === $wahl,
         estab_dv_requirement(
             'NV-08-DURCHSAGE-SPRUCH',
-            'Der Arbeitsschritt ' . $task . ' erklärt eine Nachricht ohne '
-                . 'Eintrag nachträglich zur Durchsage.'
+            'Die Wahl „' . $wahl . '“ wird überschrieben.'
         )
     );
 }
@@ -172,6 +177,44 @@ $assert(
             . 'Vordruck nicht.'
     )
 );
+/*
+ * Wenn nichts mehr vorbelegt ist, muss die Ausfüllhilfe sagen, wann man
+ * ankreuzt. „DURCHSAGE oder Spruch (Ausnahme)" sagte nur, welches der beiden
+ * seltener ist -- nicht, was sie bedeuten.
+ */
+$hilfe = '';
+if (preg_match(
+    "~8 => \\[\\s*'title' => '([^']*)',\\s*'text' => '(.*?)',\\s*\\]~s",
+    $view,
+    $treffer
+) === 1) {
+    $hilfe = $treffer[2];
+}
+$assert(
+    str_contains($hilfe, '1:1') && str_contains($hilfe, 'Wortlaut'),
+    estab_dv_requirement(
+        'NV-08-DURCHSAGE-SPRUCH',
+        'Die Ausfüllhilfe zu Feld 8 sagt nicht, dass ein Spruch 1:1 im '
+            . 'selben Wortlaut aufzuschreiben ist: ' . $hilfe
+    )
+);
+$assert(
+    str_contains($hilfe, 'Gruppe von Empfängern'),
+    estab_dv_requirement(
+        'NV-08-DURCHSAGE-SPRUCH',
+        'Die Ausfüllhilfe zu Feld 8 sagt nicht, dass eine Durchsage an eine '
+            . 'Gruppe von Empfängern geht: ' . $hilfe
+    )
+);
+$assert(
+    !str_contains($hilfe, 'Ausnahme'),
+    estab_dv_requirement(
+        'NV-08-DURCHSAGE-SPRUCH',
+        'Die Ausfüllhilfe nennt eine der beiden Formen weiterhin die '
+            . 'Ausnahme. Beide sind Sonderfälle, keiner ist der Regelfall.'
+    )
+);
+
 foreach (['DURCHSAGE', 'Spruch'] as $label) {
     $assert(
         str_contains($render_source, "'label' => '" . $label . "'"),
@@ -214,6 +257,8 @@ foreach (['sss' => 'Sofort', 'bbb' => 'Blitz', 'aaa' => 'Staatsnot'] as $value =
  * auf dem Papier gar nicht.
  */
 $printedBoxes = ['sss', 'bbb'];
+
+$empty = new FormAndPriorityFixture();
 
 $priorityMarkup = $render(static function () use ($empty): void {
     $empty->feld[9] = true;

@@ -601,7 +601,7 @@ HTML;
             ],
             8 => [
                 'title' => 'DURCHSAGE / Spruch',
-                'text' => 'Kennzeichnen Sie die Nachricht als DURCHSAGE oder als Spruch (Ausnahme).',
+                'text' => 'Kreuzen Sie nur an, wenn die Nachricht eine der beiden Sonderformen ist. Ein Spruch ist 1:1 im selben Wortlaut aufzuschreiben – Wort für Wort, ohne Kürzung oder Umformulierung. Eine Durchsage geht an eine Gruppe von Empfängern statt an jeden einzeln. Eine gewöhnliche Nachricht ist weder das eine noch das andere; dann bleibt dieses Feld frei.',
             ],
             9 => [
                 'title' => 'Vorrangstufe',
@@ -1579,26 +1579,25 @@ HTML;
     }
 
     /**
-     * Feld 8: die Durchsage ist die Regel, der Spruch die Ausnahme.
+     * Feld 8: keine der beiden Formen ist vorbelegt.
      *
-     * Die Ausfüllanleitung nennt den Spruch ausdrücklich die Ausnahme. Vor
-     * einem Vordruck ohne Vorbelegung wird die Ausnahme aber so oft
-     * angekreuzt wie die Regel, und die Regel steht nur noch auf dem Papier.
-     * Wer die Nachricht abfasst, findet deshalb die Durchsage vorbelegt.
+     * Ein Spruch ist eine Nachricht, die 1:1 im selben Wortlaut
+     * aufzuschreiben ist. Eine Durchsage geht an eine Gruppe von Empfängern
+     * statt an jeden einzeln. Beides sind Sonderfälle; eine normale Meldung
+     * ist weder das eine noch das andere.
      *
-     * Vorbelegt wird allein beim Abfassen. Ein eingegangener Vordruck ohne
-     * Eintrag hatte keinen; ihn nachträglich zur Durchsage zu erklären wäre
-     * eine Angabe, die niemand gemacht hat.
+     * Hier stand die Durchsage vorbelegt, mit der Begründung, sie sei die
+     * Regel und der Spruch die Ausnahme. Das war eine Auslegung der
+     * Ausfüllanleitung, nicht ihr Wortlaut. Ein vorbelegtes Kästchen ist eine
+     * Angabe, die niemand gemacht hat -- und sie steht später als Aussage des
+     * Verfassers im Nachweis.
+     *
+     * Die Methode bleibt, weil der Vordruck sie vor der Auswahl aufruft und
+     * ein Feld ohne Vorbelegung trotzdem eines ist, das nichts vorbelegt
+     * bekommt. Was sie tut, ist gerade nichts zu tun.
      */
     function official_message_preselect_form_type(): void
     {
-        if (!$this->official_message_field_access(8)) {
-            return;
-        }
-        if ((string)($this->formdata['07_durchspruch'] ?? '') !== '') {
-            return;
-        }
-        $this->formdata['07_durchspruch'] = 'D';
     }
 
     /**
