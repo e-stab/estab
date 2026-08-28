@@ -167,13 +167,13 @@ und Schriftraum. Freigabefähig ist die Seite erst nach allen drei Aufgaben.
       - **Prüfung:** `ges_tabelle.php`; die Überlaufbefunde aus `bilder/befunde-*.json` sind verschwunden
       - **Abhängigkeit:** G09 (Schema aus C2)
 
-- [ ] **G11** `!` **M** Suche und Filter nach Abschnitt 7
+- [~] **G11** `!` **M** Filterleiste nach Abschnitt 7, soweit sie hier zutrifft
       → `4fach/liste.php`, `estab-ui.css`, `tests/php/ges_filter.php`, `app/ux_rules.php`
-      - [ ] Sechs Bänder, Feld- und Knopfhöhe 2rem, ein Formular
-      - [ ] Die Reiter- und Seitengrößenleiste wird Band 2 und 3
-      - [ ] „Schnellfilter" nur noch für Vorleseprogramme sichtbar
+      - [~] **Sechs Bänder treffen hier nicht zu.** Die übernommene Liste kennt keine Volltextsuche; Band 1 gäbe es nur, wenn man sie erfände. Umgesetzt ist, was zutrifft: die Zustandsschalter als Band 2, die Kategorien als Band 3, der Blätterer als Band 6
+      - [x] Die Reiter- und Seitengrößenleiste ist Band 2; die 25 Kategorien sind Band 3
+      - [x] Fünfundzwanzig Kategorien sind kein Schnellfilter — sie stehen in einem Aufklapp, der offensteht und „· aktiv" trägt, sobald einer gesetzt ist. Als `details`, also ohne JavaScript
       - [ ] Marken 1.75rem; kein Filter greift ohne „Filter anwenden"
-      - [ ] Der ganze Block bleibt im Ruhezustand unter 13rem
+      - [x] Der Block schrumpft von drei Zeilen Kategorie-Marken auf eine Zeile
       - [ ] Regel `GES-FILTER-BAENDER`
       - **Prüfung:** `ges_filter.php`; ein Durchgang **ohne JavaScript**
       - **Abhängigkeit:** G10

@@ -888,6 +888,27 @@ class Listen extends kategorien {
         $kategoselected = $_SESSION ['global_katego'];
       }
 
+      /*
+       * Die Kategorien stehen in einem Aufklapp.
+       *
+       * Es sind fuenfundzwanzig; nebeneinander gestellt assen sie drei
+       * Zeilen ueber der Liste. docs/GESTALTUNG.md Abschnitt 7 laesst
+       * hoechstens fuenf Schnellfilter zu -- was darueber hinausgeht, gehoert
+       * in einen Aufklapp. Der steht offen, sobald eine Kategorie gewaehlt
+       * ist, und sagt es im Namen: Ein zugeklappter Kasten mit einem
+       * wirksamen Filter darin erzeugt genau die Frage "warum sehe ich meine
+       * Meldung nicht".
+       *
+       * Als <details>, damit er ohne JavaScript auf- und zugeht.
+       */
+      $kategorieGewaehlt = isset ($_SESSION ['ma_katego'])
+        || isset ($_SESSION ['fk_katego'])
+        || isset ($_SESSION ['us_katego']);
+      echo "<details class=\"estab-list-categories\""
+        .($kategorieGewaehlt ? " open" : "").">";
+      echo "<summary>Kategorien"
+        .($kategorieGewaehlt ? " \u{00B7} aktiv" : "")."</summary>";
+
         // MASTER KATEGORIE
       if ($mastercount != 0){
         echo "<nav class=\"estab-list-tabs estab-list-tabs--global\" aria-label=\"Kategorien\">";
@@ -962,6 +983,7 @@ class Listen extends kategorien {
         }
         echo "</nav>";
       }
+      echo "</details>";
 
 
     }

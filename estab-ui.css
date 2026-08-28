@@ -3112,6 +3112,72 @@ form[data-estab-incident-disabled="true"]::before {
     text-decoration: underline;
 }
 
+/* Band 3 der Filterleiste: die Kategorien.
+
+   Fuenfundzwanzig Kategorien sind kein Schnellfilter. Nebeneinander gestellt
+   assen sie drei Zeilen ueber der Liste -- auf einem flachen Bildschirm ein
+   Zwanzigstel der Hoehe fuer eine Auswahl, die selten wechselt. Sie stehen
+   jetzt in einem Aufklapp, der offensteht, sobald eine gewaehlt ist.
+
+   Die uebernommene Liste kennt keine Volltextsuche; Band 1 der Spec
+   entfaellt hier deshalb, und Band 2 sind die Zustandsschalter darueber. */
+.estab-list-categories {
+    background: var(--grund-tafel);
+    border: 1px solid var(--linie-kraeftig);
+    border-radius: var(--radius-3);
+    margin-bottom: var(--abstand-5);
+    padding: var(--abstand-2) var(--abstand-5);
+}
+
+/* `display: flex` nimmt dem summary seine Dreiecksmarke. Sie kommt als
+   eigenes Zeichen zurueck und dreht sich beim Oeffnen -- ohne sie sieht ein
+   zugeklappter Kasten aus wie eine Ueberschrift. */
+.estab-list-categories > summary {
+    align-items: center;
+    color: var(--handlung-dunkel);
+    cursor: pointer;
+    display: flex;
+    font-size: var(--schrift-3);
+    font-weight: var(--stark-voll);
+    gap: var(--abstand-4);
+    list-style: none;
+    min-height: 2rem;
+}
+
+.estab-list-categories > summary::-webkit-details-marker {
+    display: none;
+}
+
+.estab-list-categories > summary::before {
+    content: "\25B8";
+    display: inline-block;
+    transition: transform 140ms ease;
+}
+
+.estab-list-categories[open] > summary::before {
+    transform: rotate(90deg);
+}
+
+/* Die Zustandsspalten stehen oben buendig. Ohne das haengt jeder Knopf an
+   der Schriftgrundlinie seiner eigenen Zelle, und zwei nebeneinander stehen
+   versetzt. */
+.estab-list-table td > .estab-list-cell-form:only-child {
+    margin-top: 0;
+}
+
+.estab-list-table td:has(> .estab-list-cell-form) {
+    vertical-align: top;
+}
+
+.estab-list-categories[open] > summary {
+    border-bottom: 1px solid var(--linie);
+    margin-bottom: var(--abstand-4);
+}
+
+.estab-list-categories .estab-list-tabs {
+    margin-bottom: var(--abstand-4);
+}
+
 /* Die Zustandsumschalter der uebernommenen Liste.
 
    Sie trugen GIFs -- und 000.gif war ein durchsichtiges Bild, also gar
