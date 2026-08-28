@@ -268,6 +268,43 @@ function estab_ux_rules(): array
                 . 'eingebettete Dokumente. Sonst gilt am Ende nicht, was '
                 . 'zuletzt geschrieben steht, sondern wer lauter gerufen hat.',
         ],
+        'GES-TABELLE-SORTIERUNG' => [
+            'origin' => ESTAB_UX_ORIGIN_GESTALTUNG,
+            'reference' => 'docs/TABELLEN.md Abschnitt 2',
+            'requirement' => 'Jede als sortierbar benannte Spalte trägt einen '
+                . 'Knopf in ihrer Überschrift und meldet ihren Zustand über '
+                . 'aria-sort. Sortiert wird nach der Art der Spalte, nicht '
+                . 'nach ihrem Text: Zahlen numerisch, Zeiten nach Zeitpunkt, '
+                . 'Vorrangstufen nach Dringlichkeit. Wer Vorrangstufen '
+                . 'alphabetisch sortiert, stellt Blitz vor Staatsnot und '
+                . 'macht die Spalte wertlos.',
+        ],
+        'GES-TABELLE-SUCHE' => [
+            'origin' => ESTAB_UX_ORIGIN_GESTALTUNG,
+            'reference' => 'docs/TABELLEN.md Abschnitt 3',
+            'requirement' => 'Eine Tabelle hat eine Volltextsuche über alle '
+                . 'durchsuchbaren Spalten und je Spalte eine eigene Maske. '
+                . 'Mehrere Spaltensuchen wirken zusammen. Ein Satz nennt, '
+                . 'worin gesucht wird -- ohne ihn ist eine leere Trefferliste '
+                . 'nicht deutbar.',
+        ],
+        'GES-TABELLE-BLAETTERN' => [
+            'origin' => ESTAB_UX_ORIGIN_GESTALTUNG,
+            'reference' => 'docs/TABELLEN.md Abschnitt 1, GESTALTUNG 6.7',
+            'requirement' => 'Der Blätterer wechselt die Seite. Die aktuelle '
+                . 'Seite ist Text mit aria-current, nicht verfügbare Griffe '
+                . 'sind gesperrt statt weggelassen -- eine Leiste, die ihre '
+                . 'Breite ändert, verschiebt den Griff unter dem Zeiger.',
+        ],
+        'GES-TABELLE-OHNE-SKRIPT' => [
+            'origin' => ESTAB_UX_ORIGIN_GESTALTUNG,
+            'reference' => 'docs/TABELLEN.md Abschnitt 4',
+            'requirement' => 'Sortieren, Suchen, Filtern und Blättern '
+                . 'geschehen über ein Formular mit method="get" und wirken '
+                . 'ohne Skript. Der Zustand steht damit in der Adresse und '
+                . 'lässt sich weitergeben. Ein Skript darf dasselbe '
+                . 'schneller tun, nichts anderes.',
+        ],
         'GES-VORDRUCK-MASSSTAB' => [
             'origin' => ESTAB_UX_ORIGIN_GESTALTUNG,
             'reference' => 'Abschnitt 12.1 und 12.2',

@@ -147,7 +147,7 @@ Reihenfolge: **Test zuerst, dann die Änderung, dann das Bild ansehen.**
 
 ## P4 — Das Tabellenbauteil
 
-- [ ] **R14** `!!` **M** Das Bauteil
+- [x] **R14** `!!` **M** Das Bauteil
       → `app/tabelle.php` (neu), `estab-ui.css`, `tests/php/ges_tabelle_bauteil.php`
       - [ ] Vertrag nach `docs/TABELLEN.md` Abschnitt 1
       - [ ] Sortierung je Spalte nach **Art**, nicht nach Text — Zahlen numerisch, Vorrangstufen nach Dringlichkeit

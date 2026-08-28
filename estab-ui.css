@@ -5164,6 +5164,301 @@ body.estab-message-form-body {
 
 
 
+/* ---------------------------------------------------------------------
+   Das Tabellenbauteil (app/tabelle.php)
+
+   Jede Liste der Anwendung kommt hierdurch. Die Werte stehen in
+   docs/GESTALTUNG.md Abschnitt 6 und 7; hier stehen sie einmal statt in
+   jeder Seite noch einmal.
+   --------------------------------------------------------------------- */
+
+.estab-tabelle {
+    container-type: inline-size;
+    display: flex;
+    flex-direction: column;
+    gap: var(--abstand-3);
+}
+
+.estab-tabelle-suchband {
+    background: var(--grund-gedaempft);
+    border: 1px solid var(--linie);
+    border-radius: var(--radius-3);
+    display: flex;
+    flex-direction: column;
+    gap: var(--abstand-2);
+    padding: var(--abstand-3) var(--abstand-4);
+}
+
+.estab-tabelle-suchzeile {
+    align-items: flex-end;
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--abstand-3);
+}
+
+.estab-tabelle-feld {
+    display: flex;
+    flex-direction: column;
+    gap: var(--abstand-1);
+}
+
+.estab-tabelle-feld > span {
+    color: var(--tinte-neben);
+    font-size: var(--schrift-1);
+    font-weight: 700;
+    letter-spacing: 0.045em;
+    text-transform: uppercase;
+}
+
+.estab-tabelle-feld input,
+.estab-tabelle-feld select {
+    background: var(--grund-tafel);
+    border: 1px solid var(--linie-kraeftig);
+    border-radius: var(--radius-2);
+    color: var(--tinte);
+    font: inherit;
+    font-size: var(--schrift-3);
+    min-height: 2rem;
+    padding: var(--abstand-1) var(--abstand-3);
+}
+
+/* Ohne diesen Satz ist eine leere Trefferliste nicht deutbar. */
+.estab-tabelle-suchhinweis {
+    color: var(--tinte-neben);
+    font-size: var(--schrift-2);
+    margin: 0;
+}
+
+.estab-tabelle-ergebnisleiste {
+    align-items: baseline;
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--abstand-3);
+    justify-content: space-between;
+}
+
+.estab-tabelle-treffer {
+    color: var(--tinte);
+    font-size: var(--schrift-2);
+    font-weight: 700;
+    margin: 0;
+}
+
+.estab-tabelle-marken {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--abstand-2);
+}
+
+.estab-tabelle-marke {
+    background: var(--grund-kachel);
+    border: 1px solid var(--linie-kraeftig);
+    border-radius: var(--radius-pille);
+    color: var(--tinte);
+    font-size: var(--schrift-2);
+    padding: var(--abstand-1) var(--abstand-3);
+    text-decoration: none;
+}
+
+.estab-tabelle-marke:hover,
+.estab-tabelle-marke:focus-visible {
+    background: var(--grund-kachel-zeigen);
+}
+
+/* Der Rahmen scrollt quer, nicht die Seite. */
+.estab-tabelle-rahmen {
+    background: var(--grund-tafel);
+    border: 1px solid var(--linie-kraeftig);
+    border-radius: var(--radius-3);
+    box-shadow: var(--schatten-tafel);
+    max-height: min(74vh, 54rem);
+    overflow: auto;
+    overscroll-behavior: contain;
+}
+
+.estab-tabelle-blatt {
+    border-collapse: separate;
+    border-spacing: 0;
+    min-width: 44rem;
+    table-layout: fixed;
+    width: 100%;
+}
+
+.estab-tabelle-blatt thead th {
+    background: var(--grund-gedaempft);
+    border-bottom: 2px solid var(--linie-kraeftig);
+    color: var(--tinte);
+    font-size: var(--schrift-1);
+    font-weight: 700;
+    letter-spacing: 0.045em;
+    padding: var(--abstand-2) var(--abstand-4);
+    position: sticky;
+    text-align: left;
+    text-transform: uppercase;
+    top: 0;
+    vertical-align: bottom;
+    z-index: 2;
+}
+
+/* Das Zeichen steht neben dem Namen der Spalte, nicht statt seiner: Ein
+   Pfeil allein sagt nicht, wonach sortiert wuerde. */
+.estab-tabelle-sortknopf {
+    align-items: baseline;
+    color: inherit;
+    display: inline-flex;
+    gap: var(--abstand-2);
+    text-decoration: none;
+}
+
+.estab-tabelle-sortknopf:hover,
+.estab-tabelle-sortknopf:focus-visible {
+    text-decoration: underline;
+}
+
+.estab-tabelle-sortzeichen {
+    color: var(--tinte-neben);
+    font-size: var(--schrift-2);
+}
+
+.estab-tabelle-blatt tbody td {
+    border-bottom: 1px solid var(--linie);
+    font-size: var(--schrift-3);
+    overflow-wrap: anywhere;
+    padding: var(--abstand-2) var(--abstand-4);
+    text-align: left;
+    vertical-align: top;
+}
+
+.estab-tabelle-blatt tbody tr:last-child td {
+    border-bottom: 0;
+}
+
+.estab-tabelle-zahl {
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+}
+
+/* Text in einer Zelle steht auf hoechstens zwei Zeilen. Eine Zeile, die
+   zehn Zeilen hoch ist, macht die Liste unbrauchbar -- und der ganze Text
+   steht ohnehin im Vordruck, den ein Klick oeffnet. */
+.estab-tabelle-klammer {
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    display: -webkit-box;
+    overflow: hidden;
+}
+
+.estab-tabelle-masken td {
+    background: var(--grund-tafel);
+    border-bottom: 1px solid var(--linie-kraeftig);
+    padding: var(--abstand-1) var(--abstand-3);
+    position: sticky;
+    top: 2rem;
+    z-index: 1;
+}
+
+.estab-tabelle-masken input {
+    background: var(--grund-tafel);
+    border: 1px solid var(--linie);
+    border-radius: var(--radius-1);
+    color: var(--tinte);
+    font: inherit;
+    font-size: var(--schrift-2);
+    min-height: 1.5rem;
+    padding: 0 var(--abstand-2);
+    width: 100%;
+}
+
+.estab-tabelle-blaetterer {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--abstand-2);
+    justify-content: flex-end;
+}
+
+.estab-tabelle-griff {
+    align-items: center;
+    background: var(--grund-tafel);
+    border: 1px solid var(--linie-kraeftig);
+    border-radius: var(--radius-2);
+    color: var(--tinte);
+    display: inline-flex;
+    font-size: var(--schrift-2);
+    justify-content: center;
+    min-height: 1.75rem;
+    min-width: 1.75rem;
+    padding: 0 var(--abstand-2);
+    text-decoration: none;
+}
+
+.estab-tabelle-griff--hier {
+    background: var(--grund-gedaempft);
+    font-weight: 700;
+}
+
+/* Nicht verfuegbare Griffe bleiben stehen und werden gesperrt. Eine Leiste,
+   die ihre Breite aendert, verschiebt den naechsten Griff unter den Zeiger.
+
+   Gesperrt heisst nicht blass: opacity senkt den Kontrast unkontrolliert und
+   entzieht ihn der Messung. Der gesperrte Griff unterscheidet sich durch
+   seinen Grund und seine gestrichelte Kante, nicht durch Blaesse. */
+.estab-tabelle-griff--aus {
+    background: var(--grund-gedaempft);
+    border-style: dashed;
+    color: var(--tinte-neben);
+}
+
+.estab-tabelle-leer {
+    background: var(--grund-tafel);
+    border: 1px dashed var(--linie-kraeftig);
+    border-radius: var(--radius-3);
+    display: flex;
+    flex-direction: column;
+    gap: var(--abstand-3);
+    padding: var(--abstand-6);
+}
+
+.estab-tabelle-leer p {
+    font-size: var(--schrift-4);
+    margin: 0;
+}
+
+.estab-tabelle-zellenform {
+    display: inline;
+    margin: 0;
+}
+
+/* Unter 48rem Spaltenbreite wird die Tabelle zu Karten -- gemessen an der
+   Spalte, nicht am Fenster. */
+@container (max-width: 48rem) {
+    .estab-tabelle-blatt {
+        min-width: 0;
+    }
+
+    .estab-tabelle-blatt thead,
+    .estab-tabelle-masken {
+        display: none;
+    }
+
+    .estab-tabelle-blatt tbody tr {
+        border-bottom: 1px solid var(--linie-kraeftig);
+        display: block;
+        padding: var(--abstand-3) 0;
+    }
+
+    .estab-tabelle-blatt tbody td {
+        border-bottom: 0;
+        display: block;
+        padding: var(--abstand-1) var(--abstand-4);
+        text-align: left;
+    }
+
+    .estab-tabelle-blatt tbody td::before {
+        content: attr(data-label) ": ";
+        font-weight: 700;
+    }
+}
+
 /* Eine abgewiesene Handlung liegt mittig im Blickfeld, nicht am Rand eines
    Dokuments, das laenger ist als der Bildschirm.
 

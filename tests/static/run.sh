@@ -212,6 +212,7 @@ for test_name in \
     rm_infofaehnchen \
     rm_feldfreigabe \
     rm_rueckweisung \
+    ges_tabelle_bauteil \
     ux_keyboard \
     ux_without_javascript \
     fuest_formal_review \
