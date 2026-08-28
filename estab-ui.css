@@ -5440,6 +5440,15 @@ body.estab-message-form-body {
     margin: 0;
 }
 
+/* Die Vorschau eines Anhangs bleibt in ihrer Zelle. */
+.estab-anhang-vorschau {
+    border: 1px solid var(--linie);
+    border-radius: var(--radius-1);
+    display: block;
+    height: auto;
+    max-width: 100%;
+}
+
 .estab-tabelle-zellenform {
     display: inline;
     margin: 0;

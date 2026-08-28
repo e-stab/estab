@@ -3309,13 +3309,67 @@ $assert(
         ),
     'attachment restore derives sender-unit protection from the current account role instead of the signed incoming task'
 );
+/*
+ * Die Bemerkung aus der Datenbank wird an der HTML-Grenze maskiert. Die
+ * Grenze ist seit der Umstellung auf das Tabellenbauteil eine andere: Die
+ * Seite gibt den Wert weiter, das Bauteil maskiert ihn. Geprueft wird
+ * deshalb beides -- dass die Spalte ein Wert ist und keine selbstgebaute
+ * Zelle, und dass das Bauteil Werte maskiert. Ein Wert, der durch eine
+ * eigene Zelle liefe, umginge die Maskierung.
+ */
+$attachmentTable = (string) file_get_contents(
+    __DIR__ . '/../../app/anhang_tabelle.php'
+);
+// Von der Bemerkungsspalte bis zur naechsten Spalte -- ohne regulaeren
+// Ausdruck, damit die Pruefung nicht an einer Einrueckung scheitert.
+$anfang = strpos($attachmentTable, "'schluessel' => 'bemerkung'");
+$ende = $anfang === false
+    ? false
+    : strpos($attachmentTable, '$spalten[] = [', $anfang);
+$kommentarspalte = $anfang === false
+    ? ''
+    : substr(
+        $attachmentTable,
+        $anfang,
+        ($ende === false ? strlen($attachmentTable) : $ende) - $anfang
+    );
 $assert(
-    preg_match('/estab_attachment_html\s*\(\s*\$file\s*\[\s*"comment"/', $controllerSource) === 1,
-    'database comment is escaped at HTML boundary'
+    $kommentarspalte !== '' && !str_contains($kommentarspalte, "'zelle'"),
+    'the attachment comment column builds its own cell and bypasses escaping'
 );
 $assert(
-    preg_match('/estab_attachment_html\s*\(\s*\$storedFilename/', $controllerSource) === 1,
-    'database filename is escaped at HTML boundary'
+    preg_match(
+        '~\$inhalt = \$spalte\[.zelle.\] !== null~',
+        (string) file_get_contents(__DIR__ . '/../../app/tabelle.php')
+    ) === 1
+        && str_contains(
+            (string) file_get_contents(__DIR__ . '/../../app/tabelle.php'),
+            'estab_message_html(rtrim($anfang))'
+        ),
+    'the table component no longer escapes plain cell values'
+);
+/*
+ * Der Dateiname aus der Datenbank steht in einem Verweis, also in einer
+ * selbstgebauten Zelle -- und dort maskiert die Tabelle nicht fuer die
+ * Seite. Sie muss es deshalb selbst tun, an jeder Stelle: im Ziel des
+ * Verweises, in seiner Aufschrift und im Namen des Auswahlkaestchens.
+ */
+foreach ([
+    "estab_attachment_html(\$z['dateiname'])" => 'die Aufschrift des Verweises',
+    "estab_attachment_html(\$z['anzeige'])" => 'das Ziel des Verweises',
+    "estab_attachment_html(\$z['wert'])" => 'der Wert des Auswahlkaestchens',
+    "estab_attachment_html(\$z['ursprung'])" => 'der urspruengliche Name',
+] as $stelle => $was) {
+    $assert(
+        str_contains($attachmentTable, $stelle),
+        'database filename is escaped at HTML boundary: ' . $was
+            . ' ist unmaskiert'
+    );
+}
+$assert(
+    !str_contains($attachmentTable, '<?= ')
+        && preg_match('~\{\$z\[~', $attachmentTable) !== 1,
+    'the attachment table interpolates a database value into markup'
 );
 $assert(
     str_contains($controllerSource, 'Liste der verfügbaren Dateien'),

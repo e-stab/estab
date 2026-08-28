@@ -172,7 +172,7 @@ Reihenfolge: **Test zuerst, dann die Änderung, dann das Bild ansehen.**
       - **Prüfung:** mehr Zeilen als eine Seite fasst, jede Seite erreichbar
       - **Risiko:** 2 346 Zeilen Bestand
 
-- [ ] **R17** `·` **M** Anhänge
+- [x] **R17** `·` **M** Anhänge
       → `4fach/anhang.php`
       - [ ] Tabelle aus dem Bauteil, durchsuchbar wie alle anderen
       - **Prüfung:** `ges_tabelle_bauteil.php`; Sortieren und Spaltensuche einmal mit, einmal ohne Skript; Bild

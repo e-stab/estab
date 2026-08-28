@@ -226,6 +226,12 @@ function estab_tabelle_spalte(array $spalte): array
             (array) ($spalte['filter'] ?? [])
         )),
         'filtername' => (string) ($spalte['filtername'] ?? ''),
+        // Eine Zelle, die ein Bedienelement traegt, kann keine Zeichenkette
+        // sein. Die Seite baut sie dann selbst -- und maskiert dabei selbst,
+        // was sie einsetzt. Gesiebt und sortiert wird trotzdem ueber den
+        // Wert der Spalte, nicht ueber ihr Markup: Sonst suchte man in
+        // Klassennamen statt in Angaben.
+        'zelle' => $spalte['zelle'] ?? null,
     ];
 }
 
@@ -831,19 +837,26 @@ function estab_tabelle_markup(array $tabelle): string
     $markup .= '</tr>' . estab_tabelle_maskenzeile($spalten, $zustand, $aktion !== null)
         . '</thead><tbody>';
 
+    $zeilenmarke = $tabelle['zeilenmarke'] ?? null;
     foreach ($sichtbar as $zeile) {
-        $markup .= '<tr>';
+        // Eine Zeile darf eine eigene Marke tragen -- die Durchschriftenfarbe
+        // etwa. Sie kommt als fertiges Attribut von der Seite, weil nur die
+        // Seite weiss, was ihre Zeilen bedeuten.
+        $markup .= '<tr'
+            . ($zeilenmarke !== null ? ' ' . $zeilenmarke($zeile) : '')
+            . '>';
         foreach ($spalten as $spalte) {
             // data-label traegt die Kopfbezeichnung mit in die Zelle. Unter
             // 48rem Spaltenbreite wird die Tabelle zu Karten, und eine Karte
             // ohne Bezeichnungen ist eine Reihe nackter Werte.
+            $inhalt = $spalte['zelle'] !== null
+                ? ($spalte['zelle'])($zeile)
+                : estab_tabelle_zelleninhalt(
+                    (string) ($zeile[$spalte['schluessel']] ?? '')
+                );
             $markup .= '<td data-label="' . estab_message_html($spalte['kopf']) . '"'
                 . ($spalte['zahlenspalte'] ? ' class="estab-tabelle-zahl"' : '')
-                . '>'
-                . estab_tabelle_zelleninhalt(
-                    (string) ($zeile[$spalte['schluessel']] ?? '')
-                )
-                . '</td>';
+                . '>' . $inhalt . '</td>';
         }
         if ($aktion !== null) {
             $markup .= '<td data-label="Aktion">' . $aktion($zeile) . '</td>';

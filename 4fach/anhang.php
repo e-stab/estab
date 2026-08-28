@@ -19,6 +19,7 @@
 
 require_once __DIR__ . "/upload_class.php";
 require_once __DIR__ . "/../app/attachment.php";
+require_once __DIR__ . "/../app/anhang_tabelle.php";
 require_once __DIR__ . "/../app/attachment_upload.php";
 require_once __DIR__ . "/../app/csrf.php";
 require_once __DIR__ . "/../app/file_access.php";
@@ -1152,7 +1153,14 @@ require_once ("./db_operation.php");  // Datenbank operationen
       echo "<p>Hier können Sie vorhandene Anhänge ansehen oder neue Dateien hochladen. ".
            "Anhänge werden erst aus einem geöffneten Nachrichtenvordruck übernommen.</p>\n";
     }
-    echo "<form name=\"uploadform\" enctype=\"multipart/form-data\" method=\"post\" ".
+    /*
+     * Die Kennung verbindet die Auswahlkaestchen der Dateiliste mit diesem
+     * Formular. Die Liste steht seit der Umstellung auf das Tabellenbauteil
+     * ausserhalb: Das Bauteil bringt ein eigenes Suchformular mit, und ein
+     * Formular in einem Formular ist ungueltig -- der Browser wirft das
+     * innere weg, und die Suche taete nichts.
+     */
+    echo "<form id=\"uploadform\" name=\"uploadform\" enctype=\"multipart/form-data\" method=\"post\" ".
          "action=\"anhang.php\" data-estab-requires-incident>\n";
     echo estab_csrf_field ()."\n";
     $attachmentFlowToken = is_array ($messageContext)
@@ -1178,118 +1186,35 @@ require_once ("./db_operation.php");  // Datenbank operationen
     echo "</table>";
         echo "</fieldset>\n";
 
+    echo "</form>\n";
+
+    /*
+     * Die Liste der Dateien kommt aus dem Tabellenbauteil (app/tabelle.php).
+     *
+     * Sie hatte weder Suche noch Sortierung und ihre eigene Gestaltung --
+     * einer der sechs Befunde aus dem Betrieb. Die Auswahlkaestchen gehoeren
+     * weiterhin zur Hochladeform darueber und haengen ueber form= an ihr.
+     */
         echo "<fieldset>";
     echo "<legend>Liste der verfügbaren Dateien</legend>\n";
-    echo "<table border=\"1\" cellspacing=\"2\" cellpeding=\"3\" bgcolor=\"#E0E0E0\">\n";
-
     try {
       $db_file_data = readFiles_from_db();
     } catch (Throwable $exception) {
       http_response_code (503);
       error_log ("eStab attachment list failed: ".$exception->getMessage ());
-      $columnCount = $hasMessageContext ? 6 : 5;
-      echo "<tr><td colspan=\"".$columnCount."\" role=\"alert\">".
+      echo "<p role=\"alert\">".
            "Die Anhangliste kann derzeit nicht geladen werden. ".
-           "Bitte versuchen Sie es später erneut.</td></tr>\n";
+           "Bitte versuchen Sie es sp\xc3\xa4ter erneut.</p>\n";
       $db_file_data = array ();
     }
-    if ($db_file_data !== array ()){
-      $i = 0;
-      echo "<TR>";
-      if ($hasMessageContext) {
-        echo "<TH>Auswahl</TH>";
-      }
-      echo "<TH>Vorschau</TH>";
-      echo "<TH>Dateiname</TH>";
-      echo "<TH>Bemerkung</TH>";
-      echo "<TH>org. Dateiname</TH>";
-      echo "<TH>Datum/Zeit</TH>";
-      echo "</TR>";
-      foreach ($db_file_data as $file){
-        try {
-          $storedFilename = estab_attachment_validate_reservation_name ((string) ($file ["filename"] ?? ""));
-        } catch (InvalidArgumentException) {
-          continue;
-        }
-        $storedExtension = strtolower ((string) ($file ["fileext"] ?? ""));
-        if (preg_match ("/\\A[a-z0-9]{1,16}\\z/D", $storedExtension) !== 1
-            || !estab_attachment_extension_is_allowed ($storedExtension)) {
-          continue;
-        }
-        $attachmentValue = $storedFilename.".".$storedExtension;
-        try {
-          $publicUrl = estab_file_download_url (
-            (string) $conf_4f ["download_uri"],
-            "attachment",
-            $attachmentValue
-          );
-        } catch (InvalidArgumentException) {
-          continue;
-        }
-        $safePublicUrl = estab_attachment_html ($publicUrl);
-        $isEmail = $storedExtension === "eml";
-        $emailUrl = dirname ((string) $conf_4f ["download_uri"]).
-                    "/email.php?".
-                    http_build_query (
-                      array ("file" => $attachmentValue),
-                      "",
-                      "&",
-                      PHP_QUERY_RFC3986
-                    );
-        $safeEmailUrl = estab_attachment_html ($emailUrl);
-        $safeDisplayUrl = $isEmail ? $safeEmailUrl : $safePublicUrl;
-        $originalName = basename (str_replace (
-          "\\",
-          "/",
-          trim ((string) ($file ["org_filename"] ?? $attachmentValue))
-        ));
-        if ($originalName === "") {
-          $originalName = $attachmentValue;
-        }
-        echo "<tr>\n";
-          // checkbox
-        if ($hasMessageContext) {
-          echo "<td style=\"text-align:center;\">\n";
-          echo "<input type=\"checkbox\" name=\"lfd_".$i."\" value=\"".estab_attachment_html ($attachmentValue)."\">\n";
-          echo "</td>\n";
-        }
-          // Preview, if posible
-        echo "<td>\n";
-        if ($isEmail) {
-          echo "<div data-estab-email-attachment>".
-               "<a class=\"estab-button estab-button-primary\" href=\"".
-               $safeEmailUrl."\" target=\"_blank\" rel=\"noopener\">".
-               "E-Mail ansehen</a><br>".
-               "<a href=\"".$safePublicUrl."\" download=\"".
-               estab_attachment_html ($originalName)."\">".
-               "Originaldatei herunterladen</a></div>\n";
-        } else {
-          echo "<a href=\"".$safePublicUrl."\" target=\"_blank\" rel=\"noopener\">\n";
-          $previewUrl = $conf_urlroot.$conf_web ["pre_path"]."4fach/showpic.php?".
-                        http_build_query (
-                          array ("file" => $attachmentValue, "width" => 250),
-                          "",
-                          "&",
-                          PHP_QUERY_RFC3986
-                        );
-          echo "<img border=\"0\" alt=\"Anhangdatei\" src=\"".estab_attachment_html ($previewUrl)."\"></a>\n";
-        }
-        echo "</td>\n";
-          // filename
-        echo "<td style=\"text-align:center;\"> <a href=\"".$safeDisplayUrl."\" target=\"_blank\" rel=\"noopener\">".estab_attachment_html ($storedFilename)."</a></td>\n";
-          // commend belong to the attechmant
-        echo "<td> <a href=\"".$safeDisplayUrl."\" target=\"_blank\" rel=\"noopener\">".estab_attachment_html ($file ["comment"] ?? "")."</a></td>\n";
-          // org Dateiname
-        echo "<td> <a href=\"".$safeDisplayUrl."\" target=\"_blank\" rel=\"noopener\">".estab_attachment_html ($file ["org_filename"] ?? "")."</a></td>\n";
-          // time when the attetchment was edit
-        echo "<td> <a href=\"".$safeDisplayUrl."\" target=\"_blank\" rel=\"noopener\">".estab_attachment_html ($file ["date"] ?? "")."</a></td>\n";
-        echo "</tr>\n";
-        $i++;
-      }
-    }
-    echo "</table>\n";
-        echo "</fieldset>";
-    echo "</form>\n";
+    echo estab_anhang_tabelle (
+      $db_file_data,
+      $hasMessageContext,
+      $conf_4f,
+      $conf_urlroot,
+      $conf_web
+    );
+        echo "</fieldset>\n";
   }
 
 /***********************************************************************\
@@ -1558,6 +1483,27 @@ require_once ("./db_operation.php");  // Datenbank operationen
     }
   }
 
+  /*
+   * Die Anhangseite gab ihre Uebersicht bisher ohne Dokumentkopf aus: kein
+   * <head>, kein Stylesheet, keine Angabe der Kodierung. Der Browser stellte
+   * sie in seiner eigenen Schrift dar -- als einzige Seite der Anwendung. Mit
+   * der Tabelle aus dem Bauteil faellt das sofort auf, weil deren Gestaltung
+   * dort nicht ankam.
+   *
+   * fileselect() bringt seinen eigenen Kopf mit (pre_html); der Kopf hier
+   * wird deshalb nur ausgegeben, wenn dieser Weg nicht genommen wird.
+   */
+  $attachmentUploadForm =
+    isset ($_POST ["ah_upload_x"]) && $attachmentMenuState === 110;
+  if (!$attachmentUploadForm) {
+    echo "<!doctype html>\n<html lang=\"de\"><head>";
+    echo "<meta charset=\"UTF-8\">";
+    echo "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">";
+    echo "<title>Anh\xc3\xa4nge</title>";
+    echo estab_session_ui_stylesheet ()."\n";
+    echo "</head><body class=\"estab-legacy-page\">\n";
+  }
+
   switch ($attachmentMenuState){
 
     case 100: // Auswahlmenue
@@ -1595,6 +1541,10 @@ require_once ("./db_operation.php");  // Datenbank operationen
     default:
       http_response_code (500);
       echo "<p role=\"alert\"><b>Die Anhangübersicht konnte nicht initialisiert werden.</b></p>";
+  }
+
+  if (!$attachmentUploadForm) {
+    echo "\n</body></html>\n";
   }
 
 

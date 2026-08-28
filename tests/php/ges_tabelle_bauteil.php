@@ -404,6 +404,56 @@ $assert(
     'Das Bauteil gibt Auszeichnung aus einer Zelle unmaskiert weiter.'
 );
 
+/* --- Zellen mit Bedienelementen --- */
+
+/*
+ * Eine Zelle, die einen Knopf trägt, kann keine Zeichenkette sein. Die Seite
+ * baut sie dann selbst. Gesiebt und sortiert wird trotzdem über den **Wert**
+ * der Spalte, nicht über ihr Markup -- sonst suchte man in Klassennamen
+ * statt in Angaben, und eine Suche nach „button" fände jede Zeile.
+ */
+$mitKnopf = $spalten;
+$mitKnopf[3]['zelle'] = static fn (array $z): string =>
+    '<button type="button" class="estab-erledigt">'
+        . estab_message_html($z['inhalt']) . '</button>';
+$gebaut = estab_tabelle_markup([
+    'id' => 'probe', 'spalten' => $mitKnopf, 'zeilen' => $zeilen,
+    'quelle' => [$felder['suche'] => 'Abschnitt'],
+    'zeilenmarke' => static fn (array $z): string =>
+        'data-lfd="' . estab_message_html($z['nummer']) . '"',
+]);
+$assert(
+    substr_count($gebaut, '<button type="button" class="estab-erledigt">') === 1,
+    estab_ux_requirement(
+        'GES-TABELLE-SUCHE',
+        'Eine Spalte mit eigener Zelle wird nicht ausgegeben.'
+    )
+);
+$assert(
+    str_contains($gebaut, 'data-lfd="107"'),
+    estab_ux_requirement(
+        'GES-TABELLE-SUCHE',
+        'Eine Zeile kann keine eigene Marke tragen.'
+    )
+);
+$assert(
+    estab_tabelle_markup([
+        'id' => 'probe', 'spalten' => $mitKnopf, 'zeilen' => $zeilen,
+        'quelle' => [$felder['suche'] => 'estab-erledigt'],
+    ]) !== '' && !str_contains(
+        estab_tabelle_markup([
+            'id' => 'probe', 'spalten' => $mitKnopf, 'zeilen' => $zeilen,
+            'quelle' => [$felder['suche'] => 'estab-erledigt'],
+        ]),
+        '<button type="button"'
+    ),
+    estab_ux_requirement(
+        'GES-TABELLE-SUCHE',
+        'Die Suche greift auf das Markup einer Zelle zu statt auf ihren '
+            . 'Wert. Eine Suche nach einem Klassennamen fände dann jede Zeile.'
+    )
+);
+
 /* --- Der Leerzustand nennt den Grund und den Weg zurück --- */
 
 $nichts = estab_tabelle_markup([

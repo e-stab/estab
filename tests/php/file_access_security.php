@@ -423,13 +423,22 @@ $assert(
         ),
     'file endpoints lack object-level attachment or message authorization'
 );
+/*
+ * Die Anhangtabelle baut ihre Ziele ueber den Ausgabeweg, nicht ueber einen
+ * Pfad in die Ablage. Sie steht seit der Umstellung auf das Tabellenbauteil
+ * in app/anhang_tabelle.php; die Steuerung darf den Ablagepfad weiterhin
+ * nirgends verwenden.
+ */
+$attachmentTable = (string) file_get_contents($root . '/app/anhang_tabelle.php');
 $assert(
-    str_contains($attachmentController, 'estab_file_download_url')
+    str_contains($attachmentTable, 'estab_file_download_url')
+        && !str_contains($attachmentTable, '$conf_4f ["ablage_uri"]')
         && !str_contains($attachmentController, '$conf_4f ["ablage_uri"]'),
     'attachment table still links directly into 4fdata'
 );
 $assert(
-    str_contains($attachmentController, '"file" => $attachmentValue')
+    str_contains($attachmentTable, "'file' => \$z['wert']")
+        && !str_contains($attachmentTable, "\$conf_4f['ablage_dir']")
         && !str_contains($attachmentController, '$conf_4f ["ablage_dir"]."/".$attachmentValue'),
     'attachment preview still sends an absolute filesystem path'
 );
