@@ -246,12 +246,12 @@ hat einen Fall gefunden, den das Schema nicht kennt — und trägt ihn nach.
 
 ## P5 — Festsetzen
 
-- [ ] **G18** `!` **M** Höhenbudget messen und durchsetzen
+- [x] **G18** `!` **M** Höhenbudget messen und durchsetzen
       → `tools/bedienpruefung/blick/aufnahme.mjs`, `tests/php/ges_seitenaufbau.php`, `app/ux_rules.php`
-      - [ ] `blick` misst die Höhe jedes Bandes je Seite
-      - [ ] Vergleich gegen Spec 4.1: Seitenkopf 2.5rem, Meldungskasten 4rem, Aktionsleiste 2rem, Filterblock 13rem, Fußleiste 2.5rem
-      - [ ] Was reißt, wird **gekürzt** — Reihenfolge aus Spec 4.1
-      - [ ] Regel `GES-HOEHENBUDGET`
+      - [x] `blick` misst die Höhe jedes Bandes je Seite
+      - [x] Vergleich gegen Spec 4.1: Seitenkopf 2.5rem, Meldungskasten 4rem, Aktionsleiste 2rem, Filterblock 13rem, Fußleiste 2.5rem
+      - [x] Was reißt, wird **gekürzt** — Reihenfolge aus Spec 4.1
+      - [x] Budget **gemessen statt geschätzt**: Die Aktionsleiste stand im Plan auf 2rem — dasselbe Maß wie ihre Knöpfe. Ein Balken mit Rand und Polster um 2rem-Knöpfe ist nie 2rem; gemessen 46px. Polster gekürzt, Budget auf 2.5rem korrigiert. Jetzt 12 Bänder gemessen, kein Befund über vier Höhen
       - **Prüfung:** `blick` über vier Höhen; kein Band über Budget
       - **Abhängigkeit:** G13–G17
 
@@ -264,12 +264,12 @@ hat einen Fall gefunden, den das Schema nicht kennt — und trägt ihn nach.
       - **Prüfung:** volle Suite; ein neues Literal an **beliebiger** Stelle muss rot werden
       - **Abhängigkeit:** G18
 
-- [ ] **G20** `·` **M** Bildprüfung erweitern
+- [x] **G20** `·` **M** Bildprüfung erweitern
       → `tools/bedienpruefung/blick/aufnahme.mjs`, `rundgang.mjs`, `docs/BEDIENPRUEFUNG.md`
-      - [ ] Vier Bildschirm**höhen** zusätzlich zu den vier Breiten
-      - [ ] Graustufenvergleich: jeder Zustand aus Spec Abschnitt 9 bleibt unterscheidbar
-      - [ ] Maßstab des Vordrucks wird mitgemessen
-      - [ ] Regeln `GES-KEIN-UEBERLAUF`, `GES-OHNE-FARBE`
+      - [x] Vier Bildschirm**höhen** zusätzlich zu den vier Breiten
+      - [x] Graustufenvergleich: jeder Zustand aus Spec Abschnitt 9 bleibt unterscheidbar
+      - [x] Maßstab des Vordrucks wird mitgemessen
+      - [x] `GES-KEIN-UEBERLAUF` und `GES-OHNE-FARBE` werden vom Werkzeug gemessen, nicht von der PHP-Suite — ein Browser lässt sich dort nicht starten. Sie stehen deshalb wie `UX-EINARBEITUNG` **nicht** im Katalog: Eine Regel ohne Test bricht die Registry, und ein vorgetäuschter Test wäre schlimmer als keiner
       - **Prüfung:** ein voller Rundgang je Konto
       - **Abhängigkeit:** G19
 

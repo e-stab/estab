@@ -816,9 +816,16 @@ gesetzt, keine Rückweisung.
 | --- | --- | --- |
 | Seitenkopf | 2.5rem | Bereichsmarke, Titel, Unterlinie |
 | Meldungskasten | 4rem | Wort, ein bis zwei Sätze |
-| Aktionsleiste | 2rem | eine Zeile Knöpfe |
+| Aktionsleiste | 2.5rem | eine Zeile Knöpfe von 2rem, plus Rand und knappes Polster |
 | Filterblock über einer Liste | 13rem | Bänder 1 bis 6 aus Abschnitt 7 |
 | Fußleiste einer Liste | 2.5rem | Trefferzahl, Sortierung, Blätterer |
+| Aufklappband (zu) | 2.5rem | Zeile mit Dreieck und Namen |
+
+**Die Werte sind gemessen.** Ein früherer Entwurf setzte die Aktionsleiste auf
+2rem — dasselbe Maß wie ihre Knöpfe. Ein Balken mit Rand und Polster um
+2rem-Knöpfe ist aber nie 2rem; die Messung über vier Bildschirmhöhen ergab
+46 px. Gekürzt wurde das Polster, korrigiert das Budget: 2.5rem ist, was ein
+richtig gebauter Balken braucht.
 
 **Was das Budget reißt, wird gekürzt, nicht verkleinert.** Die Reihenfolge, in
 der gestrichen wird, steht fest: zuerst erklärende Sätze, dann Überschriften

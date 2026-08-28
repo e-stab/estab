@@ -3126,7 +3126,7 @@ form[data-estab-incident-disabled="true"]::before {
     border: 1px solid var(--linie-kraeftig);
     border-radius: var(--radius-3);
     margin-bottom: var(--abstand-5);
-    padding: var(--abstand-2) var(--abstand-5);
+    padding: var(--abstand-1) var(--abstand-5);
 }
 
 /* `display: flex` nimmt dem summary seine Dreiecksmarke. Sie kommt als
@@ -5268,7 +5268,7 @@ body.estab-message-form-body {
     flex-wrap: wrap;
     gap: var(--abstand-3);
     margin: 0 0 var(--abstand-4);
-    padding: var(--abstand-3) var(--abstand-3);
+    padding: var(--abstand-1) var(--abstand-4);
     position: relative;
     z-index: 30;
 }
