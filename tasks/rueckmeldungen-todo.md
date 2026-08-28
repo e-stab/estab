@@ -32,11 +32,35 @@ Reihenfolge: **Test zuerst, dann die Änderung, dann das Bild ansehen.**
 > trugen weiße Tinte ohne ihren Grund. Sie hatten alle dasselbe entfernte
 > Banner. Gemeldet war einer. Dazu trägt er eine Selbstprobe.
 
-- [ ] **R03** `!` **S** Der LdF trägt die Fernmelder-Funktionen
-      → `app/read_authorization.php`, `tests/php/…`
-      - [ ] Jede Fähigkeit, die die Rolle Fernmelder eröffnet, gilt auch für die Funktion LdF
-      - [ ] Ein Test führt beide Mengen gegeneinander und verlangt Enthaltung
-      - **Prüfung:** bestehende Berechtigungstests bleiben grün
+- [ ] **R03** `!!` **M** Der LdF trägt die Fernmelder-Tätigkeiten
+      → `app/sidebar.php`, `app/workflow.php`, `app/read_authorization.php`
+      - [ ] Der LdF bekommt die Arbeitsschritte Eingang, Ausgang, 2. Sichtung und Anhänge
+      - [ ] Und den Leseumfang, den er dafür braucht
+      - [ ] **Er bleibt dabei LdF** — er wird nicht zu einem zweiten A/W
+      - **Prüfung:** bestehende Berechtigungstests bleiben grün, insbesondere die strikte Trennung
+      - **Risiko heraufgesetzt auf `!!`.** Der erste Anlauf ist zurückgenommen
+
+      **Was der erste Anlauf ergeben hat.** Ich hatte den LdF die Funktion A/W
+      mittragen lassen — eine Zeile in `estab_auth_effective_function_roles`.
+      Das gibt ihm in einem Zug Arbeitsschritte und Sicht und war deshalb
+      verlockend. Es bricht aber **sieben** Prüfungen, und zwei davon sind
+      keine Formsache:
+
+      - `workflow_security` verlangt namentlich, dass **A/W- und
+        LdF-Identitäten strikt getrennt** sind. `estab_workflow_is_telecommunications($ldf)`
+        muss falsch bleiben. Das ist ein benannter Invariant, keine
+        Nebenwirkung.
+      - `FUEST-DOPPELFUNKTION` ist eine **Dienstvorschriftenregel** aus DV
+        1-101: Wer mehrere Funktionen trägt, bekommt je Funktion eine
+        Warteschlange. Ein LdF, der A/W mitträgt, bekäme im Cockpit zwei
+        Warteschlangen — eine Anzeigeänderung, die niemand verlangt hat, und
+        sie verwischt den Unterschied zwischen „leitet den Betrieb" und „ist
+        an der Annahmestelle eingeteilt".
+
+      Der richtige Weg ist der schmalere: **nicht** eine zweite Funktion,
+      sondern eine erweiterte Erlaubnis der einen. Der LdF bleibt LdF, bekommt
+      aber die Arbeitsschritte des A/W freigegeben und den Leseumfang dazu.
+      Das berührt drei Stellen statt einer und lässt beide Invarianten stehen.
 
 - [ ] **R04** `!!` **S** Die Meldungsübersicht steht allen offen
       → `4fueltg/ue_ltg.php`, `app/read_authorization.php`
