@@ -135,7 +135,7 @@ Reihenfolge: **Test zuerst, dann die Änderung, dann das Bild ansehen.**
 
 ## P3 — Eine Rückweisung wird gesehen
 
-- [ ] **R13** `!` **M** Die Meldung kommt ins Blickfeld
+- [x] **R13** `!` **M** Die Meldung kommt ins Blickfeld
       → `estab-ui.css`, `4fach/official_message_form.php`, `app/ux_rules.php`
       - [ ] Eine Rückweisung liegt über dem Inhalt, mittig, ohne Scrollen sichtbar
       - [ ] `role="alert"`, Fokus beim Laden, bleibt bis sie weggenommen wird oder die Handlung gelingt

@@ -5164,6 +5164,54 @@ body.estab-message-form-body {
 
 
 
+/* Eine abgewiesene Handlung liegt mittig im Blickfeld, nicht am Rand eines
+   Dokuments, das laenger ist als der Bildschirm.
+
+   Die aufgespannte Flaeche laesst Klicks durch; nur das Blatt faengt sie.
+   Sonst waere der Kasten ohne Skript eine Sperre statt einer Meldung. */
+.estab-rueckweisung {
+    display: grid;
+    inset: 0;
+    padding: var(--abstand-6);
+    place-items: center;
+    pointer-events: none;
+    position: fixed;
+    z-index: 2000;
+}
+
+.estab-rueckweisung:target {
+    display: none;
+}
+
+.estab-rueckweisung-blatt {
+    background: var(--fehler-flaeche);
+    border: 2px solid var(--fehler-kante);
+    border-radius: var(--radius-3);
+    box-shadow: var(--schatten-tafel);
+    color: var(--fehler-tinte);
+    display: flex;
+    flex-direction: column;
+    gap: var(--abstand-3);
+    max-width: min(32rem, 100%);
+    padding: var(--abstand-5);
+    pointer-events: auto;
+}
+
+.estab-rueckweisung-blatt strong {
+    font-size: var(--schrift-5);
+    line-height: 1.25;
+}
+
+.estab-rueckweisung-blatt p {
+    font-size: var(--schrift-4);
+    line-height: 1.4;
+    margin: 0;
+}
+
+.estab-rueckweisung-schliessen {
+    align-self: flex-start;
+}
+
 /* Fehlerübersicht am Seitenkopf: eine Meldung, ein Sprung je Feld. */
 .estab-message-error-summary {
     background: var(--fehler-flaeche);
@@ -7821,6 +7869,8 @@ section.estab-message-timeline[data-estab-message-timeline]
     /* Das Blatt der Ausfuellhilfe haengt am Dokument, nicht am Anker; die
        Regel fuer den Anker erreicht es dort nicht mehr. */
     .estab-official-help-dialog,
+    /* Ein Nachweis ist kein Bildschirm. */
+    .estab-rueckweisung,
     .estab-official-help-anchor,
     .estab-official-field-error,
     .estab-message-error-summary,

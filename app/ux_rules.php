@@ -113,6 +113,19 @@ function estab_ux_rules(): array
          * 4.5-Stufe gilt deshalb ueberall und sofort, die 7-Stufe fuer jeden
          * Bereich, sobald er umgestellt ist.
          */
+        'UX-RUECKWEISUNG-SICHTBAR' => [
+            'origin' => ESTAB_UX_ORIGIN_BETREIBER,
+            'reference' => 'Abgewiesene Handlung',
+            'requirement' => 'Weist die Anwendung eine Handlung ab, steht der '
+                . 'Grund mittig im Blickfeld -- ohne Scrollen, über dem '
+                . 'Inhalt, mit role="alert" und dem Fokus beim Laden. Er '
+                . 'bleibt stehen, bis jemand ihn wegnimmt oder die Handlung '
+                . 'gelingt. Auch ohne Skript -- als überlagernder Kasten am '
+                . 'Dokumentanfang, nicht als Skriptfenster. Eine Meldung am '
+                . 'Seitenende ist im Einsatz keine Meldung -- wer sie nicht '
+                . 'sieht, wiederholt die Eingabe und glaubt, sie sei '
+                . 'durchgelaufen.',
+        ],
         'UX-KONTRAST' => [
             'origin' => ESTAB_UX_ORIGIN_BETREIBER,
             'reference' => 'Lesbarkeit auf farbigem Grund',

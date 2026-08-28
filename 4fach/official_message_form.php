@@ -3177,10 +3177,33 @@ HTML;
              * die Zahl der Anlagen nennt.
              */
             . '</div></header>';
+        /*
+         * Eine abgewiesene Handlung sagt es dort, wo hingesehen wird.
+         *
+         * Der Grund stand als schmaler Streifen am oberen Rand eines
+         * Dokuments, das erheblich laenger ist als der Bildschirm. Wer unten
+         * am Vordruck arbeitet und absendet, landet wieder unten -- und
+         * sieht eine Seite, die aussieht wie vorher. Er glaubt, die Handlung
+         * sei durchgelaufen. Sie ist es nicht, und im Einsatz bleibt eine
+         * Nachricht liegen, von der jemand annimmt, sie sei weiter.
+         *
+         * Der Kasten liegt deshalb fest im Blickfeld und mittig. Beides
+         * ohne Skript -- `autofocus` bringt den Fokus hinein, und der
+         * Schliessen-Weg zeigt auf den Kasten selbst, den `:target` dann
+         * ausblendet. Ein Fragment ueberlebt keine Formularsendung -- eine
+         * neue Abweisung erscheint also verlaesslich wieder.
+         */
         if ((string)$this->formdata['estab_route_error'] !== '') {
-            echo '<div class="estab-alert estab-alert--danger" role="alert">'
+            echo '<div class="estab-rueckweisung" id="estab-rueckweisung" '
+                . 'role="alert" tabindex="-1" autofocus>'
+                . '<div class="estab-rueckweisung-blatt">'
+                . '<strong>Die Handlung wurde nicht ausgeführt</strong>'
+                . '<p>'
                 . estab_message_html($this->formdata['estab_route_error'])
-                . '</div>';
+                . '</p>'
+                . '<a class="estab-button estab-rueckweisung-schliessen" '
+                . 'href="#estab-rueckweisung">Verstanden</a>'
+                . '</div></div>';
         }
         echo (string)$this->messageTimelineHtml;
         include_once __DIR__ . '/katego.php';
