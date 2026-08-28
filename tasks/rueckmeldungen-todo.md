@@ -70,7 +70,7 @@ Reihenfolge: **Test zuerst, dann die Änderung, dann das Bild ansehen.**
       - **Prüfung:** Übersicht für jede Funktion aufrufen, keine wird abgewiesen; Schreibtests unverändert grün
       - **Risiko:** höchstes in P1 — eine zu weit geöffnete Leseberechtigung zeigt Meldungen fremder Funktionen
 
-- [ ] **R05** `!` **S** TBB schreibt der LdF, ETB der S2
+- [x] **R05** `!` **S** TBB schreibt der LdF, ETB der S2
       → `app/logbook.php`, `app/dv_operations.php`
       - [ ] TBB: **nur** die Funktion LdF schreibt
       - [ ] ETB: **nur** S2 oder ETB-Führer

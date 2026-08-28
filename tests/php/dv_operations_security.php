@@ -1166,7 +1166,9 @@ $assert(
             "\$function = (string) (\$writerIdentity['funktion'] ?? '');"
         )
         && str_contains($logbook, "'EINSATZTAGEBUCH'")
-        && str_contains($logbook, "'BEFOERDERUNG'")
+        // Das TBB haengt an FERNMELDEBETRIEB, der Fachzustaendigkeit des
+        // LdF. BEFOERDERUNG traegt der A/W, und der fuehrt kein Buch.
+        && str_contains($logbook, "'FERNMELDEBETRIEB'")
         && str_contains(
             $logbook,
             'estab_incident_duty_shift_required($incident)'
@@ -1187,7 +1189,7 @@ $assert(
             $logbook,
             "estab_auth_identity_has_function(\$selected, 'S2', 'Stab')"
         )
-        && str_contains($logbook, "'A/W'")
+        && str_contains($logbook, "'LdF'")
         && str_contains($logbook, "'Fernmelder'"),
     'ETB/TBB authorship does not enforce STRICT writers and exact LOOSE effective functions'
 );

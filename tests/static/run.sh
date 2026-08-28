@@ -207,6 +207,7 @@ for test_name in \
     ges_durchsetzung \
     rm_ldf_vertretung \
     rm_uebersicht_fuer_alle \
+    rm_buchfuehrung \
     ux_keyboard \
     ux_without_javascript \
     fuest_formal_review \

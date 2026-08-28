@@ -605,11 +605,14 @@ try {
   );
   $identity = $readScope ["identity"];
   estab_permission_context_set_from_incident ($readScope ["incident"]);
+  // Die Fachzustaendigkeit des Buches, nicht die des Meldungsverkehrs.
+  // BEFOERDERUNG traegt der A/W; das TBB fuehrt der LdF, und der traegt
+  // FERNMELDEBETRIEB.
   $hasTbbCapability = estab_dv_has_write_capability (
     $readConnection,
     (int) $readScope ["incident"]["active_einsatz_id"],
     $identity,
-    "BEFOERDERUNG"
+    "FERNMELDEBETRIEB"
   );
   $istTbbFuehrung = estab_logbook_is_designated_writer (
     $readConnection,
