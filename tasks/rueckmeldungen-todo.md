@@ -62,11 +62,11 @@ Reihenfolge: **Test zuerst, dann die Änderung, dann das Bild ansehen.**
       aber die Arbeitsschritte des A/W freigegeben und den Leseumfang dazu.
       Das berührt drei Stellen statt einer und lässt beide Invarianten stehen.
 
-- [ ] **R04** `!!` **S** Die Meldungsübersicht steht allen offen
+- [x] **R04** `!!` **S** Die Meldungsübersicht steht allen offen
       → `4fueltg/ue_ltg.php`, `app/read_authorization.php`
-      - [ ] Lesenden Zugriff hat jede angemeldete Funktion im aktiven Einsatz
-      - [ ] **Jede schreibende Prüfung bleibt unverändert** — der Test verlangt das ausdrücklich
-      - [ ] Die Abweisung „ist der aktiven Lage/Dokumentation vorbehalten" entfällt
+      - [x] Lesenden Zugriff hat jede angemeldete Funktion im aktiven Einsatz
+      - [x] **Jede schreibende Prüfung bleibt unverändert** — der Test verlangt das ausdrücklich
+      - [x] Die Abweisung „ist der aktiven Lage/Dokumentation vorbehalten" entfällt
       - **Prüfung:** Übersicht für jede Funktion aufrufen, keine wird abgewiesen; Schreibtests unverändert grün
       - **Risiko:** höchstes in P1 — eine zu weit geöffnete Leseberechtigung zeigt Meldungen fremder Funktionen
 

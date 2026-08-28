@@ -58,7 +58,8 @@ try {
   $overviewAccessError = array (
     403,
     "Keine Berechtigung für die Meldungsübersicht",
-    "Die Meldungsübersicht ist der aktiven Lage/Dokumentation vorbehalten.",
+    "Die Meldungsübersicht setzt einen angetretenen Dienst im aktiven "
+      ."Einsatz voraus.",
   );
 } catch (Throwable $exception) {
   error_log (

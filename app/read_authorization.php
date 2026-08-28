@@ -936,11 +936,27 @@ function estab_read_require_area(
     $incident = estab_incident_require_active($connection);
     $incidentId = (int) $incident['active_einsatz_id'];
     if ($area === 'message-overview') {
-        $selected = estab_read_require_capability(
+        /*
+         * Die Uebersicht steht jeder Funktion offen.
+         *
+         * Sie war der Lage- und Dokumentationsfunktion vorbehalten. Der
+         * Betreiber: Jeder soll die Meldungen ansehen koennen -- wer im
+         * Stab arbeitet, muss wissen, was laeuft, und nicht erst jemanden
+         * fragen, der die Liste sehen darf.
+         *
+         * Geoeffnet ist **nur das Lesen**. Die Uebersicht ist eine Ansicht;
+         * sie schreibt nichts, und jede schreibende Pruefung liegt
+         * anderswo und bleibt unberuehrt. Verlangt wird weiterhin ein
+         * gueltiger, angetretener Dienst im aktiven Einsatz -- die
+         * Uebersicht ist offen, nicht oeffentlich.
+         *
+         * Der Abfrageumfang war nie enger: Die Seite filtert auf
+         * `einsatz_id` und sonst nichts. Zu oeffnen war nur das Tor.
+         */
+        $selected = estab_read_require_identity_scope(
             $connection,
             $incidentId,
-            $identity,
-            'LAGE_DOKUMENTATION'
+            $identity
         );
     } elseif ($area === 'tracking') {
         $selected = null;
