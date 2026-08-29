@@ -1138,7 +1138,15 @@ class Listen extends kategorien {
     return $verified;
   }
 
-  function get_list ($listenart){
+  /**
+   * Die Zeilen einer Liste.
+   *
+   * `$vollstaendig` liefert alle Zeilen statt einer Seite. Das braucht, wer
+   * das Tabellenbauteil sieben, sortieren und blaettern laesst: Eine
+   * Sortierung ueber eine Seite ist keine Sortierung, sondern eine Umordnung
+   * von fuenfzehn zufaelligen Zeilen.
+   */
+  function get_list ($listenart, $vollstaendig = false){
     include ("../4fcfg/config.inc.php");
     include ("../4fcfg/para.inc.php");
     include ("../4fcfg/dbcfg.inc.php");
@@ -1293,7 +1301,7 @@ class Listen extends kategorien {
         $parameters
       );
       $result = estab_read_filter_messages ($result, $identity);
-      if ($displayFilters) {
+      if ($displayFilters && !$vollstaendig) {
         list ($start, $pageSize) = estab_list_page_window (count ($result));
         $result = array_slice ($result, $start, $pageSize);
       }
@@ -1474,8 +1482,22 @@ class Listen extends kategorien {
         /*
           Hole die Liste der gelesenen und der erledigten Nachrichten
         */
-        $result = $this->get_list ("global");
+        // Vollstaendig: Das Tabellenbauteil siebt, sortiert und blaettert.
+        $result = $this->get_list ("global", true);
+        /*
+         * Die Filterleiste und die Kategorienauswahl gehoeren *in* das Band
+         * des Tabellenbauteils, nicht daneben. Sie werden deshalb
+         * zwischengespeichert und dort eingesetzt.
+         *
+         * Ohne diese Stelle stuende neben jeder Tabelle wieder eine eigene
+         * Leiste -- und dann sieht wieder jede anders aus. Der Blaetterer
+         * (listen_navi) faellt ganz weg: Das Bauteil bringt seinen eigenen
+         * mit, und zwei Blaetterer nebeneinander sind schlimmer als einer.
+         */
+        ob_start ();
         $this->darstellungs_art ( $this->listenart );
+        $this->kategoliste ();
+        $stabZusatz = (string) ob_get_clean ();
         if (!is_array ($this->operationalIdentity)) {
           throw new EstabReadPermissionException (
             "Die wirksame Stabsfunktion ist nicht verfügbar."
@@ -1483,8 +1505,6 @@ class Listen extends kategorien {
         }
         $dbschongelesen = list_of_readed_msg ($this->operationalIdentity) ;
         $dbschonerledigt = list_of_done_msg ($this->operationalIdentity) ;
-        $this->kategoliste ();
-        $this->listen_navi () ;  //Navigationsbutton
         /*
          * Die Liste "Stab lesen" kommt aus dem Tabellenbauteil
          * (app/tabelle.php), in dessen zweiter Betriebsart: Gesiebt,
@@ -1503,12 +1523,18 @@ class Listen extends kategorien {
           // Messung im Browser: Mit gleich verteilten Breiten ueberlagerte
           // der Transportstand die Vorrangstufe, und der Nachrichtentext
           // machte Zeilen von 450 Bildpunkten Hoehe.
+          // Kopf, Breite, Klammerung, Art, sortierbar, suchbar.
           $stabSpalten = array (
-            array ("Kenntnis", 8, false), array ("Erledigt", 8, false),
-            array ("Transport", 10, false), array ("Vorrang", 8, false),
-            array ("E/A", 4, false), array ("TBB-Nachweis", 10, false),
-            array ("Von", 9, true), array ("An", 9, true),
-            array ("Abfasszeit", 9, false), array ("Inhalt", 25, true),
+            array ("Kenntnis", 7, false, "text", false, false),
+            array ("Erledigt", 7, false, "text", false, false),
+            array ("Transport", 10, false, "text", false, false),
+            array ("Vorrang", 10, false, "vorrang", true, false),
+            array ("E/A", 4, false, "text", true, false),
+            array ("TBB-Nachweis", 10, false, "zahl", true, true),
+            array ("Von", 9, true, "text", true, true),
+            array ("An", 9, true, "text", true, true),
+            array ("Abfasszeit", 8, false, "zeit", true, false),
+            array ("Inhalt", 25, true, "text", false, true),
           );
           $stabZeilen = array ();
           foreach ($result as $row){
@@ -1698,6 +1724,15 @@ class Listen extends kategorien {
                "id" => (string) ($row ["00_lfd"] ?? ""),
                "grund" => $receiverbackground,
                "tinte" => $receiverink,
+               // Die Werte, nach denen gesiebt und sortiert wird. Nicht das
+               // Markup: Sonst suchte man in Klassennamen statt in Angaben.
+               "w3" => estab_message_priority_label ($row ["09_vorrangstufe"] ?? ""),
+               "w4" => (string) ($row ["04_richtung"] ?? ""),
+               "w5" => estab_message_list_tbb_evidence_label ($row),
+               "w6" => (string) ($row ["13_abseinheit"] ?? ""),
+               "w7" => (string) ($row ["10_anschrift"] ?? ""),
+               "w8" => (string) ($row ["12_abfzeit"] ?? ""),
+               "w9" => estab_message_plain_text ($row ["12_inhalt"] ?? ""),
              );
              foreach ($stabZellen as $stabNummer => $stabInhalt) {
                $stabZeile ["z" . $stabNummer] = $stabInhalt;
@@ -1708,12 +1743,16 @@ class Listen extends kategorien {
           $stabAufbau = array ();
           foreach ($stabSpalten as $stabNummer => $stabAngabe) {
             $stabAufbau[] = array (
-              "schluessel" => "id",
+              // Gesiebt und sortiert wird ueber den Wert der Spalte, das
+              // Markup steht in "zelle".
+              "schluessel" => (($stabAngabe [4] ?? false) || ($stabAngabe [5] ?? false))
+                ? "w" . $stabNummer
+                : "id",
               "kopf" => $stabAngabe [0],
               "breite" => $stabAngabe [1],
-              "sortierbar" => false,
-              "suchbar" => false,
-              "art" => "text",
+              "sortierbar" => (bool) ($stabAngabe [4] ?? false),
+              "suchbar" => (bool) ($stabAngabe [5] ?? false),
+              "art" => (string) ($stabAngabe [3] ?? "text"),
               "klammern" => $stabAngabe [2],
               "zelle" => static function (array $z) use ($stabNummer): string {
                 return $z ["z" . $stabNummer];
@@ -1724,12 +1763,9 @@ class Listen extends kategorien {
             "id" => "stab-lesen",
             "beschriftung" => "Meldungen des aktiven Einsatzes mit "
               . "Kenntnis-, Erledigt- und Transportstand",
-            "baender" => false,
             "mindestbreite" => "60rem",
-            "fremd" => array (
-              "treffer" => count ($stabZeilen),
-              "gesamt" => (int) ($_SESSION ["filter_rescount"] ?? count ($stabZeilen)),
-            ),
+            // Die eigene Filterleiste steht im Band des Bauteils.
+            "zusatzbaender" => $stabZusatz,
             // Die Durchschriftenfarbe der eigenen Funktion. Sie kommt aus der
             // Einrichtung, nicht aus dem Stylesheet, und sagt auf einen Blick,
             // ob diese Meldung einen selbst betrifft.
@@ -1743,7 +1779,7 @@ class Listen extends kategorien {
             "leer" => "Keine Meldung entspricht den gesetzten Filtern.",
           ));
         }
-        $this->listen_navi () ;  //Navigationsbutton
+        // Kein listen_navi mehr: Das Bauteil bringt seinen Blaetterer mit.
       break;
 
       case "KORREKTUR":

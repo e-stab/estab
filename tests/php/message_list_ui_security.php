@@ -640,8 +640,15 @@ $assert(
             $overviewSource,
             'name=\"14_funktion\" value=\"".$this->safe_message_value'
         )
-        && str_contains($toolsSource, 'if ($column === "funktion")')
-        && str_contains($toolsSource, 'estab_function_display_name ($value)'),
+        // Die Kontenliste kommt aus dem Tabellenbauteil; sie uebersetzt die
+        // Funktion beim Bauen der Zeile statt beim Ausgeben der Zelle. Die
+        // Aussage ist dieselbe: In der Liste steht der Anzeigename, nicht
+        // der gespeicherte Schluessel.
+        && str_contains($toolsSource, '"funktion" => estab_function_display_name (')
+        && !preg_match(
+            '~"funktion" => \(string\) \(\$user \["funktion"\]~',
+            $toolsSource
+        ),
     'overview detail or account list exposes the persisted function key'
 );
 $recipientInclude = strpos(

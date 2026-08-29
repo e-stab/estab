@@ -22,6 +22,7 @@ require_once __DIR__ . "/../app/auth.php";
 require_once __DIR__ . "/../app/csrf.php";
 require_once __DIR__ . "/../app/file_access.php";
 require_once __DIR__ . "/../app/navigation.php";
+require_once __DIR__ . "/../app/tabelle.php";
 require_once __DIR__ . "/../app/self_registration.php";
 require_once __DIR__ . "/../app/session_ui.php";
 
@@ -683,7 +684,16 @@ bersichtlich dargestellt werden.
       $loginSelectable = $what == "verlinkt"
         && in_array (($_SESSION ["menue"] ?? ""), array ("WELCOME", "LOGIN"), true);
       if ($what == 'verlinkt'){
-         echo "\n\n<form action=\"".estab_auth_html ($conf_4f ["MainURL"])."\" method=\"POST\" target=\"_self\">\n";
+         /*
+          * Die Kennung verbindet die Auswahlknoepfe der Kontenliste mit
+          * diesem Formular.
+          *
+          * Die Liste steht seit der Umstellung auf das Tabellenbauteil
+          * ausserhalb: Das Bauteil bringt ein eigenes Suchformular mit, und
+          * ein Formular in einem Formular wirft der Browser weg -- die Suche
+          * taete nichts, und die Kontenwahl womoeglich auch nicht mehr.
+          */
+         echo "\n\n<form id=\"estab-kontenwahl\" action=\"".estab_auth_html ($conf_4f ["MainURL"])."\" method=\"POST\" target=\"_self\">\n";
          echo estab_csrf_field ()."\n";
          echo estab_navigation_login_destination_field ($loginDestination)."\n";
          echo "<!-- Benutzerliste mit POST-Auswahl zur Anmeldung -->\n";
@@ -697,14 +707,22 @@ bersichtlich dargestellt werden.
       if ($loginSelectable) {
         echo "<p>Die Auswahl übernimmt Name, Kürzel und Funktion. Zum Anmelden benötigen Sie weiterhin das zugehörige Kennwort.</p>\n";
       }
-      echo "<table class=\"estab-account-list\">\n";
-      echo "<tbody>\n";
-      echo "<tr>";
-      echo "<th scope=\"col\">Benutzer</th><th scope=\"col\">Kürzel</th><th scope=\"col\">Rolle</th><th scope=\"col\">Funktion</th><th scope=\"col\">Status</th>";
-      if ($loginSelectable) {
-        echo "<th scope=\"col\">Aktion</th>";
+      if ($what == 'verlinkt'){
+         // Vor der Tabelle schliessen: Das Bauteil bringt sein eigenes
+         // Formular mit, und ein Formular im Formular ist ungueltig. Die
+         // Auswahlknoepfe haengen ueber form= weiterhin an diesem hier.
+         echo "</form>\n";
       }
-      echo "</tr>\n";
+      /*
+       * Die Kontenliste kommt aus dem Tabellenbauteil (app/tabelle.php).
+       *
+       * Sie war die letzte Liste mit eigenem Markup und eigener Klasse
+       * (estab-account-list) -- und deshalb ist sie meinem Waechter
+       * entgangen, der nur zwei bestimmte Klassennamen zaehlte. Bei einer
+       * Uebung mit hundert Konten sucht man ein Kuerzel sonst mit dem Finger
+       * am Bildschirm.
+       */
+      $kontenZeilen = array ();
       foreach ($benutzer as $user){
         $presence = estab_auth_presence_state ($user);
         $isCurrentSession = (string) ($user ["sid"] ?? "") !== ""
@@ -721,31 +739,75 @@ bersichtlich dargestellt werden.
               "blocked" => "Gesperrt",
               default => "Abgemeldet",
             };
-        echo "<tr class=\"".$rowClass."\">";
-        $identityToken = $loginSelectable ? estab_auth_identity_token ($user) : "";
-        foreach (array ("benutzer", "kuerzel", "rolle", "funktion") as $column) {
-          $value = (string) ($user [$column] ?? "");
-          if ($column === "funktion") {
-            $value = estab_function_display_name ($value);
-          }
-          $safeValue = estab_auth_html ($value);
-          echo "<td>".$safeValue."</td>";
-        }
-        echo "<td>".estab_auth_html ($statusText)."</td>";
-        if ($loginSelectable) {
-          $safeToken = estab_auth_html ($identityToken);
-          $safeName = estab_auth_html ($user ["benutzer"] ?? "");
-          $safeCode = estab_auth_html ($user ["kuerzel"] ?? "");
-          echo "<td><button class=\"estab-button\" type=\"submit\" name=\"login_identity\" value=\"".$safeToken."\" aria-label=\"Konto ".$safeName." mit Kürzel ".$safeCode." auswählen\">Konto auswählen</button></td>";
-        }
-        echo "</tr>\n";
+        $kontenZeilen[] = array (
+          "benutzer" => (string) ($user ["benutzer"] ?? ""),
+          "kuerzel" => (string) ($user ["kuerzel"] ?? ""),
+          "rolle" => (string) ($user ["rolle"] ?? ""),
+          "funktion" => estab_function_display_name (
+            (string) ($user ["funktion"] ?? "")
+          ),
+          "status" => $statusText,
+          "marke" => $rowClass,
+          "kennung" => $loginSelectable
+            ? estab_auth_identity_token ($user)
+            : "",
+        );
       }
-      echo "</tbody></table>\n";
+
+      $kontenStati = array ();
+      foreach ($kontenZeilen as $kontenZeile) {
+        $kontenStati [$kontenZeile ["status"]] = true;
+      }
+      ksort ($kontenStati);
+
+      $kontenSpalten = array (
+        array ("schluessel" => "benutzer", "kopf" => "Benutzer",
+          "breite" => $loginSelectable ? 24 : 30,
+          "sortierbar" => true, "suchbar" => true, "art" => "text"),
+        array ("schluessel" => "kuerzel", "kopf" => "Kürzel", "breite" => 12,
+          "sortierbar" => true, "suchbar" => true, "art" => "text"),
+        array ("schluessel" => "rolle", "kopf" => "Rolle", "breite" => 12,
+          "sortierbar" => true, "suchbar" => true, "art" => "text"),
+        array ("schluessel" => "funktion", "kopf" => "Funktion",
+          "breite" => 16,
+          "sortierbar" => true, "suchbar" => true, "art" => "text"),
+        array ("schluessel" => "status", "kopf" => "Status",
+          "breite" => $loginSelectable ? 20 : 30,
+          "sortierbar" => true, "suchbar" => true, "art" => "text",
+          "filter" => array_keys ($kontenStati),
+          "filtername" => "Alle Zustände"),
+      );
+      if ($loginSelectable) {
+        $kontenSpalten[] = array (
+          "schluessel" => "kennung", "kopf" => "Aktion", "breite" => 16,
+          "sortierbar" => false, "suchbar" => false, "art" => "text",
+          "zelle" => static function (array $z): string {
+            return "<button class=\"estab-button\" type=\"submit\""
+              . " form=\"estab-kontenwahl\""
+              . " name=\"login_identity\" value=\""
+              . estab_auth_html ($z ["kennung"])."\""
+              . " aria-label=\"Konto ".estab_auth_html ($z ["benutzer"])
+              . " mit Kürzel ".estab_auth_html ($z ["kuerzel"])
+              . " auswählen\">Konto auswählen</button>";
+          },
+        );
+      }
+
+      echo estab_tabelle_markup (array (
+        "id" => "konten",
+        "beschriftung" => $loginSelectable
+          ? "Bestehende Konten mit Rolle, Funktion und Anmeldestatus"
+          : "Benutzerkonten mit Rolle, Funktion und Anmeldestatus",
+        "mindestbreite" => "44rem",
+        "zeilenmarke" => static function (array $z): string {
+          return "class=\"".estab_auth_html ($z ["marke"])."\"";
+        },
+        "spalten" => $kontenSpalten,
+        "zeilen" => $kontenZeilen,
+        "leer" => "Kein Konto entspricht den gesetzten Filtern.",
+      ));
       echo "</fieldset>\n";
       echo "</section>\n";
-      if ($what == 'verlinkt'){
-         echo "</form>\n";
-      }
     } else {
       echo "<section class=\"estab-auth-shell\"><div class=\"estab-auth-card\">\n";
       echo "<h2>Noch keine Konten vorhanden</h2>\n";

@@ -660,8 +660,11 @@ function estab_tabelle_mitfuehren(array $zustand, array $ausser = []): string
  * @param list<array<string,mixed>> $spalten
  * @param array<string,mixed> $zustand
  */
-function estab_tabelle_suchband(array $spalten, array $zustand): string
-{
+function estab_tabelle_suchband(
+    array $spalten,
+    array $zustand,
+    string $zusatz = ''
+): string {
     $suchbar = [];
     foreach ($spalten as $spalte) {
         if ($spalte['suchbar']) {
@@ -704,6 +707,16 @@ function estab_tabelle_suchband(array $spalten, array $zustand): string
         }
         $markup .= '</select></label>';
     }
+
+    /*
+     * Was die Seite selbst mitbringt, steht *im* Band -- nicht daneben.
+     *
+     * Manche Listen haben Bedienelemente, die nur sie haben: die
+     * Kategorienauswahl der Meldungsliste, die Schalter fuer gelesen und
+     * erledigt. Ohne diese Stelle muessten sie ihre eigene Leiste
+     * danebenstellen, und dann sieht wieder jede Tabelle anders aus.
+     */
+    $markup .= $zusatz;
 
     $markup .= '<label class="estab-tabelle-feld"><span>Zeilen</span><select name="'
         . estab_message_html($zustand['felder']['groesse']) . '">';
@@ -893,7 +906,13 @@ function estab_tabelle_markup(array $tabelle): string
     $eigeneBaender = ($tabelle['baender'] ?? true) === false;
     $markup = '<section class="estab-tabelle" data-estab-tabelle="'
         . estab_message_html($id) . '">'
-        . ($eigeneBaender ? '' : estab_tabelle_suchband($spalten, $zustand))
+        . ($eigeneBaender
+            ? ''
+            : estab_tabelle_suchband(
+                $spalten,
+                $zustand,
+                (string) ($tabelle['zusatzbaender'] ?? '')
+            ))
         . ($eigeneBaender
             ? ''
             : estab_tabelle_ergebnisleiste($zustand, $spalten, $treffer, $gesamt));
