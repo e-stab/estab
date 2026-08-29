@@ -39,7 +39,25 @@ function estab_message_list_direction_label(mixed $direction): string
     };
 }
 
-/** Describe the canonical TTB link without inventing a fallback number. */
+/**
+ * Der Nachweis im Technischen Betriebsbuch -- und wenn keiner da ist, warum.
+ *
+ * > „Warum steht bei den Meldungen überall noch kein TBB-Nachweis?"
+ *
+ * Weil er beim Befördern entsteht, nicht beim Abfassen. Das TBB dokumentiert
+ * den Fernmeldebetrieb: Eine eingehende Nachricht bekommt ihre Nummer bei der
+ * Aufnahme, eine ausgehende erst, wenn der Fernmelder sie tatsächlich
+ * abgesetzt hat. Eine Gesprächsnotiz bekommt nie eine -- sie hält ein
+ * geführtes Gespräch fest und geht über keinen Sender.
+ *
+ * Der Satz lautete für alle drei Fälle gleich: „noch kein TBB-Nachweis".
+ * Damit sah eine Liste aus, als fehle überall etwas -- auch dort, wo nichts
+ * fehlt. Jetzt sagt er, woran man ist.
+ *
+ * Ob er das kann, hängt davon ab, was die Abfrage mitgeliefert hat. Fehlen
+ * Richtung und Gesprächsnotiz, bleibt es beim alten, ehrlich unbestimmten
+ * Satz -- eine erfundene Begründung wäre schlimmer als keine.
+ */
 function estab_message_list_tbb_evidence_label(array $row): string
 {
     $value = $row['estab_tbb_book_lfd'] ?? null;
@@ -53,6 +71,18 @@ function estab_message_list_tbb_evidence_label(array $row): string
         )
     ) {
         return 'TBB-Nachweis ' . (string) ((int) $value);
+    }
+    // Die Gespraechsnotiz steht in der Datenbank als 't', im Formular als
+    // '1' oder 'on'. Der Vordruck prueft seit jeher alle drei; hier ebenso.
+    if (in_array(
+        (string) ($row['11_gesprnotiz'] ?? ''),
+        ['t', '1', 'on'],
+        true
+    )) {
+        return 'ohne TBB-Nachweis · Gesprächsnotiz';
+    }
+    if ((string) ($row['04_richtung'] ?? '') === 'A') {
+        return 'TBB-Nachweis mit der Beförderung';
     }
     return 'noch kein TBB-Nachweis';
 }

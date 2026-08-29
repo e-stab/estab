@@ -149,7 +149,12 @@ function estab_nachweisung_zeilen(
         . 'm.`04_richtung`,'
         . estab_message_list_tbb_number_select_sql('m') . ','
         . 'm.`10_anschrift`,m.`12_abfzeit`,m.`12_inhalt`,'
-        . 'm.`12_anhang`,m.`13_abseinheit`,m.`x01_abschluss`'
+        . 'm.`12_anhang`,m.`13_abseinheit`,m.`x01_abschluss`,'
+        // Fuer die Beschriftung des TBB-Nachweises: Eine Gespraechsnotiz
+        // bekommt nie eine Nummer, ein Ausgang bekommt sie mit der
+        // Befoerderung. Ohne diese Spalte koennte die Liste den Grund nicht
+        // nennen.
+        . 'm.`11_gesprnotiz`'
         . $bedingung
         . ' ORDER BY COALESCE(' . estab_message_list_tbb_number_sql('m')
         . ', 4294967296) ASC, m.`00_lfd` ASC';

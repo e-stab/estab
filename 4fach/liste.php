@@ -1112,6 +1112,9 @@ class Listen extends kategorien {
       estab_message_list_tbb_number_select_sql ("m").",".
       "m.`01_medium`,m.`05_gegenstelle`,m.`06_befweg`,".
       "m.`09_vorrangstufe`,m.`10_anschrift`,m.`11_rufnummer`,".
+      // Fuer die Beschriftung des TBB-Nachweises: Eine Gespraechsnotiz
+      // bekommt nie eine Nummer.
+      "m.`11_gesprnotiz`,".
       "m.`12_anhang`,m.`12_betreff`,m.`12_inhalt`,m.`12_abfzeit`,".
       "m.`13_abseinheit`,m.`14_funktion`,m.`15_quitdatum`,".
       "m.`15_quitzeichen`,m.`16_empf`,m.`x00_status`,".

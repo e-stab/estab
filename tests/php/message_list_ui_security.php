@@ -482,9 +482,20 @@ foreach ([
         ) === 1,
         $surface . ' heading is missing, misplaced, or not safely escaped'
     );
+    /*
+     * Eine interne Nachrichtennummer tritt nie an die Stelle des
+     * TBB-Nachweises. Fehlt der Nachweis, sagt die Liste warum: Eine
+     * Gespraechsnotiz bekommt nie eine Nummer, ein Ausgang bekommt sie mit
+     * der Befoerderung. Frueher hiess es fuer alle drei Faelle gleich "noch
+     * kein TBB-Nachweis" -- damit sah eine Liste aus, als fehle ueberall
+     * etwas, auch dort, wo nichts fehlt.
+     */
+    $ohneNachweis = substr_count($table, 'noch kein TBB-Nachweis')
+        + substr_count($table, 'ohne TBB-Nachweis · Gesprächsnotiz')
+        + substr_count($table, 'TBB-Nachweis mit der Beförderung');
     $assert(
         str_contains($table, 'TBB-Nachweis 142')
-            && str_contains($table, 'noch kein TBB-Nachweis')
+            && $ohneNachweis >= 1
             && !str_contains($table, '9142')
             && !str_contains($table, '9143')
             && !str_contains($table, '9144'),
