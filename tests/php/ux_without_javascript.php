@@ -156,6 +156,15 @@ $assert(
 $comfort = [
     'attachment-presentation', 'attachment-upload-limit',
     'official-form-help', 'official-form-focus',
+    // Ein zweiter Klick nimmt ein gesetztes Kreuz wieder weg. Ein
+    // Auswahlknopf laesst sich mit den Mitteln des Browsers anwaehlen, aber
+    // nicht abwaehlen -- wer sich vertippt, bekommt das Kreuz nicht mehr
+    // weg, und es steht spaeter als Angabe des Verfassers im Nachweis.
+    //
+    // Komfort im Sinne der Regel: Ohne Skript bleibt es beim Verhalten des
+    // Browsers, und der Weg, den es dann braucht -- den Vordruck neu laden
+    // --, war vorher der einzige.
+    'official-choice-toggle',
 ];
 foreach ($scripts[1] as $script) {
     $assert(

@@ -2628,6 +2628,69 @@ HTML;
         echo '</div></section>';
     }
 
+    /**
+     * Ein Kreuz laesst sich wieder wegnehmen.
+     *
+     * Die Ankreuzfelder des Vordrucks sind Auswahlknoepfe: Wer sich
+     * vertippt, bekommt sie mit den Mitteln des Browsers nicht mehr weg --
+     * ein Auswahlknopf laesst sich anwaehlen, aber nicht abwaehlen. Bei
+     * einem Feld, in dem "nichts angekreuzt" eine Aussage ist -- die
+     * Vorrangstufe, die Nachrichtenform --, ist das keine Kleinigkeit: Ein
+     * versehentliches Kreuz steht spaeter als Angabe des Verfassers im
+     * Nachweis.
+     *
+     * Ein zweiter Klick auf ein gesetztes Kreuz nimmt es deshalb wieder weg.
+     *
+     * Ohne Skript bleibt es beim Verhalten des Browsers. Das ist zulaessig:
+     * UX-OHNE-JAVASCRIPT verlangt, dass der Nachrichtenlauf ohne Skript
+     * funktioniert, und laesst zu, dass Komfort daran haengt. Wer ohne
+     * Skript arbeitet, laedt den Vordruck neu -- ein Weg, den er vorher
+     * auch schon nehmen musste.
+     */
+    function official_message_choice_script(): void
+    {
+        echo '<script' . estab_csp_script_attribute()
+            . ' data-estab-official-choice-toggle>';
+        echo <<<'HTML'
+(function () {
+  "use strict";
+  var form = document.querySelector("[data-estab-official-message-form]");
+  if (!form) {
+    return;
+  }
+  // Gemerkt wird der Zustand *vor* dem Klick: Beim Klick auf einen
+  // Auswahlknopf setzt der Browser ihn, bevor das Ereignis ankommt.
+  var vorher = null;
+  form.addEventListener("pointerdown", function (ereignis) {
+    var ziel = ereignis.target;
+    if (!ziel || ziel.type !== "radio" || ziel.disabled) {
+      vorher = null;
+      return;
+    }
+    vorher = ziel.checked ? ziel : null;
+  });
+  form.addEventListener("keydown", function () {
+    // Mit der Tastatur waehlt man in einer Gruppe weiter, nicht ab.
+    vorher = null;
+  });
+  form.addEventListener("click", function (ereignis) {
+    var ziel = ereignis.target;
+    if (!ziel || ziel.type !== "radio" || ziel.disabled) {
+      return;
+    }
+    if (vorher !== ziel) {
+      vorher = null;
+      return;
+    }
+    vorher = null;
+    ziel.checked = false;
+    ziel.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+})();
+HTML;
+        echo '</script>';
+    }
+
     function official_message_help_script(): void
     {
         echo '<script' . estab_csp_script_attribute() . ' data-estab-official-form-help>';
@@ -3688,6 +3751,7 @@ HTML;
         echo '</form></main>';
         $this->show_message_suggestion_script();
         $this->official_message_help_script();
+        $this->official_message_choice_script();
         $this->official_message_guidance_script();
         echo '</body></html>';
     }
