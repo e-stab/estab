@@ -210,6 +210,7 @@ for test_name in \
     rm_buchfuehrung \
     rm_aufnahmevermerk \
     rm_infofaehnchen \
+    rm_vordruckkopf \
     rm_feldfreigabe \
     rm_rueckweisung \
     ges_tabelle_bauteil \
