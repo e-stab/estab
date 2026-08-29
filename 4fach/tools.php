@@ -760,26 +760,34 @@ bersichtlich dargestellt werden.
       }
       ksort ($kontenStati);
 
+      /*
+       * Die Breiten sind auf den engsten Platz gerechnet, an dem diese
+       * Liste steht: die Anmeldekarte, rund 660 Bildpunkte. "Fernmelder"
+       * braucht dort etwa 95 Punkte, der Auswahlknopf etwa 120. Waren die
+       * Spalten schmaler, brach der Browser mitten im Wort um.
+       */
       $kontenSpalten = array (
         array ("schluessel" => "benutzer", "kopf" => "Benutzer",
-          "breite" => $loginSelectable ? 24 : 30,
+          "breite" => $loginSelectable ? 20 : 28,
           "sortierbar" => true, "suchbar" => true, "art" => "text"),
-        array ("schluessel" => "kuerzel", "kopf" => "Kürzel", "breite" => 12,
+        array ("schluessel" => "kuerzel", "kopf" => "Kürzel",
+          "breite" => $loginSelectable ? 11 : 12,
           "sortierbar" => true, "suchbar" => true, "art" => "text"),
-        array ("schluessel" => "rolle", "kopf" => "Rolle", "breite" => 12,
+        array ("schluessel" => "rolle", "kopf" => "Rolle",
+          "breite" => $loginSelectable ? 15 : 14,
           "sortierbar" => true, "suchbar" => true, "art" => "text"),
         array ("schluessel" => "funktion", "kopf" => "Funktion",
           "breite" => 16,
           "sortierbar" => true, "suchbar" => true, "art" => "text"),
         array ("schluessel" => "status", "kopf" => "Status",
-          "breite" => $loginSelectable ? 20 : 30,
+          "breite" => $loginSelectable ? 18 : 30,
           "sortierbar" => true, "suchbar" => true, "art" => "text",
           "filter" => array_keys ($kontenStati),
           "filtername" => "Alle Zustände"),
       );
       if ($loginSelectable) {
         $kontenSpalten[] = array (
-          "schluessel" => "kennung", "kopf" => "Aktion", "breite" => 16,
+          "schluessel" => "kennung", "kopf" => "Aktion", "breite" => 20,
           "sortierbar" => false, "suchbar" => false, "art" => "text",
           "zelle" => static function (array $z): string {
             return "<button class=\"estab-button\" type=\"submit\""
@@ -788,7 +796,7 @@ bersichtlich dargestellt werden.
               . estab_auth_html ($z ["kennung"])."\""
               . " aria-label=\"Konto ".estab_auth_html ($z ["benutzer"])
               . " mit Kürzel ".estab_auth_html ($z ["kuerzel"])
-              . " auswählen\">Konto auswählen</button>";
+              . " auswählen\">Auswählen</button>";
           },
         );
       }
@@ -798,7 +806,9 @@ bersichtlich dargestellt werden.
         "beschriftung" => $loginSelectable
           ? "Bestehende Konten mit Rolle, Funktion und Anmeldestatus"
           : "Benutzerkonten mit Rolle, Funktion und Anmeldestatus",
-        "mindestbreite" => "44rem",
+        "mindestbreite" => "36rem",
+        // Wenige Spalten, aber ein schmaler Platz: erst unter 30rem Karten.
+        "schmal" => true,
         "zeilenmarke" => static function (array $z): string {
           return "class=\"".estab_auth_html ($z ["marke"])."\"";
         },

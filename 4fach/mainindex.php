@@ -2084,6 +2084,8 @@ ANTWORT % WEITERLEITUNG
     }
   }
   $loginFlow = estab_auth_login_flow ($loginFlowRequest);
+  // Die Kontenliste wird hoechstens einmal je Seite ausgegeben.
+  $kontenlisteGezeigt = false;
   $loginError = "";
   if ($loginFlow !== null) {
     $_SESSION ["menue"] = "LOGIN";
@@ -3365,6 +3367,23 @@ Nachricht als Sichtung anzeigen
 
       echo "<h2>".$formTitle."</h2>\n";
       echo "<p class=\"estab-auth-help\">".$formHelp."</p>\n";
+      /*
+       * Die Kontenliste steht vor den Feldern, nicht dahinter.
+       *
+       * Sie fuellt Name, Kuerzel und Funktion -- die drei Felder, die
+       * unmittelbar darunter stehen. Stand sie hinter dem Formular, lag sie
+       * eine volle Bildschirmhoehe tiefer: Wer sein Konto suchte, sah
+       * zuerst vier leere Felder und musste an ihnen vorbeiscrollen, um die
+       * Liste ueberhaupt zu finden.
+       *
+       * Vor dem <form> und nicht darin: Das Tabellenbauteil bringt sein
+       * eigenes Suchformular mit, und ein Formular im Formular wirft der
+       * Browser weg.
+       */
+      if (!$isRegistration) {
+        benutzerstatus ("verlinkt", $loginDestination);
+        $kontenlisteGezeigt = true;
+      }
       echo "<form action=\"".$loginAction."\" method=\"POST\" target=\"_self\">\n";
       echo "<fieldset class=\"estab-auth-form\">\n";
       echo "<legend>Zugangsdaten</legend>\n";
@@ -3447,9 +3466,14 @@ if (estab_workflow_should_render_primary_view (
      ( ( $_SESSION ["menue"] == "WELCOME" OR $_SESSION ["menue"] == "LOGIN" )
        AND $loginFlow !== "new" ) )
   {
+    // Bei der Anmeldung mit bestehendem Konto steht die Liste schon oben,
+    // zwischen Hilfesatz und Zugangsdaten. Ein zweites Mal waere sie hier
+    // eine zweite Tabelle mit derselben Kennung -- und damit ein zweites
+    // Sieb, das dem ersten widerspricht.
+    if (!($kontenlisteGezeigt ?? false)) {
 		if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><br>";  }
       benutzerstatus ("verlinkt", $loginDestination);
-	  
+    }
    }
 
 if ($_SESSION ["menue"] == "LOGIN" or $_SESSION ["menue"] == "WELCOME") {

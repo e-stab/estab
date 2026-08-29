@@ -670,6 +670,17 @@ SELECT lfd FROM `nv_masterkatego` WHERE `kategorie` = "2m"));
     echo "<p>Suche und Filter werden miteinander kombiniert. Ein Klick auf ";
     echo "„Vordruck öffnen“ zeigt die vollständige, unveränderte Nachricht.</p>\n";
     echo "</header>\n";
+    /*
+     * Die Filter der Uebersicht stehen *im* Band des Tabellenbauteils.
+     *
+     * Sie bringen kein eigenes Formular mehr mit -- ein Formular im Formular
+     * wirft der Browser weg, und zwei Baender nebeneinander waeren genau die
+     * Uneinheitlichkeit, die abgestellt werden sollte. Volltextsuche,
+     * Seitengroesse, Ergebnisleiste und Blaetterer kommen vom Bauteil und
+     * sprechen ueber die Adressfelder der Seite (ml_q, ml_page_size,
+     * ml_page) weiterhin ihre Sprache.
+     */
+    ob_start ();
     estab_message_list_render_controls (
       $this->filters,
       $recipientFunctions,
@@ -678,12 +689,10 @@ SELECT lfd FROM `nv_masterkatego` WHERE `kategorie` = "2m"));
         "method" => "get",
         "target" => "_self",
         "dom_prefix" => "overview-message-list",
+        "nur_felder" => true,
       )
     );
-    estab_message_list_render_resultbar (
-      $this->filters,
-      $this->pageWindow
-    );
+    $uebersichtFelder = (string) ob_get_clean ();
     if ($result === array ()) {
       estab_message_list_render_empty ($this->filters);
     } else {
@@ -700,19 +709,17 @@ SELECT lfd FROM `nv_masterkatego` WHERE `kategorie` = "2m"));
               "ueb_fm" => "ueb",
               "00_lfd" => $recordId,
             )))."\">".estab_message_html ($label)."</a>";
-        }
+        },
+        $uebersichtFelder,
+        array (
+          "treffer" => (int) ($this->pageWindow ["count"] ?? count ($result)),
+          "gesamt" => (int) ($this->pageWindow ["count"] ?? count ($result)),
+          "seite" => (int) ($this->pageWindow ["page"] ?? 1),
+          "seiten" => (int) ($this->pageWindow ["page_count"] ?? 1),
+        )
       );
     }
-    estab_message_list_render_pager (
-      $this->filters,
-      $this->pageWindow,
-      array (
-        "action" => estab_overview_url (),
-        "method" => "get",
-        "target" => "_self",
-        "hidden" => array (),
-      )
-    );
+    // Blaetterer und Ergebnisleiste kommen aus dem Bauteil.
     echo "</section>\n<footer class=\"estab-tool-footer\">\n";
     echo "<a href=\"".estab_auth_html (estab_application_root ())."\">";
     echo "Zur eStab-Übersicht</a>\n";

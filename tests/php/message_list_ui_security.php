@@ -553,18 +553,62 @@ foreach ([
         $surface . ' reactivates conflicting legacy mobile-table CSS'
     );
 }
+/*
+ * Die Zeilen der Uebersicht tragen genau einen traegen Verweis und kein
+ * Formular: Ein Formular in einer Zeile waere ein Bedienelement, das etwas
+ * aendert, wo nur gelesen wird.
+ *
+ * Gezaehlt wird deshalb im Rumpf der Tabelle, nicht im ganzen Markup: Das
+ * Suchband des Tabellenbauteils ist ein Formular und steht ueber der
+ * Tabelle, nicht in ihr.
+ */
+$overviewBody = '';
+if (preg_match('~<tbody>(.*)</tbody>~s', $overviewTable, $overviewRows) === 1) {
+    $overviewBody = $overviewRows[1];
+}
 $assert(
-    substr_count($overviewTable, '<form') === 0
-        && substr_count($overviewTable, '<a class="estab-button '
+    $overviewBody !== ''
+        && substr_count($overviewBody, '<form') === 0
+        && substr_count($overviewBody, '<a class="estab-button '
             . 'estab-message-list-open"') === 3,
     'Overview rows do not expose exactly one inert detail link each'
 );
+/*
+ * Auch hier wird im Rumpf gezaehlt: Das Suchband des Tabellenbauteils ist
+ * ein Formular und schliesst sich vor der Tabelle -- ein Formular in einem
+ * Formular wuerfe der Browser weg, und der Knopf "Vordruck oeffnen" taete
+ * dann nichts mehr. Dass es sich schliesst, wird unten eigens geprueft.
+ */
+$secondSightingBody = '';
+if (preg_match('~<tbody>(.*)</tbody>~s', $secondSightingTable, $secondRows) === 1) {
+    $secondSightingBody = $secondRows[1];
+}
 $assert(
-    substr_count($secondSightingTable, '<form') === 3
-        && substr_count($secondSightingTable, 'name="csrf_token"') === 3
-        && substr_count($secondSightingTable, 'name="00_lfd"') === 3
-        && substr_count($secondSightingTable, 'name="fm"') === 3,
+    $secondSightingBody !== ''
+        && substr_count($secondSightingBody, '<form') === 3
+        && substr_count($secondSightingBody, 'name="csrf_token"') === 3
+        && substr_count($secondSightingBody, 'name="00_lfd"') === 3
+        && substr_count($secondSightingBody, 'name="fm"') === 3,
     'Second-sighting rows do not expose one CSRF-protected POST action each'
+);
+/*
+ * Und der Beweis, dass das Band sich schliesst: Zwischen dem oeffnenden
+ * <form> des Bandes und der Tabelle steht ein </form>. Ohne diese Pruefung
+ * waere die vorige nur noch eine Zaehlung im Rumpf -- sie saehe eine
+ * Verschachtelung nicht, die genau die Knoepfe stillstellte, die sie zaehlt.
+ */
+$bandAnfang = strpos($secondSightingTable, '<form class="estab-tabelle-suchband"');
+if ($bandAnfang === false) {
+    $bandAnfang = strpos($secondSightingTable, '<form');
+}
+$tabellenAnfang = strpos($secondSightingTable, '<table');
+$assert(
+    is_int($bandAnfang) && is_int($tabellenAnfang)
+        && $bandAnfang < $tabellenAnfang
+        && ($bandEnde = strpos($secondSightingTable, '</form>', $bandAnfang)) !== false
+        && $bandEnde < $tabellenAnfang,
+    'Das Suchband schliesst sich nicht vor der Tabelle; die Formulare in den '
+        . 'Zeilen laegen darin und waeren wirkungslos.'
 );
 
 $emptyDefault = $render(static function (): void {
@@ -636,14 +680,32 @@ $withoutPhpComments = static function (string $source): string {
     return $code;
 };
 
+/*
+ * Ergebnisleiste und Blaetterer kommen seit der Umstellung aus dem
+ * Tabellenbauteil, nicht mehr aus zwei eigenen Ausgaben der
+ * Meldungsschicht. Die Uebersicht ruft sie deshalb nicht mehr auf -- sie
+ * uebergibt dem Bauteil ihre Auswahl ("fremd") samt Zaehlung, und das
+ * Bauteil zeichnet beides.
+ *
+ * Geprueft bleibt der Punkt, um den es dabei geht: Die Uebersicht baut
+ * nichts davon selbst. Traege sie wieder einen eigenen Blaetterer, stuenden
+ * auf einer Seite zwei -- und die Uneinheitlichkeit, wegen der umgestellt
+ * wurde, waere zurueck.
+ */
 $assert(
     str_contains($overviewSource, 'require_once __DIR__ . "/../app/message_list_ui.php"')
         && str_contains($overviewSource, 'data-estab-message-overview data-estab-message-list')
         && str_contains($overviewSource, 'estab_message_list_render_controls (')
-        && str_contains($overviewSource, 'estab_message_list_render_resultbar (')
-        && str_contains($overviewSource, 'estab_message_list_render_table (')
-        && str_contains($overviewSource, 'estab_message_list_render_pager ('),
+        && str_contains($overviewSource, '"nur_felder" => true')
+        && str_contains($overviewSource, 'estab_message_list_render_table ('),
     'Meldungsübersicht bypasses the shared message-list renderers'
+);
+$assert(
+    !str_contains($overviewSource, 'estab_message_list_render_resultbar (')
+        && !str_contains($overviewSource, 'estab_message_list_render_pager ('),
+    'Die Meldungsübersicht zeichnet Ergebnisleiste oder Blätterer wieder '
+        . 'selbst; das Tabellenbauteil bringt beide mit, und zwei nebeneinander '
+        . 'sind genau die Uneinheitlichkeit, die abgestellt werden sollte.'
 );
 $assert(
     substr_count($overviewSource, 'estab_function_display_name (') >= 5

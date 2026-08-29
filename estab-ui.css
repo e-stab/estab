@@ -5336,10 +5336,14 @@ body.estab-message-form-body {
     font-size: var(--schrift-2);
 }
 
+/* `break-word` statt `anywhere`: Ein Wort bricht erst, wenn es allein nicht
+   in die Zeile passt -- nicht schon dann, wenn ein Bruch die Spalte etwas
+   schmaler machen koennte. Mit `anywhere` stand in der Rollenspalte
+   "Fernmelde / r", obwohl das Wort gepasst haette. */
 .estab-tabelle-blatt tbody td {
     border-bottom: 1px solid var(--linie);
     font-size: var(--schrift-3);
-    overflow-wrap: anywhere;
+    overflow-wrap: break-word;
     padding: var(--abstand-2) var(--abstand-4);
     text-align: left;
     vertical-align: top;
@@ -5347,6 +5351,19 @@ body.estab-message-form-body {
 
 .estab-tabelle-blatt tbody tr:last-child td {
     border-bottom: 0;
+}
+
+/* Ein Knopf ist eine Beschriftung, kein Fliesstext.
+
+   `overflow-wrap: anywhere` gehoert in eine Zelle mit Betreffzeilen -- ein
+   Wort ohne Leerzeichen sprengte sonst die Spalte. Auf einer
+   Knopfbeschriftung richtet dieselbe Regel Schaden an: Aus "Auswaehlen"
+   wird "Auswaeh / len", der Knopf wird dreizeilig, und jede Zeile der
+   Kontenliste wuchs damit auf 97 Bildpunkte. Achtzehn Konten passten so
+   auf keinen Bildschirm mehr. */
+.estab-tabelle-blatt tbody td .estab-button {
+    overflow-wrap: normal;
+    word-break: keep-all;
 }
 
 .estab-tabelle-zahl {
@@ -5485,31 +5502,66 @@ body.estab-message-form-body {
 }
 
 /* Unter 48rem Spaltenbreite wird die Tabelle zu Karten -- gemessen an der
-   Spalte, nicht am Fenster. */
+   Spalte, nicht am Fenster.
+
+   Eine schmale Tabelle mit wenigen Spalten traegt sich laenger als eine
+   breite mit zehn. Sie sagt das mit .estab-tabelle--schmal und wird erst
+   unter 30rem zu Karten. Ohne diesen Unterschied fiel die Kontenliste auf
+   der Anmeldeseite in Karten -- ein Konto je halbe Bildschirmhoehe, und wer
+   sich anmelden wollte, scrollte. */
 @container (max-width: 48rem) {
-    .estab-tabelle-blatt {
+    .estab-tabelle:not(.estab-tabelle--schmal) .estab-tabelle-blatt {
         min-width: 0;
     }
 
-    .estab-tabelle-blatt thead,
-    .estab-tabelle-masken {
+    .estab-tabelle:not(.estab-tabelle--schmal) .estab-tabelle-blatt thead,
+    .estab-tabelle:not(.estab-tabelle--schmal) .estab-tabelle-masken {
         display: none;
     }
 
-    .estab-tabelle-blatt tbody tr {
+    .estab-tabelle:not(.estab-tabelle--schmal) .estab-tabelle-blatt tbody tr {
         border-bottom: 1px solid var(--linie-kraeftig);
         display: block;
         padding: var(--abstand-3) 0;
     }
 
-    .estab-tabelle-blatt tbody td {
+    .estab-tabelle:not(.estab-tabelle--schmal) .estab-tabelle-blatt tbody td {
         border-bottom: 0;
         display: block;
         padding: var(--abstand-1) var(--abstand-4);
         text-align: left;
     }
 
-    .estab-tabelle-blatt tbody td::before {
+    .estab-tabelle:not(.estab-tabelle--schmal) .estab-tabelle-blatt tbody td::before {
+        content: attr(data-label) ": ";
+        font-weight: 700;
+    }
+}
+
+@container (max-width: 30rem) {
+    .estab-tabelle--schmal .estab-tabelle-blatt {
+        min-width: 0;
+    }
+
+    .estab-tabelle--schmal .estab-tabelle-blatt thead,
+    .estab-tabelle--schmal .estab-tabelle-masken {
+        display: none;
+    }
+
+    .estab-tabelle--schmal .estab-tabelle-blatt tbody tr {
+        border-bottom: 1px solid var(--linie-kraeftig);
+        display: block;
+        padding: var(--abstand-3) 0;
+    }
+
+    .estab-tabelle--schmal .estab-tabelle-blatt tbody td {
+        border-bottom: 0;
+        display: block;
+        padding: var(--abstand-1) var(--abstand-4);
+        text-align: left;
+    }
+
+    .estab-tabelle--schmal .estab-tabelle-blatt tbody td::before {
         content: attr(data-label) ": ";
         font-weight: 700;
     }

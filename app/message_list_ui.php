@@ -281,6 +281,18 @@ function estab_message_list_render_controls(
         throw new InvalidArgumentException('Ungültige versteckte Listenfelder');
     }
     $csrfHtml = (string) ($options['csrf_html'] ?? '');
+    /*
+     * Nur die Felder, ohne eigenes Formular.
+     *
+     * Die Uebersicht setzt ihre Filter seit der Vereinheitlichung *in* das
+     * Band des Tabellenbauteils. Ein Formular im Formular wirft der Browser
+     * weg, und zwei Baender nebeneinander sind genau die Uneinheitlichkeit,
+     * die abgestellt werden sollte.
+     *
+     * Weggelassen werden dabei die Felder, die das Bauteil selbst stellt:
+     * die Volltextsuche, die Seitengroesse und die Absendeschaltflaeche.
+     */
+    $nurFelder = ($options['nur_felder'] ?? false) === true;
     // Only a caller which really owns per-identity read/done tables may offer
     // those filters; otherwise the surface would promise a filter that no
     // query can answer.
@@ -293,11 +305,13 @@ function estab_message_list_render_controls(
         || (int) ($filters['page_size'] ?? 50) !== 50;
     $helpId = $domPrefix . '-query-help';
 
-    echo '<section class="estab-message-list-controls" '
-        . 'data-estab-message-list-controls>';
-    echo '<form class="estab-message-list-search-form" role="search" method="'
-        . $method . '" action="' . estab_auth_html($action) . '" target="'
-        . estab_auth_html($target) . '">';
+    if (!$nurFelder) {
+        echo '<section class="estab-message-list-controls" '
+            . 'data-estab-message-list-controls>';
+        echo '<form class="estab-message-list-search-form" role="search" method="'
+            . $method . '" action="' . estab_auth_html($action) . '" target="'
+            . estab_auth_html($target) . '">';
+    }
     echo $csrfHtml;
     foreach ($hidden as $name => $value) {
         if (
@@ -310,21 +324,27 @@ function estab_message_list_render_controls(
         echo '<input type="hidden" name="' . estab_auth_html($name)
             . '" value="' . estab_auth_html((string) $value) . '">';
     }
-    echo '<div class="estab-message-list-search-row">';
-    echo '<label class="estab-message-list-query" for="' . $domPrefix . '-q">';
-    echo '<span>Nachrichten durchsuchen</span>';
-    echo '<input id="' . $domPrefix . '-q" type="search" name="ml_q" '
-        . 'value="' . estab_auth_html((string) ($filters['q'] ?? '')) . '" '
-        . 'maxlength="120" autocomplete="off" enterkeyhint="search" '
-        . 'placeholder="z. B. Überschrift, TBB-Nachweis 142 oder Rufname" '
-        . 'aria-describedby="' . $helpId . '">';
-    echo '<small id="' . $helpId . '">Durchsucht Vordruck-Überschrift '
-        . '(Betreff), TBB-Nachweisnummer, Rufname, Rufnummer, Von, An, '
-        . 'Verfasserfunktion und Nachrichtentext.</small>';
-    echo '</label>';
-    echo '<button class="estab-button estab-button-primary" type="submit" '
-        . 'name="ml_apply" value="1">Suchen</button>';
-    echo '</div>';
+    if ($nurFelder) {
+        // Das Bauteil stellt die Volltextsuche; der Hinweis, worin sie
+        // sucht, gehoert trotzdem hierher -- er beschreibt diese Liste.
+        echo '<input type="hidden" name="ml_apply" value="1">';
+    } else {
+        echo '<div class="estab-message-list-search-row">';
+        echo '<label class="estab-message-list-query" for="' . $domPrefix . '-q">';
+        echo '<span>Nachrichten durchsuchen</span>';
+        echo '<input id="' . $domPrefix . '-q" type="search" name="ml_q" '
+            . 'value="' . estab_auth_html((string) ($filters['q'] ?? '')) . '" '
+            . 'maxlength="120" autocomplete="off" enterkeyhint="search" '
+            . 'placeholder="z. B. Überschrift, TBB-Nachweis 142 oder Rufname" '
+            . 'aria-describedby="' . $helpId . '">';
+        echo '<small id="' . $helpId . '">Durchsucht Vordruck-Überschrift '
+            . '(Betreff), TBB-Nachweisnummer, Rufname, Rufnummer, Von, An, '
+            . 'Verfasserfunktion und Nachrichtentext.</small>';
+        echo '</label>';
+        echo '<button class="estab-button estab-button-primary" type="submit" '
+            . 'name="ml_apply" value="1">Suchen</button>';
+        echo '</div>';
+    }
 
     echo '<fieldset class="estab-message-list-quick-filters">';
     echo '<legend>Schnellfilter</legend>';
@@ -402,12 +422,17 @@ function estab_message_list_render_controls(
             estab_message_list_sort_options(),
             (string) ($filters['sort'] ?? 'priority_newest')
         ) . '</select></label>';
-    echo '<label for="' . $domPrefix . '-page-size"><span>Nachrichten pro Seite</span>'
-        . '<select id="' . $domPrefix . '-page-size" name="ml_page_size">'
-        . estab_message_list_select_options(
-            ['25' => '25', '50' => '50', '100' => '100'],
-            (string) ($filters['page_size'] ?? 50)
-        ) . '</select></label>';
+    if (!$nurFelder) {
+        // Die Seitengroesse stellt das Bauteil ("Zeilen"), wenn es das Band
+        // baut. Zwei Bedienelemente fuer dieselbe Sache sind schlimmer als
+        // eines.
+        echo '<label for="' . $domPrefix . '-page-size"><span>Nachrichten pro Seite</span>'
+            . '<select id="' . $domPrefix . '-page-size" name="ml_page_size">'
+            . estab_message_list_select_options(
+                ['25' => '25', '50' => '50', '100' => '100'],
+                (string) ($filters['page_size'] ?? 50)
+            ) . '</select></label>';
+    }
     echo '</div></details>';
 
     echo '<div class="estab-tool-actions">';
@@ -429,7 +454,9 @@ function estab_message_list_render_controls(
         }
         echo '</div></div>';
     }
-    echo '</form></section>';
+    if (!$nurFelder) {
+        echo '</form></section>';
+    }
 }
 
 /** @param array<string,mixed> $options */
@@ -659,8 +686,12 @@ function estab_message_list_clamped_text(mixed $value, int $limit = 160): string
  *
  * @param list<array<string,mixed>> $rows
  */
-function estab_message_list_render_table(array $rows, callable $openControl): void
-{
+function estab_message_list_render_table(
+    array $rows,
+    callable $openControl,
+    string $zusatzbaender = '',
+    ?array $fremd = null
+): void {
     /*
      * Die Meldungsuebersicht kommt aus dem Tabellenbauteil (app/tabelle.php)
      * -- in dessen zweiter Betriebsart.
@@ -812,7 +843,24 @@ function estab_message_list_render_table(array $rows, callable $openControl): vo
     echo estab_tabelle_markup([
         'id' => 'meldungen',
         'beschriftung' => 'Gefilterte Nachrichtenvordrucke des aktiven Einsatzes',
-        'baender' => false,
+        /*
+         * Die Uebersicht siebt und blaettert in der Datenbank -- an ihrer
+         * Abfrage haengt die Berechtigungspruefung. Das Bauteil bekommt
+         * deshalb eine fertige Auswahl und die Adressfelder, unter denen die
+         * Seite ihren Zustand seit jeher kennt. So spricht sein Band ihre
+         * Sprache, und die Liste sieht aus wie jede andere.
+         */
+        'zusatzbaender' => $zusatzbaender,
+        'felder' => [
+            'suche' => 'ml_q',
+            'groesse' => 'ml_page_size',
+            'seite' => 'ml_page',
+        ],
+        'groessen' => [25, 50, 100],
+        'fremd' => $fremd ?? [
+            'treffer' => count($zeilen),
+            'gesamt' => count($zeilen),
+        ],
         // Acht Spalten brauchen Platz. Ohne diese Angabe quetscht
         // `table-layout: fixed` die Aktionsspalte auf ein Zeichen je Zeile.
         //
@@ -822,7 +870,6 @@ function estab_message_list_render_table(array $rows, callable $openControl): vo
         // Oeffnen erst quer scrollen. Enger wird es nur auf schmaleren
         // Fenstern -- und darunter wird die Tabelle ohnehin zu Karten.
         'mindestbreite' => '56rem',
-        'fremd' => ['treffer' => count($zeilen), 'gesamt' => count($zeilen)],
         'zeilenmarke' => static fn (array $z): string =>
             'class="estab-message-list-row'
                 . ($z['vorrang'] !== '' ? ' estab-message-list-row--priority' : '')

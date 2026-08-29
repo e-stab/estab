@@ -12,6 +12,17 @@ require_once __DIR__ . '/auth.php';
 require_once __DIR__ . '/navigation.php';
 require_once __DIR__ . '/permission_mode.php';
 require_once __DIR__ . '/session_ui.php';
+require_once __DIR__ . '/tabelle_felder.php';
+
+/**
+ * Die Kontenliste der Anmeldeseite.
+ *
+ * Vor der Anmeldung nimmt der Steuerlauf nur eine genau umrissene Anfrage
+ * an. Die Kontenliste ist die einzige Tabelle, die dort steht; ihr Sieb
+ * gehoert damit zur Anmeldeanfrage. Der Name steht hier neben der Sperre,
+ * damit beide zusammen gelesen werden.
+ */
+const ESTAB_WORKFLOW_ANMELDUNG_TABELLE = 'konten';
 
 /** Return true only for the exact anonymous requests used by the login UI. */
 function estab_workflow_public_login_request(array $server, array $get, array $post): bool
@@ -24,7 +35,7 @@ function estab_workflow_public_login_request(array $server, array $get, array $p
         if ($get === []) {
             return true;
         }
-        foreach (array_keys($get) as $key) {
+        foreach ($get as $key => $wert) {
             if (
                 !is_string($key)
                 || !in_array(
@@ -33,6 +44,19 @@ function estab_workflow_public_login_request(array $server, array $get, array $p
                     true
                 )
             ) {
+                // Das Sieb der Kontenliste waehlt und sortiert, es aendert
+                // nichts. Ohne diese Zulassung antwortete die Anmeldeseite
+                // auf jede Suche mit "Aktion nicht erlaubt".
+                if (
+                    is_string($key)
+                    && is_string($wert)
+                    && estab_tabelle_ist_siebschluessel(
+                        ESTAB_WORKFLOW_ANMELDUNG_TABELLE,
+                        $key
+                    )
+                ) {
+                    continue;
+                }
                 return false;
             }
         }

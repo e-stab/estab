@@ -37,6 +37,7 @@ declare(strict_types=1);
  */
 
 require_once __DIR__ . '/message_repository.php';
+require_once __DIR__ . '/tabelle_felder.php';
 
 /** Wie viele Zeilen eine Seite fasst, wenn die Seite nichts anderes sagt. */
 const ESTAB_TABELLE_SEITENGROESSE = 25;
@@ -180,37 +181,6 @@ function estab_tabelle_vergleichen(
 }
 
 /**
- * Die Namen der Adressfelder einer Tabelle.
- *
- * Jede Tabelle trägt ihre Kennung im Feldnamen. Zwei Tabellen auf einer Seite
- * blättern sonst gemeinsam, und das fällt erst auf, wenn es beide gibt.
- *
- * `$eigene` überschreibt einzelne Namen. Das braucht eine Seite, die ihre
- * Auswahl selbst trifft -- die Meldungsübersicht siebt in der Datenbank und
- * kennt ihre Adressfelder seit jeher unter `ml_`. Sie soll deswegen nicht
- * ihre Adressen ändern müssen; das Bauteil lernt stattdessen ihre Namen.
- *
- * @param array<string,string> $eigene
- * @return array<string,string>
- */
-function estab_tabelle_felder(string $id, array $eigene = []): array
-{
-    $marke = preg_replace('~[^a-z0-9]+~', '_', mb_strtolower($id)) ?? 't';
-    return array_merge([
-        'sortierung' => $marke . '_sort',
-        'richtung' => $marke . '_richtung',
-        'seite' => $marke . '_seite',
-        'groesse' => $marke . '_groesse',
-        'suche' => $marke . '_suche',
-        'spalte' => $marke . '_s_',
-        'filter' => $marke . '_f_',
-    ], array_filter(
-        $eigene,
-        static fn (mixed $wert): bool => is_string($wert) && $wert !== ''
-    ));
-}
-
-/**
  * Eine Spalte auf ihre vollständige Form bringen.
  *
  * @param array<string,mixed> $spalte
@@ -260,9 +230,13 @@ function estab_tabelle_zustand(
     string $id,
     array $spalten,
     array $quelle,
-    array $eigeneFelder = []
+    array $eigeneFelder = [],
+    array $groessen = []
 ): array {
     $felder = estab_tabelle_felder($id, $eigeneFelder);
+    // Eine Seite darf ihre eigenen Seitengroessen mitbringen -- die
+    // Meldungsuebersicht kennt seit jeher 25, 50 und 100.
+    $groessen = $groessen === [] ? ESTAB_TABELLE_SEITENGROESSEN : $groessen;
     $lies = static function (array $quelle, string $name): string {
         $wert = $quelle[$name] ?? '';
         return is_string($wert) ? trim($wert) : '';
@@ -281,9 +255,12 @@ function estab_tabelle_zustand(
     $richtung = $lies($quelle, $felder['richtung']) === 'ab' ? 'ab' : 'auf';
 
     $groesse = (int) $lies($quelle, $felder['groesse']);
-    if (!in_array($groesse, ESTAB_TABELLE_SEITENGROESSEN, true)) {
-        $groesse = ESTAB_TABELLE_SEITENGROESSE;
+    if (!in_array($groesse, $groessen, true)) {
+        $groesse = in_array(ESTAB_TABELLE_SEITENGROESSE, $groessen, true)
+            ? ESTAB_TABELLE_SEITENGROESSE
+            : (int) $groessen[0];
     }
+    $felder['groessenliste'] = implode(',', array_map('strval', $groessen));
     $seite = max(1, (int) $lies($quelle, $felder['seite']));
 
     $spaltensuche = [];
@@ -720,7 +697,11 @@ function estab_tabelle_suchband(
 
     $markup .= '<label class="estab-tabelle-feld"><span>Zeilen</span><select name="'
         . estab_message_html($zustand['felder']['groesse']) . '">';
-    foreach (ESTAB_TABELLE_SEITENGROESSEN as $groesse) {
+    $angebot = array_map(
+        'intval',
+        explode(',', (string) ($zustand['felder']['groessenliste'] ?? ''))
+    );
+    foreach (($angebot === [0] ? ESTAB_TABELLE_SEITENGROESSEN : $angebot) as $groesse) {
         $markup .= '<option value="' . $groesse . '"'
             . ($zustand['groesse'] === $groesse ? ' selected' : '') . '>'
             . $groesse . '</option>';
@@ -880,7 +861,8 @@ function estab_tabelle_markup(array $tabelle): string
         $id,
         $spalten,
         $quelle,
-        (array) ($tabelle['felder'] ?? [])
+        (array) ($tabelle['felder'] ?? []),
+        array_map('intval', (array) ($tabelle['groessen'] ?? []))
     );
 
     if (is_array($fremd)) {
@@ -904,7 +886,12 @@ function estab_tabelle_markup(array $tabelle): string
     }
 
     $eigeneBaender = ($tabelle['baender'] ?? true) === false;
-    $markup = '<section class="estab-tabelle" data-estab-tabelle="'
+    // Eine schmale Tabelle mit wenigen Spalten wird erst spaeter zu Karten.
+    $markup = '<section class="estab-tabelle'
+        . (($tabelle['schmal'] ?? false) === true
+            ? ' estab-tabelle--schmal'
+            : '')
+        . '" data-estab-tabelle="'
         . estab_message_html($id) . '">'
         . ($eigeneBaender
             ? ''
