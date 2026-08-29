@@ -472,10 +472,30 @@ $assert(
     'secure canonical generated-form menu item is not active'
 );
 
-foreach (['4fach/4fachform.php', '4fueltg/ue_ltg.php'] as $legacyView) {
+/*
+ * Wer Anlagen verlinkt, verlinkt sie ueber die gesicherte Ausgabe.
+ *
+ * 4fueltg/ue_ltg.php stand hier einmal mit: Es trug eine zweite Fassung des
+ * Nachrichtenvordrucks samt eigener Anlagenliste. Die ist geloescht (siehe
+ * rm_ein_vordruck), und damit verlinkt die Uebersicht keine Anlage mehr.
+ *
+ * Aus der Liste genommen -- aber nicht ungeprueft: Unten wird verlangt,
+ * dass die Uebersicht auch keine Anlagenadresse mehr selbst zusammensetzt.
+ * Ohne diese zweite Haelfte waere das Streichen aus der Liste genau der
+ * blinde Fleck, den es zu vermeiden gilt.
+ */
+foreach (['4fach/4fachform.php'] as $legacyView) {
     $source = (string) file_get_contents($root . '/' . $legacyView);
     $assert(str_contains($source, 'estab_file_download_url'), $legacyView . ' lacks secure download links');
     $assert(!str_contains($source, '$conf_4f ["ablage_uri"]'), $legacyView . ' still exposes 4fdata');
 }
+$uebersicht = (string) file_get_contents($root . '/4fueltg/ue_ltg.php');
+$assert(
+    !str_contains($uebersicht, '$conf_4f ["ablage_uri"]')
+        && !str_contains($uebersicht, '"../anhang/"')
+        && !str_contains($uebersicht, 'list_anhang'),
+    'the overview builds attachment paths of its own again; it must either '
+        . 'use estab_file_download_url or link no attachment at all'
+);
 
 echo "file access security: OK ({$assertions} assertions)\n";

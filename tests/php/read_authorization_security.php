@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 require_once dirname(__DIR__, 2) . '/app/read_authorization.php';
 require_once dirname(__DIR__, 2) . '/app/navigation.php';
+require_once __DIR__ . '/lib/quelltext.php';
 
 $assertions = 0;
 $assert = static function (
@@ -376,9 +377,11 @@ $assert(
 
 $root = dirname(__DIR__, 2);
 $sources = [
-    'overview' => (string) file_get_contents(
+    // Ohne Kommentare: siehe tests/php/lib/quelltext.php. Ein Satz, der
+    // einen Pfad nennt, ist keine Anweisung, die ihn hereinzieht.
+    'overview' => estab_test_ohne_kommentare((string) file_get_contents(
         $root . '/4fueltg/ue_ltg.php'
-    ),
+    )),
     'tracking' => (string) file_get_contents(
         $root . '/4fach/nachwea.php'
     ),
@@ -439,42 +442,71 @@ $assert(
         && str_contains($sources['overview'], 'estab_read_require_area'),
     'message overview lacks its privileged area gate'
 );
-$overviewDetailStart = strpos(
-    $sources['overview'],
-    'class nachrichten4fach'
-);
-$overviewTargetsStart = is_int($overviewDetailStart)
-    ? strpos($sources['overview'], 'function ziele (){', $overviewDetailStart)
-    : false;
-$overviewTargetsEnd = is_int($overviewTargetsStart)
-    ? strpos(
-        $sources['overview'],
-        '/*****************************************************************************',
-        $overviewTargetsStart
-    )
-    : false;
-$overviewTargets = (
-    is_int($overviewTargetsStart)
-    && is_int($overviewTargetsEnd)
-    && $overviewTargetsEnd > $overviewTargetsStart
-) ? substr(
-    $sources['overview'],
-    $overviewTargetsStart,
-    $overviewTargetsEnd - $overviewTargetsStart
-) : '';
+/*
+ * Die Durchschriftenfarbe des Vordrucks kommt aus der geprueften Kennung.
+ *
+ * Sie stand hier einmal an der zweiten Vordruckfassung der Uebersicht.
+ * Die ist geloescht (siehe rm_ein_vordruck): Die Uebersicht baut jetzt
+ * dieselbe Klasse wie jede andere Stelle, und die liest ihre Kennung aus
+ * $GLOBALS ["workflowSelectedIdentity"].
+ *
+ * Geprueft wird deshalb an beiden Enden -- was die Uebersicht dort
+ * hineinlegt, und woraus die gepflegte Fassung die Farbe ableitet. Nur die
+ * zweite Haelfte allein waere blind dafuer, dass eine Seite die Kennung
+ * aus der rohen Sitzung nachreicht.
+ */
 $assert(
     str_contains(
         $sources['overview'],
         '$overviewActingIdentity = $overviewReadScope ["identity"];'
     )
-        && $overviewTargets !== ''
         && str_contains(
-            $overviewTargets,
-            '$GLOBALS ["overviewActingIdentity"] ?? null'
+            $sources['overview'],
+            '$GLOBALS ["workflowSelectedIdentity"] = $overviewActingIdentity;'
         )
-        && str_contains($overviewTargets, 'hash_equals ($overviewActingFunction, $fkt)')
-        && !str_contains($overviewTargets, '$_SESSION'),
-    'overview detail derives copy presentation from raw session function '
+        /*
+         * Und der Einsatz dazu, aus demselben Lesebereich.
+         *
+         * Der Vordruck laedt den Bearbeitungsweg nur, wenn er den Einsatz
+         * kennt; ohne diese Angabe faellt er auf "kann derzeit nicht sicher
+         * angezeigt werden" zurueck. Beim Nachsehen im Browser stand genau
+         * das da. Der Rueckfall ist richtig -- lieber keine Auskunft als
+         * eine aus einem fremden Einsatz --, aber er darf nicht der
+         * Normalfall sein.
+         */
+        && str_contains(
+            $sources['overview'],
+            '$GLOBALS ["workflowIncidentId"] = $overviewIncidentId;'
+        )
+        && str_contains(
+            $sources['overview'],
+            '$overviewIncidentId = (int) ('
+        )
+        && !preg_match(
+            '~workflowSelectedIdentity"?\]\s*=\s*\$_SESSION~',
+            $sources['overview']
+        ),
+    'overview publishes an identity for the message form that does not come '
+        . 'from the server-authorized read scope'
+);
+$vordruckQuelle = file_get_contents($root . '/4fach/4fachform.php');
+$assert(is_string($vordruckQuelle), '4fachform.php ist nicht lesbar.');
+$zieleAnfang = strpos((string) $vordruckQuelle, 'function ziele (){');
+$zieleEnde = is_int($zieleAnfang)
+    ? strpos((string) $vordruckQuelle, "\n  }\n", $zieleAnfang)
+    : false;
+$ziele = (is_int($zieleAnfang) && is_int($zieleEnde))
+    ? substr(
+        (string) $vordruckQuelle,
+        $zieleAnfang,
+        $zieleEnde - $zieleAnfang
+    )
+    : '';
+$assert(
+    $ziele !== ''
+        && str_contains($ziele, '$GLOBALS ["workflowSelectedIdentity"] ?? null')
+        && !str_contains($ziele, '$_SESSION'),
+        'overview detail derives copy presentation from raw session function '
         . 'instead of the server-authorized STRICT hat or LOOSE grant'
 );
 $assert(

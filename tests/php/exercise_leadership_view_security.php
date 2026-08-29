@@ -90,7 +90,16 @@ $tableSource = $extractFunction(
     $listUiSource,
     'estab_message_list_render_table'
 );
-$messageFormSource = $extractFunction($source, 'plot_form');
+/*
+ * Die Einzelansicht ist der gepflegte Nachrichtenvordruck.
+ *
+ * Hier stand einmal die zweite Fassung aus ue_ltg.php. Sie ist geloescht
+ * (rm_ein_vordruck); geprueft wird, was jetzt gezeichnet wird. Die
+ * Anforderungen darunter sind dieselben geblieben -- nur ihr Ort nicht.
+ */
+$messageFormSource = (string) file_get_contents(
+    $root . '/4fach/official_message_form.php'
+);
 $recipientMapSource = $extractFunction(
     $toolsSource,
     'estab_recipient_copy_map'
@@ -138,50 +147,64 @@ $assert(
 $assert(
     str_contains($source, 'estab_message_html ($url)')
         && str_contains($source, 'estab_message_html ($pageSizeUrl)')
-        && str_contains($messageFormSource, 'estab_message_html (estab_overview_url ())'),
+        && str_contains(
+            $messageFormSource,
+            'estab_message_html($conf_4f[\'MainURL\'])'
+        ),
     'overview links or form actions are emitted without HTML escaping'
 );
+$plotAnfang = strpos($messageFormSource, 'function plot_official_message_form');
+$plot = is_int($plotAnfang) ? substr($messageFormSource, $plotAnfang) : '';
 $assert(
-    substr_count($messageFormSource, 'echo "<body') === 1
-        && substr_count($messageFormSource, 'echo "</body>') === 1,
+    $plot !== ''
+        && substr_count($plot, '<body') === 1
+        && substr_count($plot, '</body>') === 1,
     'message detail view emits duplicate or unbalanced body elements'
 );
+/*
+ * Der TBB-Nachweis kommt aus der einsatzlokalen Nachweisnummer, nie aus
+ * `04_nummer`. Die ist eine technische Ablaufnummer; sie als Buchnummer zu
+ * zeigen hiesse, einen Nachweis zu behaupten, den es nicht gibt.
+ */
 $assert(
     str_contains(
         $messageFormSource,
-        'estab_message_list_tbb_evidence_label (array ('
+        '$value = $this->formdata[\'estab_ttb_lfd\'] ?? null;'
     )
+        && str_contains($messageFormSource, 'noch kein TBB-Nachweis')
+        /*
+         * `04_nummer` darf mitlaufen -- der Vordruck traegt sie als
+         * verborgenes Feld durch den Rueckweg. Verboten ist, sie zu
+         * *zeigen*: Die sichtbare Zelle nennt den Nachweistext, und die
+         * einzige Stelle, an der 04_nummer als Wert steht, ist ein
+         * type="hidden".
+         */
         && str_contains(
             $messageFormSource,
-            '"estab_tbb_book_lfd" => $this->formdata ["estab_ttb_lfd"] ?? null'
+            'estab_message_html($this->official_message_ttb_evidence_text())'
         )
-        && substr_count($messageFormSource, 'TBB-Nachweis') >= 2
-        && !str_contains(
+        && substr_count(
             $messageFormSource,
-            '$this->safe_message_value ("04_nummer")'
+            'safe_message_value(\'04_nummer\')'
+        ) === 1
+        && str_contains(
+            $messageFormSource,
+            '<input type="hidden" name="04_nummer" value="'
         ),
     'message detail view still presents the technical message number as TBB evidence'
 );
+/*
+ * Die Vorrangstufe ist eine benannte Gruppe aus Kaestchen. Ist sie nicht
+ * zu bearbeiten, steht der Wert in einem verborgenen Feld statt in
+ * anklickbaren Knoepfen -- lesbar, aber nicht aus Versehen aenderbar.
+ */
 $assert(
-    str_contains(
-        $messageFormSource,
-        'role=\"radiogroup\" aria-label=\"Vorrangstufe, schreibgeschützt\"'
-    )
-        && substr_count(
-            $messageFormSource,
-            'class=\"estab-official-box-choice\"'
-        ) >= 3
+    str_contains($messageFormSource, 'role="radiogroup" ')
+        && str_contains($messageFormSource, 'aria-label="Vorrangstufe" ')
+        && substr_count($messageFormSource, 'estab-official-box-choice') >= 3
         && str_contains(
             $messageFormSource,
-            'name=\"09_vorrangstufe\" value=\"'
-        )
-        && str_contains(
-            $messageFormSource,
-            'nur auf ausdrückliche Weisung einer berechtigten Stelle'
-        )
-        && str_contains(
-            $messageFormSource,
-            'Vorrangstufe nicht darstellbar.'
+            '<input type="hidden" name="09_vorrangstufe" value="'
         ),
     'message detail priority is not a square, labelled, read-only group'
 );

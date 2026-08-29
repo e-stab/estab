@@ -3,9 +3,13 @@
 declare(strict_types=1);
 
 $root = dirname(__DIR__, 2);
+require_once __DIR__ . '/lib/quelltext.php';
 $formController = file_get_contents($root . '/4fach/4fachform.php');
 $officialView = file_get_contents($root . '/4fach/official_message_form.php');
-$overview = file_get_contents($root . '/4fueltg/ue_ltg.php');
+// Ohne Kommentare, siehe tests/php/lib/quelltext.php.
+$overview = estab_test_ohne_kommentare(
+    (string) file_get_contents($root . '/4fueltg/ue_ltg.php')
+);
 $timeline = file_get_contents($root . '/app/message_timeline.php');
 $stylesheet = file_get_contents($root . '/estab-ui.css');
 
@@ -113,7 +117,6 @@ $timelineFallback = $extractFunction(
 );
 $formPlot = $extractFunction($formController, 'plot_form');
 $officialPlot = $extractFunction($officialView, 'plot_official_message_form');
-$overviewPlot = $extractFunction($overview, 'plot_form');
 
 $assert(
     str_contains(
@@ -209,14 +212,20 @@ $assert(
         && str_contains($overview, '$overviewIncidentId'),
     'The overview detail is not bound to the authorized incident read scope'
 );
+/*
+ * `estab_message_timeline_for_message` stand einmal mitten in dieser
+ * Reihenfolge -- die Uebersicht baute den Laufweg selbst. Sie tut es nicht
+ * mehr; der gepflegte Vordruck laedt ihn (oben geprueft). Die Reihenfolge,
+ * auf die es hier ankommt, ist die andere: erst den Satz holen, der an den
+ * berechtigten Einsatz gebunden ist, dann abweisen, wenn es ihn nicht
+ * gibt, und erst dann den Vordruck bauen.
+ */
 $assert(
     $appearsInOrder(
         $overview,
         [
             '$formdata = estab_message_fetch_for_incident_by_id',
-            'estab_message_timeline_for_message',
-            '$messageConnection,',
-            '$formdata',
+            '$overviewIncidentId',
             'if (!is_array ($formdata))',
             'estab_overview_forbid ();',
             '$form = new nachrichten4fach',
@@ -224,40 +233,48 @@ $assert(
     ),
     'The detail row can bypass its incident-bound record or render an unavailable message'
 );
+/*
+ * Der Bearbeitungsweg steht ueber dem Vordruck -- auch in der Einzelansicht
+ * der Uebersicht.
+ *
+ * Hier standen drei Pruefungen an der zweiten Vordruckfassung der
+ * Uebersicht: dass sie den Laufweg selbst rendert, dass sie ihn ueber das
+ * Formular setzt, und dass die Seite ihn hineinreicht. Die Fassung ist
+ * geloescht (rm_ein_vordruck).
+ *
+ * Die Anforderung bleibt, sie hat nur einen Ort statt zweier. Geprueft
+ * wird jetzt am gepflegten Vordruck -- der ihn laedt, im Fehlerfall
+ * ersetzt und vor dem <form> ausgibt -- und daran, dass die Uebersicht
+ * genau diesen baut.
+ */
 $assert(
-    str_contains($overview, 'estab_message_timeline_render (')
-        && str_contains($overview, 'estab_message_timeline_for_message (')
-        && str_contains($overview, 'data-estab-message-timeline')
+    str_contains($overview, '/../4fach/4fachform.php')
+        && str_contains($overview, 'new nachrichten4fach (')
+        && !str_contains($overview, 'function plot_form'),
+    'The overview detail no longer builds the maintained message form'
+);
+$assert(
+    $appearsInOrder(
+        $officialPlot,
+        [
+            'echo (string)$this->messageTimelineHtml;',
+            '<form method="post"',
+        ]
+    ),
+    'The message form no longer places the workflow band above its form'
+);
+$assert(
+    str_contains($loadTimeline, 'estab_message_timeline_render')
         && str_contains(
-            $overview,
+            $formController,
+            '$this->messageTimelineHtml = $this->message_timeline_unavailable ();'
+        )
+        && str_contains($timelineFallback, 'data-estab-message-timeline')
+        && str_contains(
+            $timelineFallback,
             'Der Nachrichtenvordruck bleibt verfügbar.'
         ),
-    'The overview detail lost the shared timeline renderer or its graceful fallback'
-);
-$assert(
-    $appearsInOrder(
-        $overviewPlot,
-        [
-            'echo $this->messageTimelineHtml;',
-            'aria-labelledby=\"message-detail-title\"',
-            '<form method=\"get\"',
-        ]
-    ),
-    'The overview detail does not place the workflow band above its message form'
-);
-$assert(
-    $appearsInOrder(
-        $overview,
-        [
-            '$messageTimelineHtml',
-            '$form = new nachrichten4fach (',
-            '$formdata,',
-            '"Stab_lesen",',
-            '"",',
-            '$messageTimelineHtml',
-        ]
-    ),
-    'The authorized overview detail does not pass its timeline into the form view'
+    'The message detail lost the shared timeline renderer or its graceful fallback'
 );
 
 printf(

@@ -11,6 +11,7 @@ $assert = static function (bool $condition, string $message) use (&$assertions):
 };
 
 $root = dirname(__DIR__, 2);
+require_once __DIR__ . '/lib/quelltext.php';
 $stylesheet = file_get_contents($root . '/estab-ui.css');
 $assert(is_string($stylesheet), 'shared stylesheet is unreadable');
 
@@ -348,10 +349,12 @@ $tracking = str_replace(
     '"',
     $additionalSources['4fach/nachwea.php']
 );
+// Ohne Kommentare: Ein erklaerender Satz, der einen Pfad nennt, ist keine
+// Anweisung, die ihn hereinzieht. Beim Proben blieb die Pruefung sonst still.
 $overview = str_replace(
     '\\"',
     '"',
-    $additionalSources['4fueltg/ue_ltg.php']
+    estab_test_ohne_kommentare($additionalSources['4fueltg/ue_ltg.php'])
 );
 $assert(
     str_contains($tracking, 'data-estab-tracking-overview')
@@ -359,12 +362,24 @@ $assert(
         && str_contains($tracking, 'estab_session_ui_abort (')
         && !str_contains($tracking, 'Content-Type: text/plain')
         && str_contains($overview, 'data-estab-message-overview')
-        && str_contains($overview, 'data-estab-message-detail')
         && str_contains($overview, 'data-estab-message-list')
         && str_contains($overview, 'estab_message_list_render_controls')
         && str_contains($overview, 'estab_session_ui_abort (')
         && !str_contains($overview, 'Content-Type: text/plain')
-        && substr_count($overview, 'estab-tool-legacy-content') >= 1,
+        /*
+         * Die Einzelansicht der Uebersicht hatte hier zwei eigene Marken:
+         * `data-estab-message-detail` und die Huelle
+         * `estab-tool-legacy-content`. Beide gehoerten zu einer zweiten
+         * Fassung des Nachrichtenvordrucks, die geloescht ist
+         * (rm_ein_vordruck). Die Einzelansicht ist jetzt der gepflegte
+         * Vordruck; er bringt seine Huelle selbst mit.
+         *
+         * An ihre Stelle tritt der Nachweis, dass die Uebersicht ihn
+         * wirklich baut. Ersatzlos streichen hiesse: Die Uebersicht duerfte
+         * ihre Einzelansicht wieder selbst zeichnen, und niemand saehe es.
+         */
+        && str_contains($overview, '/../4fach/4fachform.php')
+        && str_contains($overview, 'new nachrichten4fach ('),
     'reporting surfaces or their access errors escape the shared page shell'
 );
 

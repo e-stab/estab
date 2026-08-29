@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 $root = dirname(__DIR__, 2);
+require_once __DIR__ . '/lib/quelltext.php';
 $assertions = 0;
 $assert = static function (bool $condition, string $message) use (&$assertions): void {
     $assertions++;
@@ -24,7 +25,8 @@ $logbook = $source('app/logbook.php');
 $dataHandler = $source('4fach/data_hndl.php');
 $main = $source('4fach/mainindex.php');
 $list = $source('4fach/liste.php');
-$overview = $source('4fueltg/ue_ltg.php');
+// Ohne Kommentare, siehe tests/php/lib/quelltext.php.
+$overview = estab_test_ohne_kommentare($source('4fueltg/ue_ltg.php'));
 $sidebar = $source('app/sidebar.php');
 $etb = $source('stabetb/etb.php');
 $tbb = $source('fmtbb/tbb.php');
@@ -191,10 +193,20 @@ $assert(
         && str_contains($main, '409,'),
     'central operational POST gate is missing or blocks logout'
 );
+/*
+ * Die Uebersicht trug diese Marke einmal selbst -- in ihrer eigenen
+ * Fassung des Nachrichtenvordrucks. Die ist geloescht (rm_ein_vordruck);
+ * die Uebersicht baut jetzt dieselbe Klasse wie jede andere Stelle, und
+ * die traegt die Marke. Geprueft wird deshalb der Weg dorthin: Ohne diese
+ * zweite Bedingung hiesse "die Uebersicht braucht die Marke nicht" nur,
+ * dass niemand mehr hinsieht.
+ */
 $assert(
     str_contains($form, 'data-estab-requires-incident')
         && substr_count($attachmentController, 'data-estab-requires-incident') >= 2
-        && str_contains($overview, 'data-estab-requires-incident'),
+        && str_contains($overview, '/../4fach/4fachform.php')
+        && str_contains($overview, 'new nachrichten4fach (')
+        && !str_contains($overview, 'function plot_form'),
     'an operational message or attachment form lacks the incident marker'
 );
 $assert(

@@ -5956,12 +5956,19 @@ section.estab-message-timeline[data-estab-message-timeline] * {
     margin: 0;
 }
 
+/* Der Bearbeitungsweg ist Fließtext, kein Bezeichner.
+
+   Er stand in `overflow-wrap: anywhere`, und in der schmalen Spalte neben
+   dem Vordruck las sich das als "Der Nachrichtenvordruc / k bleibt
+   verfügbar." `break-word` bricht erst, wenn ein Wort allein nicht in die
+   Zeile passt -- nicht schon, wenn ein Bruch die Spalte etwas schmaler
+   machen könnte. */
 .estab-message-timeline__summary {
     color: var(--tinte-neben);
     line-height: 1.45;
     margin: 0;
     max-width: 65rem;
-    overflow-wrap: anywhere;
+    overflow-wrap: break-word;
 }
 
 .estab-message-timeline__track {
@@ -6009,7 +6016,7 @@ section.estab-message-timeline[data-estab-message-timeline] * {
     flex: 0 0 clamp(11rem, 18vw, 14rem);
     gap: var(--abstand-3);
     min-width: 0;
-    overflow-wrap: anywhere;
+    overflow-wrap: break-word;
     padding: var(--abstand-5) var(--abstand-5);
     position: relative;
     scroll-snap-align: start;
@@ -6185,7 +6192,7 @@ section.estab-message-timeline[data-estab-message-timeline] * {
     font-size: var(--schrift-2);
     line-height: 1.4;
     margin: var(--abstand-1) 0 0;
-    overflow-wrap: anywhere;
+    overflow-wrap: break-word;
     padding: var(--abstand-4) var(--abstand-4);
 }
 
@@ -6210,7 +6217,7 @@ section.estab-message-timeline[data-estab-message-timeline] * {
     color: var(--handlung-dunkel);
     line-height: 1.45;
     margin: var(--abstand-5) 0 0;
-    overflow-wrap: anywhere;
+    overflow-wrap: break-word;
     padding: var(--abstand-5) var(--abstand-5);
 }
 
@@ -8238,6 +8245,38 @@ section.estab-message-timeline[data-estab-message-timeline]
         flex: 0 0 auto;
     }
 
+    /* In der Spalte steht eins unter dem anderen.
+
+       Der Inhalt einer Station ist zweispaltig (`auto auto`) -- Zustand
+       und Zeitpunkt nebeneinander. Das traegt in einem breiten Band. In
+       den rund 190 Bildpunkten neben dem Vordruck stand der Zeitpunkt
+       damit halb ausserhalb: "26.08.2" und darunter "· 02:15:". */
+    section.estab-message-timeline[data-estab-message-timeline]
+        .estab-message-timeline__content {
+        grid-template-columns: minmax(0, 1fr);
+        row-gap: var(--abstand-1);
+    }
+
+    /* In der Spalte wird gebrochen, im Band nicht.
+
+       Die Stationen standen einmal als waagerechtes Band ueber dem
+       Vordruck; dort ist `white-space: nowrap` richtig -- eine Station,
+       die umbricht, macht das Band ungleich hoch. Neben dem Vordruck ist
+       die Spalte aber nur rund 190 Bildpunkte breit, und dieselbe Regel
+       schnitt die Angaben ab: "Bearbeitungsweg der Meldun", "Dauer an
+       dieser Station: 0 S". Gemessen: 349 Bildpunkte Text in einem 140
+       Punkte breiten Kasten. */
+    section.estab-message-timeline[data-estab-message-timeline]
+        .estab-message-timeline__header h2,
+    section.estab-message-timeline[data-estab-message-timeline]
+        .estab-message-timeline__station,
+    section.estab-message-timeline[data-estab-message-timeline]
+        .estab-message-timeline__time,
+    section.estab-message-timeline[data-estab-message-timeline]
+        .estab-message-timeline__duration {
+        white-space: normal;
+    }
+
     /* Der Strich zwischen den Stationen faellt jetzt senkrecht. */
     section.estab-message-timeline[data-estab-message-timeline]
         .estab-message-timeline__step:not(:last-child)::after {
@@ -8285,6 +8324,38 @@ section.estab-message-timeline[data-estab-message-timeline]
     @page {
         margin: 7mm;
         size: A4 portrait;
+    }
+
+    /* Gedruckt wird der Inhalt, nicht die Bedienung.
+
+       Die Anwendung steht in einer dreispaltigen Huelle: links das Menue,
+       rechts das Cockpit, in der Mitte der Inhalt. Die beiden aeusseren
+       Spalten kosten zusammen rund zwei Drittel der Blattbreite und sagen
+       auf Papier nichts. Ohne diese Regeln kam aus dem Drucker ein
+       Bildschirmfoto mit einem Nachrichtenvordruck darin -- und ein
+       Vordruck neben einem gedruckten Menue ist kein Nachweis.
+
+       Das Raster muss dabei mit aufgeloest werden. Verschwaenden nur die
+       beiden Spalten, behielte die mittlere ihre Rasterbreite: Der
+       Vordruck stuende auf einem Drittel des Blattes. */
+    .estab-shell-menu,
+    .estab-shell-cockpit {
+        display: none !important;
+    }
+
+    .estab-shell {
+        display: block;
+        height: auto;
+    }
+
+    /* Die Huelle begrenzt am Bildschirm die Hoehe und scrollt innen. Auf
+       Papier gibt es kein Scrollen -- was ueber die Kante laeuft, ist
+       schlicht weg. */
+    body.estab-shell-body,
+    .estab-shell-content {
+        height: auto !important;
+        min-height: 0 !important;
+        overflow: visible !important;
     }
 
     body.estab-message-form-body {

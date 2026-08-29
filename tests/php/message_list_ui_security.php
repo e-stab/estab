@@ -14,6 +14,7 @@ try {
 }
 require_once __DIR__ . '/../../app/message_list.php';
 require_once __DIR__ . '/../../app/message_list_ui.php';
+require_once __DIR__ . '/lib/quelltext.php';
 
 $assertions = 0;
 $assert = static function (bool $condition, string $message) use (&$assertions): void {
@@ -624,7 +625,10 @@ $assert(
     'Empty state does not distinguish an empty incident from empty results'
 );
 
-$overviewSource = file_get_contents($root . '/4fueltg/ue_ltg.php');
+// Ohne Kommentare, siehe tests/php/lib/quelltext.php.
+$overviewSource = estab_test_ohne_kommentare(
+    (string) file_get_contents($root . '/4fueltg/ue_ltg.php')
+);
 $listSource = file_get_contents($root . '/4fach/liste.php');
 $mainSource = file_get_contents($root . '/4fach/mainindex.php');
 $toolsSource = file_get_contents($root . '/4fach/tools.php');
@@ -707,12 +711,26 @@ $assert(
         . 'selbst; das Tabellenbauteil bringt beide mit, und zwei nebeneinander '
         . 'sind genau die Uneinheitlichkeit, die abgestellt werden sollte.'
 );
+/*
+ * In der Anzeige steht der Anzeigename, im Feld der gespeicherte
+ * Schluessel -- und beides an der richtigen Stelle.
+ *
+ * Geprueft wurde das einmal an der zweiten Vordruckfassung der
+ * Uebersicht. Die ist geloescht (rm_ein_vordruck); die Uebersicht baut
+ * jetzt den gepflegten Vordruck, und geprueft wird dort.
+ */
+$vordruckQuelle = (string) file_get_contents($root . '/4fach/4fachform.php')
+    . (string) file_get_contents($root . '/4fach/official_message_form.php');
 $assert(
-    substr_count($overviewSource, 'estab_function_display_name (') >= 5
+    // Beide Schreibweisen: Der aeltere Teil setzt ein Leerzeichen vor die
+    // Klammer, der neuere nicht. Gemeint ist dieselbe Funktion.
+    (substr_count($vordruckQuelle, 'estab_function_display_name (')
+        + substr_count($vordruckQuelle, 'estab_function_display_name(')) >= 5
         && str_contains(
-            $overviewSource,
+            $vordruckQuelle,
             'name=\"14_funktion\" value=\"".$this->safe_message_value'
         )
+        && str_contains($overviewSource, '/../4fach/4fachform.php')
         // Die Kontenliste kommt aus dem Tabellenbauteil; sie uebersetzt die
         // Funktion beim Bauen der Zeile statt beim Ausgeben der Zelle. Die
         // Aussage ist dieselbe: In der Liste steht der Anzeigename, nicht

@@ -344,6 +344,27 @@ function estab_ux_rules(): array
                 . 'ausgenommen, wenn er namentlich begründet ist und die '
                 . 'Angabe anderswo lesbar steht.',
         ],
+        'UX-EIN-VORDRUCK' => [
+            'origin' => ESTAB_UX_ORIGIN_BETREIBER,
+            'reference' => 'Rückmeldung Betrieb: Vordruck öffnen',
+            'requirement' => 'Es gibt einen Nachrichtenvordruck, nicht zwei. '
+                . 'Jede Stelle, die einen Vordruck anzeigt, zeigt denselben '
+                . '-- dasselbe Raster, dieselben Zugriffsregeln, dasselbe '
+                . 'Druckbild. Eine zweite Fassung läuft von der ersten weg: '
+                . 'Sie bekommt keine Verbesserung mit, sie fällt aus den '
+                . 'Druckregeln, und wer sie öffnet, sieht einen anderen '
+                . 'Vordruck als der, mit dem er ihn vergleicht.',
+        ],
+        'GES-DRUCK-OHNE-HUELLE' => [
+            'origin' => ESTAB_UX_ORIGIN_GESTALTUNG,
+            'reference' => 'Abschnitt 12.4',
+            'requirement' => 'Gedruckt wird der Inhalt, nicht die Bedienung. '
+                . 'Menüspalte und Cockpit erscheinen auf keinem Ausdruck: '
+                . 'Sie kosten zwei Drittel der Blattbreite, sie sagen auf '
+                . 'Papier nichts, und ein Nachrichtenvordruck neben einem '
+                . 'gedruckten Menü ist kein Nachweis, sondern ein '
+                . 'Bildschirmfoto.',
+        ],
         'GES-INHALT-BLEIBT-GROSS' => [
             'origin' => ESTAB_UX_ORIGIN_GESTALTUNG,
             'reference' => 'Abschnitt 2.3',
