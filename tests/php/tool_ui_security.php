@@ -308,10 +308,19 @@ foreach ([
     'fmtbb/tbb.php' => ['ttb', 'TBB-Eintrag speichern', 'ttb-entry-type'],
 ] as $relativePath => [$kind, $saveLabel, $eventId]) {
     $logbook = str_replace('\\"', '"', $additionalSources[$relativePath]);
+    /*
+     * Beide Buecher kommen aus dem Tabellenbauteil. Der Kartenumbruch fuer
+     * schmale Fenster kommt von dort -- die Seiten brauchen ihn nicht mehr
+     * selbst mitzubringen und duerfen ihn auch nicht, sonst laufen sie
+     * wieder auseinander.
+     */
     $assert(
         str_contains($logbook, 'data-estab-logbook="' . $kind . '"')
-            && str_contains($logbook, 'class="estab-tool-table')
-            && str_contains($logbook, 'estab-tool-table-responsive')
+            && str_contains($logbook, 'estab_tabelle_markup (')
+            && str_contains(
+                (string) file_get_contents(__DIR__ . '/../../estab-ui.css'),
+                '@container (max-width: 48rem)'
+            )
             && str_contains($logbook, 'for="' . $eventId . '"')
             && str_contains($logbook, $saveLabel)
             && str_contains($logbook, 'data-estab-no-active-incident')

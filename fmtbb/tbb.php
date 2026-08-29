@@ -1,6 +1,7 @@
 <?php
 
 require_once __DIR__ . "/../app/legacy_mysql.php";
+require_once __DIR__ . "/../app/tabelle.php";
 
 if (!defined ("debug")) { define ("debug", false); }
 if (ob_get_level () === 0) { ob_start (); }
@@ -479,20 +480,19 @@ var $task ;
       echo "laufende Nummer gilt nur für dieses TBB und wird beim Speichern ";
       echo "unveränderlich vergeben.</p>\n";
       echo "</header>\n";
-      echo "<div class=\"estab-tool-table-wrap estab-tool-table-responsive\">\n";
-      echo "<table class=\"estab-tool-table estab-tool-logbook-table\">\n";
-      echo "<caption class=\"estab-visually-hidden\">";
-      echo "Einträge im Technischen Betriebsbuch</caption>\n<thead>\n";
-
-      $this->headline ();
-      echo "</thead>\n<tbody>\n";
-
+      /*
+       * Das Technische Betriebsbuch kommt aus dem Tabellenbauteil
+       * (app/tabelle.php). Der Inhalt jeder Zelle bleibt Zeile fuer Zeile,
+       * wie er war -- die sieben Spalten des Fb Fue 44 eingeschlossen.
+       */
       $localById = array ();
       foreach ($daten as $row) {
         $localById [(int) ($row ["tbb_lfd-nr"] ?? 0)] =
           (int) ($row ["estab_book_lfd"] ?? $row ["tbb_lfd-nr"] ?? 0);
       }
+            $tbbZeilen = array ();
       foreach ( $daten as $line ){
+        ob_start ();
         echo "<tr>";
         echo "<td class=\"estab-tool-table-number\" data-label=\"Lfd.-Nr.\">\n";
         echo (int) ($line ["estab_book_lfd"] ?? $line ["tbb_lfd-nr"]);
@@ -555,12 +555,70 @@ var $task ;
           }
           echo "</td>\n";
         }
-        echo "</tr>\n";
+        $tbbRoh = (string) ob_get_clean ();
+        $tbbZellen = estab_tabelle_zeile_zerlegen ($tbbRoh, 7);
+        $tbbWerte = array (
+          "nummer" => (string) (int) ($line ["estab_book_lfd"] ?? $line ["tbb_lfd-nr"]),
+          "zeit" => $this->konv_datetime_taktime (
+            (string) ($line ["estab_event_time"] ?? $line ["tbb_time"])
+          ),
+          "erfasst" => (string) ($line ["tbb_benutzer"] ?? "")." · "
+            . (string) ($line ["tbb_kuerzel"] ?? ""),
+        );
+        $tbbSpaltenwerte = array (
+          "estab_personnel_duty", "estab_channel", "estab_message_route",
+          "estab_operations", "estab_receipt",
+        );
+        foreach ($tbbSpaltenwerte as $tbbLaufend => $tbbFeld) {
+          $tbbWert = (string) ($line [$tbbFeld] ?? "");
+          if ($tbbFeld === "estab_operations" && $tbbWert === "") {
+            $tbbWert = (string) ($line ["tbb_aktion"] ?? "");
+          }
+          $tbbWerte ["s" . $tbbLaufend] = estab_function_display_text ($tbbWert);
+        }
+        foreach ($tbbZellen as $tbbNummer => $tbbInhalt) {
+          $tbbWerte ["z" . $tbbNummer] = $tbbInhalt;
+        }
+        $tbbZeilen[] = $tbbWerte;
       }
 
-      echo "</tbody>\n";
-      echo "</table>\n";
-      echo "</div>\n</section>\n";
+      // Kopf, Schluessel, Breite, Art, sortierbar, klammern.
+      $tbbAufbau = array ();
+      // Sieben Spalten wie im Fb Fue 44: laufende Nummer, Datum/Zeit und
+      // die fuenf Inhaltsspalten. Die Zahl steht auch im Zerleger; weicht
+      // sie ab, bricht er ab, statt Zellen zu verschieben.
+      foreach (array (
+        array ("Lfd.-Nr.", "nummer", 7, "zahl", true, false),
+        array ("Datum/Zeit", "zeit", 13, "zeit", true, false),
+        array ("Betrieb / Personal / Dienst", "s0", 15, "text", false, true),
+        array ("Kanal / Rufgruppe / Bedienung", "s1", 15, "text", false, true),
+        array ("Nachricht von / an", "s2", 15, "text", false, true),
+        array ("Betriebsablauf / Ereignis / Störung", "s3", 17, "text", false, true),
+        array ("Quittung / Empfänger / Aushändigung", "s4", 18, "text", false, true),
+      ) as $tbbNummer => $tbbSpalte) {
+        $tbbAufbau[] = array (
+          "schluessel" => $tbbSpalte [1],
+          "kopf" => $tbbSpalte [0],
+          "breite" => $tbbSpalte [2],
+          "art" => $tbbSpalte [3],
+          "sortierbar" => $tbbSpalte [4],
+          "suchbar" => true,
+          "klammern" => $tbbSpalte [5],
+          "zelle" => static function (array $z) use ($tbbNummer): string {
+            return $z ["z" . $tbbNummer];
+          },
+        );
+      }
+
+      echo estab_tabelle_markup (array (
+        "id" => "tbb",
+        "beschriftung" => "Einträge im Technischen Betriebsbuch",
+        "mindestbreite" => "68rem",
+        "spalten" => $tbbAufbau,
+        "zeilen" => $tbbZeilen,
+        "leer" => "Kein Eintrag entspricht den gesetzten Filtern.",
+      ));
+      echo "</section>\n";
     } else {
       echo "<section class=\"estab-tool-panel\" aria-label=\"Keine TBB-Einträge\">\n";
       echo "<p class=\"estab-tool-empty\">Noch keine TBB-Einträge vorhanden.</p>\n";
