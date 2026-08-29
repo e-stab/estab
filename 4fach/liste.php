@@ -6,6 +6,7 @@ require_once __DIR__ . "/../app/message_repository.php";
 require_once __DIR__ . "/../app/message_priority.php";
 require_once __DIR__ . "/../app/message_transport.php";
 require_once __DIR__ . "/../app/tabelle.php";
+require_once __DIR__ . "/../app/liste_spalten.php";
 require_once __DIR__ . "/../app/read_authorization.php";
 require_once __DIR__ . "/../app/message_list.php";
 require_once __DIR__ . "/../app/message_list_ui.php";
@@ -1379,11 +1380,14 @@ class Listen extends kategorien {
         echo "<h2>LdF: Rufnamen und Beförderungswege</h2>";
         echo "</header>";
         if ($result != "") {
-          echo "<div class=\"estab-tool-table-wrap\">";
-          echo "<table class=\"estab-tool-table estab-list-table\"><thead>";
-          echo "<tr>";
-          echo "<th>E/A</th><th>Zeit</th><th>Vorrang</th><th>Rufname</th><th>Von/An</th><th>Inhalt</th></tr>";
-          echo "</thead><tbody>";
+          /*
+           * Die Disposition kommt aus dem Tabellenbauteil.
+           *
+           * Sie fuehrt Eingaenge und Ausgaenge nebeneinander -- beim
+           * Disponieren ist beides zu sehen. Trennen koennen muss man sie
+           * trotzdem, deshalb traegt die Richtungsspalte einen Filter.
+           */
+          $dispoZeilen = array ();
           foreach ($result as $row) {
             $abfzeit = convdatetimeto ($row ["12_abfzeit"]);
             $direction = (string) $row ["04_richtung"];
@@ -1392,28 +1396,48 @@ class Listen extends kategorien {
                 ? $row ["13_abseinheit"]
                 : "Absender zu übersetzen")
               : $row ["10_anschrift"];
-            echo "<tr>";
-            echo "<td>";
-            estab_list_detail_action ("ldf", "meldung", $row ["00_lfd"], $direction);
-            echo "</td><td>";
-            estab_list_detail_action ("ldf", "meldung", $row ["00_lfd"], $abfzeit ["stak"] ?? "");
-            echo "</td><td>";
-            estab_list_detail_action (
-              "ldf",
-              "meldung",
-              $row ["00_lfd"],
-              estab_message_priority_label ($row ["09_vorrangstufe"])
+            $dispoZeilen[] = array (
+              "lfd" => estab_message_positive_id ($row ["00_lfd"]),
+              "richtung" => $direction === "E" ? "Eingang" : "Ausgang",
+              "zeit" => (string) ($abfzeit ["stak"] ?? ""),
+              "vorrang" => estab_message_priority_label ($row ["09_vorrangstufe"]),
+              "rufname" => (string) ($row ["05_gegenstelle"] ?: "noch offen"),
+              "gegenstelle" => (string) $address,
+              "inhalt" => (string) ($row ["12_inhalt"] ?? ""),
+              "anhang" => $row ["12_anhang"] ?? null,
             );
-            echo "</td><td>";
-            estab_list_detail_action ("ldf", "meldung", $row ["00_lfd"], $row ["05_gegenstelle"] ?: "noch offen");
-            echo "</td><td>";
-            estab_list_detail_action ("ldf", "meldung", $row ["00_lfd"], $address);
-            echo "</td><td style=\"text-align:left\">";
-            estab_list_detail_action ("ldf", "meldung", $row ["00_lfd"], $row ["12_inhalt"]);
-            estab_list_attachment_badge ($row ["12_anhang"] ?? null);
-            echo "</td></tr>";
           }
-          echo "</tbody></table></div>";
+          $dispoSpalten = estab_liste_spalten_disposition ();
+          foreach ($dispoSpalten as $i => $dispoSpalte) {
+            if ($dispoSpalte ["schluessel"] === "inhalt") {
+              $dispoSpalten [$i]["zelle"] = static function (array $z): string {
+                ob_start ();
+                estab_list_attachment_badge ($z ["anhang"] ?? null);
+                $marke = (string) ob_get_clean ();
+                return estab_tabelle_zelleninhalt ((string) $z ["inhalt"]).$marke;
+              };
+            }
+          }
+          $dispoSpalten[] = array (
+            "schluessel" => "aktion", "kopf" => "Aktion", "breite" => 12,
+            "sortierbar" => false, "suchbar" => false, "art" => "text",
+            "zelle" => static function (array $z): string {
+              ob_start ();
+              estab_list_detail_action (
+                "ldf", "meldung", $z ["lfd"], "Vordruck öffnen", false, true
+              );
+              return (string) ob_get_clean ();
+            },
+          );
+          echo estab_tabelle_markup (array (
+            "id" => "disposition",
+            "beschriftung" => "Nachrichten zur Disposition mit Richtung, "
+              . "Vorrang und Rufname",
+            "mindestbreite" => "58rem",
+            "spalten" => $dispoSpalten,
+            "zeilen" => $dispoZeilen,
+            "leer" => "Keine Nachricht entspricht den gesetzten Filtern.",
+          ));
         } else {
           echo "<p class=\"estab-message-list-empty\">".
                "Zur Zeit keine Nachricht für die LdF</p>";
@@ -1423,7 +1447,7 @@ class Listen extends kategorien {
       case "FMA":           /***** F M A ****/
         if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b> ### - fkt:createlist - switch(listenart) -- case (FMA)<br>";}
         $incidentId = $this->required_incident_id ();
-        $query = "SELECT `00_lfd`,`07_durchspruch`, `08_befhinweis`, `08_befhinwausw`,`09_vorrangstufe`, `10_anschrift`, `12_abfzeit`, `12_anhang`, `12_inhalt` FROM `".$conf_4f_tbl ["nachrichten"]."`
+        $query = "SELECT `00_lfd`,`01_medium`,`07_durchspruch`, `08_befhinweis`, `08_befhinwausw`,`09_vorrangstufe`, `10_anschrift`, `12_abfzeit`, `12_anhang`, `12_inhalt` FROM `".$conf_4f_tbl ["nachrichten"]."`
                   WHERE `einsatz_id` = ?
                   AND `x00_status` = 2
                   AND `02_zeit` IS NOT NULL AND `02_zeichen` != \"\"
@@ -1445,36 +1469,84 @@ class Listen extends kategorien {
           estab_auth_close ($messageConnection);
         }
         $result = $result === array () ? "" : $result;
+        /*
+         * Der Ausgang kommt aus dem Tabellenbauteil.
+         *
+         * Er trug vier Spalten ohne Sortierung, ohne Suche und ohne
+         * Blaetterer -- und das Uebermittlungsmittel gar nicht, obwohl die
+         * Abfrage seit jeher danach filtert. Eine Fernmeldestelle teilt
+         * ihre Plaetze aber nach Mitteln auf: Wer den Funk betreut, sucht
+         * seine Auftraege sonst zwischen den Faxen der anderen.
+         */
         if ($result != "" ){
-          echo "<div class=\"estab-tool-table-wrap\">";
-          echo "<table class=\"estab-tool-table estab-list-table\">\n<thead>\n";
-          echo "<tr>\n";
-          echo "<th>Zeit</th>\n";
-          echo "<th>Vorrang</th>\n";
-          echo "<th>Anschrift</th>\n";
-          echo "<th>Inhalt</th>\n";
-          echo "</tr>\n</thead>\n<tbody>\n";
-          foreach ($result as $row){
-            $priorityStyle = estab_message_priority_requires_attention (
-              $row["09_vorrangstufe"]
-            )
-                ? " style=\"background-color: rgb(255,255,100); color:#000000; font-weight:bold;\""
-                : "";
-            echo "<tr".$priorityStyle.">\n";
-            $abfzeit = convdatetimeto ($row["12_abfzeit"]);
-            echo "<td>"; if (($row["12_abfzeit"] != "")) { estab_list_detail_action ("fm", "meldung", $row["00_lfd"], $abfzeit["stak"]); } else { echo "<span class=\"estab-message-list-clamp--empty\">–</span>";} echo "</td>\n";
-            echo "<td>";
-            estab_list_detail_action (
-              "fm",
-              "meldung",
-              $row["00_lfd"],
-              estab_message_priority_label ($row["09_vorrangstufe"])
+          $ausgangZeilen = array ();
+          $ausgangMedien = array ();
+          foreach ($result as $row) {
+            $abfzeit = convdatetimeto ($row ["12_abfzeit"]);
+            $medium = estab_liste_medium_name ($row ["01_medium"] ?? "");
+            if ($medium !== "") {
+              $ausgangMedien [$medium] = true;
+            }
+            $ausgangZeilen[] = array (
+              "lfd" => estab_message_positive_id ($row ["00_lfd"]),
+              "zeit" => (string) ($abfzeit ["stak"] ?? ""),
+              "medium" => $medium,
+              "vorrang" => estab_message_priority_label ($row ["09_vorrangstufe"]),
+              "anschrift" => (string) ($row ["10_anschrift"] ?? ""),
+              "inhalt" => (string) ($row ["12_inhalt"] ?? ""),
+              "anhang" => $row ["12_anhang"] ?? null,
+              // Dringliches faellt auf -- als Marke, nicht als fest
+              // eingetragene Farbe im Markup.
+              "dringend" => estab_message_priority_requires_attention (
+                $row ["09_vorrangstufe"]
+              ),
             );
-            echo "</td>\n";
-            echo "<td>"; if (($row["10_anschrift"] != "")) { estab_list_detail_action ("fm", "meldung", $row["00_lfd"], $row["10_anschrift"]); } else { echo "<span class=\"estab-message-list-clamp--empty\">–</span>";} echo "</td>\n";
-            echo "<td align=\"left\">"; if (($row["12_inhalt"] != "")) { estab_list_detail_action ("fm", "meldung", $row["00_lfd"], $row["12_inhalt"]); } else { echo "<span class=\"estab-message-list-clamp--empty\">–</span>";} estab_list_attachment_badge ($row ["12_anhang"] ?? null); echo "</td>\n";           echo "</tr>";
           }
-          echo "</tbody></table></div>";
+          ksort ($ausgangMedien);
+          $ausgangSpalten = estab_liste_spalten_ausgang (
+            array_keys ($ausgangMedien)
+          );
+          /*
+           * Der Inhalt traegt die Anlagenmarke, die Aktionsspalte den
+           * Knopf. Beides steht in der Spalte, nicht in der Zeile: Frueher
+           * war jede Zelle ein Knopf, und ein Klick auf den Text loeste
+           * ungewollt aus.
+           */
+          foreach ($ausgangSpalten as $i => $ausgangSpalte) {
+            if ($ausgangSpalte ["schluessel"] === "inhalt") {
+              $ausgangSpalten [$i]["zelle"] = static function (array $z): string {
+                ob_start ();
+                estab_list_attachment_badge ($z ["anhang"] ?? null);
+                $marke = (string) ob_get_clean ();
+                return estab_tabelle_zelleninhalt ((string) $z ["inhalt"]).$marke;
+              };
+            }
+          }
+          $ausgangSpalten[] = array (
+            "schluessel" => "aktion", "kopf" => "Aktion", "breite" => 12,
+            "sortierbar" => false, "suchbar" => false, "art" => "text",
+            "zelle" => static function (array $z): string {
+              ob_start ();
+              estab_list_detail_action (
+                "fm", "meldung", $z ["lfd"], "Vordruck öffnen", false, true
+              );
+              return (string) ob_get_clean ();
+            },
+          );
+          echo estab_tabelle_markup (array (
+            "id" => "ausgang",
+            "beschriftung" => "Meldungen im Ausgang mit Übermittlungsmittel, "
+              . "Vorrang und Anschrift",
+            "mindestbreite" => "56rem",
+            "zeilenmarke" => static function (array $z): string {
+              return ($z ["dringend"] ?? false)
+                ? "class=\"estab-tabelle-zeile--achtung\""
+                : "";
+            },
+            "spalten" => $ausgangSpalten,
+            "zeilen" => $ausgangZeilen,
+            "leer" => "Keine Meldung entspricht den gesetzten Filtern.",
+          ));
         } else {// if $result != ""
           echo "<p class=\"estab-message-list-empty\">".
                "Zur Zeit keine Meldung im Ausgang</p>";

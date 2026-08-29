@@ -299,6 +299,16 @@ function estab_ux_rules(): array
                 . 'worin gesucht wird -- ohne ihn ist eine leere Trefferliste '
                 . 'nicht deutbar.',
         ],
+        'UX-AUSGANG-MEDIUM' => [
+            'origin' => ESTAB_UX_ORIGIN_BETREIBER,
+            'reference' => 'Rückmeldung Betrieb: Ausgang und Disposition',
+            'requirement' => 'Die Ausgangsliste des Fernmelders trägt das '
+                . 'Übermittlungsmittel als eigene Spalte, sortierbar und '
+                . 'filterbar, und nennt es beim Namen -- "Funk", nicht "Fu". '
+                . 'Ein Fernmelder betreut in der Regel ein bis zwei Mittel. '
+                . 'Ohne diesen Filter sucht er seine eigenen Aufträge in '
+                . 'einer Liste, die zum größeren Teil andere angeht.',
+        ],
         'GES-TABELLE-BLAETTERN' => [
             'origin' => ESTAB_UX_ORIGIN_GESTALTUNG,
             'reference' => 'docs/TABELLEN.md Abschnitt 1, GESTALTUNG 6.7',

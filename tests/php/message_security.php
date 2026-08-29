@@ -585,7 +585,18 @@ $assert(
     substr_count($listSource, 'data-estab-list-filter') === 2
         && substr_count($listSource, '<form') === 4
         && substr_count($listSource, '</form>') === 4
-        && substr_count($listSource, 'echo "<tr".$priorityStyle') === 2
+        /*
+         * Nur noch eine handgeschriebene Vorrangzeile: Der Ausgang zeichnet
+         * seine Zeilen seit der Umstellung nicht mehr selbst. Was dort
+         * hervorhebt, ist eine Marke am Bauteil -- unten eigens geprueft,
+         * damit die gesenkte Zahl kein stiller Verlust ist.
+         */
+        && substr_count($listSource, 'echo "<tr".$priorityStyle') === 1
+        && str_contains($listSource, 'estab-tabelle-zeile--achtung')
+        && str_contains(
+            $listSource,
+            'estab_message_priority_requires_attention ('
+        )
         && str_contains(
             $listSource,
             'estab_message_list_render_controls ('

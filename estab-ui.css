@@ -5366,6 +5366,18 @@ body.estab-message-form-body {
     word-break: keep-all;
 }
 
+/* Eine Zeile, die Aufmerksamkeit verlangt.
+
+   Der Ausgang hob dringliche Meldungen mit `rgb(255,255,100)` hervor --
+   fest im Markup, also von aussen nicht erreichbar und von keinem
+   Kontrastwaechter geprueft. Schwarz auf diesem Gelb ist blass; die
+   Achtungsmarken der Anwendung sind es nicht. */
+.estab-tabelle-blatt tbody tr.estab-tabelle-zeile--achtung > td {
+    background: var(--achtung-flaeche);
+    color: var(--achtung-tinte);
+    font-weight: 600;
+}
+
 .estab-tabelle-zahl {
     font-variant-numeric: tabular-nums;
     text-align: right;

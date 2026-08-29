@@ -15,11 +15,20 @@ declare(strict_types=1);
  *
  * ## Was gezählt wird
  *
- * Datentabellen, erkennbar an den beiden Klassen, mit denen diese Anwendung
- * sie seit jeher auszeichnet: `estab-tool-table` und `estab-list-table`. Die
- * Layouttabellen des Nachrichtenvordrucks zählen nicht mit -- sie stellen
- * keine Liste dar, sondern das Papierraster, und das ist eine ausdrückliche
- * Ausnahme (docs/GESTALTUNG.md Abschnitt 12).
+ * Jedes `<table` in den Verzeichnissen der Anwendung. Jedes.
+ *
+ * Vorher waren es nur zwei Klassennamen -- `estab-tool-table` und
+ * `estab-list-table` --, und genau daran ist die Kontenliste der
+ * Anmeldeseite vorbeigekommen: Sie hiess `estab-account-list`, stand in
+ * keiner Zählung, und der Betreiber hat sie gefunden, nicht diese Prüfung.
+ * Ein Wächter, der eine Liste bekannter Namen abfragt, findet immer nur,
+ * was schon jemand aufgeschrieben hat.
+ *
+ * Deshalb jetzt umgekehrt: Erlaubt ist, was das Bauteil erzeugt. Alles
+ * andere muss hier namentlich stehen -- entweder als dauerhafte Ausnahme
+ * (das Papierraster des Vordrucks, docs/GESTALTUNG.md Abschnitt 12) oder
+ * als noch offene Stelle mit ihrem Grund. Eine neue Tabelle mit einem neuen
+ * Klassennamen fällt damit auf, statt durchzurutschen.
  *
  * ## Warum die Liste nicht leer ist
  *
@@ -47,33 +56,64 @@ $assert = static function (bool $condition, string $message) use (&$assertions):
 };
 
 /**
- * Noch nicht umgestellte Datentabellen, je mit ihrem Grund.
+ * Das Papierraster des Nachrichtenvordrucks -- dauerhafte Ausnahme.
+ *
+ * Der Vordruck bildet ein gedrucktes Formular nach. Sein Raster *ist* eine
+ * Tabelle, und zwar seit 1978; ein Bauteil für Listen hat dort nichts zu
+ * suchen. Diese Dateien zeichnen den Vordruck oder zeigen ihn an.
  *
  * @var array<string,string>
  */
-$ausnahmen = [
-    '4fach/liste.php' => 'Die übrigen Listenarten der Meldungsliste: '
-        . 'Sichtung, Korrektur, die Administrationssichten und die '
-        . 'Nachweisungszweige, die nachwea.php nicht mehr aufruft.',
-    '4fach/fuehrungsstelle.php' => 'Die Führungsstellenübersicht.',
-    '4fach/katgoedt.php' => 'Die Pflege der Kategorien.',
-    '4fadm/fuehrungsstelle.php' => 'Die Führungsstellenverwaltung.',
-    '4fadm/make_fkt.php' => 'Die Empfängermatrix.',
-    '4fadm/system_status.php' => 'Der Systemstand.',
-    'stabetb/etb.php' => 'Das Einsatztagebuch.',
-    'fmtbb/tbb.php' => 'Das Technische Betriebsbuch.',
+$faksimile = [
+    '4fach/4fachform.php' => 'Der Nachrichtenvordruck selbst.',
+    '4fach/anhang.php' => 'Die Anlagenseite im Vordruckraster.',
+    '4fach/logoff.php' => 'Die Abmeldeseite im alten Raster.',
+];
+
+/**
+ * Noch nicht umgestellte Tabellen, je Datei mit ihrem Grund und ihrer Zahl.
+ *
+ * Die Zahl steht dabei, damit eine *zusätzliche* Tabelle in einer Datei,
+ * die ohnehin schon offen ist, ebenfalls auffällt. Ohne sie wäre die
+ * Ausnahme ein Freibrief für die ganze Datei.
+ *
+ * @var array<string,array{0:int,1:string}>
+ */
+$offeneDateien = [
+    '4fach/liste.php' => [11, 'Die übrigen Listenarten -- Sichtung, '
+        . 'Korrektur, die Administrationssichten und die Nachweisungszweige '
+        . '-- sowie sechs Layouttabellen der alten Filterleiste.'],
+    '4fueltg/ue_ltg.php' => [17, 'Der Vordruck der Führungsleitung und zwei '
+        . 'Layouttabellen seiner Bedienleiste.'],
+    '4fach/tools.php' => [6, 'Das alte Cockpit mit fest eingetragenen Grautönen.'],
+    '4fadm/fuehrungsstelle.php' => [4, 'Die Führungsstellenverwaltung.'],
+    '4fadm/system_status.php' => [4, 'Der Systemstand.'],
+    '4fadm/make_fkt.php' => [1, 'Die Empfängermatrix.'],
+    '4fach/fuehrungsstelle.php' => [2, 'Die Führungsstellenübersicht.'],
+    '4fach/katgoedt.php' => [1, 'Die Pflege der Kategorien.'],
+    '4fach/mainindex.php' => [1, 'Der Satzspiegel der Anmeldefelder -- '
+        . 'Beschriftung und Feld nebeneinander, keine Liste.'],
+    'handbuch/index.php' => [2, 'Zwei Übersichten im Handbuch. Sie stehen '
+        . 'im Fließtext und werden nicht aus Daten erzeugt.'],
+    'stabetb/etb.php' => [1, 'Die Titelliste über dem Einsatztagebuch.'],
 ];
 
 /*
- * Die Zahl der noch selbst gebauten Datentabellen. Sie darf sinken.
+ * Die Gesamtzahl der noch nicht umgestellten Tabellen. Sie darf sinken.
+ *
+ * Vorher stand hier 22 -- gezählt wurden aber nur zwei Klassennamen. Die
+ * ehrliche Zahl ist höher, und das ist der Punkt: Eine Ratsche, die nur
+ * zählt, was sie kennt, misst ihren eigenen Blick, nicht den Bestand.
  */
-const ESTAB_TABELLEN_OFFEN = 22;
+const ESTAB_TABELLEN_OFFEN = 50;
 
 $verzeichnisse = [
     '4fach', '4fadm', '4fueltg', 'app', 'stabetb', 'fmtbb', 'stabinfo',
     'handbuch',
 ];
 $gefunden = [];
+$amBauteil = 0;
+$imFaksimile = 0;
 foreach ($verzeichnisse as $verzeichnis) {
     $pfad = $root . '/' . $verzeichnis;
     if (!is_dir($pfad)) {
@@ -97,39 +137,68 @@ foreach ($verzeichnisse as $verzeichnis) {
             if (!str_contains($text, '<table')) {
                 continue;
             }
-            if (!str_contains($text, 'estab-tool-table')
-                && !str_contains($text, 'estab-list-table')) {
+            // Was das Bauteil erzeugt, ist in Ordnung -- und nur das.
+            if (str_contains($text, 'estab-tabelle-blatt')) {
+                $amBauteil++;
                 continue;
             }
-            $gefunden[] = $relativ . ':' . $zeile;
+            if (array_key_exists($relativ, $faksimile)) {
+                $imFaksimile++;
+                continue;
+            }
+            $gefunden[$relativ][] = $zeile;
         }
     }
 }
 
-$offen = [];
-foreach ($gefunden as $stelle) {
-    $datei = substr($stelle, 0, (int) strpos($stelle, ':'));
-    if (!array_key_exists($datei, $ausnahmen)) {
-        $offen[] = $stelle;
+// Jede Datei mit eigener Tabelle steht namentlich in einer der beiden
+// Listen. Eine neue Datei mit einer neuen Klasse fällt hier auf -- der
+// Fehler, an dem die Kontenliste vorbeigekommen ist.
+$unbekannt = [];
+foreach ($gefunden as $relativ => $zeilen) {
+    if (!array_key_exists($relativ, $offeneDateien)) {
+        $unbekannt[] = $relativ . ':' . implode(',', $zeilen);
     }
 }
 $assert(
-    $offen === [],
+    $unbekannt === [],
     estab_ux_requirement(
         'GES-TABELLE-EINHEITLICH',
-        'Diese Seiten schreiben ihr eigenes Tabellenmarkup, ohne in der '
-            . 'Ausnahmeliste zu stehen: ' . implode(', ', $offen)
-            . '. Eine Vorlage wird kopiert und läuft auseinander -- entweder '
-            . 'die Tabelle kommt aus dem Bauteil, oder ihr Grund steht hier.'
+        'Diese Stellen schreiben ihr eigenes Tabellenmarkup, ohne in einer '
+            . 'der beiden Listen zu stehen: ' . implode(' | ', $unbekannt)
+            . '. Entweder die Tabelle kommt aus dem Bauteil, oder ihr Grund '
+            . 'steht hier.'
     )
 );
+
+// Und keine Datei trägt mehr Tabellen, als für sie eingetragen sind.
+$gewachsen = [];
+foreach ($offeneDateien as $relativ => $eintrag) {
+    $ist = count($gefunden[$relativ] ?? []);
+    if ($ist > $eintrag[0]) {
+        $gewachsen[] = $relativ . ': ' . $ist . ' statt ' . $eintrag[0];
+    }
+}
 $assert(
-    count($gefunden) <= ESTAB_TABELLEN_OFFEN,
+    $gewachsen === [],
     estab_ux_requirement(
         'GES-TABELLE-EINHEITLICH',
-        'Es gibt ' . count($gefunden) . ' selbst gebaute Datentabellen statt '
-            . 'höchstens ' . ESTAB_TABELLEN_OFFEN . '. Die Liste darf sinken, '
-            . 'nicht steigen.'
+        'Diese Dateien haben eine Tabelle dazubekommen: '
+            . implode(', ', $gewachsen) . '. Eine offene Stelle ist kein '
+            . 'Freibrief, dort weiterzubauen.'
+    )
+);
+
+$summe = 0;
+foreach ($gefunden as $zeilen) {
+    $summe += count($zeilen);
+}
+$assert(
+    $summe <= ESTAB_TABELLEN_OFFEN,
+    estab_ux_requirement(
+        'GES-TABELLE-EINHEITLICH',
+        'Es gibt ' . $summe . ' selbst gebaute Tabellen statt höchstens '
+            . ESTAB_TABELLEN_OFFEN . '. Die Zahl darf sinken, nicht steigen.'
     )
 );
 
@@ -161,27 +230,45 @@ foreach ($flaechen as $datei => $name) {
     );
 }
 
-// Beisst die Pruefung? Eine erfundene Stelle ausserhalb der Ausnahmeliste
-// muss auffallen.
-$probe = ['4fach/erfunden.php:1', '4fach/liste.php:9'];
-$probeOffen = [];
-foreach ($probe as $stelle) {
-    $datei = substr($stelle, 0, (int) strpos($stelle, ':'));
-    if (!array_key_exists($datei, $ausnahmen)) {
-        $probeOffen[] = $stelle;
+/*
+ * Beisst die Pruefung?
+ *
+ * Zwei Proben, und die zweite ist die wichtigere: eine Tabelle mit einem
+ * *neuen* Klassennamen in einer Datei, die niemand auf dem Zettel hat.
+ * Genau so ist die Kontenliste durchgerutscht -- sie hiess
+ * `estab-account-list`, und die alte Pruefung fragte nach zwei anderen
+ * Namen. Eine Pruefung, die nur bekannte Namen kennt, findet nie etwas
+ * Neues.
+ */
+$probeZeilen = [
+    'echo "<table class=\"estab-tabelle-blatt\">";',
+    'echo "<table class=\"voellig-neuer-name\">";',
+    'echo "<p>keine Tabelle</p>";',
+];
+$probeOffen = 0;
+$probeBauteil = 0;
+foreach ($probeZeilen as $text) {
+    if (!str_contains($text, '<table')) {
+        continue;
     }
+    if (str_contains($text, 'estab-tabelle-blatt')) {
+        $probeBauteil++;
+        continue;
+    }
+    $probeOffen++;
 }
 $assert(
-    $probeOffen === ['4fach/erfunden.php:1'],
-    'Die Pruefung erkennt eine Tabelle ausserhalb der Ausnahmeliste nicht '
+    $probeOffen === 1 && $probeBauteil === 1,
+    'Die Pruefung erkennt eine Tabelle mit unbekanntem Klassennamen nicht '
         . 'wieder; ihre Ruhe waere kein Beweis.'
 );
 
 printf(
-    "Gestaltung Tabellen einheitlich: OK (%d assertions, %d Flächen am "
-        . "Bauteil, %d Tabellen noch offen in %d Dateien)\n",
+    "Gestaltung Tabellen einheitlich: OK (%d assertions, %d am Bauteil, "
+        . "%d im Papierraster, %d noch offen in %d Dateien)\n",
     $assertions,
-    count($flaechen),
-    count($gefunden),
-    count($ausnahmen)
+    $amBauteil,
+    $imFaksimile,
+    $summe,
+    count($gefunden)
 );

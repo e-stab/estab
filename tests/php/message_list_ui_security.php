@@ -839,13 +839,27 @@ $assert(
         ) === 1,
     'Staff message rows do not show exactly one attachment badge'
 );
+/*
+ * Jede Betriebsliste zeigt an, dass eine Anlage haengt.
+ *
+ * Gezaehlt werden beide Schreibweisen. Ausgang und Disposition holen ihre
+ * Zeilen seit der Umstellung durch das Tabellenbauteil; dort heisst das
+ * Feld `$z ["anhang"]`, weil die Zeile schon aufbereitet ist. Die Zahl
+ * bleibt dieselbe -- nur die Schreibweise nicht, und eine Pruefung, die
+ * eine Zeichenkette zaehlt, darf das nicht mit einem Verlust verwechseln.
+ */
+$anlagenmarken = substr_count(
+    $listExecutableSource,
+    'estab_list_attachment_badge ($row ["12_anhang"] ?? null);'
+) + substr_count(
+    $listExecutableSource,
+    'estab_list_attachment_badge ($z ["anhang"] ?? null);'
+);
 $assert(
-    substr_count(
-        $listExecutableSource,
-        'estab_list_attachment_badge ($row ["12_anhang"] ?? null);'
-    ) === 7
+    $anlagenmarken === 7
         && substr_count($listExecutableSource, '`12_anhang`') >= 7,
-    'An operational message list omits the attachment indicator'
+    'An operational message list omits the attachment indicator ('
+        . $anlagenmarken . ' statt 7)'
 );
 
 $incomingTrackingStart = strrpos($listExecutableSource, 'case "FmNwE"');

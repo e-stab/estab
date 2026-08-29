@@ -235,8 +235,34 @@ foreach ($pairs as $pair) {
     );
     $fixedPairs++;
 }
+/*
+ * Es war einmal ein Paar mehr.
+ *
+ * Der Ausgang hob dringliche Meldungen mit `rgb(255,255,100)` und schwarzer
+ * Schrift hervor -- fest im Markup, und deshalb hier gemessen. Seit der
+ * Umstellung auf das Tabellenbauteil traegt diese Zeile eine Marke
+ * (`estab-tabelle-zeile--achtung`), und ihre Farben stehen im Stylesheet.
+ *
+ * Die Anforderung ist damit nicht weggefallen, sondern umgezogen: ges_kontrast
+ * leitet ihre Paarungen aus dem Stylesheet selbst ab und misst sie dort mit.
+ * Damit dieser Umzug nachweisbar bleibt und nicht bloss eine gesenkte Schranke
+ * ist, wird hier geprueft, dass die Marke wirklich existiert und ihre Farben
+ * aus Marken zieht -- nicht aus wieder eingetragenen Literalen.
+ */
+$stylesheet = file_get_contents($root . '/estab-ui.css');
+$assert(is_string($stylesheet), 'Das Stylesheet ist nicht lesbar.');
 $assert(
-    $fixedPairs >= 2,
+    preg_match(
+        '~\.estab-tabelle-zeile--achtung[^{]*\{[^}]*background:\s*'
+            . 'var\(--achtung-flaeche\)[^}]*color:\s*var\(--achtung-tinte\)~s',
+        (string) $stylesheet
+    ) === 1,
+    'Die hervorgehobene Zeile des Ausgangs zieht ihre Farben nicht mehr aus '
+        . 'den Achtungsmarken. Das Paar waere damit weder hier noch in '
+        . 'ges_kontrast gemessen.'
+);
+$assert(
+    $fixedPairs >= 1,
     'The fixed colour pairs of the list are no longer being checked'
 );
 
