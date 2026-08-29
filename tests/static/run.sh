@@ -212,6 +212,7 @@ for test_name in \
     rm_infofaehnchen \
     rm_vordruckkopf \
     rm_anlage_darstellbar \
+    rm_leere_zeitangabe \
     rm_feldfreigabe \
     rm_rueckweisung \
     ges_tabelle_bauteil \

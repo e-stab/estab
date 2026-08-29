@@ -1127,6 +1127,22 @@ bersichtlich dargestellt werden.
   | Formateinausgang:  YYYY-MM-TT hh:mm:ss
   | Formatausgang   :  TThhmmMMYYYY
   \****************************************************************************/
+  /**
+   * Eine taktische Zeitgruppe in eine Datenbankzeit -- oder null.
+   *
+   * Null heisst: Es gibt keine Zeitangabe. Frueher stand hier "", und das
+   * ist keine Zeit, sondern eine Behauptung: In einer DATETIME-Spalte weist
+   * MariaDB den leeren Text im strikten Modus mit Fehler 1292 ab, und der
+   * ganze Vorgang scheitert.
+   *
+   * Aufgefallen ist das, als die Abfassungszeit dem Fernmelder gesperrt
+   * wurde. Sie bleibt beim Eingang leer -- so gewollt, denn er hat die
+   * Nachricht nicht abgefasst -- und das gesperrte Feld sendet trotzdem mit.
+   * Der Fernmelder konnte daraufhin keinen Eingang mehr aufnehmen.
+   *
+   * Die Spalten lassen NULL zu; das ist die Schreibweise fuer "nicht
+   * angegeben".
+   */
   function konv_taktime_datetime ($taktime){
     include ("../4fcfg/config.inc.php");
     // taktische Zeit konvertiert in Datenbankzeit
@@ -1137,10 +1153,13 @@ bersichtlich dargestellt werden.
       $minute = substr ($taktime, 4, 2);
       $monat  = substr ($taktime, 6, 3);
       $jahr   = substr ($taktime, 9, 4);
+      if (!isset ($rew_tak_monate [$monat])) {
+        return (null);
+      }
       $monat = $rew_tak_monate [$monat];
       return ($jahr."-".$monat."-".$tag." ".$stunde.":".$minute.":00" );
     } else {
-      return ("");
+      return (null);
     }
   }
 

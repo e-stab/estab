@@ -498,8 +498,35 @@ function estab_message_connect(array $databaseConfig): mysqli
 }
 
 /**
+ * Der Fehlerschluessel einer fehlgeschlagenen Datenbankoperation.
+ *
+ * Nur Codes, keine Daten: die Fehlernummer und der SQLSTATE. MySQL schreibt
+ * in seinen Klartext gern den beanstandeten Wert hinein ("Incorrect datetime
+ * value: '1810' for column ..."), und der gehoert weder in eine Ausnahme noch
+ * in ein Protokoll. Die Nummer sagt genug: 1292 ist ein unbrauchbares Datum,
+ * 1048 eine fehlende Pflichtangabe, 1406 ein zu langer Wert, 1062 ein
+ * doppelter Schluessel.
+ *
+ * Ohne diese zwei Zahlen stand im Protokoll nur "Could not execute message
+ * operation" -- und wer einen Eingang nicht aufnehmen konnte, erfuhr nirgends,
+ * woran es lag.
+ */
+function estab_message_error_key(mysqli $connection): string
+{
+    $nummer = (int) $connection->errno;
+    $zustand = (string) $connection->sqlstate;
+    if ($nummer === 0 && $zustand === '') {
+        return 'ohne Angabe';
+    }
+    return 'Fehler ' . $nummer . ', SQLSTATE ' . $zustand;
+}
+
+/**
  * Prepare and execute without exposing SQL, parameters or credentials in an
  * exception or audit record.
+ *
+ * Der Fehlerschluessel der Datenbank kommt mit -- er besteht aus Codes, nicht
+ * aus Werten.
  */
 function estab_message_execute(
     mysqli $connection,
@@ -508,22 +535,33 @@ function estab_message_execute(
 ): mysqli_stmt {
     $statement = $connection->prepare($sql);
     if (!$statement) {
-        throw new RuntimeException('Could not prepare message operation');
+        throw new RuntimeException(
+            'Could not prepare message operation ('
+                . estab_message_error_key($connection) . ')'
+        );
     }
     try {
         $executed = $parameters === []
             ? $statement->execute()
             : $statement->execute(array_values($parameters));
         if (!$executed) {
-            throw new RuntimeException('Could not execute message operation');
+            throw new RuntimeException(
+                'Could not execute message operation ('
+                    . estab_message_error_key($connection) . ')'
+            );
         }
         return $statement;
     } catch (Throwable $exception) {
+        $schluessel = estab_message_error_key($connection);
         $statement->close();
         if ($exception instanceof RuntimeException) {
             throw $exception;
         }
-        throw new RuntimeException('Could not execute message operation', 0, $exception);
+        throw new RuntimeException(
+            'Could not execute message operation (' . $schluessel . ')',
+            0,
+            $exception
+        );
     }
 }
 
