@@ -2384,7 +2384,18 @@ audio[data-estab-sidebar-audio] {
     max-width: 68rem;
 }
 
-.estab-incident-export-panel {
+/* Die einspaltige Fassung des Abschnitts "Umfang festlegen".
+
+   Sie traegt beide Klassen, und das ist keine Zierde: Mit nur
+   .estab-incident-export-panel hatte sie dieselbe Spezifitaet wie die
+   zweispaltige Grundregel -- und verlor gegen sie, weil die weiter unten in
+   dieser Datei steht.
+
+   Die Folge war im Bild zu sehen: Die rechte Spalte ist `auto` und nahm sich
+   die Breite des Formulars; fuer den Hinweis links blieben rund fuenfzig
+   Bildpunkte, und das Formular lag ueber seinem Text. Eine Regel, die nur
+   gewinnt, weil sie weiter unten steht, ist eine Regel auf Widerruf. */
+.estab-export-create.estab-incident-export-panel {
     align-items: stretch;
     grid-template-columns: 1fr;
 }

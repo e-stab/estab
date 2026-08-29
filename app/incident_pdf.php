@@ -14,6 +14,7 @@ declare(strict_types=1);
  */
 
 require_once __DIR__ . '/legacy_php.php';
+require_once __DIR__ . '/anlage_darstellbar.php';
 require_once __DIR__ . '/incident.php';
 require_once __DIR__ . '/email_attachment.php';
 require_once __DIR__ . '/logbook_numbering.php';
@@ -4192,16 +4193,36 @@ final class EstabIncidentPdf extends vordruckaspdf
                     default => null,
                 };
 
-                if (is_array($imageFormat)) {
-                    if (!in_array(
-                        $extension,
-                        $imageFormat['extensions'],
-                        true
-                    )) {
-                        throw new EstabIncidentPdfInputException(
-                            'Dateiendung und erkannter Inhaltstyp einer Bildanlage stimmen nicht überein.'
-                        );
-                    }
+                if (
+                    is_array($imageFormat)
+                    && !in_array($extension, $imageFormat['extensions'], true)
+                ) {
+                    /*
+                     * Name und Inhalt widersprechen einander.
+                     *
+                     * Bis hierher brach das ganze Dossier ab -- wegen einer
+                     * von vierzig Anlagen, und mit einer Meldung, die nicht
+                     * sagte, welche. Wer ein Dossier braucht, braucht es
+                     * meist sofort.
+                     *
+                     * Dargestellt wird sie trotzdem nicht: Ein Nachweis zeigt
+                     * keinen Inhalt, den der Dateiname nicht ankuendigt. Sie
+                     * bekommt die Hinweisseite, die jede nicht darstellbare
+                     * Anlage bekommt -- und darauf steht im Klartext, woran
+                     * es liegt. Die Datei selbst liegt bytegleich im Dossier.
+                     */
+                    $this->drawAttachmentInformationPage(
+                        $attachment,
+                        $position,
+                        $total,
+                        estab_anlage_widerspruch_satz(
+                            (string) ($attachment['display_name'] ?? $archiveName),
+                            $extension,
+                            $mime
+                        )
+                    );
+                    $stats['attachment_information_pages']++;
+                } elseif (is_array($imageFormat)) {
                     $image = self::attachmentImageInfo(
                         $embedded['data'],
                         (int) $imageFormat['type']
@@ -4379,19 +4400,32 @@ final class EstabIncidentPdf extends vordruckaspdf
                             true
                         )
                     ) {
-                        throw new EstabIncidentPdfInputException(
-                            'Dateiendung und erkannter Inhaltstyp einer darstellbaren Anlage stimmen nicht überein.'
+                        // Widerspruch zwischen Name und Inhalt: nicht
+                        // dargestellt, aber auch kein Grund, das ganze
+                        // Dossier zu verweigern. Der Grund steht auf der
+                        // Seite, mit Namen, Endung und erkanntem Inhalt.
+                        $this->drawAttachmentInformationPage(
+                            $attachment,
+                            $position,
+                            $total,
+                            estab_anlage_widerspruch_satz(
+                                (string) ($attachment['display_name'] ?? $archiveName),
+                                $extension,
+                                $mime
+                            )
                         );
+                        $stats['attachment_information_pages']++;
+                    } else {
+                        $this->drawAttachmentInformationPage(
+                            $attachment,
+                            $position,
+                            $total,
+                            'Archive, Office-Dateien, Videos und andere binäre '
+                                . 'Formate lassen sich nicht vollständig und '
+                                . 'verlässlich auf statische PDF-Seiten abbilden.'
+                        );
+                        $stats['attachment_information_pages']++;
                     }
-                    $this->drawAttachmentInformationPage(
-                        $attachment,
-                        $position,
-                        $total,
-                        'Archive, Office-Dateien, Videos und andere binäre '
-                            . 'Formate lassen sich nicht vollständig und '
-                            . 'verlässlich auf statische PDF-Seiten abbilden.'
-                    );
-                    $stats['attachment_information_pages']++;
                 }
 
                 if (microtime(true) >= $renderDeadline) {

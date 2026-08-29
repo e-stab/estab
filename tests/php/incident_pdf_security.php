@@ -990,42 +990,57 @@ try {
         'declared MIME differing from the immutable byte snapshot was accepted'
     );
 
-    $mismatchPdf = new EstabIncidentPdf($incident, 1024);
-    $mismatchEmbedded = $mismatchPdf->embedAttachment(
-        $attachmentPath,
-        'Anlage-Falsch.jpg',
-        'text/plain',
-        'MIME mismatch proof'
-    );
-    $assertThrows(
-        static fn (): array => $mismatchPdf->addAttachmentPages([[
-            'display_name' => 'Anlage-Falsch.jpg',
+    /*
+     * Widerspricht der Inhalt der Endung, wird die Anlage **nicht
+     * dargestellt** -- ein Nachweis zeigt keinen Inhalt, den der Dateiname
+     * nicht ankuendigt.
+     *
+     * Bis hierher brach deswegen das ganze Dossier ab. Das war
+     * unverhaeltnismaessig: eine von vierzig Anlagen, und wer ein Dossier
+     * braucht, braucht es meist sofort. Die Sicherheitsaussage bleibt, die
+     * Form der Weigerung aendert sich -- die Anlage bekommt die
+     * Hinweisseite, die jede nicht darstellbare Datei bekommt, und darauf
+     * steht im Klartext, woran es liegt.
+     *
+     * Geprueft wird das jetzt schaerfer als vorher: nicht nur, dass keine
+     * Darstellung entsteht, sondern dass genau eine Hinweisseite entsteht
+     * und der Grund darauf steht.
+     */
+    foreach ([
+        ['Anlage-Falsch.jpg', 'EL0003.jpg', 'MIME mismatch proof', 'jpg'],
+        ['Anlage-Falsch.eml', 'EL0004.eml', 'EML mismatch proof', 'eml'],
+    ] as [$mismatchName, $mismatchArchive, $mismatchNote, $mismatchExtension]) {
+        $mismatchPdf = new EstabIncidentPdf($incident, 1024);
+        $mismatchPdf->SetCompression(false);
+        $mismatchEmbedded = $mismatchPdf->embedAttachment(
+            $attachmentPath,
+            $mismatchName,
+            'text/plain',
+            $mismatchNote
+        );
+        $mismatchVisibility = $mismatchPdf->addAttachmentPages([[
+            'display_name' => $mismatchName,
             'stored_name' => $mismatchEmbedded['name'],
-            'archive_name' => 'EL0003.jpg',
+            'archive_name' => $mismatchArchive,
             'size' => $mismatchEmbedded['size'],
             'sha256' => $mismatchEmbedded['sha256'],
             'mime' => $mismatchEmbedded['mime'],
-        ]]),
-        'renderable extension with mismatching detected MIME type was accepted'
-    );
-    $emailMismatchPdf = new EstabIncidentPdf($incident, 1024);
-    $emailMismatchEmbedded = $emailMismatchPdf->embedAttachment(
-        $attachmentPath,
-        'Anlage-Falsch.eml',
-        'text/plain',
-        'EML mismatch proof'
-    );
-    $assertThrows(
-        static fn (): array => $emailMismatchPdf->addAttachmentPages([[
-            'display_name' => 'Anlage-Falsch.eml',
-            'stored_name' => $emailMismatchEmbedded['name'],
-            'archive_name' => 'EL0004.eml',
-            'size' => $emailMismatchEmbedded['size'],
-            'sha256' => $emailMismatchEmbedded['sha256'],
-            'mime' => $emailMismatchEmbedded['mime'],
-        ]]),
-        'EML extension with mismatching detected MIME type was accepted'
-    );
+        ]]);
+        $mismatchDocument = $mismatchPdf->Output('', 'S');
+        $assert(
+            $mismatchVisibility['attachment_rendered_pages'] === 0
+                && $mismatchVisibility['attachment_information_pages'] === 1,
+            $mismatchExtension . ' extension with mismatching detected MIME '
+                . 'type was rendered instead of refused'
+        );
+        $assert(
+            str_contains($mismatchDocument, 'Hinweisseite')
+                && str_contains($mismatchDocument, $mismatchName)
+                && str_contains($mismatchDocument, 'text/plain'),
+            $mismatchExtension . ' mismatch information page does not name '
+                . 'the attachment and its detected content type'
+        );
+    }
 
     $lineLimitPath = $temporaryRoot . '/too-many-lines.txt';
     $lineLimitPayload = str_repeat("x\n", 13000);
