@@ -33,6 +33,7 @@ require_once __DIR__ . '/message_repository.php';
 require_once __DIR__ . '/message_transport.php';
 require_once __DIR__ . '/message_priority.php';
 require_once __DIR__ . '/datetime.php';
+require_once __DIR__ . '/nv_datetime_group.php';
 
 /**
  * Die Spalten der Nachweisung.
@@ -61,7 +62,9 @@ function estab_nachweisung_spalten(bool $mitRichtung): array
     $spalten[] = ['schluessel' => 'gegenueber', 'kopf' => 'Von/An',
         'breite' => 16, 'sortierbar' => true, 'suchbar' => true, 'art' => 'text'];
     $spalten[] = ['schluessel' => 'abfasszeit', 'kopf' => 'Abfasszeit',
-        'breite' => 11, 'sortierbar' => true, 'suchbar' => false, 'art' => 'zeit'];
+        'breite' => 11, 'sortierbar' => true, 'suchbar' => false, 'art' => 'zeit',
+        'zelle' => static fn (array $z): string =>
+            estab_message_html((string) ($z['abfasszeit_kurz'] ?? ''))];
         /*
      * Der Wunsch steht in der Anzeige, nicht im Wert -- sonst fiele die
      * Zeile aus dem Filter ihres eigenen Mittels heraus.
@@ -194,10 +197,25 @@ function estab_nachweisung_zeile(array $zeile): array
     $gegenueber = $richtung === 'A'
         ? (string) ($zeile['10_anschrift'] ?? '')
         : (string) ($zeile['13_abseinheit'] ?? '');
-    $abfasszeit = (string) ($zeile['12_abfzeit'] ?? '');
-    if ($abfasszeit !== '') {
-        $teile = estab_datetime_parts($abfasszeit);
-        $abfasszeit = (string) ($teile['stak'] ?? '');
+    /*
+     * Der Wert ist die lange taktische Form, die Anzeige die kurze.
+     *
+     * Frueher stand hier nur die kurze Form "TThhmm". Die Spalte ist als
+     * Art "zeit" sortierbar, und ohne Monat und Jahr ist "030215" kein
+     * Zeitpunkt: Das Bauteil deutete es als Uhrzeit des heutigen Tages
+     * und ordnete die Nachweisung falsch. Die Anzeige bleibt kurz -- so
+     * steht es auf dem Vordruck --, der Wert traegt den Monat.
+     */
+    $abfasszeitRoh = (string) ($zeile['12_abfzeit'] ?? '');
+    $abfasszeit = '';
+    $abfasszeitKurz = '';
+    if ($abfasszeitRoh !== '') {
+        $teile = estab_datetime_parts($abfasszeitRoh);
+        $abfasszeitKurz = (string) ($teile['stak'] ?? '');
+        $abfasszeit = estab_datetime_to_tactical(
+            $abfasszeitRoh,
+            estab_nv_month_abbreviations()
+        );
     }
     $anhaenge = count(estab_message_list_attachment_tokens($zeile['12_anhang'] ?? null));
     // Reiner Text, keine Auszeichnung: Das Bauteil maskiert, kürzt auf zwei
@@ -215,6 +233,7 @@ function estab_nachweisung_zeile(array $zeile): array
         'nachweis' => estab_message_list_tbb_evidence_label($zeile),
         'gegenueber' => $gegenueber,
         'abfasszeit' => $abfasszeit,
+        'abfasszeit_kurz' => $abfasszeitKurz,
         'mittel' => estab_nachweisung_weg($zeile),
         'wunsch' => estab_nachweisung_weg_ist_wunsch($zeile),
         'inhalt' => $inhalt,

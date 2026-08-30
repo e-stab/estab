@@ -18,6 +18,57 @@ declare(strict_types=1);
  */
 
 require_once __DIR__ . '/dv_operations.php';
+require_once __DIR__ . '/datetime.php';
+require_once __DIR__ . '/nv_datetime_group.php';
+require_once __DIR__ . '/message_repository.php';
+
+/**
+ * Der Wert einer Zeitspalte: die lange taktische Form.
+ *
+ * Auf dem Vordruck steht die Zeit kurz, als „TThhmm". Als *Wert* einer
+ * sortierbaren Spalte taugt diese Form nicht: Ohne Monat und Jahr ist
+ * „030215" kein Zeitpunkt, sondern eine Ziffernfolge, und das Bauteil
+ * deutete sie als Uhrzeit des heutigen Tages. Vier Listen sortierten so
+ * den 25. August vor den 3. August und den 3. Juli dazwischen -- ohne
+ * eine Fehlermeldung, denn jede Deutung gelang ja.
+ *
+ * Deshalb zwei Angaben je Zeile: der Wert trägt den Monat, die Anzeige
+ * bleibt kurz.
+ */
+function estab_liste_zeitwert(mixed $datenbankwert): string
+{
+    return estab_datetime_to_tactical(
+        $datenbankwert,
+        estab_nv_month_abbreviations()
+    );
+}
+
+/** Die Anzeige einer Zeitspalte: kurz, wie auf dem Vordruck. */
+function estab_liste_zeitanzeige(mixed $datenbankwert): string
+{
+    $teile = estab_datetime_parts($datenbankwert);
+    return (string) ($teile['stak'] ?? '');
+}
+
+/**
+ * Die Zeitspalte selbst -- an einer Stelle, damit die Trennung von Wert
+ * und Anzeige nicht in jeder Liste einzeln gelingen muss.
+ *
+ * @return array<string,mixed>
+ */
+function estab_liste_spalte_zeit(
+    string $kopf = 'Zeit',
+    int $breite = 12,
+    bool $suchbar = true,
+    string $anzeigefeld = 'zeit_kurz'
+): array {
+    return [
+        'schluessel' => 'zeit', 'kopf' => $kopf, 'breite' => $breite,
+        'sortierbar' => true, 'suchbar' => $suchbar, 'art' => 'zeit',
+        'zelle' => static fn (array $z): string =>
+            estab_message_html((string) ($z[$anzeigefeld] ?? '')),
+    ];
+}
 
 /**
  * Das Übermittlungsmittel beim Namen nennen.
@@ -54,10 +105,7 @@ function estab_liste_medium_name(mixed $medium): string
 function estab_liste_spalten_ausgang(array $medien): array
 {
     return [
-        [
-            'schluessel' => 'zeit', 'kopf' => 'Zeit', 'breite' => 12,
-            'sortierbar' => true, 'suchbar' => true, 'art' => 'zeit',
-        ],
+        estab_liste_spalte_zeit(),
         [
             'schluessel' => 'medium', 'kopf' => 'Mittel', 'breite' => 15,
             'sortierbar' => true, 'suchbar' => true, 'art' => 'text',
@@ -101,10 +149,7 @@ function estab_liste_spalten_disposition(): array
             'filter' => ['Eingang', 'Ausgang'],
             'filtername' => 'Ein- und Ausgang',
         ],
-        [
-            'schluessel' => 'zeit', 'kopf' => 'Zeit', 'breite' => 12,
-            'sortierbar' => true, 'suchbar' => true, 'art' => 'zeit',
-        ],
+        estab_liste_spalte_zeit(),
         [
             'schluessel' => 'vorrang', 'kopf' => 'Vorrang', 'breite' => 11,
             'sortierbar' => true, 'suchbar' => true, 'art' => 'vorrang',

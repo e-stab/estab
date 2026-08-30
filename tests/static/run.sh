@@ -255,6 +255,7 @@ for test_name in \
     pdf_gleichzeitig \
     rm_keine_doppelsendung \
     rm_nachweis_weg \
+    zeit_sortierung \
     pruefungen_vollstaendig
 do
     [ -f "$repo_root/tests/php/$test_name.php" ] || continue

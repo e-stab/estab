@@ -1399,7 +1399,8 @@ class Listen extends kategorien {
             $dispoZeilen[] = array (
               "lfd" => estab_message_positive_id ($row ["00_lfd"]),
               "richtung" => $direction === "E" ? "Eingang" : "Ausgang",
-              "zeit" => (string) ($abfzeit ["stak"] ?? ""),
+              "zeit" => estab_liste_zeitwert ($row ["12_abfzeit"] ?? null),
+              "zeit_kurz" => (string) ($abfzeit ["stak"] ?? ""),
               "vorrang" => estab_message_priority_label ($row ["09_vorrangstufe"]),
               "rufname" => (string) ($row ["05_gegenstelle"] ?: "noch offen"),
               "gegenstelle" => (string) $address,
@@ -1489,7 +1490,8 @@ class Listen extends kategorien {
             }
             $ausgangZeilen[] = array (
               "lfd" => estab_message_positive_id ($row ["00_lfd"]),
-              "zeit" => (string) ($abfzeit ["stak"] ?? ""),
+              "zeit" => estab_liste_zeitwert ($row ["12_abfzeit"] ?? null),
+              "zeit_kurz" => (string) ($abfzeit ["stak"] ?? ""),
               "medium" => $medium,
               "vorrang" => estab_message_priority_label ($row ["09_vorrangstufe"]),
               "anschrift" => (string) ($row ["10_anschrift"] ?? ""),
@@ -2010,7 +2012,8 @@ class Listen extends kategorien {
             $abfzeit = convdatetimeto ($row ["12_abfzeit"]);
             $sichtZeilen[] = array (
               "lfd" => estab_message_positive_id ($row ["00_lfd"]),
-              "zeit" => (string) ($abfzeit ["stak"] ?? ""),
+              "zeit" => estab_liste_zeitwert ($row ["12_abfzeit"] ?? null),
+              "zeit_kurz" => (string) ($abfzeit ["stak"] ?? ""),
               "vorrang" => estab_message_priority_label ($row ["09_vorrangstufe"]),
               "anschrift" => (string) ($row ["10_anschrift"] ?? ""),
               "inhalt" => (string) ($row ["12_inhalt"] ?? ""),
@@ -2028,8 +2031,7 @@ class Listen extends kategorien {
             );
           }
           $sichtSpalten = array (
-            array ("schluessel" => "zeit", "kopf" => "Zeit", "breite" => 12,
-              "sortierbar" => true, "suchbar" => true, "art" => "zeit"),
+            estab_liste_spalte_zeit (),
             array ("schluessel" => "vorrang", "kopf" => "Vorrang",
               "breite" => 12,
               "sortierbar" => true, "suchbar" => true, "art" => "vorrang"),

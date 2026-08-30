@@ -129,6 +129,22 @@ function estab_tabelle_zeitpunkt(string $wert): ?int
             );
         }
     }
+    /*
+     * Eine blosse Ziffernfolge ist kein Zeitpunkt.
+     *
+     * strtotime() liest "030215" bereitwillig als 03:02:15 des heutigen
+     * Tages und "240215" als 00:02 des Folgetages. Vier Listen gaben ihrer
+     * Zeitspalte genau diese kurze taktische Form "TThhmm" mit; die
+     * Sortierung stellte damit den 25. August vor den 3. August und den
+     * 3. Juli dazwischen -- ohne Fehlermeldung, denn jede Deutung gelang
+     * ja. Ohne Monat und Jahr hat die Frage "welcher Zeitpunkt?" keine
+     * Antwort, und ein Zerleger, der sich trotzdem eine gibt, ist
+     * schlimmer als einer, der nichts liefert: Die leere Antwort faellt
+     * auf, die erfundene nicht.
+     */
+    if (preg_match('~\\A\\d+\\z~u', $wert) === 1) {
+        return null;
+    }
     $zeitpunkt = strtotime($wert);
     return $zeitpunkt === false ? null : $zeitpunkt;
 }
