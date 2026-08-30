@@ -701,6 +701,47 @@ $assert(
     'Eine Tabelle mit sortierbarer und durchsuchbarer Spalte wird abgewiesen.'
 );
 
+/* --- Die Zelle ist die Grenze --- */
+
+/*
+ * Ein inline-flex-Kasten misst sich an seinem Inhalt und nicht an der
+ * Zelle, in der er steht. In "Stab lesen" waren das 82 Zellen: Die
+ * Transportmarke "abgeschlossen" (120 Bildpunkte) lag in einer Spalte
+ * von 97 und schob sich ueber die Vorrangstufe -- auf dem Bildschirm
+ * stand "abgeschlossStaatsnot". Die Anschriftenspalte tat dasselbe.
+ *
+ * Zwei Regeln halten das: die Bindung an die Zelle, und die Abwesenheit
+ * einer Gegenregel. `word-break: keep-all` stand einmal auf den Knoepfen
+ * in Zellen und war damals richtig, weil die Zelle `overflow-wrap:
+ * anywhere` sagte; mit `break-word` verhindert es genau den Bruch, den
+ * ein zu langes Wort braucht. Wer es zurueckholt, holt den Ueberlauf
+ * zurueck.
+ */
+$stil = (string) file_get_contents($root . "/estab-ui.css");
+$assert(
+    preg_match(
+        '~\.estab-tabelle-blatt\s+tbody\s+td\s+\*\s*\{[^}]*max-width:\s*100%~su',
+        $stil
+    ) === 1,
+    estab_ux_requirement(
+        'GES-TABELLE-EINHEITLICH',
+        'Nichts bindet den Inhalt einer Zelle an ihre Breite. Ein '
+            . 'inline-flex-Kasten waechst dann ueber die Nachbarspalte.'
+    )
+);
+$assert(
+    preg_match(
+        '~\.estab-tabelle-blatt\s+tbody\s+td[^{]*\{[^}]*word-break:\s*keep-all~su',
+        $stil
+    ) === 0,
+    estab_ux_requirement(
+        'GES-TABELLE-EINHEITLICH',
+        '`word-break: keep-all` steht wieder in einer Zelle. Ein Wort, '
+            . 'das allein nicht in die Spalte passt, kann dann nicht '
+            . 'brechen und laeuft in die Nachbarspalte.'
+    )
+);
+
 printf(
     "Gestaltung Tabellenbauteil: OK (%d assertions, %d Spalten, %d Zeilen)\n",
     $assertions,

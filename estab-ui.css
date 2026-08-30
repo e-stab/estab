@@ -5353,17 +5353,32 @@ body.estab-message-form-body {
     border-bottom: 0;
 }
 
-/* Ein Knopf ist eine Beschriftung, kein Fliesstext.
+/* Die Zelle ist die Grenze, auch fuer einen inline-flex-Kasten.
 
-   `overflow-wrap: anywhere` gehoert in eine Zelle mit Betreffzeilen -- ein
-   Wort ohne Leerzeichen sprengte sonst die Spalte. Auf einer
-   Knopfbeschriftung richtet dieselbe Regel Schaden an: Aus "Auswaehlen"
-   wird "Auswaeh / len", der Knopf wird dreizeilig, und jede Zeile der
-   Kontenliste wuchs damit auf 97 Bildpunkte. Achtzehn Konten passten so
-   auf keinen Bildschirm mehr. */
-.estab-tabelle-blatt tbody td .estab-button {
-    overflow-wrap: normal;
-    word-break: keep-all;
+   Ein inline-flex-Kasten misst sich an seinem Inhalt: Er wird so breit,
+   wie sein laengstes Wort es verlangt, und die Spaltenbreite der Tabelle
+   geht ihn nichts an. In "Stab lesen" waren das 82 Zellen: Die
+   Transportmarke "abgeschlossen" (120 Bildpunkte) lag in einer Zelle von
+   97 und schob sich ueber die Vorrangstufe daneben -- auf dem Bildschirm
+   stand "abgeschlossStaatsnot". Die Anschriftenspalte tat dasselbe.
+
+   `max-width` bindet den Kasten an die Zelle, `min-width: 0` erlaubt
+   seinen Teilen, unter ihre Inhaltsbreite zu schrumpfen; ohne das zweite
+   bliebe der Kasten breit und liefe nur innen ueber. Die Regel gilt fuer
+   jede Ebene in der Zelle, nicht nur fuer die oberste: Das Bauteil legt um
+   jeden Zellenwert eine Klammer, der Kasten haengt also eine Stufe tiefer,
+   als man erwartet.
+
+   Eine Knopfbeschriftung ist davon nicht ausgenommen. Frueher stand hier
+   `word-break: keep-all`, damit aus "Auswaehlen" nicht "Auswaeh / len"
+   wird -- das war noetig, solange die Zelle `overflow-wrap: anywhere`
+   sagte und jedes Wort eifrig brach. Mit `break-word` bricht ein Wort
+   erst, wenn es allein nicht in die Zeile passt: "Auswaehlen" bleibt
+   ganz, "Energieversorger" in einer Spalte von 89 Bildpunkten bricht --
+   und muss brechen. */
+.estab-tabelle-blatt tbody td * {
+    max-width: 100%;
+    min-width: 0;
 }
 
 /* Eine Zeile, die Aufmerksamkeit verlangt.
