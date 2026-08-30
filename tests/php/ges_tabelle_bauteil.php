@@ -496,6 +496,156 @@ $assert(
         . 'nach Dringlichkeit. Die Prüfung oben wäre damit kein Nachweis.'
 );
 
+
+/*
+ * Die Zusicherungsliste gilt fuer jede eingesetzte Tabelle.
+ *
+ * > R5.5: „Alle Tabellen tragen denselben Aufbau und dieselbe Bedienung --
+ * > ein Test haelt alle eingesetzten Tabellen gegen dieselbe
+ * > Zusicherungsliste."
+ *
+ * Bis hierher pruefte diese Datei das Bauteil an einer erfundenen Tabelle.
+ * Das laesst eine Luecke: Eine Seite kann das Bauteil aufrufen und ihm
+ * lauter Spalten geben, die weder sortierbar noch durchsuchbar sind. Sie
+ * saehe dann aus wie jede andere Liste und koennte nichts.
+ *
+ * Geprueft wird deshalb nicht der Quelltext der Seiten -- den kann man
+ * lesen, ohne dass er etwas bedeutet --, sondern das Bauteil weist eine
+ * solche Tabelle beim Bauen ab. Damit ist jede eingesetzte Tabelle
+ * geprueft, auch die, die es noch nicht gibt.
+ *
+ * Ausgenommen sind Tafeln ohne Baender (`baender => false`): Eine
+ * Statustafel mit vier festen Zeilen braucht keine Sortierung, und ein
+ * Suchfeld darueber waere Beiwerk.
+ */
+$abgewiesen = static function (array $tabelle) use (&$assertions): ?string {
+    try {
+        estab_tabelle_markup($tabelle);
+    } catch (Throwable $fehler) {
+        return $fehler->getMessage();
+    }
+    return null;
+};
+
+$ohneSortierung = [
+    'id' => 'probe-ohne-sortierung',
+    'beschriftung' => 'Eine Liste ohne jede Sortierung',
+    'spalten' => [
+        ['schluessel' => 'a', 'kopf' => 'A', 'breite' => 50,
+            'sortierbar' => false, 'suchbar' => true],
+        ['schluessel' => 'b', 'kopf' => 'B', 'breite' => 50,
+            'sortierbar' => false, 'suchbar' => true],
+    ],
+    'zeilen' => [['a' => '1', 'b' => '2']],
+];
+$meldung = $abgewiesen($ohneSortierung);
+$assert(
+    is_string($meldung) && str_contains($meldung, 'sortierbar'),
+    estab_ux_requirement(
+        'GES-TABELLE-SORTIERUNG',
+        'Eine Tabelle ohne eine einzige sortierbare Spalte wird gebaut. Sie '
+            . 'saehe aus wie jede andere Liste und koennte nichts.'
+    )
+);
+
+$ohneSuche = [
+    'id' => 'probe-ohne-suche',
+    'beschriftung' => 'Eine Liste ohne jede Suche',
+    'spalten' => [
+        ['schluessel' => 'a', 'kopf' => 'A', 'breite' => 50,
+            'sortierbar' => true, 'suchbar' => false],
+        ['schluessel' => 'b', 'kopf' => 'B', 'breite' => 50,
+            'sortierbar' => true, 'suchbar' => false],
+    ],
+    'zeilen' => [['a' => '1', 'b' => '2']],
+];
+$meldung = $abgewiesen($ohneSuche);
+$assert(
+    is_string($meldung) && str_contains($meldung, 'durchsuchbar'),
+    estab_ux_requirement(
+        'GES-TABELLE-SUCHE',
+        'Eine Tabelle ohne eine einzige durchsuchbare Spalte wird gebaut. '
+            . 'Das Suchfeld darueber faende dann nie etwas.'
+    )
+);
+
+/*
+ * Eine Tafel ohne Baender darf beides nicht haben -- sie zeigt einen
+ * festen Stand, keine Liste.
+ */
+$assert(
+    $abgewiesen([
+        'id' => 'probe-tafel',
+        'beschriftung' => 'Ein fester Stand',
+        'baender' => false,
+        'spalten' => [
+            ['schluessel' => 'a', 'kopf' => 'A', 'breite' => 100,
+                'sortierbar' => false, 'suchbar' => false],
+        ],
+        'zeilen' => [['a' => '1']],
+    ]) === null,
+    estab_ux_requirement(
+        'GES-TABELLE-SORTIERUNG',
+        'Eine Statustafel ohne Baender wird abgewiesen, obwohl sie weder '
+            . 'Sortierung noch Suche braucht.'
+    )
+);
+
+/*
+ * Eine Tabelle, die ihre Auswahl selbst trifft, wird nicht abgewiesen.
+ *
+ * Das ist die Meldungsuebersicht: Sie sortiert und siebt in der Datenbank
+ * ueber alle Seiten und reicht dem Bauteil nur die fertige Seite herein.
+ * Ihre Spalten sind absichtlich nicht sortierbar -- eine Sortierung ueber
+ * fuenfzig angezeigte Zeilen waere eine andere als die ueber
+ * zwoelfhundert. Sie bringt ihre Bedienung unter `zusatzbaender` mit.
+ *
+ * Ohne diese Ausnahme haette die Regel oben die wichtigste Liste der
+ * Anwendung abgewiesen. Diese Probe haelt fest, dass sie es nicht tut.
+ */
+$assert(
+    $abgewiesen([
+        'id' => 'probe-fremde-auswahl',
+        'beschriftung' => 'Eine Liste, die selbst siebt',
+        'spalten' => [
+            ['schluessel' => 'a', 'kopf' => 'A', 'breite' => 100,
+                'sortierbar' => false, 'suchbar' => false],
+        ],
+        'zeilen' => [['a' => '1']],
+        'fremd' => [
+            'treffer' => 1200,
+            'gesamt' => 1200,
+            'seite' => 1,
+            'seiten' => 48,
+        ],
+    ]) === null,
+    estab_ux_requirement(
+        'GES-TABELLE-SORTIERUNG',
+        'Eine Tabelle mit eigener Auswahl wird abgewiesen, obwohl sie ihre '
+            . 'Sortierung und Suche selbst mitbringt.'
+    )
+);
+
+/*
+ * Und eine Tabelle, die beides hat, geht durch. Ohne diese Probe koennte
+ * die Abweisung alles ablehnen und die beiden Pruefungen oben waeren
+ * erfuellt, ohne etwas zu bedeuten.
+ */
+$assert(
+    $abgewiesen([
+        'id' => 'probe-vollstaendig',
+        'beschriftung' => 'Eine ordentliche Liste',
+        'spalten' => [
+            ['schluessel' => 'a', 'kopf' => 'A', 'breite' => 50,
+                'sortierbar' => true, 'suchbar' => true],
+            ['schluessel' => 'b', 'kopf' => 'B', 'breite' => 50,
+                'sortierbar' => false, 'suchbar' => false],
+        ],
+        'zeilen' => [['a' => '1', 'b' => '2']],
+    ]) === null,
+    'Eine Tabelle mit sortierbarer und durchsuchbarer Spalte wird abgewiesen.'
+);
+
 printf(
     "Gestaltung Tabellenbauteil: OK (%d assertions, %d Spalten, %d Zeilen)\n",
     $assertions,

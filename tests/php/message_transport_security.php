@@ -115,11 +115,26 @@ $nachweisungsSeite = (string) file_get_contents($root . '/4fach/nachwea.php');
  * "Fu" sagt einem Leser des Nachweises nichts, was "Funk" nicht
  * deutlicher saegte.
  */
+/*
+ * Die Spalte heisst "Weg" und zeigt den Weg, ueber den die Meldung ging.
+ *
+ * Sie hiess "Mittel" und zeigte Feld 1 -- beim Ausgang also das Mittel,
+ * das der Verfasser sich wuenscht, nicht das gewaehlte. Ein Nachweis, der
+ * beides gleich darstellt, behauptet einen Weg, den es vielleicht nie
+ * gab. Seit dem 31.08.2026 steht dort das Mittel des tatsaechlich
+ * gewaehlten Weges (Feld 6, `06_befwegausw`); ist noch keiner gewaehlt,
+ * steht das Wunschmittel -- als Wunsch gekennzeichnet.
+ *
+ * Uebersetzt wird zentral: "Fu" sagt einem Leser des Nachweises nichts,
+ * was "Funk" nicht deutlicher saegte.
+ */
 $assert(
     str_contains($nachweisung, 'estab_message_medium_text')
-        && str_contains($nachweisung, "'kopf' => 'Mittel'"),
-    'Die Nachweisung nennt das Uebermittlungsmittel nicht oder uebersetzt '
-        . 'es nicht zentral'
+        && str_contains($nachweisung, "'kopf' => 'Weg'")
+        && str_contains($nachweisung, "\$zeile['06_befwegausw']")
+        && str_contains($nachweisung, 'm.`06_befwegausw`'),
+    'Die Nachweisung nennt nicht den Weg, ueber den befoerdert wurde, oder '
+        . 'uebersetzt ihn nicht zentral'
 );
 
 /*

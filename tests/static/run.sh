@@ -254,6 +254,7 @@ for test_name in \
     betriebsmittel_contract \
     pdf_gleichzeitig \
     rm_keine_doppelsendung \
+    rm_nachweis_weg \
     pruefungen_vollstaendig
 do
     [ -f "$repo_root/tests/php/$test_name.php" ] || continue

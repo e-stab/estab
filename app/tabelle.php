@@ -886,6 +886,68 @@ function estab_tabelle_markup(array $tabelle): string
     }
 
     $eigeneBaender = ($tabelle['baender'] ?? true) === false;
+
+    /*
+     * Eine Liste, die nichts kann, sieht aus wie eine, die alles kann.
+     *
+     * Das Bauteil zeichnet ein Suchband, eine Ergebnisleiste und einen
+     * Blätterer -- gleichgültig, ob die Spalten dahinter etwas hergeben.
+     * Eine Seite, die lauter unsortierbare und undurchsuchbare Spalten
+     * übergibt, bekäme eine Tabelle mit einem Suchfeld, das nie etwas
+     * findet, und mit Köpfen, die auf Klick nichts tun. Das ist schlimmer
+     * als eine schlichte Tabelle: Es verspricht eine Bedienung, die es
+     * nicht gibt.
+     *
+     * Deshalb wird hier abgewiesen statt still gezeichnet. Damit ist
+     * jede eingesetzte Tabelle gegen dieselbe Zusicherung gehalten -- auch
+     * die, die es noch nicht gibt (SPEC.md R5.5).
+     *
+     * Nicht für Tafeln ohne Bänder: Eine Statustafel mit vier festen
+     * Zeilen zeigt einen Stand, keine Liste. Sortierung und Suche wären
+     * dort Beiwerk.
+     */
+    /*
+     * Und nicht für Tabellen, die ihre Auswahl selbst treffen.
+     *
+     * Die Meldungsübersicht sortiert und siebt in der Datenbank über
+     * *alle* Seiten und reicht dem Bauteil nur die fertige Seite herein
+     * (`fremd`). Ihre Spalten sind deshalb absichtlich nicht sortierbar --
+     * eine Sortierung über fünfzig angezeigte Zeilen wäre eine andere
+     * Sortierung als die über zwölfhundert. Sie bringt ihre Bedienung
+     * unter `zusatzbaender` mit.
+     *
+     * Ohne diese Ausnahme hätte die Regel die wichtigste Liste der
+     * Anwendung abgewiesen. Gefunden beim Nachzählen, bevor sie lief.
+     */
+    if (!$eigeneBaender && !is_array($fremd)) {
+        $sortierbareSpalten = 0;
+        $suchbareSpalten = 0;
+        foreach ($spalten as $spalte) {
+            if ($spalte['sortierbar']) {
+                $sortierbareSpalten++;
+            }
+            if ($spalte['suchbar']) {
+                $suchbareSpalten++;
+            }
+        }
+        if ($sortierbareSpalten === 0) {
+            throw new InvalidArgumentException(
+                'Die Tabelle "' . $id . '" hat keine einzige sortierbare '
+                    . 'Spalte. Ihre Spaltenköpfe sähen aus wie Knöpfe und '
+                    . 'täten nichts. Entweder eine Spalte wird sortierbar, '
+                    . 'oder die Tabelle trägt "baender" => false und zeigt '
+                    . 'einen festen Stand.'
+            );
+        }
+        if ($suchbareSpalten === 0) {
+            throw new InvalidArgumentException(
+                'Die Tabelle "' . $id . '" hat keine einzige durchsuchbare '
+                    . 'Spalte. Das Suchfeld darüber fände nie etwas. '
+                    . 'Entweder eine Spalte wird durchsuchbar, oder die '
+                    . 'Tabelle trägt "baender" => false.'
+            );
+        }
+    }
     // Eine schmale Tabelle mit wenigen Spalten wird erst spaeter zu Karten.
     $markup = '<section class="estab-tabelle'
         . (($tabelle['schmal'] ?? false) === true
