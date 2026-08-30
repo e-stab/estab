@@ -136,31 +136,26 @@ function estab_overview_detail_link ($recordId, $label) {
        estab_message_html ($label)."</a>\n";
 }
 
-function estab_overview_row_start ($priority) {
-  return $priority
-    ? "<tr style=\"background-color: rgb(255,255,0); color: #000000; font-weight:bold;\">\n"
-    : "<tr>\n";
-}
+/*
+ * Hier standen zwei Funktionen ohne Aufrufer:
+ * estab_overview_row_start und estab_overview_recipient_cell.
+ *
+ * Sie stammen aus der Zeit, als die Meldungsuebersicht ihre Zeilen selbst
+ * zeichnete. Seit sie aus dem Tabellenbauteil kommt, ruft sie niemand
+ * mehr. Die erste trug dabei ein fest eingetragenes Farbpaar -- Gelb auf
+ * Schwarz --, das kein Kontrastwaechter erreichte: Sie stand nicht im
+ * Stylesheet und nicht in der Liste, die list_contrast_security absucht.
+ *
+ * Gefunden beim Nachzaehlen der Aufrufer, nicht durch eine Pruefung.
+ */
 
-function estab_overview_recipient_cell ($copyColor, array $backgroundColors) {
-  return estab_recipient_copy_cell_html (
-    $copyColor,
-    $backgroundColors,
-    "<p><img src=\"null.gif\" alt=\"leer\"></p>"
-  );
-}
-
-function estab_overview_empty_row ($columnCount) {
-  $columnCount = filter_var (
-    $columnCount,
-    FILTER_VALIDATE_INT,
-    array ("options" => array ("min_range" => 1, "max_range" => 100))
-  );
-  if (!is_int ($columnCount)) {
-    throw new InvalidArgumentException ("Ungültige Spaltenanzahl");
-  }
-  return "<tr><td colspan=\"".$columnCount."\">Keine Meldungen vorhanden.</td></tr>\n";
-}
+/*
+ * Auch estab_overview_empty_row hatte keinen Aufrufer mehr. Der Satz bei
+ * leerer Trefferliste kommt seit der Umstellung aus dem Tabellenbauteil
+ * ("leer"), das ihn ueber die richtige Spaltenzahl setzt -- die Zahl von
+ * Hand mitzufuehren war genau die Fehlerquelle, gegen die der Zerleger
+ * des Bauteils heute abbricht.
+ */
 
 function estab_overview_forbid () {
   estab_session_ui_abort (

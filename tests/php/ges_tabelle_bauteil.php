@@ -261,6 +261,61 @@ $blaettern = static function (array $quelle) use ($spalten, $viele): string {
     ]);
 };
 $erste = $blaettern([]);
+
+/*
+ * Wohlgeformtheit der Zeilen. Die Prüfung stand früher an den
+ * Zeilenbausteinen der Meldungsübersicht, die von Hand "<tr>" und "<td>"
+ * aneinanderreihten; seit das Bauteil die Zeilen baut, gehört sie
+ * hierher. Sie zählt nicht nur Zellen -- das tut die Prüfung darüber --
+ * sondern hält den Aufbau nach: keine Zelle außerhalb einer Zeile,
+ * keine Zeile in einer Zeile, keine offene Marke am Ende. Ein
+ * unbedachtes "zelle" könnte all das brechen.
+ */
+$wohlgeformt = static function (string $markup) use ($assert): int {
+    preg_match_all('~</?(?:tr|td|th)\b[^>]*>~i', $markup, $treffer);
+    $stapel = [];
+    $zellen = 0;
+    $verletzungen = 0;
+    foreach ($treffer[0] as $marke) {
+        $schliessend = str_starts_with($marke, '</');
+        preg_match('~^</?([a-z]+)~i', $marke, $name);
+        $name = strtolower($name[1] ?? '');
+        if (!$schliessend) {
+            if ($name === 'tr' && $stapel !== []) { $verletzungen++; }
+            if ($name !== 'tr') {
+                if (end($stapel) !== 'tr') { $verletzungen++; }
+                $zellen++;
+            }
+            $stapel[] = $name;
+            continue;
+        }
+        if (array_pop($stapel) !== $name) { $verletzungen++; }
+    }
+    if ($stapel !== []) { $verletzungen++; }
+    $assert(
+        $verletzungen === 0,
+        estab_ux_requirement(
+            'GES-TABELLE-EINHEITLICH',
+            'Das Bauteil setzt ' . $verletzungen . ' Zellen oder Zeilen '
+                . 'ineinander oder lässt Marken offen.'
+        )
+    );
+    return $zellen;
+};
+/*
+ * Drei Sorten Zeilen tragen je Spalte genau eine Zelle: die Kopfzeile,
+ * die Zeile der Spaltenmasken und die 25 Datenzeilen der Seite.
+ */
+$erwarteteZellen = (1 + 1 + 25) * 4;
+$assert(
+    $wohlgeformt($erste) === $erwarteteZellen,
+    estab_ux_requirement(
+        'GES-TABELLE-EINHEITLICH',
+        'Kopf, Suchmasken und Datenzeilen tragen zusammen nicht '
+            . $erwarteteZellen . ' Zellen, sondern ' . $wohlgeformt($erste)
+            . '. Eine Spalte fällt in einer der drei Zeilenarten aus.'
+    )
+);
 $assert(
     substr_count($erste, 'estab-tabelle-klammer') === 25 * 4,
     estab_ux_requirement(

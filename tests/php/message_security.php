@@ -560,14 +560,32 @@ $assert(
 );
 
 $assert(
-    substr_count(
+/*
+ * Die Durchschriftenfarbe und der fehlende Empfaenger.
+ *
+ * Beide standen in einem auskommentierten Block von 126 Zeilen, der
+ * geloescht ist (eine zweite Sichterliste, deren Abfrage `WHERE 1` las --
+ * also die Nachrichten aller Einsaetze). Die Aussage bleibt: Eine
+ * Funktion ohne eigene Durchschrift darf die Zelle nicht sprengen.
+ *
+ * Sie steht jetzt an der lebenden Stelle: "Stab lesen" sucht die Farbe
+ * der wirksamen Funktion heraus und leitet Grund *und* Tinte daraus ab --
+ * eine feste weisse Schrift machte jede Zeile ohne eigene Durchschrift
+ * unsichtbar.
+ *
+ * estab_recipient_copy_cell_html hat seit der Umstellung der Uebersicht
+ * keinen Aufrufer mehr; die einzige verbliebene Verwendung stand in einer
+ * Funktion, die selbst keinen hatte. Beide sind geloescht.
+ */
+    str_contains(
         $listSource,
-        'estab_recipient_copy_cell_html ('
-    ) === 1
-        && substr_count(
+        'estab_recipient_copy_background ('
+    )
+        && str_contains($listSource, 'estab_recipient_copy_ink (')
+        && str_contains(
             $listSource,
-            '$empfcolor [$recipientFunction] ?? ""'
-        ) === 1
+            '] ?? ""; // Empfänger dieser wirksamen Funktion'
+        )
         && str_contains(
             $listSource,
             'estab_message_list_render_table ('
@@ -586,12 +604,12 @@ $assert(
         && substr_count($listSource, '<form') === 4
         && substr_count($listSource, '</form>') === 4
         /*
-         * Nur noch eine handgeschriebene Vorrangzeile: Der Ausgang zeichnet
-         * seine Zeilen seit der Umstellung nicht mehr selbst. Was dort
-         * hervorhebt, ist eine Marke am Bauteil -- unten eigens geprueft,
-         * damit die gesenkte Zahl kein stiller Verlust ist.
+         * Keine handgeschriebene Vorrangzeile mehr. Ausgang und Sichtung
+         * zeichnen ihre Zeilen nicht mehr selbst; was dort hervorhebt, ist
+         * dieselbe Marke am Bauteil -- unten eigens geprueft, damit die
+         * gesunkene Zahl kein stiller Verlust ist.
          */
-        && substr_count($listSource, 'echo "<tr".$priorityStyle') === 1
+        && substr_count($listSource, 'echo "<tr".$priorityStyle') === 0
         && str_contains($listSource, 'estab-tabelle-zeile--achtung')
         && str_contains(
             $listSource,

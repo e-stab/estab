@@ -1997,38 +1997,82 @@ class Listen extends kategorien {
           estab_auth_close ($messageConnection);
         }
         $result = $result === array () ? "" : $result;
+        /*
+         * Die Sichtungsliste kommt aus dem Tabellenbauteil.
+         *
+         * Sie trug vier Spalten ohne Sortierung, ohne Suche und ohne
+         * Blaetterer. Ein Sichter sieht sie bei jeder Schicht; bei einer
+         * Uebung stehen dort schnell hundert Meldungen.
+         */
         if ($result != "" ){
-          echo "<table class=\"estab-tool-table estab-list-table\">\n<tbody>\n";
-          echo "<tr class=\"estab-list-head\">\n";
-          echo "<td>ZEIT</td>\n";
-          echo "<td>Vorst</td>\n";
-          echo "<td>Anschrift</td>\n";
-          echo "<td>Inhalt / Text</td>\n";
-          echo "</tr>";
-          foreach ($result as $row){
-           $priorityStyle = estab_message_priority_requires_attention (
-             $row["09_vorrangstufe"]
-           )
-               ? " style=\"background-color: rgb(220,0,0); color:#FFFFFF; font-weight:bold;\""
-               : "";
-           echo "<tr".$priorityStyle.">\n";
-           $abfzeit = convdatetimeto ($row["12_abfzeit"]);
-           echo "<td>"; if (($row["12_abfzeit"] != "")) { estab_list_detail_action ("sichter", "meldung", $row["00_lfd"], $abfzeit["stak"]); } else { echo "<span class=\"estab-message-list-clamp--empty\">–</span>";} echo "</td>\n";
-           echo "<td>";
-           estab_list_detail_action (
-             "sichter",
-             "meldung",
-             $row["00_lfd"],
-             estab_message_priority_label ($row["09_vorrangstufe"])
-           );
-           echo "</td>\n";
-           echo "<td>"; if (($row["10_anschrift"] != "")) { estab_list_detail_action ("sichter", "meldung", $row["00_lfd"], $row["10_anschrift"]); } else { echo "<span class=\"estab-message-list-clamp--empty\">–</span>";} echo "</td>\n";
-           echo "<td align=\"left\">"; if (($row["12_inhalt"] != "")) { estab_list_detail_action ("sichter", "meldung", $row["00_lfd"], $row["12_inhalt"]); } else { echo "<span class=\"estab-message-list-clamp--empty\">–</span>";} estab_list_attachment_badge ($row ["12_anhang"] ?? null); echo "</td>\n";
-           echo "</tr>";
-          } // foreach result row
-          echo "</tbody></table>";
+          $sichtZeilen = array ();
+          foreach ($result as $row) {
+            $abfzeit = convdatetimeto ($row ["12_abfzeit"]);
+            $sichtZeilen[] = array (
+              "lfd" => estab_message_positive_id ($row ["00_lfd"]),
+              "zeit" => (string) ($abfzeit ["stak"] ?? ""),
+              "vorrang" => estab_message_priority_label ($row ["09_vorrangstufe"]),
+              "anschrift" => (string) ($row ["10_anschrift"] ?? ""),
+              "inhalt" => (string) ($row ["12_inhalt"] ?? ""),
+              "anhang" => $row ["12_anhang"] ?? null,
+              /*
+               * Dringliches faellt auf -- als Marke, nicht als fest
+               * eingetragene Farbe. Hier stand rgb(220,0,0) auf Weiss,
+               * waehrend der Ausgang fuer dieselbe Bedingung Gelb nahm.
+               * Gleiche Bedeutung, gleiches Aussehen: beide tragen jetzt
+               * dieselbe Achtungsmarke.
+               */
+              "dringend" => estab_message_priority_requires_attention (
+                $row ["09_vorrangstufe"]
+              ),
+            );
+          }
+          $sichtSpalten = array (
+            array ("schluessel" => "zeit", "kopf" => "Zeit", "breite" => 12,
+              "sortierbar" => true, "suchbar" => true, "art" => "zeit"),
+            array ("schluessel" => "vorrang", "kopf" => "Vorrang",
+              "breite" => 12,
+              "sortierbar" => true, "suchbar" => true, "art" => "vorrang"),
+            array ("schluessel" => "anschrift", "kopf" => "Anschrift",
+              "breite" => 22,
+              "sortierbar" => true, "suchbar" => true, "art" => "text"),
+            array ("schluessel" => "inhalt", "kopf" => "Inhalt / Text",
+              "breite" => 42,
+              "sortierbar" => false, "suchbar" => true, "art" => "text",
+              "zelle" => static function (array $z): string {
+                ob_start ();
+                estab_list_attachment_badge ($z ["anhang"] ?? null);
+                $marke = (string) ob_get_clean ();
+                return estab_tabelle_zelleninhalt ((string) $z ["inhalt"]).$marke;
+              }),
+            array ("schluessel" => "aktion", "kopf" => "Aktion", "breite" => 12,
+              "sortierbar" => false, "suchbar" => false, "art" => "text",
+              "zelle" => static function (array $z): string {
+                ob_start ();
+                estab_list_detail_action (
+                  "sichter", "meldung", $z ["lfd"], "Vordruck öffnen",
+                  false, true
+                );
+                return (string) ob_get_clean ();
+              }),
+          );
+          echo estab_tabelle_markup (array (
+            "id" => "sichtung",
+            "beschriftung" => "Meldungen zur Sichtung mit Zeit, Vorrang und "
+              . "Anschrift",
+            "mindestbreite" => "54rem",
+            "zeilenmarke" => static function (array $z): string {
+              return ($z ["dringend"] ?? false)
+                ? "class=\"estab-tabelle-zeile--achtung\""
+                : "";
+            },
+            "spalten" => $sichtSpalten,
+            "zeilen" => $sichtZeilen,
+            "leer" => "Keine Meldung entspricht den gesetzten Filtern.",
+          ));
         } else {// if isset $result
-          echo "<big><big><big>Zur Zeit keine Meldung zu sichten</big></big></big>";
+          echo "<p class=\"estab-message-list-empty\">".
+               "Zur Zeit keine Meldung zu sichten</p>";
         }
 		
 		
@@ -2111,132 +2155,20 @@ class Listen extends kategorien {
         echo "</section>";
 		
 		
-/******************************************************************************************************************************************
-        $this->darstellungs_art ( $this->listenart );
-		$this->listen_navi () ;  //Navigationsbutton
-        include ("../4fcfg/fkt_rolle.inc.php");
-        $dbaccess = new db_access ($conf_4f_db ["server"], $conf_4f_db ["datenbank"],
-                             $conf_4f_tbl ["benutzer"], $conf_4f_db ["user"],  $conf_4f_db ["password"] );
-        $query = "SELECT `00_lfd`,
-                         `04_richtung`,
-                         `04_nummer`,
-                         `09_vorrangstufe`,
-                         `10_anschrift`,
-                         `12_abfzeit`,
-                         `13_abseinheit`,
-                         `12_inhalt`,
-                         `16_empf`
-                   FROM `".$conf_4f_tbl ["nachrichten"]."`
-                               WHERE 1 order by 04_nummer DESC, 09_vorrangstufe DESC ; ";          //
-
-        $result = $dbaccess->query_table ($query);
-        if  ($result != ""){
-          echo "<table class=\"estab-tool-table estab-list-table\">\n<tbody>\n";
-          echo "<tr class=\"estab-list-head\">\n";
-          echo "<td>Vorst</td>\n";
-          echo "<td>E/A</td>\n";
-          echo "<td>Nw-Nr.</td>\n";
-          echo "<td>Von/An</td>";
-          echo "<td>Abfasszeit</td>\n";
-          // Funktionen und Farben
-          for ( $i=1; $i<= count ($conf_empf); $i++ ) {
-            if ( ( $conf_empf [$i]["fkt"] != "Si" ) and ( $conf_empf [$i]["fkt"] != "A/W" ) ) {
-              echo "<td>";
-              echo $conf_empf [$i]["fkt"];
-              echo "</td>\n";
-            }
-          }
-          echo "<td>Inhalt</td>\n";
-          echo "</tr>";
-
-          foreach ($result as $row){
-             // VORRANGSTUFE
-             if ( ( $row["09_vorrangstufe"] != "") and ( $row["09_vorrangstufe"] != "eee" ) ){
-               echo "<tr class=\"estab-list-head\">\n";
-             }
-             echo "<td>";
-             if ( ( $row["09_vorrangstufe"] != "") and ( $row["09_vorrangstufe"] != "eee" ) ) {
-               echo "<a href=\"mainindex.php?fm=SI-Adminmeldung&00_lfd=".$row["00_lfd"]."\" target=\"_self\">".$row["09_vorrangstufe"]."</a>\n" ;
-             } else {
-               echo "<span class=\"estab-message-list-clamp--empty\">–</span>";
-             }
-             echo "</td>\n";
-
-             // RICHTUNG Eingang / Ausgang
-             echo "<td>";
-             if (($row["04_richtung"] != "")) {
-               echo "<a href=\"mainindex.php?fm=SI-Adminmeldung&00_lfd=".$row["00_lfd"]."\" target=\"_self\">".$row["04_richtung"]."</a>\n";
-             } else {
-               echo "<span class=\"estab-message-list-clamp--empty\">–</span>";
-             }
-             echo "</td>\n";
-
-             // N a c h w e i s n u m m e r
-             echo "<td>";
-             if (($row["04_richtung"] != "")) {
-               echo "<a href=\"mainindex.php?fm=SI-Adminmeldung&00_lfd=".$row["00_lfd"]."\" target=\"_self\">".$row["04_nummer"]."</a>\n";
-             } else {
-               echo "<span class=\"estab-message-list-clamp--empty\">–</span>";
-             }
-             echo "</td>\n";
-
-             if ($row["04_richtung"] == "A" ) {
-               echo "<td>";
-               if (($row["10_anschrift"] != "")) {
-                 echo "<a href=\"mainindex.php?fm=SI-Adminmeldung&00_lfd=".$row["00_lfd"]."\" target=\"_self\">".$row["10_anschrift"]."</a>\n";
-               } else {
-                 echo "<span class=\"estab-message-list-clamp--empty\">–</span>";
-               }
-               echo "</td>\n";
-             } else {
-               echo "<td>";
-
-             // Absender / Einheit / Stelle / ...
-             if (($row["13_abseinheit"] != "")) {
-               echo "<a href=\"mainindex.php?fm=SI-Adminmeldung&00_lfd=".$row["00_lfd"]."\" target=\"_self\">".$row["13_abseinheit"]."</a>\n";
-               } else {
-                 echo "<span class=\"estab-message-list-clamp--empty\">–</span>";
-               }
-               echo "</td>\n";
-             }
-             echo "<td>";
-             // Abfassungs Z E I T
-             if (($row["12_abfzeit"] != "")) {
-               $abfzeit = convdatetimeto ($row["12_abfzeit"]);
-               echo "<a href=\"mainindex.php?fm=SI-Adminmeldung&00_lfd=".$row["00_lfd"]."\" target=\"_self\">".$abfzeit['stak']."</a>\n";
-             } else {
-               echo "<span class=\"estab-message-list-clamp--empty\">–</span>";
-             }
-             echo "</td>\n";
-
-             // Funktionen und Farben
-             $empfcolor = extraiereempfaenger ( $row ["16_empf"] ) ;
-             for ( $i=1; $i<= count ($conf_empf); $i++ ) {
-               if ( ( $conf_empf [$i]["fkt"] != "Si" ) and ( $conf_empf [$i]["fkt"] != "A/W" ) ) {
-                 $recipientFunction = $conf_empf [$i]['fkt'];
-                 echo estab_recipient_copy_cell_html (
-                   $empfcolor [$recipientFunction] ?? "",
-                   $cfg ["vbg"],
-                   "<span class=\"estab-message-list-clamp--empty\">–</span>"
-                 );
-               }
-             }
-
-             // I N H A L T !
-             echo "<td align=\"left\">";
-             if (($row["12_inhalt"] != "")) {
-               echo "<a href=\"mainindex.php?fm=SI-Adminmeldung&00_lfd=".
-                        $row["00_lfd"]."\" target=\"_self\">".
-                        substr($row["12_inhalt"], 0, $conf_4f_liste ["inhalt"])." ..."."</a>\n";
-             } else {
-               echo "<span class=\"estab-message-list-clamp--empty\">–</span>";
-             }
-             echo "</td>\n";
-             echo "</tr>";
-          }
-        }
-        echo "</tbody></table>";
-************************************************************************************************************************************/
+      /*
+       * Hier stand ein auskommentierter Block von 126 Zeilen: eine
+       * zweite Sichterliste mit eigenen Spalten je Empfaengerfunktion.
+       *
+       * Kein Hinweis stand dabei, warum sie stillgelegt wurde. Ihre
+       * Abfrage las `WHERE 1` -- also die Nachrichten *aller*
+       * Einsaetze, nicht die des aktiven -- und ihre Zeilen oeffneten
+       * ihr <tr> nur bei gesetzter Vorrangstufe, gaben die Zellen aber
+       * immer aus. Beides waere heute ein Befund; auskommentiert war
+       * es keiner, aber es stand da und sah aus wie Vorrat.
+       *
+       * Geloescht: 126 Zeilen. Wer eine solche Liste braucht, baut sie
+       * aus dem Tabellenbauteil -- mit Einsatzbindung.
+       */
 
       break; // case SIADMIN
 

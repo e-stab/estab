@@ -261,9 +261,24 @@ $assert(
         . 'den Achtungsmarken. Das Paar waere damit weder hier noch in '
         . 'ges_kontrast gemessen.'
 );
+/*
+ * Es gibt kein fest eingetragenes Farbpaar mehr.
+ *
+ * Die Liste trug zwei: Gelb im Ausgang und Rot in der Sichtung -- fuer
+ * dieselbe Bedingung, `estab_message_priority_requires_attention`.
+ * Gleiche Bedeutung, zwei Aussehen. Beide tragen jetzt dieselbe
+ * Achtungsmarke, und ihre Farben stehen im Stylesheet, wo ges_kontrast
+ * sie mitmisst.
+ *
+ * Aus "mindestens eines" wird deshalb "keines". Das ist die staerkere
+ * Aussage: Ein neues Paar im Markup faellt sofort auf, statt sich unter
+ * die Schranke zu ducken.
+ */
 $assert(
-    $fixedPairs >= 1,
-    'The fixed colour pairs of the list are no longer being checked'
+    $fixedPairs === 0,
+    'Die Liste traegt wieder ein fest eingetragenes Farbpaar ('
+        . $fixedPairs . '). Es waere von keinem Kontrastwaechter erreichbar; '
+        . 'Farben gehoeren ins Stylesheet.'
 );
 
 printf(

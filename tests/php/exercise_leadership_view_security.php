@@ -80,9 +80,6 @@ $extractFunction = static function (string $php, string $functionName): string {
 };
 
 $overviewUrlSource = $extractFunction($source, 'estab_overview_url');
-$rowStartSource = $extractFunction($source, 'estab_overview_row_start');
-$recipientCellSource = $extractFunction($source, 'estab_overview_recipient_cell');
-$emptyRowSource = $extractFunction($source, 'estab_overview_empty_row');
 $navigationSource = $extractFunction($source, 'listen_navi');
 $displayControlsSource = $extractFunction($source, 'darstellungs_art');
 $listSource = $extractFunction($source, 'createlist');
@@ -275,9 +272,6 @@ foreach ([
     'estab_recipient_copy_ink',
     'estab_recipient_copy_cell_html',
     'estab_overview_url',
-    'estab_overview_row_start',
-    'estab_overview_recipient_cell',
-    'estab_overview_empty_row',
 ] as $functionName) {
     eval(match ($functionName) {
         'estab_recipient_copy_map' => $recipientMapSource,
@@ -289,9 +283,6 @@ foreach ([
         'estab_recipient_copy_ink' => $recipientInkSource,
         'estab_recipient_copy_cell_html' => $recipientCellHtmlSource,
         'estab_overview_url' => $overviewUrlSource,
-        'estab_overview_row_start' => $rowStartSource,
-        'estab_overview_recipient_cell' => $recipientCellSource,
-        'estab_overview_empty_row' => $emptyRowSource,
     });
 }
 
@@ -372,49 +363,73 @@ $assert(
     ],
     'underscore recipient functions or multiple copies collapse in list parsing'
 );
-$normalRow = estab_overview_row_start(false)
-    . estab_overview_recipient_cell('', $colors)
-    . '</tr>';
-$priorityRow = estab_overview_row_start(true)
-    . estab_overview_recipient_cell('rt', $colors)
-    . '</tr>';
-$unknownColorRow = estab_overview_row_start(false)
-    . estab_overview_recipient_cell('unexpected', $colors)
-    . '</tr>';
-$multipleCopyRow = estab_overview_row_start(false)
-    . estab_overview_recipient_cell('bl,gn', $colors)
-    . '</tr>';
-$emptyRow = estab_overview_empty_row(9);
-
-$assertRowStructure($normalRow, 1, 'normal row');
-$assertRowStructure($priorityRow, 1, 'priority row');
-$assertRowStructure($unknownColorRow, 1, 'unknown recipient color row');
-$assertRowStructure($multipleCopyRow, 1, 'multiple-copy recipient row');
-$assertRowStructure($emptyRow, 1, 'empty result row');
+/*
+ * Die Zeilenbausteine der Uebersicht sind geloescht.
+ *
+ * estab_overview_row_start, estab_overview_recipient_cell und
+ * estab_overview_empty_row hatten seit der Umstellung der
+ * Meldungsuebersicht auf das Tabellenbauteil keinen Aufrufer mehr --
+ * nachgezaehlt: je ein Vorkommen, die Definition. Die erste trug dabei
+ * ein fest eingetragenes Farbpaar (Gelb auf Schwarz), das kein
+ * Kontrastwaechter erreichte.
+ *
+ * Was hier geprueft wurde, bleibt geprueft, nur an lebenden Stellen:
+ *
+ * - Die Durchschriftenzelle: estab_recipient_copy_cell_html steht
+ *   weiterhin in tools.php und wird hier unmittelbar aufgerufen. Ihre
+ *   Maskierung ist der Punkt: Eine Farbe aus der Einrichtung darf nicht
+ *   aus dem style-Attribut ausbrechen.
+ * - Die Hervorhebung dringlicher Zeilen: Sie kommt aus dem Bauteil
+ *   ueber die Zeilenmarke der Uebersicht.
+ * - Der Satz bei leerer Trefferliste: Das Bauteil setzt ihn ueber die
+ *   richtige Spaltenzahl. Die Zahl von Hand mitzufuehren war die
+ *   Fehlerquelle, gegen die sein Zerleger heute abbricht.
+ */
+$normaleZelle = estab_recipient_copy_cell_html('', $colors, '<p><img src="null.gif" alt="leer"></p>');
+$rotZelle = estab_recipient_copy_cell_html('rt', $colors, '<p><img src="null.gif" alt="leer"></p>');
+$unbekannteZelle = estab_recipient_copy_cell_html('unexpected', $colors, '<p><img src="null.gif" alt="leer"></p>');
+$mehrfachZelle = estab_recipient_copy_cell_html('bl,gn', $colors, '<p><img src="null.gif" alt="leer"></p>');
 $assert(
-    str_contains($normalRow, 'alt="leer"')
-        && str_contains($priorityRow, '>X</td>')
-        && str_contains($multipleCopyRow, 'linear-gradient(')
-        && str_contains($multipleCopyRow, 'Durchschriften: blau, grün')
-        && str_contains($unknownColorRow, 'alt="leer"')
-        && str_contains($emptyRow, 'colspan="9"'),
+    str_contains($normaleZelle, 'alt="leer"')
+        && str_contains($rotZelle, '>X</td>')
+        && str_contains($mehrfachZelle, 'linear-gradient(')
+        && str_contains($mehrfachZelle, 'Durchschriften: blau, grün')
+        && str_contains($unbekannteZelle, 'alt="leer"'),
     'representative message table branch content changed'
 );
 
-$escapedColorCell = estab_overview_recipient_cell(
+$escapedColorCell = estab_recipient_copy_cell_html(
     'rt',
-    ['rt' => 'red" onmouseover="alert(1)', 'gn' => 'green', 'bl' => 'blue']
+    ['rt' => 'red" onmouseover="alert(1)', 'gn' => 'green', 'bl' => 'blue'],
+    ''
 );
 $assert(
     str_contains($escapedColorCell, 'red&quot; onmouseover=&quot;alert(1)')
         && !str_contains($escapedColorCell, 'onmouseover="alert(1)"'),
     'recipient background escaped its style attribute'
 );
-try {
-    estab_overview_empty_row(0);
-    $assert(false, 'invalid empty-row column count accepted');
-} catch (InvalidArgumentException) {
-    $assert(true, 'invalid empty-row column count rejected');
-}
+
+/*
+ * Und die lebende Stelle: "Stab lesen" baut die Zeilenmarke aus der
+ * Durchschriftenfarbe der wirksamen Funktion. Auch dort darf eine Farbe
+ * aus der Einrichtung nicht aus dem Attribut ausbrechen.
+ */
+$listeQuelle = (string) file_get_contents($root . '/4fach/liste.php');
+$assert(
+    str_contains($listeQuelle, 'estab_message_html ($z ["grund"])')
+        && str_contains($listeQuelle, 'estab_message_html ($z ["tinte"])'),
+    'Stab lesen setzt die Durchschriftenfarbe ohne Maskierung ins '
+        . 'style-Attribut'
+);
+
+/*
+ * Und der Satz bei leerer Trefferliste kommt aus dem Bauteil.
+ */
+$uebersichtQuelle = (string) file_get_contents($root . '/app/message_list_ui.php');
+$assert(
+    str_contains($uebersichtQuelle, "'leer' =>")
+        || str_contains($uebersichtQuelle, '"leer" =>'),
+    'Die Meldungsuebersicht sagt bei leerer Trefferliste nichts.'
+);
 
 printf("Exercise leadership view security tests: OK (%d assertions)\n", $assertions);

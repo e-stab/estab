@@ -81,7 +81,7 @@ $faksimile = [
  * @var array<string,array{0:int,1:string}>
  */
 $offeneDateien = [
-    '4fach/liste.php' => [8, 'Die übrigen Listenarten -- Sichtung, '
+    '4fach/liste.php' => [6, 'Die übrigen Listenarten -- Sichtung, '
         . 'Korrektur und die Administrationssichten -- sowie sechs '
         . 'Layouttabellen der alten Filterleiste. Die drei Nachweisungs'
         . 'zweige sind geloescht: Sie hatten keinen Aufrufer mehr.'],
@@ -103,7 +103,7 @@ $offeneDateien = [
  * ehrliche Zahl ist höher, und das ist der Punkt: Eine Ratsche, die nur
  * zählt, was sie kennt, misst ihren eigenen Blick, nicht den Bestand.
  */
-const ESTAB_TABELLEN_OFFEN = 25;
+const ESTAB_TABELLEN_OFFEN = 23;
 
 $verzeichnisse = [
     '4fach', '4fadm', '4fueltg', 'app', 'stabetb', 'fmtbb', 'stabinfo',
@@ -129,6 +129,19 @@ foreach ($verzeichnisse as $verzeichnis) {
         if (!is_string($quelle)) {
             continue;
         }
+        /*
+         * Gezaehlt wird der ausfuehrbare Text.
+         *
+         * In liste.php stand eine Tabelle in einem 126 Zeilen langen
+         * Kommentarblock. Sie wurde mitgezaehlt und haette umgestellt
+         * werden muessen -- eine Tabelle, die niemand sieht, weil sie
+         * auskommentiert ist. Die Zahl war damit um eins zu hoch, und die
+         * Arbeitsliste enthielt eine Aufgabe, die keine war.
+         *
+         * Kommentare werden durch ihre Zeilenumbrueche ersetzt, damit die
+         * gemeldeten Zeilennummern weiter stimmen.
+         */
+        $quelle = estab_test_ohne_kommentare($quelle);
         $zeile = 0;
         foreach (preg_split('~\R~', $quelle) ?: [] as $text) {
             $zeile++;
