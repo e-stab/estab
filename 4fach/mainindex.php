@@ -2558,6 +2558,43 @@ try {
   estab_workflow_forbid ();
 }
 
+/*
+ * Die Auswahl einer Ansicht endet in einer Adresse, nicht in einer Seite.
+ *
+ * Ein Menueknopf waehlt aus und aendert nichts. Trotzdem war er ein POST,
+ * und wer danach neu lud, bekam die Frage nach dem erneuten Senden -- fuer
+ * einen Vorgang, bei dem es nichts zu wiederholen gibt.
+ *
+ * Hier, unmittelbar nach der Herleitung und vor jedem Seitenaufbau: Weiter
+ * unten waeren die Kopfzeilen zu spaet.
+ *
+ * Der Gewinn ist mehr als der weggefallene Dialog. Die Ansicht bekommt
+ * eine Adresse -- sie laesst sich neu laden, mit dem Ruecksprung verlassen
+ * und wiederfinden.
+ */
+/*
+ * Angesehen wird, was der Browser gesendet hat -- nicht $returnValue.
+ *
+ * Der Steuerlauf ergaenzt dort neutrale Vorgaben (task, fm, ldf, stab,
+ * sichter) und normalisiert Datensatzkennungen. Eine Pruefung auf "nur
+ * Auswahl und sonst nichts" schluege daran fehl: Sie saehe fuenf
+ * zusaetzliche Schluessel und hielte die Anfrage fuer mehr als eine
+ * Auswahl. $_POST traegt genau das, was das Formular abgeschickt hat.
+ */
+$navigationsZiel = estab_workflow_view_selection_redirect (
+  $_POST,
+  (string) ($_SERVER ["REQUEST_METHOD"] ?? "GET")
+);
+if ($navigationsZiel !== null && !headers_sent ()) {
+  header ("Cache-Control: private, no-store, max-age=0");
+  header (
+    "Location: ".(string) ($conf_4f ["MainURL"] ?? "")."?".$navigationsZiel,
+    true,
+    303
+  );
+  exit;
+}
+
 if (estab_workflow_should_render_primary_view (
   $workflowPrimaryView,
   "staff-corrections",

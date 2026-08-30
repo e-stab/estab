@@ -33,6 +33,7 @@ declare(strict_types=1);
 $root = dirname(__DIR__, 2);
 require_once $root . '/app/ux_rules.php';
 require_once $root . '/app/session_ui.php';
+require_once $root . '/app/workflow.php';
 require_once __DIR__ . '/lib/quelltext.php';
 
 $assertions = 0;
@@ -383,6 +384,151 @@ $assert(
         'UX-KEINE-DOPPELSENDUNG',
         'Die Rueckmeldung bleibt nach dem Einsetzen liegen und erschiene ein '
             . 'zweites Mal.'
+    )
+);
+
+
+// ------------------------------- Navigation endet in einer Adresse
+
+/*
+ * Ein Menueknopf waehlt eine Ansicht. Er aendert nichts.
+ *
+ * Trotzdem war er ein POST, und die Antwort darauf war eine Seite. Wer
+ * danach neu lud, bekam die Frage nach dem erneuten Senden -- fuer einen
+ * Vorgang, bei dem es nichts zu wiederholen gibt.
+ *
+ * Nachgemessen: Dieselben Auswahlmerkmale funktionieren als GET bereits
+ * heute, samt Arbeitsfunktion. Der Steuerlauf beantwortet die Auswahl
+ * deshalb mit einer Weiterleitung auf genau diese Adresse. Nichts wird
+ * dabei gespeichert -- die Herleitung der Arbeitsfunktion bleibt
+ * unveraendert, weil die Adresse traegt, was vorher das Formular trug.
+ *
+ * Der Gewinn ist mehr als der weggefallene Dialog: Die Ansicht bekommt
+ * eine Adresse. Sie laesst sich neu laden, mit dem Ruecksprung verlassen
+ * und wiederfinden.
+ */
+$assert(
+    estab_workflow_view_selection_redirect([], 'GET') === null,
+    'Eine leere Anfrage soll nicht weitergeleitet werden.'
+);
+$assert(
+    estab_workflow_view_selection_redirect(
+        ['stab_lesen_x' => '1'],
+        'GET'
+    ) === null,
+    'Ein GET wird weitergeleitet und laeuft im Kreis.'
+);
+$assert(
+    estab_workflow_view_selection_redirect(
+        ['stab_lesen_x' => '1', 'stab_lesen_y' => '1', 'csrf_token' => 'x'],
+        'POST'
+    ) === 'stab_lesen_x=1',
+    'Die Auswahl einer Ansicht wird nicht zu einer Adresse: '
+        . var_export(estab_workflow_view_selection_redirect(
+            ['stab_lesen_x' => '1', 'stab_lesen_y' => '1', 'csrf_token' => 'x'],
+            'POST'
+        ), true)
+);
+/*
+ * Die Arbeitsfunktion faehrt mit. Ohne sie landete "Lesen als S6" auf der
+ * Vorgabeansicht des Kontos -- gemessen: beim LdF auf der Disposition.
+ * Der Bediener waere aus seiner Ansicht geworfen worden.
+ */
+$assert(
+    estab_workflow_view_selection_redirect(
+        ['stab_lesen_x' => '1', 'acting_function' => 'S6', 'csrf_token' => 'x'],
+        'POST'
+    ) === 'stab_lesen_x=1&acting_function=S6',
+    'Die Arbeitsfunktion faehrt nicht mit.'
+);
+/*
+ * Und nur reine Auswahl. Traegt die Anfrage sonst etwas -- einen
+ * Datensatz, Formulardaten, eine Handlung --, ist sie keine Navigation
+ * mehr, und die Weiterleitung wuerfe weg, was sie traegt.
+ */
+foreach ([
+    ['stab_lesen_x' => '1', '00_lfd' => '42'],
+    ['stab_lesen_x' => '1', 'task' => 'Stab_lesen'],
+    ['stab_lesen_x' => '1', 'absenden_x' => '1'],
+    ['stab_lesen_x' => '1', '12_inhalt' => 'getippter Text'],
+    ['stab_lesen_x' => '1', 'fm_ausgang_x' => '1'],
+    ['action' => 'gelesen', 'todo' => 'set'],
+] as $anfrage) {
+    $assert(
+        estab_workflow_view_selection_redirect($anfrage, 'POST') === null,
+        'Eine Anfrage mit mehr als der Auswahl wird weitergeleitet und '
+            . 'verliert dabei ihren Inhalt: ' . json_encode(array_keys($anfrage))
+    );
+}
+/*
+ * Ein erfundener Auswahlname wird nicht weitergereicht. Sonst haette die
+ * Weiterleitung eine offene Stelle, an der beliebige Zeichen in die
+ * Adresse geraten.
+ */
+$assert(
+    estab_workflow_view_selection_redirect(
+        ['erfunden_x' => '1', 'csrf_token' => 'x'],
+        'POST'
+    ) === null,
+    'Ein unbekannter Auswahlname wird in die Adresse uebernommen.'
+);
+$assert(
+    estab_workflow_view_selection_redirect(
+        ['stab_lesen_x' => '1', 'acting_function' => "boes\r\nLocation: x"],
+        'POST'
+    ) === null,
+    'Eine unzulaessige Arbeitsfunktion wird in die Adresse uebernommen.'
+);
+
+/*
+ * Und der Steuerlauf benutzt es wirklich -- vor dem ersten Seitenaufbau.
+ */
+/*
+ * Angesehen wird $_POST, nicht $returnValue.
+ *
+ * Der Steuerlauf ergaenzt in $returnValue neutrale Vorgaben -- task, fm,
+ * ldf, stab, sichter. Eine Pruefung auf "nur Auswahl und sonst nichts"
+ * saehe die und hielte jede Anfrage fuer mehr als eine Auswahl; die
+ * Weiterleitung griffe nie. Genau das ist beim ersten Versuch passiert.
+ */
+$assert(
+    preg_match(
+        '~estab_workflow_view_selection_redirect \(\s*\$_POST,~',
+        $steuerlauf
+    ) === 1,
+    estab_ux_requirement(
+        'UX-KEINE-DOPPELSENDUNG',
+        'Die Weiterleitung der Navigation sieht nicht die abgeschickten '
+            . 'Felder an, sondern die vom Steuerlauf ergaenzten.'
+    )
+);
+$assert(
+    str_contains($steuerlauf, 'estab_workflow_view_selection_redirect'),
+    estab_ux_requirement(
+        'UX-KEINE-DOPPELSENDUNG',
+        'Der Steuerlauf beantwortet die Auswahl einer Ansicht weiterhin mit '
+            . 'einer Seite.'
+    )
+);
+/*
+ * Gesucht wird der erste Seitenaufbau, der wirklich *laeuft* -- nicht der
+ * erste, der im Text steht. Innerhalb von resetframeset steht auch einer,
+ * aber die Funktion wird erst spaeter aufgerufen; ein Vergleich roher
+ * Textstellen meldete dort einen Fehler, den es nicht gibt.
+ */
+$navStelle = strpos($steuerlauf, 'estab_workflow_view_selection_redirect');
+$hinterReset = is_int($resetAnfang)
+    ? strpos($steuerlauf, "\n  }", $resetAnfang)
+    : false;
+$erstesHtml = is_int($hinterReset)
+    ? strpos($steuerlauf, 'pre_html (', $hinterReset)
+    : false;
+$assert(
+    is_int($navStelle) && is_int($erstesHtml) && $navStelle < $erstesHtml,
+    estab_ux_requirement(
+        'UX-KEINE-DOPPELSENDUNG',
+        'Die Weiterleitung der Navigation steht hinter dem ersten '
+            . 'Seitenaufbau; die Kopfzeilen kaemen zu spaet.'
     )
 );
 

@@ -1353,6 +1353,109 @@ function estab_workflow_cancelled_new_form(array $request): bool
     ], true);
 }
 
+/**
+ * Die Auswahl einer Ansicht als Adresse -- oder null.
+ *
+ * Ein Menueknopf waehlt eine Ansicht und aendert nichts. Trotzdem war er
+ * ein POST, und die Antwort darauf war eine Seite: Wer danach neu lud,
+ * bekam die Frage nach dem erneuten Senden fuer einen Vorgang, bei dem es
+ * nichts zu wiederholen gibt.
+ *
+ * Nachgemessen: Dieselben Auswahlmerkmale funktionieren als GET bereits --
+ * `?fm_ausgang_x=1` und `?stab_lesen_x=1&acting_function=S6` liefern genau
+ * dieselben Ansichten. Es wird deshalb nichts aufgeweicht und nichts
+ * gespeichert; die Adresse traegt, was vorher das Formular trug, und die
+ * Herleitung der Arbeitsfunktion bleibt unveraendert.
+ *
+ * Die Arbeitsfunktion muss mitfahren. Ohne sie landete "Lesen als S6" auf
+ * der Vorgabeansicht des Kontos -- gemessen beim LdF auf der Disposition.
+ * Der Bedienende waere aus seiner Ansicht geworfen worden, und das waere
+ * schlimmer als der Dialog.
+ *
+ * Weitergeleitet wird nur *reine* Auswahl. Traegt die Anfrage sonst
+ * etwas -- einen Datensatz, Formulardaten, eine Handlung --, ist sie keine
+ * Navigation mehr, und die Weiterleitung wuerfe weg, was sie traegt.
+ *
+ * @param array<string,mixed> $request
+ * @return string|null Die Abfragezeichenkette, oder null.
+ */
+function estab_workflow_view_selection_redirect(
+    array $request,
+    string $method
+): ?string {
+    if (strtoupper($method) !== 'POST') {
+        return null;
+    }
+
+    /*
+     * Die Auswahlnamen. Sie stehen hier noch einmal und nicht als Ableitung
+     * aus estab_workflow_primary_view_selector: Dort stehen auch Namen, die
+     * *nicht* bloss auswaehlen (reset_record, action, task). Eine Ableitung
+     * wuerde sie stillschweigend mitnehmen.
+     */
+    $auswahl = [
+        'stab_schreiben', 'stab_lesen', 'stab_korrekturen', 'stab_sichten',
+        'ldf_nachrichten', 'fm_eingang', 'fm_ausgang', 'fm_admin', 'si_admin',
+        'stab_anhang', 'fm_anhang', 'm2_benutzer',
+    ];
+    $begleiter = ['csrf_token', 'acting_function', 'next'];
+
+    $gewaehlt = null;
+    foreach (array_keys($request) as $schluessel) {
+        if (!is_string($schluessel)) {
+            return null;
+        }
+        if (in_array($schluessel, $begleiter, true)) {
+            continue;
+        }
+        $name = null;
+        foreach ($auswahl as $kandidat) {
+            if ($schluessel === $kandidat . '_x' || $schluessel === $kandidat . '_y') {
+                $name = $kandidat;
+                break;
+            }
+        }
+        if ($name === null) {
+            // Irgendetwas anderes: keine reine Auswahl.
+            return null;
+        }
+        if ($gewaehlt !== null && $gewaehlt !== $name) {
+            // Zwei Ansichten zugleich waeren keine Auswahl, sondern ein
+            // Widerspruch. Der Steuerlauf weist ihn ohnehin ab.
+            return null;
+        }
+        $gewaehlt = $name;
+    }
+    if ($gewaehlt === null) {
+        return null;
+    }
+
+    $abfrage = [$gewaehlt . '_x' => '1'];
+    if (array_key_exists('acting_function', $request)) {
+        try {
+            $funktion = estab_workflow_requested_acting_function($request);
+        } catch (InvalidArgumentException) {
+            // Eine unzulaessige Funktion gehoert nicht in eine Adresse. Der
+            // Steuerlauf weist sie an seiner eigenen Stelle ab; hier wird
+            // nur nicht weitergeleitet.
+            return null;
+        }
+        if ($funktion !== null) {
+            $abfrage['acting_function'] = $funktion;
+        }
+    }
+    if (array_key_exists('next', $request)) {
+        $ziel = $request['next'];
+        if (
+            is_string($ziel)
+            && estab_navigation_login_destination_key($ziel) !== null
+        ) {
+            $abfrage['next'] = $ziel;
+        }
+    }
+    return http_build_query($abfrage, '', '&', PHP_QUERY_RFC3986);
+}
+
 /** Return whether acknowledging an already-read message restores its queue. */
 function estab_workflow_acknowledged_read_form(array $request): bool
 {
