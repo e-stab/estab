@@ -290,9 +290,23 @@ $assert(
     str_contains($categories, 'aria-labelledby="category-list-title"')
         && str_contains($categories, 'for="category-name"')
         && str_contains($categories, 'for="category-description"')
-        && str_contains($categories, 'data-label="Aktionen"')
         && str_contains($categories, 'estab-tool-feedback-success'),
     'category manager lacks labelled controls or responsive status feedback'
+);
+/*
+ * Die Kartenbeschriftung `data-label` stand einmal als Zeichenkette in
+ * dieser Datei. Sie kommt jetzt aus dem Tabellenbauteil, das sie aus der
+ * Spaltenueberschrift bildet -- geprueft in message_list_ui_security.
+ *
+ * Hier bleibt der Teil, den diese Datei besitzt: dass es die Spalte
+ * ueberhaupt gibt und wie sie heisst. Unter 30rem wird die Tabelle zu
+ * Karten, und eine Karte ohne Beschriftungen ist eine Reihe nackter
+ * Werte.
+ */
+$assert(
+    str_contains($categories, "'kopf' => 'Aktionen'")
+        && str_contains($categories, "'schmal' => true"),
+    'category manager lost its action column or its card breakpoint'
 );
 
 $problemReport = $additionalSources['4fach/info.php'];

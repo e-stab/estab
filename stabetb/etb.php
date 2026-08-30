@@ -452,38 +452,70 @@ if (debug == true){ echo "etb_tableexist==>"; var_dump($this->etb_titel_tbl); ec
         echo "Weitere Verknüpfungen liegen außerhalb der gewählten Tiefe.";
         echo "</p>\n";
       }
-      echo "<div class=\"estab-tool-table-wrap estab-tool-table-responsive\">";
-      echo "<table class=\"estab-tool-table\"><thead><tr>";
-      echo "<th>Tiefe</th><th>ETB-Nr.</th><th>Verknüpft über</th>";
-      echo "<th>Ereigniszeit</th><th>Darstellung der Ereignisse</th>";
-      echo "<th>Bemerkung</th></tr></thead><tbody>\n";
+      /*
+       * Die Verknuepfungsauswertung kommt aus dem Tabellenbauteil.
+       *
+       * Sie zeigt, ueber welche Kette von Verweisen ein Ereignis mit einem
+       * anderen zusammenhaengt. Bei einer tiefen Auswertung sind das
+       * schnell dutzende Zeilen -- und sie waren weder sortierbar noch
+       * durchsuchbar.
+       */
+      $verknuepfungZeilen = array ();
       foreach ($rows as $row) {
         $via = (int) ($row ["estab_reference_via"] ?? 0);
         $rowReference = estab_logbook_stored_etb_reference_number (
           $row ["estab_reference"] ?? null
         );
-        echo "<tr><td>".(int) ($row ["estab_reference_depth"] ?? 0)."</td>";
-        echo "<td>".(int) ($row ["estab_book_lfd"] ?? 0)."</td><td>";
         if ($via > 0) {
-          echo "ETB-Nr. ".$via;
+          $ueber = "ETB-Nr. ".$via;
         } elseif ($rowReference !== null) {
-          echo "Referenz auf ETB-Nr. ".$rowReference;
+          $ueber = "Referenz auf ETB-Nr. ".$rowReference;
         } else {
-          echo "Start";
+          $ueber = "Start";
         }
-        echo "</td><td>".estab_auth_html ($this->konv_datetime_taktime (
-          (string) ($row ["estab_event_time"] ?? $row ["etb_time"] ?? "")
-        ))."</td><td>";
-        echo nl2br (estab_auth_html (estab_function_display_text (
-          (string) ($row ["etb_aktion"] ?? "")
-        )), false);
-        echo "</td><td>";
-        echo nl2br (estab_auth_html (estab_function_display_text (
-          (string) ($row ["etb_bemerk"] ?? "")
-        )), false);
-        echo "</td></tr>\n";
+        $verknuepfungZeilen[] = array (
+          "tiefe" => (string) (int) ($row ["estab_reference_depth"] ?? 0),
+          "nummer" => (string) (int) ($row ["estab_book_lfd"] ?? 0),
+          "ueber" => $ueber,
+          "zeit" => $this->konv_datetime_taktime (
+            (string) ($row ["estab_event_time"] ?? $row ["etb_time"] ?? "")
+          ),
+          "ereignis" => estab_function_display_text (
+            (string) ($row ["etb_aktion"] ?? "")
+          ),
+          "bemerkung" => estab_function_display_text (
+            (string) ($row ["etb_bemerk"] ?? "")
+          ),
+        );
       }
-      echo "</tbody></table></div>\n";
+      echo estab_tabelle_markup (array (
+        "id" => "etb-verknuepfung",
+        "beschriftung" => "Verknüpfte Ereignisse mit Tiefe, ETB-Nummer und "
+          . "Ereigniszeit",
+        "mindestbreite" => "52rem",
+        "spalten" => array (
+          array ("schluessel" => "tiefe", "kopf" => "Tiefe", "breite" => 7,
+            "sortierbar" => true, "suchbar" => false, "art" => "zahl"),
+          array ("schluessel" => "nummer", "kopf" => "ETB-Nr.", "breite" => 10,
+            "sortierbar" => true, "suchbar" => true, "art" => "zahl"),
+          array ("schluessel" => "ueber", "kopf" => "Verknüpft über",
+            "breite" => 18,
+            "sortierbar" => true, "suchbar" => true, "art" => "text"),
+          array ("schluessel" => "zeit", "kopf" => "Ereigniszeit",
+            "breite" => 14,
+            "sortierbar" => true, "suchbar" => true, "art" => "zeit"),
+          array ("schluessel" => "ereignis",
+            "kopf" => "Darstellung der Ereignisse", "breite" => 30,
+            "sortierbar" => false, "suchbar" => true, "art" => "text",
+            "klammern" => true),
+          array ("schluessel" => "bemerkung", "kopf" => "Bemerkung",
+            "breite" => 21,
+            "sortierbar" => false, "suchbar" => true, "art" => "text",
+            "klammern" => true),
+        ),
+        "zeilen" => $verknuepfungZeilen,
+        "leer" => "Keine Verknüpfung entspricht den gesetzten Filtern.",
+      ));
     }
     echo "</section>\n";
   }

@@ -89,13 +89,10 @@ $offeneDateien = [
     '4fadm/fuehrungsstelle.php' => [4, 'Die Führungsstellenverwaltung.'],
     '4fadm/system_status.php' => [4, 'Der Systemstand.'],
     '4fadm/make_fkt.php' => [1, 'Die Empfängermatrix.'],
-    '4fach/fuehrungsstelle.php' => [2, 'Die Führungsstellenübersicht.'],
-    '4fach/katgoedt.php' => [1, 'Die Pflege der Kategorien.'],
     '4fach/mainindex.php' => [1, 'Der Satzspiegel der Anmeldefelder -- '
         . 'Beschriftung und Feld nebeneinander, keine Liste.'],
     'handbuch/index.php' => [2, 'Zwei Übersichten im Handbuch. Sie stehen '
         . 'im Fließtext und werden nicht aus Daten erzeugt.'],
-    'stabetb/etb.php' => [1, 'Die Titelliste über dem Einsatztagebuch.'],
 ];
 
 /*
@@ -105,7 +102,7 @@ $offeneDateien = [
  * ehrliche Zahl ist höher, und das ist der Punkt: Eine Ratsche, die nur
  * zählt, was sie kennt, misst ihren eigenen Blick, nicht den Bestand.
  */
-const ESTAB_TABELLEN_OFFEN = 50;
+const ESTAB_TABELLEN_OFFEN = 32;
 
 $verzeichnisse = [
     '4fach', '4fadm', '4fueltg', 'app', 'stabetb', 'fmtbb', 'stabinfo',
@@ -201,6 +198,115 @@ $assert(
             . ESTAB_TABELLEN_OFFEN . '. Die Zahl darf sinken, nicht steigen.'
     )
 );
+
+
+/*
+ * Sichtbarer Text ist richtiges Deutsch, keine Umschrift.
+ *
+ * Die Kommentare dieses Bestandes schreiben "ueber" und "faellt" -- das
+ * ist eine bewusste Gewohnheit und bleibt. Was der Bedienende *liest*,
+ * darf so nicht aussehen: "VERKNUEPFT UEBER" in einer Spaltenüberschrift
+ * ist kein Deutsch, und in einer Führungsstelle steht die Anwendung neben
+ * einem gedruckten Vordruck, der es richtig schreibt.
+ *
+ * Genau dieser Fehler ist beim Umstellen der ETB-Verknüpfungsliste
+ * passiert, und gefunden hat ihn ein Blick in den Browser, keine Prüfung.
+ * Bei den noch offenen Tabellen -- jede mit deutschen Überschriften --
+ * passiert er wieder.
+ *
+ * ## Warum eine Wortliste und keine Buchstabenprobe
+ *
+ * "ue", "ae", "ss" kommen in richtigem Deutsch ständig vor: aktuelles,
+ * Ereignisse, Abfasszeit. Eine Probe auf Buchstabenpaare meldete beim
+ * ersten Versuch vier Fehlalarme und keinen echten Fund. Aufgeführt sind
+ * deshalb nur Formen, die in sichtbarem Text nie richtig sind.
+ */
+$umschriften = [
+    'ueber', 'Ueber', 'fuer', 'Fuer', 'zurueck', 'Zurueck',
+    'Kuerzel', 'kuerzel', 'Groesse', 'groesse', 'oeffnen', 'Oeffnen',
+    'loeschen', 'Loeschen', 'waehlen', 'Waehlen', 'aendern', 'Aendern',
+    'naechste', 'Naechste', 'moeglich', 'Moeglich', 'Anhaenge', 'anhaenge',
+    'Empfaenger', 'empfaenger', 'schliessen', 'Schliessen', 'Massnahme',
+    'massnahme', 'Strasse', 'Verknuepf', 'verknuepf', 'Uebermittlung',
+    'uebermittlung', 'Vordruecke', 'vordruecke', 'gemaess', 'Gemaess',
+    'Erlaeuterung', 'erlaeuterung', 'Auswaehlen', 'auswaehlen',
+];
+
+/**
+ * Die sichtbaren Zeichenketten einer Tabellenbeschreibung.
+ *
+ * `kopf` ist die Spaltenüberschrift, `beschriftung` die Bildunterschrift,
+ * `leer` der Satz bei leerer Trefferliste, `filtername` die erste Zeile
+ * einer Auswahlliste. Alle vier liest der Bedienende.
+ */
+$sichtbareSchluessel = ['kopf', 'beschriftung', 'leer', 'filtername'];
+$umschriftFunde = [];
+foreach ($verzeichnisse as $verzeichnis) {
+    $pfad = $root . '/' . $verzeichnis;
+    if (!is_dir($pfad)) {
+        continue;
+    }
+    $dateien = new RecursiveIteratorIterator(
+        new RecursiveDirectoryIterator($pfad, FilesystemIterator::SKIP_DOTS)
+    );
+    foreach ($dateien as $datei) {
+        if (!$datei->isFile() || $datei->getExtension() !== 'php') {
+            continue;
+        }
+        $quelle = file_get_contents($datei->getPathname());
+        if (!is_string($quelle)) {
+            continue;
+        }
+        $relativ = substr($datei->getPathname(), strlen($root) + 1);
+        foreach ($sichtbareSchluessel as $schluessel) {
+            $muster = '~["\']' . $schluessel . '["\']\s*=>\s*(["\'])(.*?)(?<!\\\\)\1~s';
+            if (preg_match_all($muster, $quelle, $treffer, PREG_SET_ORDER) === false) {
+                continue;
+            }
+            foreach ($treffer as $einzeln) {
+                foreach ($umschriften as $umschrift) {
+                    if (str_contains($einzeln[2], $umschrift)) {
+                        $umschriftFunde[] = $relativ . ': ' . $schluessel
+                            . ' = "' . $einzeln[2] . '"';
+                        break;
+                    }
+                }
+            }
+        }
+    }
+}
+$assert(
+    $umschriftFunde === [],
+    estab_ux_requirement(
+        'UX-SPRACHE-VORSCHRIFT',
+        'Diese sichtbaren Tabellentexte stehen in Umschrift statt in '
+            . 'richtigem Deutsch: ' . implode(' | ', array_slice($umschriftFunde, 0, 6))
+    )
+);
+
+// Beisst die Pruefung? Ein eingebauter Fall muss auffallen -- und ein
+// richtig geschriebener darf es nicht.
+$probeTexte = [
+    'Verknuepft ueber' => true,
+    'Verknüpft über' => false,
+    'Aktuelles PDF' => false,
+    'Ereignisse' => false,
+    'Abfasszeit' => false,
+];
+foreach ($probeTexte as $text => $sollAuffallen) {
+    $faellt = false;
+    foreach ($umschriften as $umschrift) {
+        if (str_contains($text, $umschrift)) {
+            $faellt = true;
+            break;
+        }
+    }
+    $assert(
+        $faellt === $sollAuffallen,
+        'Die Umschriftpruefung urteilt falsch ueber "' . $text . '": '
+            . ($faellt ? 'gemeldet' : 'durchgelassen')
+    );
+}
 
 /*
  * Und die sieben Flächen aus docs/TABELLEN.md Abschnitt 5 rufen das Bauteil

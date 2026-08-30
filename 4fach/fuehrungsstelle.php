@@ -11,6 +11,7 @@ require_once __DIR__ . '/../app/dv_operations.php';
 require_once __DIR__ . '/../app/navigation.php';
 require_once __DIR__ . '/../app/read_authorization.php';
 require_once __DIR__ . '/../app/session_ui.php';
+require_once __DIR__ . '/../app/tabelle.php';
 
 estab_session_ui_start($_SESSION);
 estab_navigation_require_session(
@@ -934,83 +935,126 @@ foreach ($plans as $plan) {
           <p class="estab-tool-empty">Ihrem Konto ist in der aktuellen oder
             geplanten Schicht noch keine Funktion zugewiesen.</p>
         <?php else: ?>
-          <div class="estab-tool-table-wrap estab-tool-table-responsive">
-            <table class="estab-tool-table">
-              <caption class="estab-visually-hidden">
-                Persönlich zugewiesene Dienstfunktionen
-              </caption>
-              <thead><tr>
-                <th scope="col">Schicht</th>
-                <th scope="col">Funktion</th>
-                <th scope="col">Status</th>
-                <th scope="col">Aktion</th>
-              </tr></thead>
-              <tbody>
-              <?php foreach ($hats as $hat): ?>
-                <?php
-                  $isSelectedHat = is_array($selectedIdentity)
-                      && (int) ($selectedIdentity['duty_assignment_id'] ?? 0)
-                          === (int) $hat['dienstbesetzung_id'];
-                ?>
-                <tr<?= $isSelectedHat ? ' data-estab-selected-duty-hat' : '' ?>>
-                  <td data-label="Schicht">#<?= (int) $hat['nummer'] ?> ·
-                    <?= dv_operations_html($hat['bezeichnung']) ?><br>
-                    <?= dv_operations_html($hat['schicht_status']) ?></td>
-                  <td data-label="Funktion"><?= dv_operations_html(
-                      estab_function_identity_display_name(
-                          $hat['funktion'],
-                          $hat['rolle']
-                      )
-                  ) ?></td>
-                  <td data-label="Status"><?= $isSelectedHat
-                      ? 'Aktiv ausgewählt'
-                      : dv_operations_html($hat['status']) ?></td>
-                  <td data-label="Aktion">
-                    <?php if (
-                        $hat['status'] === 'ZUGEWIESEN'
-                        && in_array(
-                            $hat['schicht_status'],
-                            ['GEPLANT', 'AKTIV'],
-                            true
-                        )
-                    ): ?>
-                      <form method="post" action="fuehrungsstelle.php">
-                        <?= estab_csrf_field() ?>
-                        <input type="hidden" name="operation_action"
-                          value="accept_hat">
-                        <input type="hidden" name="dienstbesetzung_id"
-                          value="<?= (int) $hat['dienstbesetzung_id'] ?>">
-                        <button class="estab-button estab-button-primary"
-                          type="submit"><?= $hat['schicht_status'] === 'AKTIV'
-                              ? 'Ergänzung annehmen'
-                              : 'Verbindlich annehmen' ?></button>
-                      </form>
-                    <?php elseif (
-                        $hat['status'] === 'ANGENOMMEN'
-                        && $hat['schicht_status'] === 'AKTIV'
-                        && !$isSelectedHat
-                    ): ?>
-                      <form method="post" action="fuehrungsstelle.php">
-                        <?= estab_csrf_field() ?>
-                        <input type="hidden" name="operation_action"
-                          value="select_hat">
-                        <input type="hidden" name="dienstbesetzung_id"
-                          value="<?= (int) $hat['dienstbesetzung_id'] ?>">
-                        <button class="estab-button" type="submit">
-                          Als Arbeitsfunktion wählen
-                        </button>
-                      </form>
-                    <?php else: ?>
-                      <span><?= $isSelectedHat
-                          ? 'Diese Funktion ist wirksam.'
-                          : 'Keine Aktion verfügbar' ?></span>
-                    <?php endif; ?>
-                  </td>
-                </tr>
-              <?php endforeach; ?>
-              </tbody>
-            </table>
-          </div>
+          <?php
+            /*
+             * Die Dienstfunktionen kommen aus dem Tabellenbauteil.
+             *
+             * Wer in mehreren Schichten eingeteilt ist, hat hier schnell ein
+             * Dutzend Zeilen -- und suchte die eine, die gerade gilt, ohne
+             * Suche und ohne Sortierung.
+             */
+            $funktionsZeilen = [];
+            foreach ($hats as $hat) {
+                $istGewaehlt = is_array($selectedIdentity)
+                    && (int) ($selectedIdentity['duty_assignment_id'] ?? 0)
+                        === (int) $hat['dienstbesetzung_id'];
+                $funktionsZeilen[] = [
+                    'schicht' => '#' . (int) $hat['nummer'] . ' · '
+                        . (string) $hat['bezeichnung'] . ' · '
+                        . (string) $hat['schicht_status'],
+                    'funktion' => estab_function_identity_display_name(
+                        $hat['funktion'],
+                        $hat['rolle']
+                    ),
+                    'status' => $istGewaehlt
+                        ? 'Aktiv ausgewählt'
+                        : (string) $hat['status'],
+                    'gewaehlt' => $istGewaehlt,
+                    'kennung' => (int) $hat['dienstbesetzung_id'],
+                    'schicht_status' => (string) $hat['schicht_status'],
+                    'roh_status' => (string) $hat['status'],
+                ];
+            }
+            $funktionsStati = [];
+            foreach ($funktionsZeilen as $z) {
+                $funktionsStati[$z['status']] = true;
+            }
+            ksort($funktionsStati);
+            echo estab_tabelle_markup([
+                'id' => 'dienstfunktionen',
+                'beschriftung' => 'Persönlich zugewiesene Dienstfunktionen',
+                'mindestbreite' => '46rem',
+                'schmal' => true,
+                // Die wirksame Funktion ist die eine Zeile, die zählt.
+                'zeilenmarke' => static fn (array $z): string =>
+                    ($z['gewaehlt'] ?? false)
+                        ? 'data-estab-selected-duty-hat'
+                        : '',
+                'spalten' => [
+                    ['schluessel' => 'schicht', 'kopf' => 'Schicht',
+                        'breite' => 30, 'sortierbar' => true,
+                        'suchbar' => true, 'art' => 'text'],
+                    ['schluessel' => 'funktion', 'kopf' => 'Funktion',
+                        'breite' => 22, 'sortierbar' => true,
+                        'suchbar' => true, 'art' => 'text'],
+                    ['schluessel' => 'status', 'kopf' => 'Status',
+                        'breite' => 20, 'sortierbar' => true,
+                        'suchbar' => true, 'art' => 'text',
+                        'filter' => array_keys($funktionsStati),
+                        'filtername' => 'Alle Zustände'],
+                    ['schluessel' => 'aktion', 'kopf' => 'Aktion',
+                        'breite' => 28, 'sortierbar' => false,
+                        'suchbar' => false, 'art' => 'text',
+                        'zelle' => static function (array $z): string {
+                            /*
+                             * Annehmen und Wählen sind Handlungen und
+                             * bleiben CSRF-geschützte Formulare. Eine
+                             * Dienstfunktion persönlich anzunehmen ist ein
+                             * Nachweis, kein Anzeigewechsel.
+                             */
+                            $formular = static fn (
+                                string $aktion,
+                                int $kennung,
+                                string $klasse,
+                                string $beschriftung
+                            ): string =>
+                                '<form method="post" action="fuehrungsstelle.php">'
+                                . estab_csrf_field()
+                                . '<input type="hidden" name="operation_action" value="'
+                                . dv_operations_html($aktion) . '">'
+                                . '<input type="hidden" name="dienstbesetzung_id" value="'
+                                . $kennung . '">'
+                                . '<button class="' . $klasse . '" type="submit">'
+                                . dv_operations_html($beschriftung)
+                                . '</button></form>';
+                            if (
+                                $z['roh_status'] === 'ZUGEWIESEN'
+                                && in_array(
+                                    $z['schicht_status'],
+                                    ['GEPLANT', 'AKTIV'],
+                                    true
+                                )
+                            ) {
+                                return $formular(
+                                    'accept_hat',
+                                    (int) $z['kennung'],
+                                    'estab-button estab-button-primary',
+                                    $z['schicht_status'] === 'AKTIV'
+                                        ? 'Ergänzung annehmen'
+                                        : 'Verbindlich annehmen'
+                                );
+                            }
+                            if (
+                                $z['roh_status'] === 'ANGENOMMEN'
+                                && $z['schicht_status'] === 'AKTIV'
+                                && !($z['gewaehlt'] ?? false)
+                            ) {
+                                return $formular(
+                                    'select_hat',
+                                    (int) $z['kennung'],
+                                    'estab-button',
+                                    'Als Arbeitsfunktion wählen'
+                                );
+                            }
+                            return '<span>' . (($z['gewaehlt'] ?? false)
+                                ? 'Diese Funktion ist wirksam.'
+                                : 'Keine Aktion verfügbar') . '</span>';
+                        }],
+                ],
+                'zeilen' => $funktionsZeilen,
+                'leer' => 'Keine Dienstfunktion entspricht den gesetzten Filtern.',
+            ]);
+          ?>
         <?php endif; ?>
       </section>
 
@@ -1106,49 +1150,76 @@ foreach ($plans as $plan) {
             ) ?></span>
           </p>
         <?php endif; ?>
-        <div class="estab-tool-table-wrap estab-tool-table-responsive">
-          <table class="estab-tool-table">
-            <caption class="estab-visually-hidden">
-              Wege des aktiven Fernmeldeplans
-            </caption>
-            <thead><tr>
-              <th scope="col">Betriebsstelle</th>
-              <th scope="col">Rufname</th>
-              <th scope="col">Medium und technische Angaben</th>
-              <th scope="col">Verkehrsform</th>
-              <th scope="col">Vermerke</th>
-            </tr></thead>
-            <tbody>
-            <?php foreach ($activePlan['eintraege'] as $entry): ?>
-              <?php $routeParts = array_values(array_filter([
+        <?php
+          /*
+           * Die Wege des Fernmeldeplans kommen aus dem Tabellenbauteil.
+           *
+           * Ein Fernmeldeplan hat schnell zwanzig Wege. Wer den einen
+           * Rufnamen sucht, über den er gerade sprechen soll, suchte ihn
+           * bisher mit dem Finger am Bildschirm.
+           */
+          $wegeZeilen = [];
+          $wegeMedien = [];
+          foreach ($activePlan['eintraege'] as $entry) {
+              $teile = array_values(array_filter([
                   estab_dv_telecom_medium_label($entry['medium']),
                   trim((string) $entry['kanal']),
                   trim((string) $entry['bandlage']),
-              ], static fn (string $part): bool => $part !== '')); ?>
-              <tr>
-                <td data-label="Betriebsstelle"><?= dv_operations_html(
-                    $entry['betriebsstelle']
-                ) ?></td>
-                <td data-label="Rufname"><?= dv_operations_html(
-                    $entry['rufname']
-                ) ?></td>
-                <td data-label="Medium und technische Angaben"><?=
-                  dv_operations_html(implode(' · ', $routeParts))
-                ?></td>
-                <td data-label="Verkehrsform"><?= dv_operations_html(
-                    $entry['verkehrsform']
-                ) ?></td>
-                <td data-label="Vermerke"><?= dv_operations_html(
-                    trim(
-                        (string) $entry['besondere_vermerke']
-                        . ' ' . (string) $entry['bemerkungen']
-                    )
-                ) ?></td>
-              </tr>
-            <?php endforeach; ?>
-            </tbody>
-          </table>
-        </div>
+              ], static fn (string $part): bool => $part !== ''));
+              $mittel = estab_dv_telecom_medium_label($entry['medium']);
+              $wegeMedien[$mittel] = true;
+              $wegeZeilen[] = [
+                  'betriebsstelle' => (string) $entry['betriebsstelle'],
+                  'rufname' => (string) $entry['rufname'],
+                  'mittel' => $mittel,
+                  'technik' => implode(' · ', $teile),
+                  'verkehrsform' => (string) $entry['verkehrsform'],
+                  'vermerke' => trim(
+                      (string) $entry['besondere_vermerke']
+                      . ' ' . (string) $entry['bemerkungen']
+                  ),
+              ];
+          }
+          ksort($wegeMedien);
+          echo estab_tabelle_markup([
+              'id' => 'fernmeldewege',
+              'beschriftung' => 'Wege des aktiven Fernmeldeplans',
+              // Gemessen stehen hier 916 Bildpunkte zur Verfuegung; 58rem
+              // waeren 928 gewesen und haetten quergescrollt.
+              'mindestbreite' => '56rem',
+              'spalten' => [
+                  ['schluessel' => 'betriebsstelle',
+                      'kopf' => 'Betriebsstelle', 'breite' => 18,
+                      'sortierbar' => true, 'suchbar' => true, 'art' => 'text'],
+                  ['schluessel' => 'rufname', 'kopf' => 'Rufname',
+                      'breite' => 16, 'sortierbar' => true,
+                      'suchbar' => true, 'art' => 'text'],
+                  /*
+                   * Das Mittel bekommt eine eigene Spalte mit Filter --
+                   * dieselbe Not wie im Ausgang: Wer den Funk betreut,
+                   * sucht die Funkwege.
+                   */
+                  ['schluessel' => 'mittel', 'kopf' => 'Mittel',
+                      'breite' => 14, 'sortierbar' => true,
+                      'suchbar' => true, 'art' => 'text',
+                      'filter' => array_keys($wegeMedien),
+                      'filtername' => 'Alle Mittel'],
+                  ['schluessel' => 'technik',
+                      'kopf' => 'Technische Angaben', 'breite' => 20,
+                      'sortierbar' => false, 'suchbar' => true,
+                      'art' => 'text'],
+                  ['schluessel' => 'verkehrsform', 'kopf' => 'Verkehrsform',
+                      'breite' => 14, 'sortierbar' => true,
+                      'suchbar' => true, 'art' => 'text'],
+                  ['schluessel' => 'vermerke', 'kopf' => 'Vermerke',
+                      'breite' => 18, 'sortierbar' => false,
+                      'suchbar' => true, 'art' => 'text',
+                      'klammern' => true],
+              ],
+              'zeilen' => $wegeZeilen,
+              'leer' => 'Kein Weg entspricht den gesetzten Filtern.',
+          ]);
+        ?>
       <?php endif; ?>
     </section>
 
