@@ -1564,56 +1564,60 @@ if (
 /**********************************************************************\
 \**********************************************************************/
   /**
-   * Antwortseite einer abgeschlossenen Aktion im Nachrichtenrahmen.
+   * Antwort einer abgeschlossenen Handlung: eine Weiterleitung.
    *
-   * Ohne Rueckmeldung entsteht nur ein leeres Dokument, das beide Rahmen neu
-   * laedt; der Bedienende sieht dann nicht, ob und wohin die Nachricht
-   * gegangen ist. Liegt eine Rueckmeldung vor, bleibt sie im
-   * Nachrichtenrahmen stehen, und nur die Seitenleiste wird neu geladen,
-   * damit Warteschlangen und der Zaehler der Korrekturschleife sofort
-   * stimmen.
+   * Hier stand eine Seite. Wer danach neu lud oder zurueckging, bekam die
+   * Frage, ob die Daten erneut gesendet werden sollen -- und wer sie
+   * bestaetigte, verschickte eine Meldung ein zweites Mal, befoerderte
+   * zweimal oder trug zweimal ins Buch ein. Der Betrieb hat gemeldet, dass
+   * die Frage staendig kommt.
+   *
+   * 303 und nicht 302: Nur 303 verpflichtet den Browser, die Weiterleitung
+   * als GET auszufuehren. Bei 302 duerfen aeltere Browser die Handlung
+   * wiederholen -- genau das, was hier verhindert werden soll.
+   *
+   * Wohin: auf die Hauptadresse. Nachgemessen liefert ein GET dorthin
+   * dieselbe Ansicht wie zuvor der POST, weil die Sitzung den Zustand
+   * traegt und nicht die Anfrage.
+   *
+   * Die Rueckmeldung -- was geschehen ist und wohin die Nachricht ging --
+   * kann dabei nicht im Dokument stehen, weil es keines mehr gibt. Sie
+   * geht durch die Sitzung und wird auf der Zielseite genau einmal
+   * gezeigt.
    */
   function resetframeset ($confirmation = null) {
     global $conf_4f;
-    $confirmationMarkup = "";
     if (is_array ($confirmation)) {
-      try {
-        $confirmationMarkup = estab_session_ui_message_confirmation_markup (
-          $confirmation,
-          (string) ($conf_4f ["MainURL"] ?? "")
-        );
-      } catch (Throwable $exception) {
-        // Die Nachricht ist zu diesem Zeitpunkt gespeichert. Scheitert allein
-        // die Tafel, faellt der Rahmen auf die historische Auffrischung
-        // zurueck, statt die Antwort einer abgeschlossenen Aktion zu
-        // zerstoeren.
-        $confirmationMarkup = "";
-        error_log (
-          "eStab message confirmation rendering failed: ".
-          $exception->getMessage ()
-        );
-      }
+      estab_session_ui_outcome_store ($_SESSION, $confirmation);
+      // Kein Zwischenspeicher darf die Antwort einer Handlung aufbewahren.
+      header ("Cache-Control: private, no-store, max-age=0");
+      header (
+        "Location: ".(string) ($conf_4f ["MainURL"] ?? ""),
+        true,
+        303
+      );
+      exit;
     }
+    /*
+     * Ohne Rueckmeldung bleibt es bei der Auffrischung beider Rahmen.
+     *
+     * Diesen Weg nimmt die Abmeldung. Eine Weiterleitung des
+     * Nachrichtenrahmens allein liesse das Cockpit daneben bis zu dreissig
+     * Sekunden lang eine Sitzung anzeigen, die es nicht mehr gibt --
+     * Anmeldename, Funktion und Warteschlangen einer Person, die gerade
+     * gegangen ist. Das ist in einer Fuehrungsstelle schlimmer als der
+     * Dialog, den die Weiterleitung erspart: Hier wird nichts wiederholt,
+     * wenn jemand neu laedt, denn es ist nichts mehr zu wiederholen.
+     */
     pre_html (
       "reset",
-      $confirmationMarkup === ""
-        ? "Framereset ".$conf_4f ["Titelkurz"]." ".$conf_4f ["Version"]
-        : "Nachricht abgesetzt",
-      "",
-      $confirmationMarkup !== ""
-    ); // Normaler Seitenaufbau mit Auffrischung
-    if ($confirmationMarkup === "") {
-      echo "<body>";
-      echo estab_session_ui_frame_refresh_markup (
-        estab_session_ui_frame_refresh_script ()
-      );
-      return;
-    }
-    echo "<body class=\"estab-tool-page\">";
-    echo estab_session_ui_frame_refresh_markup (
-      estab_session_ui_sidebar_refresh_script ()
+      "Framereset ".$conf_4f ["Titelkurz"]." ".$conf_4f ["Version"],
+      ""
     );
-    echo $confirmationMarkup;
+    echo "<body>";
+    echo estab_session_ui_frame_refresh_markup (
+      estab_session_ui_frame_refresh_script ()
+    );
   }
 
   /**
@@ -2026,6 +2030,27 @@ ANTWORT % WEITERLEITUNG
         unset_msg_done ( $returnValue["00_lfd"], $workflowSelectedIdentity );
       }
     unset ($returnValue ["action"], $returnValue ["todo"]);
+    /*
+     * Gelesen und erledigt sind Handlungen: Sie aendern etwas.
+     *
+     * Der Steuerlauf fiel hier bisher durch und baute die Liste auf. Damit
+     * stand am Ende einer Handlung eine Seite, und wer neu lud oder
+     * zurueckging, bekam die Frage, ob die Daten erneut gesendet werden
+     * sollen. Ein zweites Absenden setzte das Haekchen ein weiteres Mal --
+     * beim Umschalten also wieder zurueck, und der Bedienende sah, dass
+     * sein Klick "nicht gewirkt" hat.
+     *
+     * 303 auf dieselbe Adresse. Nachgemessen liefert ein GET dorthin
+     * dieselbe Liste, weil die Sitzung Filter und Seite traegt.
+     */
+    if (
+      strtoupper ((string) ($_SERVER ["REQUEST_METHOD"] ?? "GET")) === "POST"
+      && !headers_sent ()
+    ) {
+      header ("Cache-Control: private, no-store, max-age=0");
+      header ("Location: ".(string) ($conf_4f ["MainURL"] ?? ""), true, 303);
+      exit;
+    }
   }
 
 

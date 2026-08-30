@@ -484,6 +484,81 @@ function estab_session_ui_dirty_guard_script(bool $popup = false): string
         . '</script>';
 }
 
+/** Der Sitzungsschluessel, unter dem eine Rueckmeldung die Weiterleitung ueberlebt. */
+const ESTAB_SESSION_UI_OUTCOME_KEY = 'estab_ui_outcome';
+
+/**
+ * Eine Rueckmeldung fuer genau eine Weiterleitung hinterlegen.
+ *
+ * Der Steuerlauf beantwortete eine Handlung frueher mit einer Seite. Wer
+ * danach neu lud oder zurueckging, bekam die Frage, ob die Daten erneut
+ * gesendet werden sollen -- und wer bestaetigte, verschickte eine Meldung
+ * ein zweites Mal.
+ *
+ * Die Antwort ist jetzt eine Weiterleitung. Was der Bedienende lesen soll
+ * -- was geschehen ist und wohin die Nachricht ging --, kann dabei nicht
+ * im Dokument stehen, weil es keines mehr gibt. Es geht durch die Sitzung.
+ *
+ * Nicht durch die Adresse: Dort stuende es im Verlauf, im Fensterrahmen
+ * und in jedem Zwischenspeicher. Die Fuehrungsstellenseiten reichen einen
+ * *Schluessel* durch die Adresse und schlagen den Satz serverseitig nach;
+ * das geht hier nicht, weil die Rueckmeldung aus vier abgeleiteten Feldern
+ * besteht und nicht aus einem von zwanzig festen Saetzen.
+ *
+ * @param array<string,mixed> $session
+ * @param array<string,mixed> $outcome
+ */
+function estab_session_ui_outcome_store(array &$session, array $outcome): void
+{
+    $session[ESTAB_SESSION_UI_OUTCOME_KEY] = $outcome;
+}
+
+/**
+ * Die hinterlegte Rueckmeldung abholen -- genau einmal.
+ *
+ * Sie wird beim Abholen entfernt. Bliebe sie liegen, staende die
+ * Bestaetigung einer laengst erledigten Handlung noch auf der naechsten
+ * Seite und auf der uebernaechsten -- und der Bedienende glaubte, seine
+ * letzte Handlung sei durchgelaufen, obwohl er die Bestaetigung der
+ * vorletzten liest.
+ *
+ * Unbrauchbares wird verworfen statt ausgegeben: Die Sitzung ueberlebt
+ * Programmfassungen, und ein Eintrag aus einer alten Fassung darf die
+ * Anzeige nicht sprengen.
+ *
+ * @param array<string,mixed> $session
+ * @return array<string,mixed>|null
+ */
+function estab_session_ui_outcome_take(array &$session): ?array
+{
+    $stored = $session[ESTAB_SESSION_UI_OUTCOME_KEY] ?? null;
+    unset($session[ESTAB_SESSION_UI_OUTCOME_KEY]);
+    if (!is_array($stored)) {
+        return null;
+    }
+    if (
+        !in_array(
+            $stored['tone'] ?? null,
+            ['forwarded', 'returned', 'completed'],
+            true
+        )
+    ) {
+        return null;
+    }
+    foreach (['title', 'destination', 'detail'] as $field) {
+        $value = $stored[$field] ?? null;
+        if (
+            !is_string($value)
+            || trim($value) === ''
+            || strlen($value) > 400
+            || preg_match('//u', $value) !== 1
+        ) {
+            return null;
+        }
+    }
+    return $stored;
+}
+
 /**
  * Return the safe JavaScript call used to refresh the application sidebar and
  * content frame after login, logout-compatible legacy actions, and saves.

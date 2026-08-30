@@ -244,25 +244,76 @@ $assert(
     'Die Bestaetigung wird durch eine Auffrischung des Rahmens ueberschrieben'
 );
 
+/*
+ * Die Aussage entsteht im Steuerlauf, gezeigt wird sie nach der
+ * Weiterleitung.
+ *
+ * Der Steuerlauf beantwortete eine Handlung frueher mit einer Seite und
+ * schrieb die Tafel selbst hinein. Seit der Umstellung auf 303 (siehe
+ * rm_keine_doppelsendung) gibt es diese Seite nicht mehr: Der Steuerlauf
+ * *bildet* die Aussage und legt sie in der Sitzung ab, der gemeinsame
+ * Seitenkopf holt sie ab und setzt sie ein.
+ *
+ * Beide Haelften werden geprueft. Nur die erste hiesse: Die Aussage wird
+ * gebildet und niemand zeigt sie.
+ */
 $controller = file_get_contents($root . '/4fach/mainindex.php');
 $assert(
     is_string($controller)
         && substr_count($controller, 'estab_session_ui_message_outcome (') === 1
         && substr_count(
             $controller,
+            'estab_session_ui_outcome_store ('
+        ) === 1,
+    'Der Nachrichtenrahmen bildet den Ausgang der Aktion nicht oder legt ihn '
+        . 'nicht fuer die Weiterleitung ab'
+);
+$werkzeuge = file_get_contents($root . '/4fach/tools.php');
+$assert(
+    is_string($werkzeuge)
+        && substr_count(
+            (string) $werkzeuge,
             'estab_session_ui_message_confirmation_markup ('
         ) === 1
         && substr_count(
-            $controller,
+            (string) $werkzeuge,
             'estab_session_ui_sidebar_refresh_script ()'
         ) === 1,
     'Der Nachrichtenrahmen meldet den Ausgang der Aktion nicht zurueck'
+);
+/*
+ * Und die Auffrischung steht *vor* der Tafel im selben Einschub -- nicht
+ * als zweiter, spaeterer Eingriff. Zwei Einschuebe koennten in beliebiger
+ * Reihenfolge landen; hier ist die Reihenfolge belanglos fuer die Anzeige,
+ * aber die gemeinsame Stelle stellt sicher, dass es die Auffrischung nur
+ * zusammen mit einer Tafel gibt. Eine Auffrischung ohne Handlung waere
+ * eine zusaetzliche Anfrage bei jedem Seitenaufbau.
+ */
+$assert(
+    preg_match(
+        '~estab_session_ui_sidebar_refresh_script \(\).*?ob_start~s',
+        (string) $werkzeuge
+    ) === 1,
+    'Die Auffrischung der Seitenleiste haengt nicht an der Tafel; sie liefe '
+        . 'bei jedem Seitenaufbau.'
 );
 
 /*
  * Die Nachricht ist beim Rendern der Tafel bereits gespeichert. Scheitert
  * allein die Tafel, darf sie die Antwort der abgeschlossenen Aktion nicht
  * zerstoeren, sondern muss auf die historische Auffrischung zurueckfallen.
+ */
+/*
+ * Die Tafel entsteht jetzt beim Anzeigen, nicht beim Speichern -- und die
+ * Vorsorge ist mit ihr umgezogen: Scheitert allein die Tafel, bleibt die
+ * Ansicht stehen, statt dass die Seite zerbricht. Die Nachricht ist zu
+ * diesem Zeitpunkt laengst gespeichert.
+ *
+ * `estab_session_ui_frame_refresh_script` bleibt im Steuerlauf: Ohne
+ * Rueckmeldung -- so meldet sich jemand ab -- werden weiterhin beide
+ * Rahmen aufgefrischt. Eine Weiterleitung des Nachrichtenrahmens allein
+ * liesse das Cockpit daneben eine Sitzung anzeigen, die es nicht mehr
+ * gibt.
  */
 $assert(
     is_string($controller)
@@ -273,7 +324,7 @@ $assert(
         && preg_match(
             '~estab_session_ui_message_confirmation_markup \([^;]*?\);\s*'
                 . '\} catch \(Throwable~s',
-            $controller
+            (string) $werkzeuge
         ) === 1
         && substr_count(
             $controller,

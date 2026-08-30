@@ -299,6 +299,18 @@ function estab_ux_rules(): array
                 . 'worin gesucht wird -- ohne ihn ist eine leere Trefferliste '
                 . 'nicht deutbar.',
         ],
+        'UX-KEINE-DOPPELSENDUNG' => [
+            'origin' => ESTAB_UX_ORIGIN_BETREIBER,
+            'reference' => 'Rückmeldung Betrieb: "Daten erneut senden"',
+            'requirement' => 'Eine Handlung, die etwas ändert, wird mit einer '
+                . 'Weiterleitung beantwortet, nicht mit einer Seite. Sonst '
+                . 'fragt der Browser beim Neuladen und beim Zurückgehen, ob '
+                . 'die Daten erneut gesendet werden sollen -- und wer '
+                . 'bestätigt, verschickt eine Meldung ein zweites Mal, '
+                . 'befördert zweimal oder trägt zweimal ins Buch ein. Die '
+                . 'Rückmeldung der Handlung trägt die Sitzung über die '
+                . 'Weiterleitung; sie wird genau einmal gezeigt.',
+        ],
         'UX-AUSGANG-MEDIUM' => [
             'origin' => ESTAB_UX_ORIGIN_BETREIBER,
             'reference' => 'Rückmeldung Betrieb: Ausgang und Disposition',

@@ -253,6 +253,7 @@ for test_name in \
     rm_ein_vordruck \
     betriebsmittel_contract \
     pdf_gleichzeitig \
+    rm_keine_doppelsendung \
     pruefungen_vollstaendig
 do
     [ -f "$repo_root/tests/php/$test_name.php" ] || continue

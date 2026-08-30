@@ -33,9 +33,85 @@ require_once __DIR__ . "/../app/session_ui.php";
    * daneben die Huelle in der Gestaltung der Anwendung stand. Wer beides
    * gleichzeitig sah, sah zwei Programme.
    */
+  /**
+   * Die Rueckmeldung einer abgeschlossenen Handlung einsetzen.
+   *
+   * Seit der Umstellung auf die Weiterleitung (siehe resetframeset in
+   * mainindex.php) beantwortet der Steuerlauf eine Handlung nicht mehr mit
+   * einer Seite, sondern mit 303. Was der Bedienende lesen soll -- was
+   * geschehen ist und wohin die Nachricht ging -- traegt die Sitzung
+   * hinueber und wird auf der Zielseite gezeigt.
+   *
+   * Eingesetzt wird sie hier, in der einen Funktion, die jede Ansicht des
+   * Nachrichtenrahmens vor ihrem <body> aufruft. Der Aufrufer schreibt
+   * sein <body> selbst und mit eigener Klasse; deshalb ein Ausgabepuffer,
+   * der die Tafel hinter das erste <body> setzt, statt sie davor
+   * auszugeben. Vor dem <body> ausgegeben, oeffnete der Browser den
+   * Koerper selbst -- und die Klasse des Aufrufers ginge verloren.
+   *
+   * Ohne diese eine Stelle muesste jede der sieben Ansichten dieselbe
+   * Zeile tragen, und die achte vergaesse sie.
+   */
+  function estab_rueckmeldung_einsetzen (){
+    if (!isset ($_SESSION) || !is_array ($_SESSION)) {
+      return;
+    }
+    $rueckmeldung = estab_session_ui_outcome_take ($_SESSION);
+    if ($rueckmeldung === null) {
+      return;
+    }
+    include ("../4fcfg/config.inc.php");
+    try {
+      $tafel = estab_session_ui_message_confirmation_markup (
+        $rueckmeldung,
+        (string) ($conf_4f ["MainURL"] ?? "")
+      );
+    } catch (Throwable $exception) {
+      // Die Nachricht ist gespeichert. Scheitert allein die Tafel, bleibt
+      // die Ansicht stehen, statt dass die Seite zerbricht.
+      error_log (
+        "eStab message confirmation rendering failed: ".
+        $exception->getMessage ()
+      );
+      return;
+    }
+    if ($tafel === "") {
+      return;
+    }
+    /*
+     * Mit der Tafel wird die Seitenleiste aufgefrischt.
+     *
+     * Sonst stimmten die Warteschlangenzaehler und der Zaehler der
+     * Korrekturschleife bis zu dreissig Sekunden lang nicht -- so lange
+     * bis das Cockpit von allein nachsieht. Wer eine Meldung abgesetzt hat
+     * und daneben unveraendert dieselbe Zahl liest, glaubt, sie sei nicht
+     * durchgelaufen.
+     *
+     * Nur die Seitenleiste: Wer auch den Nachrichtenrahmen auffrischte,
+     * loeschte die Tafel, bevor sie gelesen werden kann.
+     */
+    $tafel = estab_session_ui_frame_refresh_markup (
+      estab_session_ui_sidebar_refresh_script ()
+    ).$tafel;
+    ob_start (static function (string $ausgabe) use ($tafel): string {
+      $stelle = stripos ($ausgabe, "<body");
+      if ($stelle === false) {
+        return $ausgabe;
+      }
+      $ende = strpos ($ausgabe, ">", $stelle);
+      if ($ende === false) {
+        return $ausgabe;
+      }
+      return substr ($ausgabe, 0, $ende + 1)
+        . $tafel
+        . substr ($ausgabe, $ende + 1);
+    });
+  }
+
   function pre_html ($art, $titel, $cssstr, $sharedUi = true){
     include ("../4fcfg/para.inc.php");
     include ("../4fcfg/config.inc.php");
+    estab_rueckmeldung_einsetzen ();
     echo "<!DOCTYPE html PUBLIC \"-//W3C//DTD HTML 4.01 Transitional//EN\">\n";
     echo "<html>\n";
     echo "<head><meta http-equiv=\"content-type\" content=\"text/html; charset=UTF-8\" />\n";
