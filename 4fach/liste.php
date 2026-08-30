@@ -185,15 +185,6 @@ function estab_list_tab_markup ($url, $label, $title, $active, $kind) {
     .estab_message_html ((string) $label)."</a>";
 }
 
-/** Eine Marke fuer die Zahl der Meldungen je Seite. */
-function estab_list_size_markup ($url, $label, $active) {
-  return "<a class=\"estab-list-chip".($active ? " is-active" : "")."\""
-    ." href=\"".$url."\""
-    .($active ? " aria-current=\"true\"" : "")
-    ." title=\"".estab_message_html ((string) $label)." Meldungen je Seite\">"
-    .estab_message_html ((string) $label)."</a>";
-}
-
 /**
  * Der Name, unter dem eine Handlung der Meldungsliste ausgewertet wird.
  *
@@ -217,65 +208,24 @@ function estab_list_handlungsname ($name) {
 /** Ein Schalter der Filterleiste; sein Zustand steht in aria-pressed. */
 function estab_list_toggle_markup ($name, $label, $active) {
   return "<button class=\"estab-list-toggle".($active ? " is-active" : "")."\""
-    ." type=\"submit\" name=\"".estab_list_handlungsname ($name)."\" value=\"1\""
+    ." type=\"submit\" form=\"estab-list-filter\""
+    ." name=\"".estab_list_handlungsname ($name)."\" value=\"1\""
     ." aria-pressed=\"".($active ? "true" : "false")."\">"
     .estab_message_html ((string) $label)."</button>";
 }
 
-/** Ein Knopf zum Blaettern. Das Zeichen ist Schmuck, das Wort ist die Angabe. */
-function estab_list_pager_markup ($name, $glyph, $label) {
-  // form= verbindet den Knopf mit der Filterleiste, in der er nicht steht.
-  // Ohne diese Zeile ist er ein Absendeknopf ohne Formular -- und der tut
-  // nichts.
-  return "<button class=\"estab-list-pager\" type=\"submit\""
-    ." form=\"estab-list-filter\""
-    ." name=\"".estab_list_handlungsname ($name)."\" value=\"1\""
-    ." title=\"".estab_message_html ((string) $label)."\">"
-    ."<span aria-hidden=\"true\">".$glyph."</span>"
-    ."<span class=\"estab-visually-hidden\">"
-    .estab_message_html ((string) $label)."</span></button>";
-}
 
+/*
+ * Hier stand estab_list_page_window() -- der Seitenrahmen der alten Liste.
+ *
+ * Er las flt_navi, filter_start und filter_anzahl aus der Sitzung und
+ * schnitt daraus eine Seite. Seit "Stab lesen" vollstaendig laedt und das
+ * Bauteil blaettert, ruft ihn niemand mehr; die Knoepfe und die
+ * Seitengroessenmarken, die ihn fuellten, sind mit der alten Filterleiste
+ * gegangen. Die Uebungsleitung hat ihren eigenen Rahmen und ist davon
+ * unberuehrt.
+ */
 
-/** Clamp and advance the legacy list pager without putting request data in SQL. */
-function estab_list_page_window ($resultCount) {
-  $pageSize = filter_var ($_SESSION["filter_anzahl"] ?? 15, FILTER_VALIDATE_INT, array (
-    "options" => array ("min_range" => 1, "max_range" => 200),
-  ));
-  if (!is_int ($pageSize)) { $pageSize = 15; }
-  $start = filter_var ($_SESSION["filter_start"] ?? 0, FILTER_VALIDATE_INT, array (
-    "options" => array ("min_range" => 0, "max_range" => PHP_INT_MAX),
-  ));
-  if (!is_int ($start)) { $start = 0; }
-
-  switch ((string) ($_SESSION["flt_navi"] ?? "")) {
-    case "start":
-      $start = 0;
-    break;
-    case "back":
-      $start = max (0, $start - $pageSize);
-    break;
-    case "for":
-      if ($start + $pageSize < $resultCount) { $start += $pageSize; }
-    break;
-    case "end":
-      $start = $resultCount > 0
-        ? intdiv ($resultCount - 1, $pageSize) * $pageSize
-        : 0;
-    break;
-  }
-  unset ($_SESSION["flt_navi"]);
-
-  if ($resultCount === 0) {
-    $start = 0;
-  } elseif ($start >= $resultCount) {
-    $start = intdiv ($resultCount - 1, $pageSize) * $pageSize;
-  }
-  $_SESSION["filter_anzahl"] = $pageSize;
-  $_SESSION["filter_start"] = $start;
-  $_SESSION["filter_rescount"] = $resultCount;
-  return array ($start, $pageSize);
-}
 
 /**
  * Return the fixed Nachweisung view of the current request.
@@ -599,226 +549,77 @@ class Listen extends kategorien {
 /******************************************************************************\
 
 \******************************************************************************/
-  function darstellungs_art ( $what ){
+  /****************************************************************************\
+  | Die Schalter der eigenen Filterleiste von "Stab lesen".
+  |
+  | Ein Aufrufer, eine Listenart: createlist() ruft diese Funktion nur im
+  | Zweig "Stab lesen" und puffert ihre Ausgabe in das Band des
+  | Tabellenbauteils. Die Zweige fuer FMA, LdF, "Stab sichten" und die
+  | beiden Administrationssichten standen hier trotzdem noch -- die
+  | letzte mit drei eigenen Layouttabellen, einem eigenen Zaehler und
+  | einer eigenen Suche, die nie jemand zu Gesicht bekam. Sie sind fort.
+  |
+  | Geblieben sind die beiden Schalter, die etwas koennen, was das
+  | Bauteil nicht kann: Sie entscheiden, *welche* Zeilen die Datenbank
+  | ueberhaupt liefert. Gegangen sind Zaehler, Seitengroesse und
+  | Suchfeld. Die brachte das Bauteil daneben ein zweites Mal mit -- und
+  | seine Angaben stimmten, waehrend die alten nichts mehr beschrieben:
+  | Seit "Stab lesen" vollstaendig laedt, blaettert das Bauteil, nicht
+  | die Abfrage. Auf dem Bildschirm standen zwei Seitengroessen
+  | nebeneinander, die eine mit 5/10/15/20/25, die andere mit 25/50/100.
+  |
+  | Das Suchfeld war dabei mehr als eine Dopplung: Ein Suchbegriff
+  | schaltete die Filter "Unerledigt", "Erledigt" und die Kategorien
+  | stillschweigend ab (siehe get_list). Wer suchte, bekam ungefragt
+  | einen anderen Ausschnitt, als die Schalter daneben anzeigten.
+  |
+  | Hier stehen nur die Knoepfe, kein Formular. Das Band liegt im
+  | Suchformular des Bauteils, und ein Formular im Formular verwirft der
+  | Zerleger des Browsers: Die Knoepfe gehoerten dann zur Suche des
+  | Bauteils und schickten einen GET dorthin. Ihr Formular steht deshalb
+  | neben der Tabelle, und das form-Attribut verbindet sie damit.
+  \****************************************************************************/
+  function darstellungs_art (){
 
-    include ("../4fcfg/config.inc.php");
-
-    switch ($this->listenart){
-      /*************************************************************************\
-                               FFFFF M   M  AAA
-                               F     MM MM A   A
-                               FFF   M M M AAAAA
-                               F     M   M A   A
-                               F     M   M A   A
-      \*************************************************************************/
-      case "FMA":           /***** F M A ****/
-      case "LDF":           /***** L d F ****/
-      break;
-
-      /*************************************************************************\
-        SSSSS  TTTTT   AAA  BBBB   l
-        S        T    A   A B   B  l
-        SSSSS    T    AAAAA BBBBB  l 
-            S    T    A   A B   B  l
-        SSSSS    T    A   A BBBB   l esen
-      \*************************************************************************/
-      case "Stab_lesen":  // ******  S T A B    l e s e n *****
-          if ( debug ) { echo "<b>file:liste.php:_92 fkt:darstellungsart - switch (this->listenart):Stab_lesen </b><br>"; }
-          /*
-           * Die Kennung verbindet den Blaetterer mit dieser Filterleiste.
-           *
-           * listen_navi() gibt die Blaetterknoepfe nach darstellungs_art()
-           * aus -- also ausserhalb dieses Formulars. Ein type="submit" ohne
-           * Formular tut gar nichts: Das war der eigentliche Grund, warum
-           * das Blaettern in "Stab lesen" wirkungslos blieb. Das
-           * form-Attribut der Knoepfe zeigt hierher.
-           */
-          echo "\n<form id=\"estab-list-filter\" action=\"".estab_message_html ($conf_4f ["MainURL"])."\" method=\"POST\" target=\"mainframe\" data-estab-list-filter>\n";
-          echo estab_list_acting_function_field ();
-          echo "<table><tbody>";
-          echo "<tr>";
-          echo "<td>";
-          echo "<big><b>".($_SESSION['filter_start']+1)."|".($_SESSION['filter_start']+$_SESSION['filter_anzahl'])."|<big>".($_SESSION["filter_rescount"])."</big></b></big>";
-          echo "</td>";
-          echo "<td>";
-          echo "Meldung/Seite:<br>\n";
-
-            // Voreinstellung fÃ¼r die Meldungen pro Seite
-          if ( !(isset ($_SESSION["filter_anzahl"])) OR
-              ( $_SESSION["filter_anzahl"] == "" )
-           ){$_SESSION["filter_anzahl"] = 5; }
-
-          echo "<table border=\"0\" ><tbody>";
-          echo "<tr>";
-
-          echo "<td>";
-          echo "<span class=\"estab-list-chips\">";
-            for ($pps=5; $pps <=25; $pps+=5){
-              echo estab_list_size_markup (
-                estab_list_category_url ($conf_4f ["MainURL"], array (
-                  "filter_anzahl_x" => 1, "filter_anzahl" => $pps,
-                )),
-                $pps,
-                $_SESSION["filter_anzahl"] == $pps
-              );
-            }
-          echo "</span>";
-          echo "</td>";
-          echo "</tr>";
-          echo "</tbody></table>";
-          echo "</td>";
-          echo "<td>";
-          $an = $_SESSION ['filter_unerledigt'] != 0;
-          echo estab_list_toggle_markup (
-            $an ? "filter_unerledigt_aus" : "filter_unerledigt_ein", "Unerledigt", $an
-          );
-          echo "</td>";
-          echo "<td>";
-          $an = $_SESSION ['filter_erledigt'] != 0;
-          echo estab_list_toggle_markup (
-            $an ? "filter_erledigt_aus" : "filter_erledigt_ein", "Erledigt", $an
-          );
-          echo "</td>";
-          echo "<td>";
-          $an = $_SESSION ['flt_find_mask'] != 0;
-          echo estab_list_toggle_markup (
-            $an ? "flt_find_mask_aus" : "flt_find_mask_ein", "Suche", $an
-          );
-          echo "</td>";
-
-        echo "<!-- liste.php 233 -->";
-        echo "<td>";
-        echo "<table><tbody>";
-        echo "<tr>";
-        if ($_SESSION["flt_find_mask"] == 1){
-          echo "<td>";
-          if (isset ($_SESSION ["flt_search"]) ) { $defvalue = $_SESSION ["flt_search"] ;}
-          else {$defvalue = "";}
-          echo "<p>Suchbegriff: <input name=\"flt_search\" value=\"".estab_message_html ($defvalue)."\" type=\"text\" size=\"30\" maxlength=\"30\"></p>";
-          echo "</td>";
-          echo "<td>";
-          echo "<input name=\"filter_suche\" value=\"suchen\" type=\"submit\">\n";
-          echo "</td>";
-        }
-        echo "</tr>";
-        echo "</tbody></table>";
-        echo "</td>";
-        echo "</tr>";
-        echo "</tbody></table>";
-        echo "</form>\n";
-      break;
-
-
-      case "Stab_sichten":   /*********** S t a b   s i c h t e n ************/
-      break;
-      /*************************************************************************\
-               SSSSS III  AAA  DDDD  M   M III N   N
-               S      I  A   A D   D MM MM  I  NN  N
-               SSSSS  I  AAAAA D   D M M M  I  N N N
-                   S  I  A   A D   D M   M  I  N  NN
-               SSSSS III A   A DDDD  M   M III N   N
-      \*************************************************************************/
-      case "SIADMIN":  // ***************  SICHTER ADMINISTRATOR  *********************
-      case "FMADMIN":
-          if ( debug ) { echo "<b>file:liste.php:194 fkt:darstellungsart - switch (this->listenart):SIADMIN/FMADMIN </b><br>"; }
-          /*
-           * Die Kennung verbindet den Blaetterer mit dieser Filterleiste.
-           *
-           * listen_navi() gibt die Blaetterknoepfe nach darstellungs_art()
-           * aus -- also ausserhalb dieses Formulars. Ein type="submit" ohne
-           * Formular tut gar nichts: Das war der eigentliche Grund, warum
-           * das Blaettern in "Stab lesen" wirkungslos blieb. Das
-           * form-Attribut der Knoepfe zeigt hierher.
-           */
-          echo "\n<form id=\"estab-list-filter\" action=\"".estab_message_html ($conf_4f ["MainURL"])."\" method=\"POST\" target=\"mainframe\" data-estab-list-filter>\n";
-          echo estab_list_acting_function_field ();
-          echo "<table><tbody>";
-          echo "<tr>";
-          echo "<td>";
-          echo "<big><b>".($_SESSION['filter_start']+1)."|".($_SESSION['filter_start']+$_SESSION['filter_anzahl'])."|<big>".($_SESSION["filter_rescount"])."</big></b></big>";
-          echo "</td>";
-          echo "<td>";
-          echo "Meldung/Seite:<br>\n";
-
-            // Voreinstellung fÃ¼r die Meldungen pro Seite
-          if ( !(isset ($_SESSION["filter_anzahl"])) OR
-              ( $_SESSION["filter_anzahl"] == "" )
-           ){$_SESSION["filter_anzahl"] = 5; }
-
-          echo "<table border=\"0\" ><tbody>";
-          echo "<tr>";
-
-          echo "<td>";
-          echo "<span class=\"estab-list-chips\">";
-            for ($pps=5; $pps <=25; $pps+=5){
-              echo estab_list_size_markup (
-                estab_list_category_url ($conf_4f ["MainURL"], array (
-                  "filter_anzahl_x" => 1, "filter_anzahl" => $pps,
-                )),
-                $pps,
-                $_SESSION["filter_anzahl"] == $pps
-              );
-            }
-          echo "</span>";
-          echo "</td>";
-          echo "</tr>";
-          echo "</tbody></table>";
-          echo "</td>";
-
-		  
-          echo "<td>";
-          $an = $_SESSION ['flt_find_mask'] != 0;
-          echo estab_list_toggle_markup (
-            $an ? "flt_find_mask_aus" : "flt_find_mask_ein", "Suche", $an
-          );
-          echo "</td>";
-
-        echo "<!-- liste.php 233 -->";
-        echo "<td>";
-        echo "<table><tbody>";
-        echo "<tr>";
-        if ($_SESSION["flt_find_mask"] == 1){
-          echo "<td>";
-          if (isset ($_SESSION ["flt_search"]) ) { $defvalue = $_SESSION ["flt_search"] ;}
-          else {$defvalue = "";}
-          echo "<p>Suchbegriff: <input name=\"flt_search\" value=\"".estab_message_html ($defvalue)."\" type=\"text\" size=\"30\" maxlength=\"30\"></p>";
-          echo "</td>";
-          echo "<td>";
-          echo "<input name=\"filter_suche\" value=\"suchen\" type=\"submit\">\n";
-          echo "</td>";
-        }
-        echo "</tr>";
-        echo "</tbody></table>";
-        echo "</td>";
-        echo "</tr>";
-        echo "</tbody></table>";
-        echo "</form>\n";
-
-
-      break;
+    if ($this->listenart !== "Stab_lesen") {
+      return;
     }
-    if ( debug ) { echo "<b>file:liste.php:279 fkt:darstellungsart_ENDE </b><br>"; }
+    $an = $_SESSION ['filter_unerledigt'] != 0;
+    echo estab_list_toggle_markup (
+      $an ? "filter_unerledigt_aus" : "filter_unerledigt_ein", "Unerledigt", $an
+    );
+    $an = $_SESSION ['filter_erledigt'] != 0;
+    echo estab_list_toggle_markup (
+      $an ? "filter_erledigt_aus" : "filter_erledigt_ein", "Erledigt", $an
+    );
   }
 
-  /******************************************************************************\
-    Funktion:  listen_navi ()
-  SELECT * FROM `nv_nachrichten` WHERE `00_lfd` IN
-
-  (SELECT msg FROM `nv_masterkategolink` WHERE `katego` = (
-
-  SELECT lfd FROM `nv_masterkatego` WHERE `kategorie` = "2m"));
-
-  \******************************************************************************/
-  function  listen_navi (){
+  /****************************************************************************\
+  | Das Formular, zu dem die Schalter gehoeren.
+  |
+  | Es traegt keinen sichtbaren Inhalt -- nur die wirksame Funktion -- und
+  | steht neben der Tabelle statt in ihrem Band. Der Grund steht bei
+  | darstellungs_art(): Ein Formular im Formular ueberlebt den Zerleger
+  | des Browsers nicht.
+  \****************************************************************************/
+  function filterleiste_formular (){
     include ("../4fcfg/config.inc.php");
-    echo "<span class=\"estab-list-pagers\">";
-    echo estab_list_pager_markup ("flt_start", "&#124;&#9664;", "Erste Seite");
-    echo estab_list_pager_markup ("flt_back", "&#9664;", "Seite zurück");
-    echo estab_list_pager_markup ("flt_for", "&#9654;", "Seite vor");
-    echo estab_list_pager_markup ("flt_end", "&#9654;&#124;", "Letzte Seite");
-    echo "</span>";
+    echo "\n<form id=\"estab-list-filter\""
+      ." action=\"".estab_message_html ($conf_4f ["MainURL"])."\""
+      ." method=\"POST\" target=\"mainframe\" data-estab-list-filter>";
+    echo estab_list_acting_function_field ();
+    echo "</form>\n";
   }
 
+  /*
+   * Hier stand listen_navi() -- die vier Blaetterknoepfe. Sie hatte seit
+   * der Umstellung von "Stab lesen" auf das Tabellenbauteil keinen
+   * Aufrufer mehr: Das Bauteil bringt seinen eigenen Blaetterer mit, und
+   * zwei Blaetterer nebeneinander sind schlimmer als einer.
+   *
+   * Die Uebungsleitung (4fueltg/ue_ltg.php) hat ihren eigenen Blaetterer;
+   * der ist davon unberuehrt.
+   */
 
   /******************************************************************************\
     Funktion:  kategoliste
@@ -1143,14 +944,21 @@ class Listen extends kategorien {
   }
 
   /**
-   * Die Zeilen einer Liste.
+   * Die Zeilen einer Liste -- immer alle.
    *
-   * `$vollstaendig` liefert alle Zeilen statt einer Seite. Das braucht, wer
-   * das Tabellenbauteil sieben, sortieren und blaettern laesst: Eine
-   * Sortierung ueber eine Seite ist keine Sortierung, sondern eine Umordnung
-   * von fuenfzehn zufaelligen Zeilen.
+   * Es gab hier einmal einen Schalter `$vollstaendig`, der wahlweise eine
+   * Seite oder alle Zeilen lieferte. Er war schon nicht mehr wahlweise:
+   * Von den beiden Aufrufern lädt der eine vollständig, der andere
+   * (Sichter- und Fernmeldeadministration) verlässt die Funktion weiter
+   * oben über `get_admin_message_list`. Der Zweig für eine einzelne Seite
+   * war unerreichbar.
+   *
+   * Und er soll es bleiben: Wer das Tabellenbauteil sieben, sortieren und
+   * blättern lässt, braucht alle Zeilen. Eine Sortierung über eine Seite
+   * ist keine Sortierung, sondern eine Umordnung von fünfzehn zufälligen
+   * Zeilen.
    */
-  function get_list ($listenart, $vollstaendig = false){
+  function get_list ($listenart){
     include ("../4fcfg/config.inc.php");
     include ("../4fcfg/para.inc.php");
     include ("../4fcfg/dbcfg.inc.php");
@@ -1227,12 +1035,24 @@ class Listen extends kategorien {
             $prefix."_fkt_".strtolower ($identity ["funktion"]);
           $userBase = $prefix.strtolower ($identity ["funktion"]).
             "_".$identity ["kuerzel"];
-          // An empty search term is no search. Treating it as one turned the
-          // pattern into "%%", matched every message and silently disabled the
-          // read/done/category filters below.
-          $searchTerm = trim ((string) ($_SESSION["flt_search"] ?? ""));
-          $searchActive = $searchTerm !== "";
-          if ($displayFilters && !$searchActive) {
+          /*
+           * Gesucht wird im Tabellenbauteil, nicht in der Abfrage.
+           *
+           * Hier stand eine zweite Suche ueber Nachweis, Anschrift,
+           * Abfasszeit, Inhalt und absendende Einheit. Zwei Gruende, sie
+           * zu streichen. Erstens schaltete ein Suchbegriff die Filter
+           * darunter -- gelesen, erledigt, Kategorien -- stillschweigend
+           * ab; wer suchte, bekam ungefragt einen anderen Ausschnitt, als
+           * die Schalter daneben anzeigten. Zweitens durchsuchte sie die
+           * Abfasszeit in der Datenbankform "2026-08-24 02:15:26",
+           * waehrend auf dem Bildschirm "240215" steht: Wer eintippte,
+           * was er sah, fand nichts.
+           *
+           * "Stab lesen" laedt vollstaendig; das Bauteil sucht damit ueber
+           * denselben Bestand und kombiniert die Suche mit den Filtern,
+           * statt sie abzuschalten.
+           */
+          if ($displayFilters) {
             if ((int) ($_SESSION["filter_gelesen"] ?? 0) === 1) {
               $where[] =
                 "m.`00_lfd` IN (SELECT `nachnum` FROM ".$readTable.")";
@@ -1268,22 +1088,6 @@ class Listen extends kategorien {
               $parameters[] = $categoryId;
             }
           }
-
-          if ($searchActive) {
-            // A percent sign or underscore in the search term is a character
-            // the operator typed, not a wildcard.
-            $searchPattern = estab_message_list_like_pattern ($searchTerm);
-            $where[] =
-              "(CAST(".estab_message_list_tbb_number_sql ("m").
-              " AS CHAR) LIKE ? ESCAPE '!' OR ".
-              "m.`10_anschrift` LIKE ? ESCAPE '!' OR ".
-              "m.`12_abfzeit` LIKE ? ESCAPE '!' OR ".
-              "m.`12_inhalt` LIKE ? ESCAPE '!' OR ".
-              "m.`13_abseinheit` LIKE ? ESCAPE '!')";
-            for ($i = 0; $i < 5; $i++) {
-              $parameters[] = $searchPattern;
-            }
-          }
         break;
 
         default:
@@ -1305,10 +1109,6 @@ class Listen extends kategorien {
         $parameters
       );
       $result = estab_read_filter_messages ($result, $identity);
-      if ($displayFilters && !$vollstaendig) {
-        list ($start, $pageSize) = estab_list_page_window (count ($result));
-        $result = array_slice ($result, $start, $pageSize);
-      }
       if (!$messageConnection->commit ()) {
         throw new RuntimeException (
           "Lesetransaktion konnte nicht abgeschlossen werden."
@@ -1560,7 +1360,7 @@ class Listen extends kategorien {
           Hole die Liste der gelesenen und der erledigten Nachrichten
         */
         // Vollstaendig: Das Tabellenbauteil siebt, sortiert und blaettert.
-        $result = $this->get_list ("global", true);
+        $result = $this->get_list ("global");
         /*
          * Die Filterleiste und die Kategorienauswahl gehoeren *in* das Band
          * des Tabellenbauteils, nicht daneben. Sie werden deshalb
@@ -1572,9 +1372,11 @@ class Listen extends kategorien {
          * mit, und zwei Blaetterer nebeneinander sind schlimmer als einer.
          */
         ob_start ();
-        $this->darstellungs_art ( $this->listenart );
+        $this->darstellungs_art ();
         $this->kategoliste ();
         $stabZusatz = (string) ob_get_clean ();
+        // Erst das Formular, dann die Tabelle mit den Knoepfen darin.
+        $this->filterleiste_formular ();
         if (!is_array ($this->operationalIdentity)) {
           throw new EstabReadPermissionException (
             "Die wirksame Stabsfunktion ist nicht verfügbar."
@@ -1595,7 +1397,21 @@ class Listen extends kategorien {
          * davon --, und aus dem Quelltext ist nicht ablesbar, welches <td>
          * zu welcher Spalte gehoert. Aus dem Ergebnis schon.
          */
-        if  ($result != "") {
+        /*
+         * Auch die leere Menge wird gezeichnet.
+         *
+         * Hier stand ein "if ($result != \"\")" ohne Gegenzweig. Wer beide
+         * Schalter ausschaltete, bekam eine WHERE-Bedingung "1 = 0" -- und
+         * damit eine vollstaendig leere Flaeche: keine Tabelle, kein Satz,
+         * keine Leiste. Das sieht aus wie ein Absturz, und schlimmer: Ohne
+         * Leiste gibt es keinen Weg zurueck. Man kam nur heraus, indem man
+         * die Ansicht verliess.
+         *
+         * Das Bauteil bringt seinen Leerzustand mit ("leer" weiter unten)
+         * und zeichnet die Baender dazu. Also wird immer gezeichnet.
+         */
+        $result = is_array ($result) ? $result : array ();
+        {
           // Breite und Klammerung je Spalte. Die Angaben stammen aus einer
           // Messung im Browser: Mit gleich verteilten Breiten ueberlagerte
           // der Transportstand die Vorrangstufe, und der Nachrichtentext

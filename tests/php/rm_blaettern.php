@@ -75,25 +75,42 @@ $knopfnamen = static function (string $quelle, string $funktion): array {
     return array_values(array_unique($namen));
 };
 
-$gesendet = array_merge(
-    $knopfnamen($liste, 'estab_list_pager_markup'),
-    $knopfnamen($liste, 'estab_list_toggle_markup')
-);
+/*
+ * Gesucht wird nur noch an der Schalterhilfe.
+ *
+ * `estab_list_pager_markup` und `listen_navi` sind gefallen: Seit „Stab
+ * lesen" vollständig lädt, blättert das Tabellenbauteil, und zwei
+ * Blätterer nebeneinander sind schlimmer als einer. Mit ihnen ging die
+ * Marke für die Seitengröße und die zweite Suche -- das Bauteil bringt
+ * beides mit, und seine Angaben stimmten, während die alten nichts mehr
+ * beschrieben.
+ *
+ * Vier Namen bleiben: „Unerledigt" und „Erledigt", je ein- und
+ * ausgeschaltet. Das sind die beiden Schalter, die etwas können, was das
+ * Bauteil nicht kann -- sie entscheiden, welche Zeilen die Datenbank
+ * überhaupt liefert.
+ *
+ * Offen und hier nicht geprüft: Die Übungsleitung (4fueltg/ue_ltg.php)
+ * führt einen eigenen Blätterer, noch mit `<input type="image">` und den
+ * Namen `ueb_flt_*`. Dieselbe Fehlerart wäre dort möglich.
+ */
+$gesendet = $knopfnamen($liste, 'estab_list_toggle_markup');
 $assert(
-    count($gesendet) >= 8,
-    'Es werden nur ' . count($gesendet) . ' Knopfnamen gefunden. Die Suche '
-        . 'greift nicht mehr, und ihre Ruhe waere kein Beweis.'
+    count($gesendet) === 4,
+    'Es werden ' . count($gesendet) . ' Knopfnamen gefunden statt vier. '
+        . 'Entweder die Suche greift nicht mehr -- dann wäre ihre Ruhe kein '
+        . 'Beweis --, oder die Leiste hat Schalter bekommen oder verloren.'
 );
 
 /*
  * Die Kette hat zwei Glieder, und beide werden geprüft.
  *
- * Erstens: Beide Bauhilfen schreiben den Namen nicht selbst, sondern lassen
- * ihn durch estab_list_handlungsname laufen. Zweitens: Diese Hilfe hängt das
+ * Erstens: Die Bauhilfe schreibt den Namen nicht selbst, sondern lässt ihn
+ * durch estab_list_handlungsname laufen. Zweitens: Diese Hilfe hängt das
  * Suffix an. Ohne das erste Glied bekäme ein einzelner Knopf wieder einen
  * eigenen Namen, ohne das zweite alle zusammen den falschen.
  */
-foreach (['estab_list_toggle_markup', 'estab_list_pager_markup'] as $hilfe) {
+foreach (['estab_list_toggle_markup'] as $hilfe) {
     if (preg_match(
         '~function ' . $hilfe . ' \([^)]*\) \{(.*?)\n\}~s',
         $liste,
@@ -116,33 +133,20 @@ if (preg_match(
     throw new RuntimeException('estab_list_handlungsname fehlt.');
 }
 /*
- * Und der zweite Fehler, der unter dem ersten lag: Die Blätterknöpfe stehen
- * gar nicht in der Filterleiste. `listen_navi()` gibt sie nach
- * `darstellungs_art()` aus, also ausserhalb des Formulars -- und ein
- * `type="submit"` ohne Formular tut nichts.
+ * Hier stand die Prüfung des Blätterknopfs: Er muss über `form=` mit der
+ * Filterleiste verbunden sein, weil er ausserhalb ihres Formulars steht --
+ * ein `type="submit"` ohne Formular tut nichts. Das war der zweite Fehler,
+ * der unter dem ersten lag.
  *
- * Der Name allein hätte das nicht geheilt: Der Knopf hätte weiterhin
- * geschwiegen. Das form-Attribut verbindet ihn mit der Leiste, in der er
- * nicht steht.
+ * Der Knopf ist fort, und damit die Prüfung. Die Aussage lebt weiter, nur
+ * an einer anderen Stelle: Die verbliebenen Schalter stehen im selben Fall
+ * -- sie sitzen im Band des Bauteils, ausserhalb ihres Formulars -- und
+ * die Leiste muss die Kennung tragen, auf die sie zeigen.
  */
-if (preg_match(
-    '~function estab_list_pager_markup \([^)]*\) \{(.*?)\n\}~s',
-    $liste,
-    $blaetterer
-) !== 1) {
-    throw new RuntimeException('estab_list_pager_markup fehlt.');
-}
 $assert(
-    str_contains($blaetterer[1], 'form=\\"estab-list-filter\\"'),
-    'Die Blätterknöpfe sind nicht mit der Filterleiste verbunden. Sie stehen '
-        . 'ausserhalb ihres Formulars, und ein Absendeknopf ohne Formular tut '
-        . 'nichts.'
-);
-$assert(
-    substr_count($liste, 'id=\\"estab-list-filter\\"') === 2,
-    'Die Filterleiste traegt die Kennung nicht, auf die die Blätterknöpfe '
-        . 'zeigen -- oder nicht in beiden Listenarten. Ein form-Attribut ins '
-        . 'Leere ist so still wie gar keines.'
+    substr_count($liste, 'id=\\"estab-list-filter\\"') === 1,
+    'Die Filterleiste traegt die Kennung nicht, auf die die Schalter '
+        . 'zeigen. Ein form-Attribut ins Leere ist so still wie gar keines.'
 );
 
 $assert(

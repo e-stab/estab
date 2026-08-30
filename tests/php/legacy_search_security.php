@@ -41,58 +41,57 @@ $assert(
     'The escape character itself is not escaped and breaks the pattern'
 );
 
-$listSource = file_get_contents($root . '/4fach/liste.php');
-if (!is_string($listSource)) {
-    throw new RuntimeException('Could not read 4fach/liste.php');
+/*
+ * Wo die Suche heute steht.
+ *
+ * Die alte Liste hatte eine eigene zweite Suche über Nachweis, Anschrift,
+ * Abfasszeit, Inhalt und absendende Einheit. Sie ist gefallen: Ein
+ * Suchbegriff schaltete die Filter darunter -- gelesen, erledigt,
+ * Kategorien -- stillschweigend ab, und ihre Abfasszeit durchsuchte die
+ * Datenbankform „2026-08-24 02:15:26", während auf dem Bildschirm
+ * „240215" steht. Gesucht wird jetzt im Tabellenbauteil und in
+ * app/message_list.php.
+ *
+ * Die Anforderung ist dieselbe geblieben, nur ihr Ort nicht: Jeder
+ * LIKE-Vergleich, der ein maskiertes Muster benutzt, muss sein
+ * Fluchtzeichen auch erklären. Ohne die ESCAPE-Klausel nimmt der Server
+ * das „!" wörtlich, und aus der Maskierung wird ein Suchbegriff.
+ */
+$suchQuelle = file_get_contents($root . '/app/message_list.php');
+if (!is_string($suchQuelle)) {
+    throw new RuntimeException('Could not read app/message_list.php');
 }
-
-// The legacy list must use the shared builder instead of its own concatenation.
-$assert(
-    !str_contains($listSource, '"%".(string) $_SESSION["flt_search"]."%"'),
-    'The legacy search still concatenates its pattern from the raw session value'
-);
-$assert(
-    str_contains($listSource, 'estab_message_list_like_pattern ($searchTerm)'),
-    'The legacy search does not use the escaping pattern builder'
-);
-
-// Every LIKE of that search needs the escape clause, otherwise the escaping
-// character is taken literally by the server.
-$searchStart = strpos($listSource, 'if ($searchActive) {');
-$assert($searchStart !== false, 'The search branch of the legacy list is gone');
-$searchEnd = strpos($listSource, 'break;', (int) $searchStart);
-$searchBlock = substr(
-    $listSource,
-    (int) $searchStart,
-    (int) $searchEnd - (int) $searchStart
-);
-$likeCount = substr_count($searchBlock, 'LIKE ?');
-$escapeCount = substr_count($searchBlock, "LIKE ? ESCAPE '!'");
+$likeCount = substr_count($suchQuelle, 'LIKE ?');
+$escapeCount = substr_count($suchQuelle, "LIKE ? ESCAPE '!'");
 $assert(
     $likeCount > 0 && $likeCount === $escapeCount,
     sprintf(
-        'The legacy search has %d LIKE comparisons but only %d declare the'
-            . ' escape character',
+        'Die Suche hat %d LIKE-Vergleiche, aber nur %d nennen ihr'
+            . ' Fluchtzeichen.',
         $likeCount,
         $escapeCount
     )
 );
-
-// An empty term is no search.
 $assert(
-    !str_contains($listSource, '$searchActive = isset ($_SESSION["flt_search"]);'),
-    'An empty search term still activates the search and matches everything'
-);
-$assert(
-    str_contains($listSource, '$searchTerm = trim ((string) ($_SESSION["flt_search"] ?? ""));')
-        && str_contains($listSource, '$searchActive = $searchTerm !== "";'),
-    'The legacy list no longer distinguishes an empty term from a real search'
+    substr_count($suchQuelle, '= estab_message_list_like_pattern(') === 2
+        && !preg_match('~[\'"]%[\'"]\s*\.\s*\$~', $suchQuelle),
+    'Die Suche baut ihr Muster nicht mehr über den maskierenden Bauer oder'
+        . ' klebt wieder Prozentzeichen an einen Wert.'
 );
 
-// The filters below must stay reachable while no search is running.
+/*
+ * Und die Falle selbst ist fort: In der alten Liste hing die Erreichbarkeit
+ * der Filter am Suchzustand.
+ */
+$listSource = file_get_contents($root . '/4fach/liste.php');
+if (!is_string($listSource)) {
+    throw new RuntimeException('Could not read 4fach/liste.php');
+}
 $assert(
-    str_contains($listSource, 'if ($displayFilters && !$searchActive) {'),
-    'The read, done and category filters no longer depend on the search state'
+    !str_contains($listSource, '$searchActive')
+        && !str_contains($listSource, 'flt_search'),
+    'Die alte zweite Suche ist zurück. Sie schaltete die Filter darunter'
+        . ' stillschweigend ab.'
 );
 
 printf("legacy search: OK (%d assertions)\n", $assertions);

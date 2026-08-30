@@ -81,12 +81,10 @@ $faksimile = [
  * @var array<string,array{0:int,1:string}>
  */
 $offeneDateien = [
-    '4fach/liste.php' => [6, 'Die übrigen Listenarten -- Sichtung, '
-        . 'Korrektur und die Administrationssichten -- sowie sechs '
-        . 'Layouttabellen der alten Filterleiste. Die drei Nachweisungs'
-        . 'zweige sind geloescht: Sie hatten keinen Aufrufer mehr.'],
-    '4fueltg/ue_ltg.php' => [17, 'Der Vordruck der Führungsleitung und zwei '
-        . 'Layouttabellen seiner Bedienleiste.'],
+    '4fueltg/ue_ltg.php' => [3, 'Drei Layouttabellen der Bedienleiste. '
+        . 'Die Zahl stand auf 17, tatsächlich sind es 3 -- eine Obergrenze, '
+        . 'die 14 Tabellen Luft lässt, ist genau der Freibrief, den sie '
+        . 'verhindern soll.'],
     '4fach/tools.php' => [6, 'Das alte Cockpit mit fest eingetragenen Grautönen.'],
     '4fadm/fuehrungsstelle.php' => [4, 'Die Schicht- und Dienstverwaltung.'],
     '4fadm/make_fkt.php' => [1, 'Die Empfängermatrix.'],
@@ -103,7 +101,7 @@ $offeneDateien = [
  * ehrliche Zahl ist höher, und das ist der Punkt: Eine Ratsche, die nur
  * zählt, was sie kennt, misst ihren eigenen Blick, nicht den Bestand.
  */
-const ESTAB_TABELLEN_OFFEN = 23;
+const ESTAB_TABELLEN_OFFEN = 17;
 
 $verzeichnisse = [
     '4fach', '4fadm', '4fueltg', 'app', 'stabetb', 'fmtbb', 'stabinfo',

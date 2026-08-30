@@ -742,6 +742,56 @@ $assert(
     )
 );
 
+/* --- Ein Zusatzband traegt kein Formular --- */
+
+/*
+ * Der Befund, der diese Zusage ausgeloest hat: Die Filterleiste von "Stab
+ * lesen" stand als Zusatzband im Suchformular des Bauteils. Ein Formular
+ * im Formular ist kein gueltiges Markup; der Browser wirft das innere
+ * still weg. Im Browser gemessen gehoerten die Schalter "Unerledigt" und
+ * "Erledigt" beide zu "estab-tabelle-sieb-stab_lesen_suche" -- dem
+ * GET-Suchformular des Bauteils -- und taten nichts.
+ *
+ * Der Fehler war fuer jeden Pruefstand unsichtbar: Im Quelltext stand ein
+ * vollstaendiges, richtig geschriebenes Formular mit passender Kennung.
+ * Erst der Zerleger des Browsers macht daraus nichts. Deshalb sagt es
+ * jetzt das Bauteil selbst.
+ */
+$mitFormular = static function (string $band) use ($spalten, $zeilen): void {
+    estab_tabelle_markup([
+        'id' => 'band', 'spalten' => $spalten, 'zeilen' => $zeilen,
+        'quelle' => [], 'zusatzbaender' => $band,
+    ]);
+};
+$abgewiesen = false;
+try {
+    $mitFormular('<form id="eigen" method="post"><button>Filter</button></form>');
+} catch (InvalidArgumentException) {
+    $abgewiesen = true;
+}
+$assert(
+    $abgewiesen,
+    estab_ux_requirement(
+        'GES-TABELLE-EINHEITLICH',
+        'Das Bauteil nimmt ein Formular im Zusatzband an. Der Browser '
+            . 'verwirft es, und seine Knoepfe senden an die Suche.'
+    )
+);
+$angenommen = true;
+try {
+    $mitFormular('<button type="submit" form="estab-list-filter">Filter</button>');
+} catch (InvalidArgumentException) {
+    $angenommen = false;
+}
+$assert(
+    $angenommen,
+    estab_ux_requirement(
+        'GES-TABELLE-EINHEITLICH',
+        'Das Bauteil weist auch den richtigen Weg ab: einen Knopf, der '
+            . 'sein Formular ueber form="..." nennt.'
+    )
+);
+
 printf(
     "Gestaltung Tabellenbauteil: OK (%d assertions, %d Spalten, %d Zeilen)\n",
     $assertions,

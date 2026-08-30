@@ -600,9 +600,15 @@ $assert(
     'message lists do not handle missing/multicolour recipients or timestamp/status keys safely'
 );
 $assert(
-    substr_count($listSource, 'data-estab-list-filter') === 2
-        && substr_count($listSource, '<form') === 4
-        && substr_count($listSource, '</form>') === 4
+    /*
+     * Eine Filterleiste, nicht zwei. Die zweite gehoerte zu den beiden
+     * Administrationssichten und war unerreichbar: darstellungs_art()
+     * hat einen einzigen Aufrufer, im Zweig "Stab lesen". Mit ihr
+     * gingen zwei Formulare -- ihres und das der zweiten Suche.
+     */
+    substr_count($listSource, 'data-estab-list-filter') === 1
+        && substr_count($listSource, '<form') === 3
+        && substr_count($listSource, '</form>') === 3
         /*
          * Keine handgeschriebene Vorrangzeile mehr. Ausgang und Sichtung
          * zeichnen ihre Zeilen nicht mehr selbst; was dort hervorhebt, ist
@@ -620,14 +626,15 @@ $assert(
             'estab_message_list_render_controls ('
         )
         /*
-         * Handgeschriebene Zeilen gibt es weiterhin -- die uebrigen
-         * Listenarten sind noch nicht umgestellt. Gezaehlt wird jetzt
-         * ohne den Zeilenumbruch: Die drei geloeschten Nachweisungszweige
-         * schrieben `echo "<tr>\n"`, die verbliebenen schreiben
-         * `echo "<tr>"`. Die Aussage ist dieselbe -- es gibt sie noch, und
-         * ihre Zahl darf nicht wachsen.
+         * Und jetzt gar keine handgeschriebene Zeile mehr. Die Zahl stand
+         * zuletzt bei sechs; das waren die Zeilen der beiden alten
+         * Filterleisten, die ihre Bedienelemente mit <table> nebeneinander
+         * stellten. Beide sind fort -- die eine unerreichbar, die andere
+         * durch einen umbrechenden Streifen ersetzt. Die Zahl darf nicht
+         * wieder wachsen: Die Datei zeichnet keine Tabelle mehr.
          */
-        && substr_count($listSource, 'echo "<tr') >= 6
+        && substr_count($listSource, 'echo "<tr') === 0
+        && substr_count($listSource, '<table') === 0
         // Die Kopfzellen der Liste "Stab lesen" kommen aus dem
         // Tabellenbauteil; die Seite schreibt sie nicht mehr selbst. Dass
         // die Zeile dort vollstaendig ist, prueft das Bauteil haerter als

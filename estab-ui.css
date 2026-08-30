@@ -3515,6 +3515,19 @@ form[data-estab-incident-disabled="true"]::before {
     color: var(--tinte-spalte);
 }
 
+/* Die eigene Filterleiste von "Stab lesen".
+
+   Sie steht als Band im Tabellenbauteil, dessen Suchzeile bereits ein
+   umbrechender Flex-Streifen ist. Die Leiste ist darin ein Element und
+   ordnet ihre beiden Schalter selbst -- frueher tat das eine
+   Layouttabelle mit zwei weiteren darin. */
+.estab-list-filterleiste {
+    align-items: flex-end;
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--abstand-2);
+}
+
 .estab-list-chips {
     display: inline-flex;
     gap: var(--abstand-1);

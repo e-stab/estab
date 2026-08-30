@@ -964,6 +964,36 @@ function estab_tabelle_markup(array $tabelle): string
             );
         }
     }
+    /*
+     * Ein Zusatzband darf kein Formular tragen.
+     *
+     * Das Band steht im Suchformular des Bauteils. Ein Formular im
+     * Formular ist kein gueltiges Markup, und der Zerleger des Browsers
+     * behandelt es nicht als Fehler, sondern wirft das innere still weg:
+     * Aus dem DOM verschwindet es, seine Knoepfe gehoeren fortan zum
+     * aeusseren Formular, und sie schicken ihre Namen an dessen Ziel.
+     *
+     * Genau das geschah in "Stab lesen". Die Schalter "Unerledigt" und
+     * "Erledigt" sassen in einer eigenen Leiste im Band; im Browser
+     * gemessen gehoerten beide zum GET-Suchformular des Bauteils. Sie
+     * taten nichts -- und der Fehler war stumm: Der Knopf sah aus wie
+     * ein Knopf, die Seite lud neu, und der Ausschnitt blieb derselbe.
+     * Kein Pruefstand konnte das sehen, denn im Quelltext stand ein
+     * vollstaendiges, richtig geschriebenes Formular.
+     *
+     * Der Weg ist das form-Attribut: Das Formular steht neben der
+     * Tabelle, der Knopf im Band nennt dessen Kennung.
+     */
+    $zusatzband = (string) ($tabelle['zusatzbaender'] ?? '');
+    if (!$eigeneBaender && stripos($zusatzband, '<form') !== false) {
+        throw new InvalidArgumentException(
+            'Das Zusatzband der Tabelle "' . $id . '" enthält ein '
+                . 'Formular. Es steht im Suchformular des Bauteils; der '
+                . 'Browser wirft das innere Formular weg, und seine Knöpfe '
+                . 'senden ihre Namen an die Suche. Das Formular gehört '
+                . 'neben die Tabelle, der Knopf nennt es über form="…".'
+        );
+    }
     // Eine schmale Tabelle mit wenigen Spalten wird erst spaeter zu Karten.
     $markup = '<section class="estab-tabelle'
         . (($tabelle['schmal'] ?? false) === true
