@@ -187,6 +187,79 @@ $assert(
     'app/incident_pdf.php trägt weiterhin die alte Schranke von 384 MB.'
 );
 
+/*
+ * Das Stylesheet wird nicht bei jedem Rahmenaufbau neu uebertragen.
+ *
+ * Gemessen: Jede Anfrage an estab-ui.css beantwortete der Server mit 200
+ * und den vollen 273 kB -- sechsmal allein waehrend der Anmeldung, einmal
+ * je Ansichtswechsel. Nie eine 304. Es fehlte `Cache-Control`; ohne
+ * diesen Kopf entscheidet der Browser nach eigenem Gutduenken, und in
+ * parallel ladenden Rahmen entschied er sich jedes Mal fuer neu holen.
+ *
+ * Gesetzt ist `no-cache`, nicht `max-age`. Der Unterschied ist wichtig:
+ * `no-cache` heisst "ablegen, aber vor jeder Benutzung rueckfragen". Die
+ * Rueckfrage kostet einige hundert Byte und liefert 304 ohne Rumpf --
+ * und anders als eine Ablaufzeit kann sie nach einer Aktualisierung kein
+ * veraltetes Stylesheet ausliefern. In einer Fuehrungsstelle ist eine
+ * Seite, die nach dem Einspielen anders aussieht als vorgesehen, teurer
+ * als eine Rueckfrage je Aufbau.
+ */
+$apache = $lies('docker/apache/estab.conf');
+$assert(
+    preg_match(
+        '~<FilesMatch[^>]*css[^>]*>.*?Cache-Control[^\n]*no-cache~s',
+        $apache
+    ) === 1,
+    'Der Webserver setzt fuer das Stylesheet keinen Cache-Control-Kopf; es '
+        . 'wird bei jedem Rahmenaufbau vollstaendig uebertragen.'
+);
+/*
+ * Und die Rueckfrage wird auch beantwortet.
+ *
+ * Cache-Control allein reichte nicht. Nachgemessen im Browser: Er fragte
+ * ab dem zweiten Aufruf zurueck (If-None-Match), und Apache antwortete
+ * trotzdem mit 200 und dem vollen Rumpf.
+ *
+ * Der Grund liegt in mod_deflate: Beim Ausliefern haengt es "-gzip" an
+ * das ETag, beim Vergleich der eingehenden Bedingung nimmt es aber das
+ * unveraenderte. Der Vergleich schlaegt damit immer fehl. Die Rueckfrage
+ * macht es dann sogar schlimmer als gar keine: Sie kostet zusaetzlich
+ * Zeit und liefert doch die vollen 50 kB.
+ *
+ * `DeflateAlterETag NoChange` laesst das ETag unangetastet.
+ */
+$assert(
+    preg_match('~^\s*DeflateAlterETag\s+NoChange\s*$~m', $apache) === 1,
+    'Apache veraendert das ETag beim Komprimieren. Die Rueckfrage des '
+        . 'Browsers trifft dann nie zu, und das Stylesheet wird bei jedem '
+        . 'Rahmenaufbau vollstaendig uebertragen -- trotz Cache-Control.'
+);
+$assert(
+    !preg_match(
+        '~<FilesMatch[^>]*css[^>]*>.*?max-age=\s*[1-9]~s',
+        $apache
+    ),
+    'Das Stylesheet bekommt eine Ablaufzeit. Nach einer Aktualisierung '
+        . 'liefe der Browser bis zu dieser Zeit mit dem alten Aussehen.'
+);
+
+/*
+ * Und die Anleitung sagt dasselbe wie die Konfiguration.
+ *
+ * Sie nannte "mindestens 2 GiB". Nach der Umstellung stimmt das nicht
+ * mehr, und eine Anleitung, die mehr verlangt als noetig, haelt Leute von
+ * einem Geraet fern, auf dem es laufen wuerde.
+ */
+$anleitung = $lies('docs/INSTALLATION.md');
+$assert(
+    !str_contains($anleitung, 'mindestens 2 GiB'),
+    'docs/INSTALLATION.md verlangt weiterhin mindestens 2 GiB.'
+);
+$assert(
+    str_contains($anleitung, '256 MiB') && str_contains($anleitung, '448 MiB'),
+    'docs/INSTALLATION.md nennt die gesetzten Containergrenzen nicht.'
+);
+
 printf(
     "Betriebsmittel: OK (%d assertions, %d Datenbankparameter in %d "
         . "compose-Dateien)\n",

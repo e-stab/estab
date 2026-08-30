@@ -5,7 +5,9 @@
 - Docker oder Podman mit Compose,
 - `openssl` zum Erzeugen der Secrets,
 - `curl` für die Bereitschaftsprüfung,
-- mindestens 2 GiB freier Arbeitsspeicher für einen kleinen Einzelbetrieb,
+- rund 1 GiB freier Arbeitsspeicher für einen kleinen Einzelbetrieb
+  (die Container sind auf 256 MiB für die Datenbank und 448 MiB für
+  die Anwendung begrenzt; gemessen belegen sie zusammen rund 280 MiB),
 - für Netzwerkzugriff ein TLS-Reverse-Proxy und eine Firewall.
 
 Die Installation aus dem Checkout baut die Images lokal. Für eine
