@@ -276,10 +276,24 @@ $assert(
 );
 
 $systemStatus = $additionalSources['4fadm/system_status.php'];
+/*
+ * Die vier Bereitschaftstafeln kommen aus dem Tabellenbauteil.
+ *
+ * Der eigene Rahmen und die verborgene Bildunterschrift standen einmal
+ * als Zeichenkette hier; beides bringt das Bauteil mit. Gezaehlt werden
+ * jetzt die Tafeln selbst -- vier, so viele wie zuvor.
+ *
+ * Ohne Suchband und Blaetterer: Eine Volltextsuche ueber vier feste
+ * Zeilen waere kein Gewinn, sondern Beiwerk, das die Tafel hoeher macht
+ * als ihren Inhalt. Genau dafuer gibt es `baender => false`, und dass es
+ * gesetzt ist, wird hier festgehalten -- sonst waechst die Diagnoseseite
+ * beim naechsten Anfassen um vier Suchfelder, die niemand braucht.
+ */
 $assert(
     str_contains($systemStatus, 'data-estab-readiness=')
-        && substr_count($systemStatus, 'class="estab-tool-table-wrap') === 4
-        && substr_count($systemStatus, '<caption class="estab-visually-hidden">') === 4
+        // Vier Aufrufe, nicht fuenf Vorkommen: Die Definition zaehlt nicht mit.
+        && substr_count($systemStatus, 'echo system_status_tafel(') === 4
+        && str_contains($systemStatus, "'baender' => false")
         && str_contains($systemStatus, 'estab-tool-badge-success')
         && str_contains($systemStatus, 'estab-tool-badge-danger'),
     'system status does not expose responsive, accessible readiness groups'

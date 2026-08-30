@@ -601,7 +601,15 @@ $assert(
             $listSource,
             'estab_message_list_render_controls ('
         )
-        && substr_count($listSource, 'echo "<tr>\n";') >= 3
+        /*
+         * Handgeschriebene Zeilen gibt es weiterhin -- die uebrigen
+         * Listenarten sind noch nicht umgestellt. Gezaehlt wird jetzt
+         * ohne den Zeilenumbruch: Die drei geloeschten Nachweisungszweige
+         * schrieben `echo "<tr>\n"`, die verbliebenen schreiben
+         * `echo "<tr>"`. Die Aussage ist dieselbe -- es gibt sie noch, und
+         * ihre Zahl darf nicht wachsen.
+         */
+        && substr_count($listSource, 'echo "<tr') >= 6
         // Die Kopfzellen der Liste "Stab lesen" kommen aus dem
         // Tabellenbauteil; die Seite schreibt sie nicht mehr selbst. Dass
         // die Zeile dort vollstaendig ist, prueft das Bauteil haerter als

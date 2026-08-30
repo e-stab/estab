@@ -873,89 +873,57 @@ $anlagenmarken = substr_count(
     $listExecutableSource,
     'estab_list_attachment_badge ($z ["anhang"] ?? null);'
 );
+/*
+ * Vier statt sieben: Die drei Nachweisungszweige in liste.php sind
+ * geloescht -- niemand rief sie auf (siehe ges_tabelle_einheitlich).
+ *
+ * Die Anlagenangabe ist damit nicht verschwunden, sondern umgezogen. Die
+ * lebende Nachweisung in app/nachweisung.php haengt sie an den Inhalt --
+ * als Text ("... . 2 Anlagen"), nicht als Marke: Sie liefert dem Bauteil
+ * reinen Text, damit dieses maskiert, auf zwei Zeilen kuerzt und den Rest
+ * aufklappt. Eine Seite, die fertiges Markup liefert, umgeht die
+ * Maskierung.
+ *
+ * Beide Haelften werden geprueft. Nur die erste hiesse: Die Nachweisung
+ * duerfte verschweigen, dass eine Anlage haengt -- und im Nachweis ist
+ * das keine Nebensache.
+ */
 $assert(
-    $anlagenmarken === 7
-        && substr_count($listExecutableSource, '`12_anhang`') >= 7,
+    $anlagenmarken === 4
+        && substr_count($listExecutableSource, '`12_anhang`') >= 4,
     'An operational message list omits the attachment indicator ('
-        . $anlagenmarken . ' statt 7)'
+        . $anlagenmarken . ' statt 4)'
+);
+$nachweisungQuelle = (string) file_get_contents($root . '/app/nachweisung.php');
+$assert(
+    str_contains($nachweisungQuelle, 'estab_message_list_attachment_tokens')
+        && str_contains($nachweisungQuelle, 'estab_message_list_attachment_label')
+        && str_contains($nachweisungQuelle, "\$zeile['12_anhang']"),
+    'Die Nachweisung verschweigt, dass eine Anlage haengt.'
 );
 
-$incomingTrackingStart = strrpos($listExecutableSource, 'case "FmNwE"');
-$outgoingTrackingStart = strrpos($listExecutableSource, 'case "FmNwA"');
-$combinedTrackingCaseStart = strrpos($listExecutableSource, 'case "FmNw"');
-$incomingTrackingCase = (
-    is_int($incomingTrackingStart)
-    && is_int($outgoingTrackingStart)
-    && $outgoingTrackingStart > $incomingTrackingStart
-) ? substr(
-    $listExecutableSource,
-    $incomingTrackingStart,
-    $outgoingTrackingStart - $incomingTrackingStart
-) : '';
-$outgoingTrackingCase = (
-    is_int($outgoingTrackingStart)
-    && is_int($combinedTrackingCaseStart)
-    && $combinedTrackingCaseStart > $outgoingTrackingStart
-) ? substr(
-    $listExecutableSource,
-    $outgoingTrackingStart,
-    $combinedTrackingCaseStart - $outgoingTrackingStart
-) : '';
-$combinedTrackingCase = is_int($combinedTrackingCaseStart)
-    ? substr($listExecutableSource, $combinedTrackingCaseStart)
-    : '';
-$combinedTrackingRowsStart = strpos(
-    $listExecutableSource,
-    'function estab_list_combined_tracking_rows ('
-);
-$combinedTrackingRowsEnd = $combinedTrackingRowsStart === false
-    ? false
-    : strpos(
-        $listExecutableSource,
-        'function estab_list_combined_tracking_data (',
-        $combinedTrackingRowsStart
-    );
-$combinedTrackingRowsSource = (
-    is_int($combinedTrackingRowsStart)
-    && is_int($combinedTrackingRowsEnd)
-    && $combinedTrackingRowsEnd > $combinedTrackingRowsStart
-) ? substr(
-    $listExecutableSource,
-    $combinedTrackingRowsStart,
-    $combinedTrackingRowsEnd - $combinedTrackingRowsStart
-) : '';
-$assert(
-    $incomingTrackingCase !== ''
-        && str_contains($incomingTrackingCase, 'm.`12_anhang`')
-        && substr_count(
-            $incomingTrackingCase,
-            'estab_list_attachment_badge ($row ["12_anhang"] ?? null);'
-        ) === 1,
-    'Incoming transmission log omits attachment data or its canonical badge'
-);
-$assert(
-    $outgoingTrackingCase !== ''
-        && str_contains($outgoingTrackingCase, 'm.`12_anhang`')
-        && substr_count(
-            $outgoingTrackingCase,
-            'estab_list_attachment_badge ($row ["12_anhang"] ?? null);'
-        ) === 1,
-    'Outgoing transmission log omits attachment data or its canonical badge'
-);
-$assert(
-    $combinedTrackingCase !== ''
-        && $combinedTrackingRowsSource !== ''
-        && str_contains($combinedTrackingRowsSource, 'm.`12_anhang`')
-        && substr_count(
-            $combinedTrackingCase,
-            'estab_list_attachment_badge ($row ["12_anhang"] ?? null);'
-        ) === 1,
-    'Combined transmission log omits attachment data or its canonical badge'
-);
+/*
+ * Hier standen drei Pruefungen an den Nachweisungszweigen von
+ * liste.php: dass jeder die Anlagendaten liest und genau eine
+ * Anlagenmarke setzt. Die Zweige sind geloescht -- niemand rief sie
+ * auf (siehe ges_tabelle_einheitlich, "kein Listenzweig ohne
+ * Aufrufer").
+ *
+ * Die Anforderung steht oben, an der lebenden Nachweisung: Sie liest
+ * 12_anhang und sagt am Inhalt, dass eine Anlage haengt.
+ */
 $secondCaseStart = strrpos($listExecutableSource, 'case "SIADMIN"');
+/*
+ * Der Abschnitt endete an 'case "FmNwE"'. Den gibt es nicht mehr.
+ *
+ * Als neues Ende dient das `break;` des Zweiges. Nicht `} // switch`:
+ * Der Quelltext ist hier ohne Kommentare, und die Marke waere darin
+ * nicht zu finden -- die Isolierung liefe bis zum Dateiende und die
+ * Pruefung saehe Dinge, die einem anderen Zweig gehoeren.
+ */
 $secondCaseEnd = $secondCaseStart === false
     ? false
-    : strpos($listExecutableSource, 'case "FmNwE"', $secondCaseStart);
+    : strpos($listExecutableSource, 'break;', $secondCaseStart);
 $secondCase = (
     is_int($secondCaseStart)
     && is_int($secondCaseEnd)

@@ -441,42 +441,59 @@ $section = static function (string $source, string $start, string $end): string 
     }
     return substr($source, $from, $to - $from);
 };
-$incoming = $section($listSource, 'case "FmNwE":', 'case "FmNwA":');
-$outgoing = $section($listSource, 'case "FmNwA":', 'case "FmNw":');
-$combined = $section($listSource, 'case "FmNw":', '} // switch');
-foreach ([
-    'Nachweisung Eingang' => [$incoming, 'nwe_'],
-    'Nachweisung Ausgang' => [$outgoing, 'nwa_'],
-    'Nachweisung Eingang/Ausgang' => [$combined, 'nw_'],
-] as $surface => [$case, $prefix]) {
-    $assert(
-        str_contains($case, 'estab_list_tracking_filters ("' . $prefix . '")')
-            && str_contains(
-                $case,
-                'estab_list_tracking_pager ($trackingFilters, $trackingWindow, "'
-                    . $prefix . '")'
-            )
-            && str_contains(
-                $case,
-                'estab_message_list_render_resultbar ($trackingFilters'
-            ),
-        $surface . ' has no page control of its own'
-    );
-    $assert(
-        str_contains($case, 'estab_message_list_clamped_text ($row["12_inhalt"]')
-            && !str_contains(
-                $case,
-                'echo "<a>".estab_message_html ($row["12_inhalt"])'
-            ),
-        $surface . ' still prints the complete message text in every row'
-    );
-}
+/*
+ * Die Nachweisung liegt in app/nachweisung.php.
+ *
+ * Hier standen drei Pruefungen an den Zweigen FmNwE, FmNwA und FmNw von
+ * liste.php: eigene Blaetterschritte, gekuerzter Text, seitenweises Lesen
+ * mit LIMIT/OFFSET. Die Zweige sind geloescht -- niemand rief sie auf
+ * (siehe ges_tabelle_einheitlich, "kein Listenzweig ohne Aufrufer").
+ *
+ * Zwei der drei Anforderungen sind mitgezogen. Die dritte ist bewusst
+ * aufgegeben worden, und zwar dokumentiert: Die Nachweisung laedt alle
+ * Zeilen eines Einsatzes, weil eine Sortierung ueber eine Seite keine
+ * Sortierung ist, sondern eine Umordnung von fuenfundzwanzig zufaelligen
+ * Zeilen. Geprueft wird deshalb, dass die Begruendung dasteht -- eine
+ * stille Aufgabe einer Anforderung waere schlimmer als die Anforderung.
+ */
+$nachweisung = (string) file_get_contents($root . '/app/nachweisung.php');
+
+/*
+ * Blaettern, Suchen und Sortieren kommen vom Bauteil, nicht von der
+ * Seite. Eigene Blaetterschritte neben denen des Bauteils waeren zwei
+ * Bedienungen fuer dieselbe Sache.
+ */
 $assert(
-    str_contains($incoming, 'LIMIT ? OFFSET ?')
-        && str_contains($outgoing, 'LIMIT ? OFFSET ?')
-        && substr_count($incoming, 'SELECT COUNT(*)') === 1
-        && substr_count($outgoing, 'SELECT COUNT(*)') === 1,
-    'A separate Nachweisung still reads every row of the incident'
+    // Sie gibt ueber estab_tabelle_ausgeben aus, nicht ueber
+    // estab_tabelle_markup -- beides ist dasselbe Bauteil.
+    str_contains($nachweisung, 'estab_tabelle_ausgeben')
+        && !str_contains($nachweisung, 'estab_list_tracking_pager')
+        && !str_contains($nachweisung, 'estab_message_list_render_pager'),
+    'Die Nachweisung bringt eigene Blaetterschritte neben denen des '
+        . 'Tabellenbauteils mit'
+);
+
+/*
+ * Der Inhalt wird nicht vollstaendig in jede Zeile geschrieben. Das
+ * Bauteil kuerzt auf zwei Zeilen und klappt den Rest auf; dafuer bekommt
+ * es reinen Text.
+ */
+$assert(
+    str_contains($nachweisung, 'estab_message_plain_text'),
+    'Die Nachweisung schreibt den vollstaendigen Nachrichtentext in jede '
+        . 'Zeile'
+);
+
+/*
+ * Und die aufgegebene Anforderung steht begruendet da.
+ */
+$assert(
+    str_contains($nachweisung, 'Warum alle Zeilen geladen werden')
+        && str_contains($nachweisung, 'LIMIT')
+        && str_contains($nachweisung, 'eines'),
+    'Die Nachweisung laedt alle Zeilen, ohne dass irgendwo steht warum. '
+        . 'Sie las frueher seitenweise; eine stille Aufgabe dieser '
+        . 'Anforderung ist schlimmer als die Anforderung.'
 );
 $combinedRows = $section(
     $listSource,

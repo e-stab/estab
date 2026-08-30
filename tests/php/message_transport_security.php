@@ -91,102 +91,63 @@ $section = static function (
     return substr($source, $startPosition, $endPosition - $startPosition);
 };
 
-$incoming = $section($listSource, 'case "FmNwE":', 'case "FmNwA":');
-$outgoing = $section($listSource, 'case "FmNwA":', 'case "FmNw":');
-$combined = $section($listSource, 'case "FmNw":', '} // switch');
-$combinedRows = $section(
-    $listSource,
-    'function estab_list_combined_tracking_rows (',
-    'function estab_list_combined_tracking_data ('
+/*
+ * Die Nachweisung liegt in app/nachweisung.php, nicht mehr in liste.php.
+ *
+ * Dort standen drei Zweige -- FmNwE, FmNwA, FmNw --, die niemand aufrief;
+ * sie sind geloescht (siehe ges_tabelle_einheitlich, "kein Listenzweig
+ * ohne Aufrufer"). Die Pruefungen, die hier standen, haben ihre Aussage
+ * behalten und ihren Ort gewechselt.
+ *
+ * Eine Aussage ist dabei *nicht* mitgekommen, und das steht hier, damit
+ * es nicht unbemerkt bleibt: Die geloeschten Zweige zeigten fuer Ausgaenge
+ * den Befoerderungsweg (`06_befweg`, "Noch nicht befoerdert"). Die
+ * lebende Nachweisung zeigt nur das Aufnahmemittel. Weil die Zweige
+ * unerreichbar waren, hat das nie ein Bedienender gesehen -- ob der
+ * Nachweis den Weg nennen soll, ist eine Frage an den Betreiber und keine
+ * an die Technik.
+ */
+$nachweisung = (string) file_get_contents($root . '/app/nachweisung.php');
+$nachweisungsSeite = (string) file_get_contents($root . '/4fach/nachwea.php');
+
+/*
+ * Das Uebermittlungsmittel wird zentral uebersetzt, nicht in der Seite.
+ * "Fu" sagt einem Leser des Nachweises nichts, was "Funk" nicht
+ * deutlicher saegte.
+ */
+$assert(
+    str_contains($nachweisung, 'estab_message_medium_text')
+        && str_contains($nachweisung, "'kopf' => 'Mittel'"),
+    'Die Nachweisung nennt das Uebermittlungsmittel nicht oder uebersetzt '
+        . 'es nicht zentral'
 );
 
+/*
+ * Ein Nachweis gehoert zu genau einem Einsatz. Die Bedingung steht in der
+ * Abfrage und nicht in einer Unterabfrage, die zwischen zwei Zeilen einen
+ * anderen Einsatz treffen koennte.
+ */
 $assert(
-    str_contains($listSource, 'app/message_transport.php')
-        && str_contains($incoming, '`01_medium`')
-        && str_contains($incoming, 'Eingangsmedium')
-        && str_contains($incoming, 'estab_message_medium_text'),
-    'Incoming tracking list does not expose its translated receive medium'
-);
-$assert(
-    str_contains($outgoing, '`03_datum`')
-        && str_contains($outgoing, '`06_befweg`')
-        && str_contains($outgoing, '`01_medium`')
-        && str_contains($outgoing, 'Beförderungsweg')
-        && str_contains($outgoing, 'estab_message_transport_text')
-        && str_contains($outgoing, 'Noch nicht befördert'),
-    'Outgoing tracking list does not expose the actual transport route'
-);
-$assert(
-    str_contains($combinedRows, '`01_medium`')
-        && str_contains($combinedRows, '`06_befweg`')
-        && str_contains($combinedRows, '`06_befwegausw`')
-        && str_contains($combined, 'Übermittlungsweg')
-        && str_contains($combined, 'estab_message_medium_text')
-        && str_contains($combined, 'estab_message_transport_text')
-        && str_contains($combined, 'Noch nicht befördert'),
-    'Combined tracking list does not distinguish incoming and outgoing routes'
-);
-$assert(
-    str_contains(
-        $listSource,
-        'function estab_list_combined_tracking_rows ('
-    )
-        && str_contains(
-            $listSource,
-            'function estab_list_combined_tracking_data ('
-        )
-        && str_contains(
-            $listSource,
-            '$incidentId = estab_message_positive_id ($incidentId);'
-        )
-        && str_contains(
-            $listSource,
-            '$incident = estab_incident_find ($connection, $incidentId);'
-        )
-        && str_contains($listSource, '" WHERE m.`einsatz_id` = ?"')
-        && str_contains(
-            $combined,
-            '$trackingData = estab_list_combined_tracking_data ('
-        )
-        && str_contains(
-            $combined,
-            '$incidentId = $this->required_incident_id ();'
-        )
-        && str_contains(
-            $combinedRows,
-            'estab_message_list_tbb_number_select_sql ("m")'
-        )
-        && str_contains(
-            $combined,
-            'estab_message_list_tbb_evidence_label ($row)'
-        )
-        && str_contains(
-            $combined,
-            '$incidentUi = $trackingData ["incident"];'
-        )
-        && str_contains(
-            $combined,
-            '$trackingRows = $trackingData ["rows"];'
-        )
+    str_contains($nachweisung, 'WHERE m.`einsatz_id` = ?')
+        && str_contains($nachweisungsSeite, 'estab_read_require_area (')
         && !str_contains(
-            $combined,
-            '(SELECT `active_einsatz_id` FROM `nv_einsatz_status`'
-        )
-        && !str_contains(
-            $combined,
-            'estab_incident_ui_current_state'
-        )
-        && !str_contains(
-            $listSource,
+            $nachweisung,
             '(SELECT `active_einsatz_id` FROM `nv_einsatz_status`'
         ),
-    'Combined tracking heading and rows are not bound to one incident ID'
+    'Die Nachweisung ist nicht an genau einen Einsatz gebunden'
 );
+
+/*
+ * Die Zeilen kommen als reiner Text ins Bauteil, das maskiert. Eine
+ * Seite, die fertiges Markup liefert, umgeht die Maskierung -- und ein
+ * Nachweis ist der letzte Ort, an dem fremder Text als Auszeichnung
+ * gelten darf.
+ */
 $assert(
-    str_contains($incoming, 'estab_message_html ($incomingMedium)')
-        && str_contains($outgoing, 'estab_message_html ($transportPath)')
-        && str_contains($combined, 'estab_message_html ($trackingPath)'),
-    'Tracking-list transport values bypass the message HTML boundary'
+    str_contains($nachweisung, 'estab_message_plain_text')
+        && !str_contains($nachweisung, '<td')
+        && !str_contains($nachweisung, '<table'),
+    'Die Nachweisung baut Markup selbst und umgeht damit die Maskierung'
 );
 $assert(
     str_contains(
@@ -205,31 +166,20 @@ $assert(
             $trackingPageSource,
             '$trackingIncidentId'
         ) >= 6
+        /*
+         * Die Nachweisnummer kommt aus der gemeinsamen Ableitung, nicht
+         * aus der technischen Ablaufnummer. Frueher stand das je einmal
+         * fuer den Eingangs- und den Ausgangszweig von liste.php; beide
+         * sind geloescht, und die Nachweisung leitet die Nummer an einer
+         * Stelle ab.
+         */
         && str_contains(
-            $incoming,
-            '$incidentId = $this->required_incident_id ();'
-        )
-        && str_contains($incoming, 'WHERE m.`einsatz_id` = ?')
-        && str_contains(
-            $incoming,
-            'estab_message_list_tbb_number_select_sql ("m")'
-        )
-        && str_contains(
-            $incoming,
-            'estab_message_list_tbb_evidence_label ($row)'
+            $nachweisung,
+            'estab_message_list_tbb_number_select_sql'
         )
         && str_contains(
-            $outgoing,
-            '$incidentId = $this->required_incident_id ();'
-        )
-        && str_contains($outgoing, 'WHERE m.`einsatz_id` = ?')
-        && str_contains(
-            $outgoing,
-            'estab_message_list_tbb_number_select_sql ("m")'
-        )
-        && str_contains(
-            $outgoing,
-            'estab_message_list_tbb_evidence_label ($row)'
+            $nachweisung,
+            'estab_message_list_tbb_evidence_label($zeile)'
         )
         && str_contains(
             $trackingPageSource,

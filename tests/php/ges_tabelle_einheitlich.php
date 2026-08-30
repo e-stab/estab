@@ -46,6 +46,7 @@ declare(strict_types=1);
 
 $root = dirname(__DIR__, 2);
 require_once $root . '/app/ux_rules.php';
+require_once __DIR__ . '/lib/quelltext.php';
 
 $assertions = 0;
 $assert = static function (bool $condition, string $message) use (&$assertions): void {
@@ -80,14 +81,14 @@ $faksimile = [
  * @var array<string,array{0:int,1:string}>
  */
 $offeneDateien = [
-    '4fach/liste.php' => [11, 'Die übrigen Listenarten -- Sichtung, '
-        . 'Korrektur, die Administrationssichten und die Nachweisungszweige '
-        . '-- sowie sechs Layouttabellen der alten Filterleiste.'],
+    '4fach/liste.php' => [8, 'Die übrigen Listenarten -- Sichtung, '
+        . 'Korrektur und die Administrationssichten -- sowie sechs '
+        . 'Layouttabellen der alten Filterleiste. Die drei Nachweisungs'
+        . 'zweige sind geloescht: Sie hatten keinen Aufrufer mehr.'],
     '4fueltg/ue_ltg.php' => [17, 'Der Vordruck der Führungsleitung und zwei '
         . 'Layouttabellen seiner Bedienleiste.'],
     '4fach/tools.php' => [6, 'Das alte Cockpit mit fest eingetragenen Grautönen.'],
-    '4fadm/fuehrungsstelle.php' => [4, 'Die Führungsstellenverwaltung.'],
-    '4fadm/system_status.php' => [4, 'Der Systemstand.'],
+    '4fadm/fuehrungsstelle.php' => [4, 'Die Schicht- und Dienstverwaltung.'],
     '4fadm/make_fkt.php' => [1, 'Die Empfängermatrix.'],
     '4fach/mainindex.php' => [1, 'Der Satzspiegel der Anmeldefelder -- '
         . 'Beschriftung und Feld nebeneinander, keine Liste.'],
@@ -102,7 +103,7 @@ $offeneDateien = [
  * ehrliche Zahl ist höher, und das ist der Punkt: Eine Ratsche, die nur
  * zählt, was sie kennt, misst ihren eigenen Blick, nicht den Bestand.
  */
-const ESTAB_TABELLEN_OFFEN = 32;
+const ESTAB_TABELLEN_OFFEN = 25;
 
 $verzeichnisse = [
     '4fach', '4fadm', '4fueltg', 'app', 'stabetb', 'fmtbb', 'stabinfo',
@@ -307,6 +308,84 @@ foreach ($probeTexte as $text => $sollAuffallen) {
             . ($faellt ? 'gemeldet' : 'durchgelassen')
     );
 }
+
+
+/*
+ * Kein Listenzweig ohne Aufrufer.
+ *
+ * liste.php trug drei Nachweisungszweige -- FmNwE, FmNwA, FmNw --, die
+ * niemand mehr aufrief: Die Nachweisung geht seit der Umstellung durch
+ * app/nachweisung.php. Sie standen als drei weitere handgeschriebene
+ * Tabellen im Baum und in der Ausnahmeliste oben.
+ *
+ * Toter Code, der aussieht wie eine Liste, ist teurer als eine Liste:
+ * Wer die Nachweisung sucht, findet zwei Umsetzungen und muss erst
+ * herausfinden, welche gilt. Und wer eine davon verbessert, verbessert
+ * womoeglich die falsche.
+ *
+ * Geprueft wird gegen die Aufrufstellen, nicht gegen eine Liste erlaubter
+ * Namen: Ein Zweig ist genau dann lebendig, wenn ihn jemand baut.
+ */
+$listenQuelle = estab_test_ohne_kommentare(
+    (string) file_get_contents($root . '/4fach/liste.php')
+);
+$gebaut = [];
+foreach ([
+    $root . '/4fach/mainindex.php',
+    $root . '/4fueltg/ue_ltg.php',
+    $root . '/4fach/liste.php',
+] as $aufrufer) {
+    $quelle = file_get_contents($aufrufer);
+    if (!is_string($quelle)) {
+        continue;
+    }
+    if (preg_match_all(
+        '~new\s+listen\s*\(\s*["\']([A-Za-z0-9_]+)["\']~',
+        $quelle,
+        $treffer
+    )) {
+        foreach ($treffer[1] as $art) {
+            $gebaut[$art] = true;
+        }
+    }
+    // get_list ruft dieselbe Verzweigung mit einer Art auf.
+    if (preg_match_all(
+        '~get_list\s*\(\s*["\']([A-Za-z0-9_]+)["\']~',
+        $quelle,
+        $treffer
+    )) {
+        foreach ($treffer[1] as $art) {
+            $gebaut[$art] = true;
+        }
+    }
+}
+$verwaisteZweige = [];
+if (preg_match_all(
+    '~^\s*case\s+["\']([A-Za-z0-9_]+)["\']\s*:~m',
+    $listenQuelle,
+    $zweige
+)) {
+    foreach (array_unique($zweige[1]) as $zweig) {
+        // Die Blaetterschritte sind keine Listenarten.
+        if (in_array($zweig, ['start', 'back', 'for', 'end', 'global'], true)) {
+            continue;
+        }
+        if (!array_key_exists($zweig, $gebaut)) {
+            $verwaisteZweige[] = $zweig;
+        }
+    }
+}
+sort($verwaisteZweige);
+$assert(
+    $verwaisteZweige === [],
+    estab_ux_requirement(
+        'GES-TABELLE-EINHEITLICH',
+        'Diese Listenzweige baut niemand mehr: '
+            . implode(', ', $verwaisteZweige) . '. Toter Code, der aussieht '
+            . 'wie eine Liste, ist teurer als eine Liste -- wer die Sache '
+            . 'sucht, findet zwei Umsetzungen und weiss nicht, welche gilt.'
+    )
+);
 
 /*
  * Und die sieben Flächen aus docs/TABELLEN.md Abschnitt 5 rufen das Bauteil

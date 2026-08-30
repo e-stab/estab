@@ -12,6 +12,7 @@ if (PHP_SAPI !== 'cli' && empty($_SERVER['REMOTE_USER'])) {
 require_once __DIR__ . '/../app/bootstrap.php';
 require_once __DIR__ . '/../app/readiness.php';
 require_once __DIR__ . '/../app/session_ui.php';
+require_once __DIR__ . '/../app/tabelle.php';
 estab_session_ui_start($_SESSION);
 
 header('Content-Type: text/html; charset=UTF-8');
@@ -26,6 +27,68 @@ function system_status_html(mixed $value): string
 function system_status_label(bool $ready): string
 {
     return $ready ? 'bereit' : 'nicht bereit';
+}
+
+/**
+ * Eine Statuszelle mit Marke.
+ *
+ * Die vier Statustafeln zeigen alle dasselbe: eine Prüfung, ihr Ergebnis
+ * als grüne oder rote Marke. Ohne diese Stelle stünde derselbe Ausdruck
+ * viermal da, und beim fünften Mal stünde er anders.
+ */
+function system_status_marke(bool $bereit): string
+{
+    return '<span class="estab-tool-badge '
+        . ($bereit ? 'estab-tool-badge-success' : 'estab-tool-badge-danger')
+        . '">' . system_status_html(system_status_label($bereit))
+        . '</span>';
+}
+
+/**
+ * Eine Statustafel: gleiche Optik wie jede Liste, ohne ihre Maschinerie.
+ *
+ * `baender => false` laesst Suchband, Ergebnisleiste, Spaltenmasken und
+ * Blaetterer weg. Eine Volltextsuche ueber vier feste Zeilen waere kein
+ * Gewinn, sondern Beiwerk, das die Tafel hoeher macht als ihren Inhalt --
+ * und auf einem flachen Bildschirm ist Hoehe das Knappe.
+ *
+ * Die Zellen kommen fertig ausgezeichnet herein: Sie tragen Marken und
+ * Codeauszeichnung, und beides ist an der Aufrufstelle klarer zu lesen als
+ * hinter einer weiteren Abstraktion.
+ *
+ * @param array<string,string> $spalten Schluessel => Ueberschrift
+ * @param list<array<string,string>> $zeilen
+ */
+function system_status_tafel(
+    string $id,
+    string $beschriftung,
+    array $spalten,
+    array $zeilen
+): string {
+    $breite = (int) floor(100 / max(1, count($spalten)));
+    $aufbau = [];
+    foreach ($spalten as $schluessel => $ueberschrift) {
+        $aufbau[] = [
+            'schluessel' => $schluessel,
+            'kopf' => $ueberschrift,
+            'breite' => $breite,
+            'sortierbar' => false,
+            'suchbar' => false,
+            'art' => 'text',
+            'zelle' => static fn (array $z): string =>
+                (string) ($z[$schluessel] ?? ''),
+        ];
+    }
+    return estab_tabelle_markup([
+        'id' => $id,
+        'beschriftung' => $beschriftung,
+        'baender' => false,
+        'mindestbreite' => '32rem',
+        'schmal' => true,
+        'spalten' => $aufbau,
+        'zeilen' => $zeilen,
+        'leer' => 'Keine Angabe verfügbar.',
+    ]);
 }
 
 $readiness = estab_readiness_report();
@@ -91,55 +154,37 @@ $overallReady = $readiness['ready'];
         <h2 id="runtime-status-title">Laufzeit</h2>
         <p>PHP-Version, Laufzeitkonfiguration und verpflichtende Erweiterungen.</p>
       </header>
-      <div class="estab-tool-table-wrap estab-tool-table-responsive">
-        <table class="estab-tool-table">
-          <caption class="estab-visually-hidden">Status der PHP-Laufzeit</caption>
-          <thead>
-            <tr>
-              <th scope="col">Prüfung</th>
-              <th scope="col">Wert</th>
-              <th scope="col">Ergebnis</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td data-label="Prüfung">PHP</td>
-              <td data-label="Wert"><code><?= system_status_html(PHP_VERSION) ?></code></td>
-              <td data-label="Ergebnis">
-                <span class="estab-tool-badge <?= $runtimeReady
-                    ? 'estab-tool-badge-success'
-                    : 'estab-tool-badge-danger' ?>">
-                  <?= system_status_label($runtimeReady) ?>
-                </span>
-              </td>
-            </tr>
-            <tr>
-              <td data-label="Prüfung">Laufzeitkonfiguration</td>
-              <td data-label="Wert">Container- und PHP-Vorgaben</td>
-              <td data-label="Ergebnis">
-                <span class="estab-tool-badge <?= $configurationReady
-                    ? 'estab-tool-badge-success'
-                    : 'estab-tool-badge-danger' ?>">
-                  <?= system_status_label($configurationReady) ?>
-                </span>
-              </td>
-            </tr>
-            <?php foreach ($extensions as $extension => $loaded): ?>
-              <tr>
-                <td data-label="Prüfung">PHP-Erweiterung</td>
-                <td data-label="Wert"><code><?= system_status_html($extension) ?></code></td>
-                <td data-label="Ergebnis">
-                  <span class="estab-tool-badge <?= $loaded
-                      ? 'estab-tool-badge-success'
-                      : 'estab-tool-badge-danger' ?>">
-                    <?= $loaded ? 'geladen' : 'fehlt' ?>
-                  </span>
-                </td>
-              </tr>
-            <?php endforeach; ?>
-          </tbody>
-        </table>
-      </div>
+      <?php
+        $laufzeitZeilen = [
+            [
+                'pruefung' => 'PHP',
+                'wert' => '<code>' . system_status_html(PHP_VERSION) . '</code>',
+                'ergebnis' => system_status_marke($runtimeReady),
+            ],
+            [
+                'pruefung' => 'Laufzeitkonfiguration',
+                'wert' => 'Container- und PHP-Vorgaben',
+                'ergebnis' => system_status_marke($configurationReady),
+            ],
+        ];
+        foreach ($extensions as $extension => $loaded) {
+            $laufzeitZeilen[] = [
+                'pruefung' => 'PHP-Erweiterung',
+                'wert' => '<code>' . system_status_html($extension) . '</code>',
+                'ergebnis' => '<span class="estab-tool-badge '
+                    . ($loaded
+                        ? 'estab-tool-badge-success'
+                        : 'estab-tool-badge-danger')
+                    . '">' . ($loaded ? 'geladen' : 'fehlt') . '</span>',
+            ];
+        }
+        echo system_status_tafel(
+            'stand-laufzeit',
+            'Status der PHP-Laufzeit',
+            ['pruefung' => 'Prüfung', 'wert' => 'Wert', 'ergebnis' => 'Ergebnis'],
+            $laufzeitZeilen
+        );
+      ?>
     </section>
 
     <section class="estab-tool-panel" aria-labelledby="database-status-title">
@@ -147,42 +192,30 @@ $overallReady = $readiness['ready'];
         <h2 id="database-status-title">Datenbank</h2>
         <p>Erreichbarkeit und Vollständigkeit des erwarteten Schemas.</p>
       </header>
-      <div class="estab-tool-table-wrap estab-tool-table-responsive">
-        <table class="estab-tool-table">
-          <caption class="estab-visually-hidden">Status der Datenbank</caption>
-          <thead>
-            <tr>
-              <th scope="col">Prüfung</th>
-              <th scope="col">Ergebnis</th>
-            </tr>
-          </thead>
-          <tbody>
-            <?php foreach ([
-                'Verbindung und Lesetest' => $databaseReady,
-                'Schema, Matrix und Migrationen' => $schemaReady,
-            ] as $label => $ready): ?>
-              <tr>
-                <td data-label="Prüfung"><?= system_status_html($label) ?></td>
-                <td data-label="Ergebnis">
-                  <span class="estab-tool-badge <?= $ready
-                      ? 'estab-tool-badge-success'
-                      : 'estab-tool-badge-danger' ?>">
-                    <?= system_status_label($ready) ?>
-                  </span>
-                </td>
-              </tr>
-            <?php endforeach; ?>
-            <tr>
-              <td data-label="Prüfung">Basistabellen</td>
-              <td data-label="Ergebnis">
-                <?= $databaseTables === null
-                    ? 'nicht ermittelbar'
-                    : (int) $databaseTables ?>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+      <?php
+        $datenbankZeilen = [];
+        foreach ([
+            'Verbindung und Lesetest' => $databaseReady,
+            'Schema, Matrix und Migrationen' => $schemaReady,
+        ] as $label => $ready) {
+            $datenbankZeilen[] = [
+                'pruefung' => system_status_html($label),
+                'ergebnis' => system_status_marke($ready),
+            ];
+        }
+        $datenbankZeilen[] = [
+            'pruefung' => 'Basistabellen',
+            'ergebnis' => $databaseTables === null
+                ? 'nicht ermittelbar'
+                : (string) (int) $databaseTables,
+        ];
+        echo system_status_tafel(
+            'stand-datenbank',
+            'Status der Datenbank',
+            ['pruefung' => 'Prüfung', 'ergebnis' => 'Ergebnis'],
+            $datenbankZeilen
+        );
+      ?>
     </section>
 
     <section class="estab-tool-panel" aria-labelledby="storage-status-title">
@@ -190,31 +223,21 @@ $overallReady = $readiness['ready'];
         <h2 id="storage-status-title">Persistente Speicher</h2>
         <p>Schreib- und Lesebereitschaft der dauerhaft eingebundenen Datenpfade.</p>
       </header>
-      <div class="estab-tool-table-wrap estab-tool-table-responsive">
-        <table class="estab-tool-table">
-          <caption class="estab-visually-hidden">Status der persistenten Speicher</caption>
-          <thead>
-            <tr>
-              <th scope="col">Speicher</th>
-              <th scope="col">Ergebnis</th>
-            </tr>
-          </thead>
-          <tbody>
-            <?php foreach ($storageReady as $label => $ready): ?>
-              <tr>
-                <td data-label="Speicher"><?= system_status_html($label) ?></td>
-                <td data-label="Ergebnis">
-                  <span class="estab-tool-badge <?= $ready
-                      ? 'estab-tool-badge-success'
-                      : 'estab-tool-badge-danger' ?>">
-                    <?= system_status_label($ready) ?>
-                  </span>
-                </td>
-              </tr>
-            <?php endforeach; ?>
-          </tbody>
-        </table>
-      </div>
+      <?php
+        $speicherZeilen = [];
+        foreach ($storageReady as $label => $ready) {
+            $speicherZeilen[] = [
+                'pruefung' => system_status_html($label),
+                'ergebnis' => system_status_marke($ready),
+            ];
+        }
+        echo system_status_tafel(
+            'stand-speicher',
+            'Status der persistenten Speicher',
+            ['pruefung' => 'Speicher', 'ergebnis' => 'Ergebnis'],
+            $speicherZeilen
+        );
+      ?>
     </section>
 
     <section class="estab-tool-panel" aria-labelledby="configuration-status-title">
@@ -225,33 +248,33 @@ $overallReady = $readiness['ready'];
           Historische Web-Installer, Konfigurationsschreiber und
           <code>phpinfo()</code> sind deshalb deaktiviert.</p>
       </header>
-      <div class="estab-tool-table-wrap estab-tool-table-responsive">
-        <table class="estab-tool-table">
-          <caption class="estab-visually-hidden">
-            Wirksame nicht-sensible Containerkonfiguration
-          </caption>
-          <thead>
-            <tr>
-              <th scope="col">Vorgabe</th>
-              <th scope="col">Zustand</th>
-            </tr>
-          </thead>
-          <tbody>
-            <?php foreach ($environmentChecks as $label => $configured): ?>
-              <tr>
-                <td data-label="Vorgabe"><?= system_status_html($label) ?></td>
-                <td data-label="Zustand">
-                  <span class="estab-tool-badge <?= $configured
-                      ? 'estab-tool-badge-success'
-                      : 'estab-tool-badge-neutral' ?>">
-                    <?= $configured ? 'konfiguriert' : 'Standardwert aktiv' ?>
-                  </span>
-                </td>
-              </tr>
-            <?php endforeach; ?>
-          </tbody>
-        </table>
-      </div>
+      <?php
+        $vorgabenZeilen = [];
+        foreach ($environmentChecks as $label => $configured) {
+            $vorgabenZeilen[] = [
+                'pruefung' => system_status_html($label),
+                /*
+                 * Hier ist "nicht gesetzt" kein Fehler, sondern der
+                 * Vorgabewert. Deshalb eine neutrale Marke und nicht die
+                 * rote: Ein roter Punkt neben einer richtigen Einstellung
+                 * schickt jemanden auf die Suche nach einem Fehler, den es
+                 * nicht gibt.
+                 */
+                'ergebnis' => '<span class="estab-tool-badge '
+                    . ($configured
+                        ? 'estab-tool-badge-success'
+                        : 'estab-tool-badge-neutral')
+                    . '">' . ($configured ? 'konfiguriert' : 'Standardwert aktiv')
+                    . '</span>',
+            ];
+        }
+        echo system_status_tafel(
+            'stand-vorgaben',
+            'Wirksame nicht-sensible Containerkonfiguration',
+            ['pruefung' => 'Vorgabe', 'ergebnis' => 'Zustand'],
+            $vorgabenZeilen
+        );
+      ?>
     </section>
 
     <footer class="estab-tool-footer">
