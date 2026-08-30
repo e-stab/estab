@@ -13,6 +13,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/incident.php';
 require_once __DIR__ . '/message_evidence.php';
 require_once __DIR__ . '/incident_pdf.php';
+require_once __DIR__ . '/pdf_sperre.php';
 require_once __DIR__ . '/file_access.php';
 require_once __DIR__ . '/attachment_integrity.php';
 
@@ -1531,6 +1532,26 @@ function estab_incident_export_pdf(
             'Die Empfängermatrix des PDF-Exports fehlt.'
         );
     }
+    /*
+     * Ab hier wird gebaut, und ab hier kostet es Speicher.
+     *
+     * FPDF haelt das ganze Dokument im Speicher; gemessen 65 MB Spitze, mit
+     * Rasteranlagen rund 90 MB. Der Container hat 448 MB -- eine Ausgabe
+     * plus gewoehnliche Seitenaufbauten passt, drei Ausgaben nicht.
+     *
+     * Die Pruefungen oben stehen ausserhalb der Sperre: Wer unvollstaendige
+     * Daten schickt, soll das erfahren, auch waehrend jemand anders ein
+     * Dossier zieht.
+     */
+    return estab_pdf_sperre_halten(static function () use (
+        $bundle,
+        $incident,
+        $sections,
+        $actor,
+        $attachmentByteLimit,
+        $generatedAt,
+        $recipientMatrix
+    ): array {
     $pdf = new EstabIncidentPdf(
         $incident,
         $attachmentByteLimit,
@@ -1708,4 +1729,5 @@ function estab_incident_export_pdf(
         'attachment_bytes' => $pdf->embeddedAttachmentBytes(),
         'sha256' => hash('sha256', $bytes),
     ], $attachmentVisibility);
+    });
 }

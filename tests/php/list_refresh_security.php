@@ -73,10 +73,12 @@ $assert(
     'A numeric string interval is rejected although it is valid'
 );
 
-$script = estab_list_refresh_script(10);
+// 30 Sekunden -- die Entscheidung des Betreibers vom 30.08.2026. Zehn
+// Sekunden waren nicht noetig und kosteten das Dreifache.
+$script = estab_list_refresh_script(30);
 $assert(
     str_starts_with($script, '<script nonce="')
-        && str_contains($script, ' data-estab-list-refresh="10">')
+        && str_contains($script, ' data-estab-list-refresh="30">')
         && str_ends_with(rtrim($script), '</script>'),
     'The refresh script is not a closed script element'
 );
@@ -103,20 +105,63 @@ $assert(
     'The refresh gives up instead of trying again shortly after'
 );
 
-// And it has to restore where the reader was.
+/*
+ * Es wird nur der Inhalt erneuert, nicht die Seite.
+ *
+ * > "Bei den Aktualisierungen moechte ich es so haben das nicht die gesamte
+ * > Seite staendig komplett neu geladen wird. Es sollen nur die Inhalten
+ * > aktualisiert werden."
+ *
+ * Das Neuladen hatte drei Nachteile, und der dritte war der schlimmste:
+ *
+ * 1. Es warf die Bildlaufstelle weg und musste sie umstaendlich merken.
+ * 2. Es baute die ganze Seite neu auf -- Kopf, Menue, Skripte.
+ * 3. Die Listenseiten kommen aus einem POST. `window.location.reload()`
+ *    auf einer POST-Antwort laesst den Browser fragen, ob die Daten
+ *    erneut gesendet werden sollen. Alle zehn Sekunden. Genau das hat
+ *    der Betrieb gemeldet.
+ *
+ * Nachgemessen: Ein GET auf dieselbe Adresse liefert dieselbe Ansicht --
+ * die Sitzung traegt den Zustand. Der Inhalt laesst sich also holen und
+ * einsetzen, ohne die Seite zu verlassen.
+ */
 $assert(
-    str_contains($script, 'sessionStorage')
-        && str_contains($script, 'window.scrollTo'),
-    'The refresh does not restore the scroll position'
+    !str_contains($script, 'window.location.reload'),
+    'Die Aktualisierung laedt die Seite neu. Auf einer POST-Antwort fragt '
+        . 'der Browser dann bei jedem Takt, ob die Daten erneut gesendet '
+        . 'werden sollen.'
 );
 $assert(
-    str_contains($script, 'estab-list-scroll:')
-        && str_contains($script, 'window.location.pathname'),
-    'The stored scroll position is not bound to the list it belongs to'
+    str_contains($script, 'fetch(')
+        && str_contains($script, "credentials:'same-origin'"),
+    'Die Aktualisierung holt den Inhalt nicht selbst.'
 );
 $assert(
-    str_contains($script, "schedule(10000)"),
-    'The configured interval does not reach the scheduler'
+    str_contains($script, 'DOMParser')
+        && str_contains($script, 'replaceChildren'),
+    'Die Aktualisierung setzt den geholten Inhalt nicht ein.'
+);
+/*
+ * Skripte aus der Antwort werden nicht ausgefuehrt.
+ *
+ * Eingesetztes Markup fuehrt seine <script>-Elemente ohnehin nicht aus.
+ * Sie neu zu erzeugen waere die uebliche Abhilfe -- hier waere sie falsch:
+ * Die Richtlinie bindet Skripte an eine Einmalkennung, und die der
+ * geholten Antwort ist eine andere als die des laufenden Dokuments. Ein
+ * nachgebautes Skript waere entweder gesperrt oder die Kennung muesste
+ * durchgereicht werden, und damit waere die Richtlinie ausgehebelt.
+ *
+ * Die Listenseiten tragen ihre Skripte im Kopf, nicht im Inhalt. Die
+ * Pruefung unten haelt das fest.
+ */
+$assert(
+    str_contains($script, "querySelectorAll('script')")
+        && str_contains($script, 'remove()'),
+    'Die Aktualisierung entfernt keine Skripte aus dem geholten Inhalt.'
+);
+$assert(
+    str_contains($script, 'schedule(30000)'),
+    'Der eingestellte Takt erreicht die Ablaufsteuerung nicht'
 );
 
 // The scheduler must run once, not stack up timers on every tick.
@@ -140,6 +185,34 @@ $assert(
 $assert(
     !preg_match('~\n\s*schedule\(\d+\);\n~', $script),
     'The refresh still schedules unconditionally at parse time'
+);
+
+/*
+ * Der Takt des Cockpits kommt aus derselben Einstellung.
+ *
+ * Beim Nachmessen im Browser stand die Liste auf 30 Sekunden, das Cockpit
+ * aber weiter auf 10. Der Grund: 4fcfg/para.inc.php -- die Datei, in der
+ * $cfg["itv"] steht -- wurde in vorgaben.php nie eingebunden. Die Abfrage
+ * `isset($cfg["itv"]["status"]) ? ... : 10` fiel deshalb immer auf die 10
+ * zurueck.
+ *
+ * Eine Einstellung, die aussieht wie eine Einstellung und keine ist, ist
+ * schlimmer als ein fester Wert: Wer sie aendert, glaubt, etwas getan zu
+ * haben.
+ */
+$vorgaben = file_get_contents($root . '/4fach/vorgaben.php');
+$assert(is_string($vorgaben), '4fach/vorgaben.php ist nicht lesbar.');
+$vorgaben = (string) $vorgaben;
+$assert(
+    str_contains($vorgaben, "/../4fcfg/para.inc.php"),
+    'Das Cockpit bindet die Datei mit den Taktangaben nicht ein; sein Takt '
+        . 'faellt still auf den eingebauten Rueckfallwert zurueck.'
+);
+$einbindung = strpos($vorgaben, "/../4fcfg/para.inc.php");
+$verwendung = strpos($vorgaben, '$cfg[\'itv\'][\'status\']');
+$assert(
+    is_int($einbindung) && is_int($verwendung) && $einbindung < $verwendung,
+    'Das Cockpit liest den Takt, bevor es ihn geladen hat.'
 );
 
 printf("list refresh: OK (%d assertions)\n", $assertions);

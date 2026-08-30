@@ -291,9 +291,24 @@ try {
 } finally {
     chdir($originalWorkingDirectory);
 }
-$ldfRefresh = estab_list_refresh_script(10);
+/*
+ * Die Warteschlange des LdF erneuert sich -- aber ohne die Seite zu
+ * verlassen.
+ *
+ * Hier stand `window.location.reload()`. Das laedt eine POST-Antwort neu,
+ * und der Browser fragt dann bei jedem Takt, ob die Daten erneut gesendet
+ * werden sollen. Seit dem 30.08.2026 wird stattdessen der Inhalt geholt
+ * und eingesetzt (siehe list_refresh_security).
+ *
+ * Was hier zaehlt, ist unveraendert: Die Warteschlange erneuert sich von
+ * allein, und sie unterbricht dabei niemanden.
+ */
+$ldfRefresh = estab_list_refresh_script(30);
 $assert(
-    $ldfRefresh !== '' && str_contains($ldfRefresh, 'window.location.reload()'),
+    $ldfRefresh !== ''
+        && !str_contains($ldfRefresh, 'window.location.reload')
+        && str_contains($ldfRefresh, 'fetch(')
+        && str_contains($ldfRefresh, 'replaceChildren'),
     'The LdF queue no longer refreshes itself'
 );
 $assert(

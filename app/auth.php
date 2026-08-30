@@ -50,19 +50,37 @@ function estab_auth_password_algorithm(): string|int
     return $algorithm;
 }
 
-/** Return explicit, reproducible Argon2id costs from the pinned PHP runtime. */
+/**
+ * Die Kostenparameter fuer Argon2id -- ausdruecklich, nicht als Vorgabe.
+ *
+ * Sie standen einmal auf PASSWORD_ARGON2_DEFAULT_*. Das hatte zwei
+ * Nachteile: Ein Wechsel der PHP-Fassung haette sie stillschweigend
+ * veraendert, und die Vorgabe (m=65536 KiB, t=4) fordert je Hashvorgang 64
+ * MB an -- ausserhalb der PHP-Buchfuehrung, also auch ausserhalb von
+ * memory_limit. Gemessen: 191 ms je Vorgang im Container, auf einer
+ * NAS-CPU eher eine halbe bis anderthalb Sekunden. Bei einem
+ * Schichtwechsel mit zehn gleichzeitigen Anmeldungen sind das 640 MB
+ * Spitze auf einem Geraet mit einem Gigabyte Budget.
+ *
+ * Gesetzt ist die OWASP-Empfehlung fuer Argon2id: m=19456 KiB, t=2, p=1.
+ * Das ist eine anerkannte Konfiguration und zugleich eine bewusste
+ * Absenkung der Bremswirkung gegen Rateangriffe auf gestohlene Hashes --
+ * eine Entscheidung des Betreibers, getroffen am 30.08.2026.
+ *
+ * Bestehende Hashes bleiben bei ihren staerkeren Werten:
+ * estab_auth_password_hash_needs_upgrade stuft nie herunter. Die Ersparnis
+ * greift also erst, wenn Kennwoerter neu gesetzt werden.
+ */
+const ESTAB_AUTH_ARGON2_MEMORY_COST = 19456;
+const ESTAB_AUTH_ARGON2_TIME_COST = 2;
+const ESTAB_AUTH_ARGON2_THREADS = 1;
+
 function estab_auth_password_options(): array
 {
     $options = [
-        'memory_cost' => defined('PASSWORD_ARGON2_DEFAULT_MEMORY_COST')
-            ? constant('PASSWORD_ARGON2_DEFAULT_MEMORY_COST')
-            : null,
-        'time_cost' => defined('PASSWORD_ARGON2_DEFAULT_TIME_COST')
-            ? constant('PASSWORD_ARGON2_DEFAULT_TIME_COST')
-            : null,
-        'threads' => defined('PASSWORD_ARGON2_DEFAULT_THREADS')
-            ? constant('PASSWORD_ARGON2_DEFAULT_THREADS')
-            : null,
+        'memory_cost' => ESTAB_AUTH_ARGON2_MEMORY_COST,
+        'time_cost' => ESTAB_AUTH_ARGON2_TIME_COST,
+        'threads' => ESTAB_AUTH_ARGON2_THREADS,
     ];
     foreach ($options as $value) {
         if (!is_int($value) || $value < 1) {

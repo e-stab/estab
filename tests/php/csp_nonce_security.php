@@ -14,6 +14,7 @@ declare(strict_types=1);
 
 $root = dirname(__DIR__, 2);
 require_once $root . '/app/csp.php';
+require_once __DIR__ . '/lib/quelltext.php';
 
 $assertions = 0;
 $assert = static function (bool $condition, string $message) use (&$assertions): void {
@@ -102,9 +103,22 @@ foreach ($iterator as $file) {
 }
 $assert($sources !== [], 'No shipped source was found');
 
+/*
+ * Geprueft wird der ausfuehrbare Text, nicht der Kommentar daneben.
+ *
+ * Ein Kommentar, der ueber Skripte spricht, enthaelt das Wort `<script`.
+ * Er fuehrt aber keines aus, und die Richtlinie hat mit ihm nichts zu
+ * schaffen. Ohne diese Trennung meldete die Pruefung einen Verstoss an
+ * einer Stelle, an der eine Erklaerung steht -- und wer den Verstoss
+ * abstellen will, entfernt die Erklaerung.
+ *
+ * Zeilennummern bleiben stimmig: estab_test_ohne_kommentare ersetzt
+ * Kommentare durch ihre Zeilenumbrueche.
+ */
 $inline = 0;
 $offenders = [];
 foreach ($sources as $relative => $source) {
+    $source = estab_test_ohne_kommentare($source);
     preg_match_all('~<script(?![^>]*\bsrc=)[^>]*>~', $source, $tags, PREG_OFFSET_CAPTURE);
     foreach ($tags[0] as $tag) {
         $inline++;

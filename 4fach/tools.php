@@ -947,6 +947,36 @@ bersichtlich dargestellt werden.
   | Aktualisierung, solange jemand in einem Eingabefeld steht oder Text
   | markiert hat, und stellt die Scrollposition danach wieder her.
   \****************************************************************************/
+  /*
+   * Die Liste erneuert ihren Inhalt, ohne die Seite zu verlassen.
+   *
+   * Sie lud sich frueher selbst neu (window.location.reload). Das hatte
+   * drei Nachteile, und der dritte war der schlimmste:
+   *
+   * 1. Die Bildlaufstelle ging verloren und musste umstaendlich gemerkt
+   *    und wiederhergestellt werden.
+   * 2. Kopf, Menue und Skripte wurden mit aufgebaut, obwohl sich nur die
+   *    Liste aendert.
+   * 3. Die Listenseiten kommen aus einem POST. Ein Neuladen einer
+   *    POST-Antwort laesst den Browser fragen, ob die Daten erneut
+   *    gesendet werden sollen -- bei zehn Sekunden Takt alle zehn
+   *    Sekunden. Genau das hat der Betrieb gemeldet.
+   *
+   * Nachgemessen: Ein GET auf dieselbe Adresse liefert dieselbe Ansicht,
+   * weil die Sitzung den Zustand traegt. Der Inhalt laesst sich also
+   * holen und einsetzen.
+   *
+   * ## Warum keine Skripte aus der Antwort ausgefuehrt werden
+   *
+   * Eingesetztes Markup fuehrt seine <script>-Elemente ohnehin nicht aus.
+   * Sie neu zu erzeugen waere die uebliche Abhilfe; hier waere sie falsch.
+   * Die Sicherheitsrichtlinie bindet Skripte an eine Einmalkennung, und
+   * die der geholten Antwort ist eine andere als die des laufenden
+   * Dokuments. Ein nachgebautes Skript waere entweder gesperrt, oder man
+   * muesste die Kennung durchreichen -- und haette die Richtlinie
+   * ausgehebelt. Die Listenseiten tragen ihre Skripte im Kopf, nicht im
+   * Inhalt; die Pruefung list_refresh_security haelt das fest.
+   */
   function estab_list_refresh_script ($seconds){
     $interval = filter_var (
       $seconds,
@@ -960,14 +990,7 @@ bersichtlich dargestellt werden.
     return "<script".estab_csp_script_attribute().
       " data-estab-list-refresh=\"".$interval."\">\n".
       "(function(){\n".
-      "var key='estab-list-scroll:'+window.location.pathname".
-      "+window.location.search;\n".
-      "try{var stored=window.sessionStorage.getItem(key);\n".
-      "if(stored!==null){window.addEventListener('load',function(){\n".
-      "window.scrollTo(0,parseInt(stored,10)||0);});}}catch(ignore){}\n".
-      "function remember(){try{window.sessionStorage.setItem(\n".
-      "key,String(window.scrollY||window.pageYOffset||0));}catch(ignore){}}\n".
-      "window.addEventListener('beforeunload',remember);\n".
+      // Niemanden unterbrechen, der gerade arbeitet.
       "function busy(){\n".
       "var active=document.activeElement;\n".
       "if(active){var tag=String(active.tagName||'').toLowerCase();\n".
@@ -975,10 +998,37 @@ bersichtlich dargestellt werden.
       "if(active.isContentEditable){return true;}}\n".
       "var selection=window.getSelection&&window.getSelection();\n".
       "if(selection&&String(selection).length>0){return true;}\n".
+      // Ein geoeffnetes Aufklappfeld ist eine Absicht des Lesenden.
+      "if(document.querySelector('details[open]')){return true;}\n".
       "return false;}\n".
+      "function einsetzen(text){\n".
+      "var doc=new DOMParser().parseFromString(text,'text/html');\n".
+      "var neu=doc.body;\n".
+      "if(!neu){return;}\n".
+      // Skripte werden nicht uebernommen; siehe Erklaerung oben.
+      "var skripte=neu.querySelectorAll('script');\n".
+      "for(var i=0;i<skripte.length;i++){skripte[i].remove();}\n".
+      "if(busy()){return;}\n".
+      "document.body.replaceChildren.apply(document.body,\n".
+      "Array.prototype.slice.call(neu.childNodes));}\n".
+      "function holen(){\n".
+      "return fetch(window.location.href,{credentials:'same-origin',\n".
+      "headers:{'Accept':'text/html'}}).then(function(antwort){\n".
+      // Eine Weiterleitung auf die Anmeldung ist keine Liste. Sie
+      // einzusetzen zeigte ein Anmeldeformular im Listenrahmen; besser
+      // gar nichts tun und beim naechsten Takt erneut versuchen.
+      "if(!antwort.ok||antwort.redirected){return null;}\n".
+      "var art=antwort.headers.get('content-type')||'';\n".
+      "if(art.indexOf('text/html')<0){return null;}\n".
+      "return antwort.text();}).then(function(text){\n".
+      "if(text!==null){einsetzen(text);}});}\n".
       "function schedule(delay){window.setTimeout(function(){\n".
       "if(busy()){schedule(5000);return;}\n".
-      "remember();window.location.reload();},delay);}\n".
+      // Ein Fehler beim Holen laesst die Seite stehen, wie sie ist, und
+      // versucht es beim naechsten Takt wieder. Eine leere Liste waere
+      // schlimmer als eine, die einen Takt alt ist.
+      "holen().catch(function(){}).then(function(){\n".
+      "schedule(".$milliseconds.");});},delay);}\n".
       "function start(){schedule(".$milliseconds.");}\n".
       "if(document.readyState==='complete'){start();}\n".
       "else{window.addEventListener('load',start);}\n".

@@ -3005,7 +3005,24 @@ final class EstabIncidentPdf extends vordruckaspdf
 
         $arguments = [
             ESTAB_INCIDENT_PDF_PRLIMIT,
-            '--as=402653184',
+            /*
+             * Adressraum je Anlagenseite.
+             *
+             * Das ist eine Schranke gegen bösartige Vorlagen, keine
+             * Bedarfsangabe. Bei den früheren 384 MB konnte ein einziger
+             * Aufruf das gesamte Gerätebudget sprengen -- die Schranke war
+             * damit größer als das, wovor sie schützen soll.
+             *
+             * Gemessen: Die Rastergröße ist durch `-scale-to 2000` fest
+             * gedeckelt, unabhängig von der Komplexität der Vorlage. Ein
+             * Testdokument mit 20.000 gefüllten Pfaden, Transparenz und
+             * Multiply-Mischmodus rendert innerhalb von 48 MB. 128 MB
+             * lassen das Zweieinhalbfache an Luft.
+             *
+             * Eine abgewiesene Anlage meldet die Anwendung verständlich;
+             * ein neu gestarteter Container mitten im Einsatz nicht.
+             */
+            '--as=134217728',
             '--cpu=30',
             '--fsize=' . ESTAB_INCIDENT_PDF_MAX_RASTER_PAGE_BYTES,
             '--nofile=64',

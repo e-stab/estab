@@ -104,6 +104,11 @@ if ($method === 'HEAD') {
 include __DIR__ . '/../4fcfg/config.inc.php';
 include __DIR__ . '/../4fcfg/dbcfg.inc.php';
 include __DIR__ . '/../4fcfg/e_cfg.inc.php';
+// Die Taktangaben ($cfg["itv"]) stehen hier -- und wurden bis zum
+// 30.08.2026 nie geladen. Die Abfrage unten fiel deshalb immer auf
+// ihren eingebauten Rueckfallwert zurueck: Das Cockpit lief mit 10
+// Sekunden, gleichgueltig was eingestellt war.
+include __DIR__ . '/../4fcfg/para.inc.php';
 
 $selectedIdentity = null;
 $readGateStatus = 200;

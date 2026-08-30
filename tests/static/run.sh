@@ -248,7 +248,12 @@ for test_name in \
     etb_message_reference \
     schema_migration_contract \
     admin_secret_isolation_contract \
-    registry_deployment_contract
+    registry_deployment_contract \
+    rm_ausgang_medium \
+    rm_ein_vordruck \
+    betriebsmittel_contract \
+    pdf_gleichzeitig \
+    pruefungen_vollstaendig
 do
     [ -f "$repo_root/tests/php/$test_name.php" ] || continue
     register_php "$test_name"
