@@ -692,8 +692,6 @@ SELECT lfd FROM `nv_masterkatego` WHERE `kategorie` = "2m"));
     echo "aria-labelledby=\"message-overview-list-title\">\n";
     echo "<header class=\"estab-tool-panel-heading\">\n";
     echo "<h2 id=\"message-overview-list-title\">Nachrichtenvordrucke</h2>\n";
-    echo "<p>Suche und Filter werden miteinander kombiniert. Ein Klick auf ";
-    echo "„Vordruck öffnen“ zeigt die vollständige, unveränderte Nachricht.</p>\n";
     echo "</header>\n";
     /*
      * Die Filter der Uebersicht stehen *im* Band des Tabellenbauteils.

@@ -276,9 +276,6 @@ if (debug == true){ echo "etb_tableexist==>"; var_dump($this->etb_titel_tbl); ec
     echo "<section class=\"estab-tool-panel\" aria-labelledby=\"etb-action-title\">\n";
     echo "<header class=\"estab-tool-panel-heading\">\n";
     echo "<h2 id=\"etb-action-title\">Neuer Tagebucheintrag</h2>\n";
-    echo "<p>Erfassen Sie den Vorgang in der unveränderlichen Reihenfolge des ";
-    echo "Buches und kennzeichnen Sie Aufgaben, Befehle, Erledigungen, ";
-    echo "Kräfteanforderungen oder besonders wichtige Einträge.</p>\n";
     echo "</header>\n";
     echo "<form class=\"estab-tool-actions\" action=\"".$action."\" method=\"get\">\n";
     echo "<button class=\"estab-button estab-button-primary\" ";
@@ -338,9 +335,7 @@ if (debug == true){ echo "etb_tableexist==>"; var_dump($this->etb_titel_tbl); ec
     echo "<header class=\"estab-tool-panel-heading\">\n";
     echo "<p class=\"estab-tool-eyebrow\">Schnelle Auswertung</p>\n";
     echo "<h2 id=\"etb-search-title\">ETB durchsuchen und filtern</h2>\n";
-    echo "<p>Eine leere Suche zeigt das vollständige Einsatztagebuch. ";
-    echo "Volltext, Art, Zuordnung und Bezug können einzeln oder gemeinsam verwendet ";
-    echo "werden.</p>\n</header>\n";
+    echo "</header>\n";
     echo "<form class=\"estab-tool-form\" method=\"get\" action=\"".$action."\">\n";
     echo "<div class=\"estab-tool-form-grid\">\n";
     echo "<div class=\"estab-tool-field estab-tool-field-wide\">\n";
@@ -397,9 +392,7 @@ if (debug == true){ echo "etb_tableexist==>"; var_dump($this->etb_titel_tbl); ec
     echo "<header class=\"estab-tool-panel-heading\">\n";
     echo "<p class=\"estab-tool-eyebrow\">Referenznachweis</p>\n";
     echo "<h2 id=\"etb-reference-title\">ETB-Referenzen auswerten</h2>\n";
-    echo "<p>Verfolgen Sie von einer lokalen ETB-Nummer aus alle ";
-    echo "referenzierenden Folgeeinträge oder den Bezugspfad zurück. ";
-    echo "Vorwärtssuchen zeigen auch verzweigte Zusammenhänge.</p>\n</header>\n";
+    echo "</header>\n";
     echo "<form class=\"estab-tool-form estab-tool-actions\" method=\"get\" ";
     echo "action=\"".$action."\">\n";
     echo "<div class=\"estab-tool-field\"><label for=\"etb-ref-start\">";
@@ -547,9 +540,6 @@ var $task;
       ? "ETB-Eintrag erfassen"
       : "Ausgewählten ETB-Eintrag berichtigen";
     echo "</h2>\n";
-    echo "<p>Fachliche Ereigniszeit und Erfassungszeit werden getrennt und ";
-    echo "unveränderlich gespeichert. Fehler werden ausschließlich mit einem ";
-    echo "neuen Korrektureintrag berichtigt.</p>\n";
     echo "</header>\n";
     echo "<form class=\"estab-tool-form\" method=\"post\" action=\"".$action.
          "\" name=\"etbeintrag\" data-estab-dirty-guard ".
@@ -725,9 +715,7 @@ var $task;
       echo "<section class=\"estab-tool-panel\" aria-labelledby=\"etb-list-title\">\n";
       echo "<header class=\"estab-tool-panel-heading\">\n";
       echo "<h2 id=\"etb-list-title\">Einträge des aktiven Einsatzes</h2>\n";
-      echo "<p>Die neuesten Einträge stehen oben. Die laufende Nummer wird ";
-      echo "beim Speichern je Einsatz vergeben und bleibt auch bei einer ";
-      echo "rückdatierten Sachzeit unverändert.</p>\n</header>\n";
+      echo "</header>\n";
       /*
        * Das Einsatztagebuch kommt aus dem Tabellenbauteil (app/tabelle.php).
        *

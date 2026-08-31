@@ -3704,8 +3704,13 @@ form[data-estab-incident-disabled="true"]::before {
 
 /* Tafelkoepfe tragen dieselbe Last wie die Seitenkoepfe: eine Ueberschrift
    und darunter zwei Zeilen, die erklaeren, was das Formular darunter ohnehin
-   zeigt. Ueberschrift und Kicker stehen jetzt in einer Zeile; der Absatz
-   entfaellt. */
+   zeigt. Ueberschrift und Kicker stehen in einer Zeile; der Absatz entfaellt.
+
+   Er entfaellt jetzt wirklich. Hier stand eine Regel, die ihn auf
+   "display: none" setzte -- unsichtbar auf dem Bildschirm und ebenso
+   unsichtbar fuer Vorleseprogramme, aber weiterhin im Markup. Was
+   niemand sieht und niemand hoert, ist kein Inhalt, sondern Ballast;
+   die elf Absaetze in vier Dateien sind geloescht. */
 .estab-tool-panel-heading {
     align-items: baseline;
     display: flex;
@@ -3723,10 +3728,6 @@ form[data-estab-incident-disabled="true"]::before {
 .estab-tool-panel-heading .estab-section-kicker {
     margin: 0;
     order: -1;
-}
-
-.estab-tool-panel-heading > p:not(.estab-tool-eyebrow):not(.estab-section-kicker) {
-    display: none;
 }
 
 /* Der Kasten "Aktiver Einsatz" nannte in fuenf Zeilen, was in eine passt.

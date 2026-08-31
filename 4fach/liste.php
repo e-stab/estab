@@ -1431,22 +1431,31 @@ class Listen extends kategorien {
            * Vorschautext.
            *
            * „TBB-Nachweis" bricht am Bindestrich und braucht deshalb
-           * nur die Breite von „NACHWEIS". „Transport" braucht die
-           * seiner längsten Marke, „abgeschlossen".
+           * nur die Breite von „NACHWEIS".
+           *
+           * „Transport" braucht die Breite seiner längsten Marke, und
+           * das ist nicht der Kopf, sondern „abgeschlossen": ein
+           * einzelnes Wort von 94 Bildpunkten, das mit Zeichen, Abstand
+           * und Polsterung 136 verlangt. Die drei anderen Marken --
+           * „bei LdF", „beim Fernmelder", „beim Sichter" -- brechen am
+           * Leerzeichen und stehen auch schmaler ganz. Der Betreiber hat
+           * entschieden, das Wort zu behalten und die Inhaltsspalte dafür
+           * schmaler zu machen; sie klammert ohnehin auf zwei Zeilen und
+           * klappt auf Wunsch auf.
            *
            * Kopf, Breite, Klammerung, Art, sortierbar, suchbar.
            */
           $stabSpalten = array (
             array ("Kenntnis", 10, false, "text", false, false),
             array ("Erledigt", 10, false, "text", false, false),
-            array ("Transport", 12, false, "text", false, false),
+            array ("Transport", 17, false, "text", false, false),
             array ("Vorrang", 10, false, "vorrang", true, false),
             array ("E/A", 6, false, "text", true, false),
             array ("TBB-Nachweis", 10, false, "zahl", true, true),
             array ("Von", 8, true, "text", true, true),
             array ("An", 8, true, "text", true, true),
             array ("Abfasszeit", 12, false, "zeit", true, false),
-            array ("Inhalt", 16, true, "text", false, true),
+            array ("Inhalt", 11, true, "text", false, true),
           );
           $stabZeilen = array ();
           foreach ($result as $row){
@@ -1769,8 +1778,6 @@ class Listen extends kategorien {
              "aria-labelledby=\"estab-correction-queue-title\">";
         echo "<header class=\"estab-tool-panel-heading\">";
         echo "<h2 id=\"estab-correction-queue-title\">Zurückgewiesene Meldungen</h2>";
-        echo "<p>Diese Meldungen warten auf Überarbeitung und wurden an eine ".
-             "deiner aktuell wirksamen Stabsfunktionen zurückgegeben.</p>";
         echo "</header>";
         if ($result === array ()) {
           echo "<div class=\"estab-message-list-empty\">".
@@ -1949,8 +1956,6 @@ class Listen extends kategorien {
              "aria-labelledby=\"".$domPrefix."-title\">";
         echo "<header class=\"estab-tool-panel-heading\">";
         echo "<h2 id=\"".$domPrefix."-title\">Nachrichtenvordrucke</h2>";
-        echo "<p>Suche und Filter werden miteinander kombiniert. ".
-             "Ein Klick auf „Vordruck öffnen“ zeigt die vollständige Nachricht.</p>";
         echo "</header>";
         estab_message_list_render_controls (
           $this->filters,

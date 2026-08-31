@@ -273,9 +273,6 @@ if (debug == true){ echo "tbb_tableexist==>"; var_dump($this->tbb_titel_tbl); ec
     echo "<section class=\"estab-tool-panel\" aria-labelledby=\"ttb-action-title\">\n";
     echo "<header class=\"estab-tool-panel-heading\">\n";
     echo "<h2 id=\"ttb-action-title\">Neuer Betriebsbucheintrag</h2>\n";
-    echo "<p>Erfassen Sie Betrieb, Personal, Funkkanäle, Nachrichtenweg, ";
-    echo "Störungen oder die Aushändigung in den dafür vorgesehenen ";
-    echo "Bereichen des Fb Fü 44.</p>\n";
     echo "</header>\n";
     echo "<form class=\"estab-tool-actions\" action=\"".$action."\" method=\"get\">\n";
     echo "<button class=\"estab-button estab-button-primary\" ";
@@ -338,9 +335,6 @@ var $task ;
       ? "TBB-Eintrag erfassen"
       : "Ausgewählten TBB-Eintrag berichtigen";
     echo "</h2>\n";
-    echo "<p>Füllen Sie mindestens einen fachlichen Bereich aus. Gespeicherte ";
-    echo "Einträge bleiben unverändert; eine Berichtigung wird als neuer, ";
-    echo "verknüpfter Eintrag angehängt.</p>\n";
     echo "</header>\n";
     echo "<form class=\"estab-tool-form\" method=\"post\" action=\"".$action.
          "\" name=\"tbbeintrag\" data-estab-dirty-guard ".
@@ -476,9 +470,6 @@ var $task ;
       echo "<section class=\"estab-tool-panel\" aria-labelledby=\"ttb-list-title\">\n";
       echo "<header class=\"estab-tool-panel-heading\">\n";
       echo "<h2 id=\"ttb-list-title\">Einträge des aktiven Einsatzes</h2>\n";
-      echo "<p>Die Ansicht folgt den sieben Spalten des Fb Fü 44. Die ";
-      echo "laufende Nummer gilt nur für dieses TBB und wird beim Speichern ";
-      echo "unveränderlich vergeben.</p>\n";
       echo "</header>\n";
       /*
        * Das Technische Betriebsbuch kommt aus dem Tabellenbauteil
