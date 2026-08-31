@@ -832,8 +832,10 @@ $assert(
         && str_contains($readiness, "'121-transport-disposition-field-one.sql'")
         && str_contains($verify, 'estab_permission_mode')
         && str_contains($readiness, 'estab_permission_mode')
-        && str_contains($verify, 'estab_schema_migrations`) = 27')
-        && str_contains($readiness, 'estab_schema_migrations) = 27')
+        && str_contains($verify, "'122-fernmeldeweg-identitaet.sql'")
+        && str_contains($readiness, "'122-fernmeldeweg-identitaet.sql'")
+        && str_contains($verify, 'estab_schema_migrations`) = 28')
+        && str_contains($readiness, 'estab_schema_migrations) = 28')
         && str_contains($verify, 'inactive_messenger_target_allowed')
         && str_contains($readiness, 'inactive_messenger_target_allowed')
         && str_contains($readiness, 'nv_zugangsschicht_mitglieder')
@@ -870,7 +872,7 @@ $assert(
             $readiness,
             "'%messenger_account.`aktiv` = 1%'"
         ),
-    'Migrations 115-121 and exact ledger are outside verify/readiness gates'
+    'Migrations 115-122 and exact ledger are outside verify/readiness gates'
 );
 $assert(
     str_contains($permissionSource, 'Missing context fails closed')

@@ -18,8 +18,9 @@ SELECT
          'nv_dienstbesetzungen', 'nv_dienstuebergabe_anfragen',
          'nv_dienstuebergaben',
          'nv_fernmeldeplaene', 'nv_fernmeldeplan_eintraege',
-         'nv_melderauftraege', 'nv_selbstregistrierung'
-       )) = 32) AS `base_tables_ok`,
+         'nv_melderauftraege', 'nv_selbstregistrierung',
+         'nv_fernmeldewege', 'nv_fernmeldeweg_zuordnung'
+       )) = 34) AS `base_tables_ok`,
   ((SELECT COUNT(*)
       FROM information_schema.tables
      WHERE table_schema = DATABASE()
@@ -651,6 +652,25 @@ SELECT
        )
        AND table_comment =
          'estab:migration:94-dv-organisational-controls:v1') = 10
+   AND
+   (SELECT COUNT(*)
+      FROM information_schema.tables
+     WHERE table_schema = DATABASE()
+       AND table_name IN (
+         'nv_fernmeldewege',
+         'nv_fernmeldeweg_zuordnung'
+       )
+       AND table_comment =
+         'estab:migration:122-fernmeldeweg-identitaet:v1') = 2
+   AND
+   (SELECT COUNT(*)
+      FROM `nv_fernmeldeplan_eintraege` AS entry
+     WHERE NOT EXISTS (
+       SELECT 1
+         FROM `nv_fernmeldeweg_zuordnung` AS mapping
+        WHERE mapping.`fernmeldeplan_eintrag_id`
+              = entry.`fernmeldeplan_eintrag_id`
+     )) = 0
    AND
    (SELECT COUNT(*)
       FROM information_schema.columns
@@ -1936,7 +1956,7 @@ SELECT
        BINARY 'STRICT', BINARY 'LOOSE'
      )) = 0)
        AS `incident_permission_mode_ok`,
-  ((SELECT COUNT(*) FROM `estab_schema_migrations`) = 27
+  ((SELECT COUNT(*) FROM `estab_schema_migrations`) = 28
    AND
    (SELECT COUNT(*)
       FROM `estab_schema_migrations`
@@ -1967,10 +1987,11 @@ SELECT
        '118-operational-authority.sql',
        '119-inactive-messenger-dispatch.sql',
        '120-single-function-relief.sql',
-       '121-transport-disposition-field-one.sql'
+       '121-transport-disposition-field-one.sql',
+       '122-fernmeldeweg-identitaet.sql'
      )
        AND `state` = 'applied'
-       AND `checksum` REGEXP BINARY '^[0-9a-f]{64}$') = 27)
+       AND `checksum` REGEXP BINARY '^[0-9a-f]{64}$') = 28)
        AS `schema_migrations_ok`;
 
 SELECT `table_name`, `engine`, `table_collation`

@@ -753,10 +753,39 @@ Im Plan, im Ausdruck und in der Auswahlliste steht „Weg 3", nicht eine
 fünfstellige Zahl. Beide werden **einmal** vergeben und nie wieder geändert
 oder neu vergeben.
 
-Der Eintrag der Planversion bekommt dafür eine Spalte `weg_id`
-(Fremdschlüssel, Pflicht) und einen eindeutigen Schlüssel
-`(fernmeldeplan_id, weg_id)` — ein Weg steht in einer Version höchstens
-einmal.
+Die Zuordnung von Kennung zu Eintrag steht in einer **eigenen Tabelle**
+`nv_fernmeldeweg_zuordnung`, nicht als Spalte am Eintrag (Entscheidung O20):
+
+```
+nv_fernmeldeweg_zuordnung
+  fernmeldeplan_eintrag_id   Schlüssel, ein Eintrag hat eine Kennung
+  fernmeldeplan_id           mitgeführt für den zusammengesetzten Schlüssel
+  weg_id                     die Kennung
+                             eindeutig je (fernmeldeplan_id, weg_id)
+```
+
+**Warum daneben und nicht daran.** Eine Spalte am Eintrag müsste für jede
+Bestandszeile **gefüllt** werden, und genau das lässt
+`estab_dv94_fernmeldeplan_entry_update`
+([Migration 94, Zeile 971](docker/db/migrations/94-dv-organisational-controls.sql:971))
+nicht zu: Eine Änderung an einem Planweg ist nur zulässig, solange sein Plan
+`ENTWURF` des gerade aktiven, offenen Einsatzes ist. Jede Zeile eines
+freigegebenen oder ersetzten Plans ist gesperrt.
+
+Der Ausweg wäre gewesen, den Auslöser für die Dauer der Migration zu ersetzen.
+Der Betreiber hat anders entschieden, und die Entscheidung ist die
+konservativere: **Der geschützte Bestand wird nicht angefasst, sondern nur
+gelesen.** Die Kennungen entstehen durch `INSERT` in zwei neue Tabellen; keine
+Zeile eines freigegebenen Plans ändert sich, kein Auslöser wird berührt, und
+die Unveränderlichkeitszusage bleibt wortwörtlich wahr statt nur sinngemäß.
+
+Der Preis ist ein Verbund beim Lesen. Er trifft eine Tabelle mit einem
+Schlüsselzugriff und fällt gegenüber dem Gewinn nicht ins Gewicht.
+
+**Die Rückfallebene bleibt trotzdem eine Spalte am Eintrag.** Sie muss nicht
+zurückgefüllt werden — Bestandszeilen haben keine —, und eine Spalte
+*anzulegen* ist DDL, die keinen Zeilenauslöser feuert. Nur das Füllen wäre das
+Problem gewesen, und das geschieht ausschließlich im Entwurf.
 
 ### 9.4 Was das nebenbei löst
 
@@ -791,7 +820,7 @@ Haken. Diesen Zustand kann es so nicht geben; der Schalter ist Darstellung.
 
 | Absicherung | Wie |
 | --- | --- |
-| Ziel liegt im selben Plan **und** in derselben Version | zusammengesetzter Fremdschlüssel `(fernmeldeplan_id, rueckfallebene_fuer_weg)` → `(fernmeldeplan_id, weg_id)` |
+| Ziel liegt im selben Plan **und** in derselben Version | zusammengesetzter Fremdschlüssel `(fernmeldeplan_id, rueckfallebene_fuer_weg)` → `nv_fernmeldeweg_zuordnung (fernmeldeplan_id, weg_id)` |
 | Kein Weg ist seine eigene Rückfallebene | Prüfbedingung `rueckfallebene_fuer_weg <> weg_id` |
 | Keine Ringe | Die Anwendung geht die Kette beim Speichern ab und weist einen Ring zurück. **Ketten sind erlaubt**: Ein Ersatz darf selbst einen Ersatz haben |
 | Ein Weg, auf den zurückgefallen wird, verschwindet nicht unbemerkt | Fremdschlüssel mit `RESTRICT`. Das Löschen nennt die Wege, die auf ihn zurückfallen, statt sie stillschweigend zu lösen |
@@ -1189,7 +1218,6 @@ erzwingen einen Test je Regel.
 | `rufgruppe` | `VARCHAR(64)` | `Fu`/digital | **neu** |
 | `anschlussart` | `ENUM('AMT','NST','MOBIL','SONDER')` | `Fe`, `FAX` | **neu**, freiwillig |
 | `datenart` | `ENUM('MAIL','MESSENGER','FACHANW','INTERNET')` | `@` | **neu** |
-| `weg_id` | `BIGINT UNSIGNED` | alle, Pflicht | **neu** — dauerhafte Kennung des Wegs, Fremdschlüssel auf `nv_fernmeldewege`; eindeutig je Plan |
 | `rueckfallebene_fuer_weg` | `BIGINT UNSIGNED NULL` | alle | **neu** — `weg_id` des Wegs, den dieser ersetzt |
 | `sortierung` | `INT UNSIGNED` | alle | Bedeutung verengt: **nur noch Anzeigereihenfolge**, keine Identität mehr |
 | `bemerkungen` | `TEXT` | alle | bleibt, einziges Vermerkfeld |
@@ -1212,7 +1240,7 @@ auf die Gegenstelle **einer bestimmten Planversion** — dieselbe Lesart wie bei
 Weg (Abschnitt 9.4): Der Nachweis hält fest, was zum Zeitpunkt der Aufnahme im
 Plan stand, nicht was heute dort steht.
 
-### 14.4 `nv_fernmeldewege` — neu
+### 14.4 `nv_fernmeldewege` und `nv_fernmeldeweg_zuordnung` — neu
 
 Die Identität des Wegs, getrennt von seinem Zustand in einer Planversion
 (Abschnitt 9.3). Zeilen dieser Tabelle werden angelegt und **nie geändert oder
@@ -1229,6 +1257,20 @@ gelöscht** — eine Kennung, die verschwindet, ist keine.
 `weg_nummer` wird als `MAX + 1` **je Einsatz** vergeben — nicht je Planversion.
 Damit ist die Wiederverwendung ausgeschlossen, an der die `sortierung`
 scheitert (Abschnitt 9.6).
+
+**Die Zuordnung** verbindet Kennung und Eintrag, ohne den geschützten Bestand
+zu ändern (Abschnitt 9.3):
+
+| Spalte | Typ | Pflicht | Zweck |
+| --- | --- | --- | --- |
+| `fernmeldeplan_eintrag_id` | `BIGINT UNSIGNED` | Schlüssel, Fremdschlüssel | der Eintrag einer Planversion |
+| `fernmeldeplan_id` | `BIGINT UNSIGNED` | ja | mitgeführt, damit der zusammengesetzte Schlüssel greift |
+| `weg_id` | `BIGINT UNSIGNED` | ja, Fremdschlüssel | die dauerhafte Kennung |
+
+Eindeutig ist `(fernmeldeplan_id, weg_id)` — ein Weg steht in einer Version
+höchstens einmal. Eine Zuordnung wird **nie umgehängt**; ein Auslöser weist
+jede Änderung zurück. Sie verschwindet nur mit ihrem Eintrag, wenn ein Entwurf
+einen Weg wieder streicht.
 
 **Eine Identität ohne Verwendung wird nicht aufgeräumt.** Ein Weg, der im
 Entwurf angelegt und wieder gestrichen wurde, behält seine Nummer. Das ist
@@ -1274,14 +1316,18 @@ Migration 94 und 117 bleiben unberührt.
 1. Neue Spalten anlegen, alle `NULL`-fähig.
 2. `rufname` → `erreichbarkeit` umbenennen (`ALTER TABLE … CHANGE`; kein
    Wertewechsel, damit kein Auslöser feuert).
-2a. `nv_fernmeldewege` anlegen und **jede bestehende Eintragszeile mit einer
-   eigenen, frischen Identität versehen**. Kein Versuch, gleiche Wege über
+2a. `nv_fernmeldewege` und `nv_fernmeldeweg_zuordnung` anlegen und **jede
+   bestehende Eintragszeile mit einer eigenen, frischen Identität versehen** —
+   ausschließlich durch `INSERT` in die beiden neuen Tabellen. Der geschützte
+   Bestand wird gelesen, nicht geschrieben. Kein Versuch, gleiche Wege über
    Versionen hinweg zusammenzuführen — siehe unten.
-2b. `rueckfallebene_fuer_weg` anlegen, dazu der zusammengesetzte Fremdschlüssel
-   auf `(fernmeldeplan_id, weg_id)` und die Prüfbedingung gegen den
-   Selbstbezug. Bestandszeilen bleiben `NULL`. Die Versionskopie in
-   [dv_operations.php:4829](app/dv_operations.php:4829) nimmt `weg_id` und
-   `rueckfallebene_fuer_weg` unverändert mit.
+2b. `rueckfallebene_fuer_weg` am Eintrag anlegen, dazu der zusammengesetzte
+   Fremdschlüssel auf die Zuordnung und die Prüfbedingung gegen den
+   Selbstbezug. Bestandszeilen bleiben `NULL`; das Anlegen einer Spalte ist
+   DDL und feuert keinen Zeilenauslöser. Die Versionskopie in
+   [dv_operations.php:4829](app/dv_operations.php:4829) schreibt die Zuordnung
+   für die neuen Zeilen mit und nimmt `rueckfallebene_fuer_weg` unverändert
+   mit.
 3. Bestehende `Fu`-Einträge: `funkart` bleibt `NULL` = **unbestimmt**. Sie
    werden in der Oberfläche als Altbestand gekennzeichnet und beim nächsten
    Bearbeiten entschieden. Kein Raten.
@@ -1596,6 +1642,7 @@ Fertig ist die Überarbeitung, wenn zusätzlich zur `Definition of Done` aus
 | O16 | Wo wird der Weg erfasst? | **außerhalb des Vordrucks**; im Vordruck steht das Mittel. Die Anwendung leitet Feld 1 nicht ab, sondern prüft es gegen den Weg | Abschnitt 10.4, Regel `FMP-WEG-AUSSERHALB-VORDRUCK` |
 | O17 | Ist der Eingangsweg Pflicht? | **nein**, freiwillig. Das Mittel bleibt Pflicht | Abschnitt 10.3 |
 | O18 | Darf der LdF die Bemerkung des Fernmelders ändern? | **nein** — sie ist für ihn nur lesbar; er behält sein eigenes Begründungsfeld | Abschnitt 10.8 |
+| O20 | Wie bekommt der Bestand seine Wegkennungen, wenn der Auslöser jede Änderung an freigegebenen Plänen sperrt? | **Zuordnungstabelle statt Spalte.** Der geschützte Bestand wird nur gelesen; die Kennungen entstehen durch `INSERT`. Kein Auslöser wird angefasst | Abschnitt 9.3, 14.4 |
 | O19 | Wie kommt Feld 15 zu seinem Wert? | Aus der **in Feld 6 ausgewählten** Gegenstelle des Plans — als Verweis festgehalten, nicht als Textvergleich | Abschnitt 5.6 |
 
 **Damit ist jede Frage dieser Überarbeitung entschieden.**

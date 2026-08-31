@@ -52,22 +52,41 @@ diesen Vorgang.
       Nachweis verlangt zu jeder Regel eine Quelle, aber nicht zu jeder Quelle
       eine Regel.
 
-- [ ] **A02** `!` **S** Schema: `nv_fernmeldewege`
-      → `docker/db/migrations/122-fernmeldeweg-identitaet.sql`, `docker/db/init/10-schema.sql`
-      - [ ] `weg_id` (Schlüssel), `einsatz_id` (Fremdschlüssel), `weg_nummer` (eindeutig je Einsatz), `angelegt_am`, `angelegt_von`
-      - [ ] `weg_nummer` als `MAX + 1` **je Einsatz**, nie wiederverwendet
-      - [ ] Zeilen werden nie geändert und nie gelöscht — Auslöser wie bei den übrigen Nachweistabellen
-      - **Prüfung:** `tests/php/schema_migration_contract.php`; `docker/db/verify.sql`
-      - **Regel:** `FMP-WEG-IDENTITAET` · **Spec:** 9.3, 14.4
+- [x] **A02+A03** `!!` **L** Die dauerhafte Wegkennung — Schema und Rückfüllung
+      → `docker/db/migrations/122-fernmeldeweg-identitaet.sql`,
+        `docker/db/verify.sql`, `app/readiness.php`,
+        `tests/php/schema_migration_contract.php`
+      - [x] `nv_fernmeldewege`: `weg_id`, `einsatz_id`, `weg_nummer`
+            (eindeutig je Einsatz), `angelegt_am`, `angelegt_von`
+      - [x] `nv_fernmeldeweg_zuordnung`: Eintrag → Kennung, eindeutig
+            `(fernmeldeplan_id, weg_id)`, Auslöser gegen jedes Umhängen
+      - [x] Rückfüllung als Prozedur mit Zeiger: jede Bestandszeile bekommt
+            eine **eigene** Kennung, geordnet nach Einsatz, Version,
+            Sortierung. Wiederanlauffähig — sie sieht nur Einträge ohne
+            Zuordnung
+      - [x] Vorprüfung auf das Migrationsbuch des Vorgängers, Nachprüfung auf
+            „kein Eintrag ohne Kennung"
+      - [x] Vertragstor hält die **Bauart** fest: Die Migration darf kein
+            `UPDATE` auf `nv_fernmeldeplan_eintraege` enthalten
+      - **Prüfung:** `schema_migration_contract.php` grün (971 assertions);
+        Laufzeitnachweis bei Prüfpunkt C1
+      - **Risiko `!!`** bestätigt sich, aber anders als gedacht — siehe unten
 
-- [ ] **A03** `!!` **M** Migration: jede Bestandszeile bekommt eine Kennung
-      → `docker/db/migrations/122-…`, `app/readiness.php`
-      - [ ] `weg_id` an `nv_fernmeldeplan_eintraege`, Pflicht, Fremdschlüssel
-      - [ ] Eindeutiger Schlüssel `(fernmeldeplan_id, weg_id)`
-      - [ ] **Jede** Bestandszeile bekommt eine **eigene** Kennung — keine Verkettung über Versionen (Spec 14.6, Schritt 5a)
-      - [ ] `rufname` → `erreichbarkeit` umbenennen (`CHANGE`, kein Wertewechsel)
-      - **Prüfung:** Lauf gegen eine Kopie eines Bestandsdatenbestands **vor** der Auslieferung. Zu belegen, nicht zu glauben: Ein `ALTER TABLE … CHANGE` ohne Wertewechsel darf keinen Unveränderlichkeitsauslöser feuern
-      - **Risiko `!!`:** Die einzige Migration über alle Bestandszeilen. Sie berührt Tabellen mit Unveränderlichkeitsauslösern aus Migration 94 und 117
+      **Zwei Aufgaben wurden eine.** A02 und A03 teilten sich eine
+      Migrationsdatei. Getrennt festzuschreiben hieße, eine bereits
+      festgeschriebene Migration später zu ändern — und eine angewandte
+      Migration ist prüfsummengebunden. Wer sie nach dem Anwenden anfasst,
+      bekommt „Checksum mismatch for applied migration" und kommt nicht mehr
+      weiter. Eine Migrationsdatei ist mit ihrem Commit endgültig.
+
+      **Der Bauplan hat sich durch O20 geändert.** Ursprünglich: eine Spalte
+      `weg_id` am Eintrag. Das scheitert an
+      `estab_dv94_fernmeldeplan_entry_update` — jede Zeile eines freigegebenen
+      Plans ist gesperrt, und das Rückfüllen ist ein `UPDATE`. Der Betreiber
+      hat die konservativere Bauart gewählt: eine Zuordnungstabelle, die nur
+      beschrieben wird. Der geschützte Bestand wird gelesen, nicht angefasst.
+      Das Vertragstor hält genau das fest, damit es niemand später
+      „vereinfacht".
 
 - [ ] **A04** `!` **S** Versionskopie trägt die Kennung
       → `app/dv_operations.php`

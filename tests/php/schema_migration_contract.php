@@ -43,6 +43,9 @@ $dvEvidenceMigration = $read(
 $dvOperationsMigration = $read(
     $root . '/docker/db/migrations/94-dv-organisational-controls.sql'
 );
+$routeIdentityMigration = $read(
+    $root . '/docker/db/migrations/122-fernmeldeweg-identitaet.sql'
+);
 $attachmentIntegrityMigration = $read(
     $root . '/docker/db/migrations/95-attachment-ingest-integrity.sql'
 );
@@ -2784,6 +2787,57 @@ $assert(
         ),
     'DV duty, S6, messenger, route, or operational event schema is outside the gate'
 );
+// Die Wegkennung entsteht ausschliesslich durch INSERT in zwei neue Tabellen.
+// Wer hier spaeter eine Spalte an nv_fernmeldeplan_eintraege fuellt, faellt
+// ueber estab_dv94_fernmeldeplan_entry_update -- das Tor haelt die Bauart fest.
+$assert(
+    str_contains(
+        $routeIdentityMigration,
+        'CREATE TABLE IF NOT EXISTS `nv_fernmeldewege`'
+    )
+        && str_contains(
+            $routeIdentityMigration,
+            'CREATE TABLE IF NOT EXISTS `nv_fernmeldeweg_zuordnung`'
+        )
+        && str_contains(
+            $routeIdentityMigration,
+            'uq_fernmeldeweg_nummer'
+        )
+        && str_contains(
+            $routeIdentityMigration,
+            'uq_fernmeldeweg_zuordnung_plan'
+        )
+        && str_contains(
+            $routeIdentityMigration,
+            'estab_dv122_wegzuordnung_update'
+        )
+        && str_contains(
+            $routeIdentityMigration,
+            'Route identity assignments are immutable'
+        )
+        && str_contains(
+            $routeIdentityMigration,
+            "'121-transport-disposition-field-one.sql'"
+        )
+        && !str_contains(
+            $routeIdentityMigration,
+            'UPDATE `nv_fernmeldeplan_eintraege`'
+        )
+        && str_contains(
+            $routeIdentityMigration,
+            'entries without an identity remain'
+        )
+        && str_contains(
+            $verify,
+            'estab:migration:122-fernmeldeweg-identitaet:v1'
+        )
+        && str_contains(
+            $readiness,
+            "'122-fernmeldeweg-identitaet.sql'"
+        ),
+    'Route identity schema, its immutable assignment, or its read-only '
+        . 'backfill is outside the gate'
+);
 $etbMigrationFragments = [
     "table_name = 'nv_funktionsfaehigkeiten' AND table_type = 'BASE TABLE' "
         . "AND engine = 'InnoDB' AND table_collation = "
@@ -3079,7 +3133,7 @@ $assert(
         && str_contains($verifySql, "index_name <> 'PRIMARY') = 0")
         && str_contains(
             $verifySql,
-            '(SELECT COUNT(*) FROM `estab_schema_migrations`) = 27'
+            '(SELECT COUNT(*) FROM `estab_schema_migrations`) = 28'
         )
         && str_contains($verifySql, "'96-etb-duty-function.sql'")
         && str_contains(
@@ -3122,7 +3176,11 @@ $assert(
             $verifySql,
             "'121-transport-disposition-field-one.sql'"
         )
-        && str_contains($verifySql, ") = 27) AS `schema_migrations_ok`")
+        && str_contains(
+            $verifySql,
+            "'122-fernmeldeweg-identitaet.sql'"
+        )
+        && str_contains($verifySql, ") = 28) AS `schema_migrations_ok`")
         && str_contains(
             $verifySql,
             'Discarded telecommunications drafts are immutable evidence'
@@ -3149,7 +3207,7 @@ $assert(
         && str_contains($readinessSql, "index_name <> 'PRIMARY') = 0")
         && str_contains(
             $readinessSql,
-            '(SELECT COUNT(*) FROM estab_schema_migrations) = 27'
+            '(SELECT COUNT(*) FROM estab_schema_migrations) = 28'
         )
         && str_contains($readinessSql, "'96-etb-duty-function.sql'")
         && str_contains(
@@ -3201,7 +3259,7 @@ $assert(
         )
         && str_contains(
             $readinessSql,
-            "checksum REGEXP BINARY '^[0-9a-f]{64}$') = 27"
+            "checksum REGEXP BINARY '^[0-9a-f]{64}$') = 28"
         ),
     'Runtime readiness does not require the exact final ETB catalogue and ledger'
 );
@@ -3447,9 +3505,11 @@ $assert(
         && str_contains($verify, "'117-telecom-draft-discard.sql'")
         && str_contains($verify, "'118-operational-authority.sql'")
         && str_contains($verify, "'119-inactive-messenger-dispatch.sql'")
-        && str_contains($verify, 'estab_schema_migrations`) = 27')
-        && str_contains($readiness, 'estab_schema_migrations) = 27'),
-    'Migration ledger/readiness does not require all twenty-five release migrations'
+        && str_contains($verify, "'122-fernmeldeweg-identitaet.sql'")
+        && str_contains($readiness, "'122-fernmeldeweg-identitaet.sql'")
+        && str_contains($verify, 'estab_schema_migrations`) = 28')
+        && str_contains($readiness, 'estab_schema_migrations) = 28'),
+    'Migration ledger/readiness does not require all release migrations'
 );
 $assert(
     str_contains($readiness, "require_once __DIR__ . '/bootstrap.php'")
