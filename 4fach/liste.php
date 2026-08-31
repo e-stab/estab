@@ -1412,22 +1412,41 @@ class Listen extends kategorien {
          */
         $result = is_array ($result) ? $result : array ();
         {
-          // Breite und Klammerung je Spalte. Die Angaben stammen aus einer
-          // Messung im Browser: Mit gleich verteilten Breiten ueberlagerte
-          // der Transportstand die Vorrangstufe, und der Nachrichtentext
-          // machte Zeilen von 450 Bildpunkten Hoehe.
-          // Kopf, Breite, Klammerung, Art, sortierbar, suchbar.
+          /*
+           * Breite und Klammerung je Spalte.
+           *
+           * Die Zahlen stammen aus einer Messung im Browser, nicht aus
+           * dem Gefühl. Gemessen wurde, wie breit jeder Kopf in seiner
+           * Schrift wirklich sein will -- die Großschreibung und der
+           * Buchstabenabstand kommen aus dem Stilblatt und machen ihn
+           * breiter, als er im Quelltext aussieht. Vier Köpfe waren zu
+           * schmal: „ABFASSZEI" stand für „ABFASSZEIT", und ein halber
+           * Spaltenname ist schlimmer als ein zweizeiliger, denn er
+           * sieht aus wie ein ganzer.
+           *
+           * Bezahlt hat das die Inhaltsspalte: Sie hatte 197
+           * Bildpunkte für einen Kopf, der 73 braucht. Sie klammert
+           * ohnehin auf zwei Zeilen und klappt auf Wunsch auf; ein
+           * richtiger Spaltenname wiegt schwerer als zwanzig Bildpunkte
+           * Vorschautext.
+           *
+           * „TBB-Nachweis" bricht am Bindestrich und braucht deshalb
+           * nur die Breite von „NACHWEIS". „Transport" braucht die
+           * seiner längsten Marke, „abgeschlossen".
+           *
+           * Kopf, Breite, Klammerung, Art, sortierbar, suchbar.
+           */
           $stabSpalten = array (
-            array ("Kenntnis", 7, false, "text", false, false),
-            array ("Erledigt", 7, false, "text", false, false),
-            array ("Transport", 10, false, "text", false, false),
+            array ("Kenntnis", 10, false, "text", false, false),
+            array ("Erledigt", 10, false, "text", false, false),
+            array ("Transport", 12, false, "text", false, false),
             array ("Vorrang", 10, false, "vorrang", true, false),
-            array ("E/A", 4, false, "text", true, false),
+            array ("E/A", 6, false, "text", true, false),
             array ("TBB-Nachweis", 10, false, "zahl", true, true),
-            array ("Von", 9, true, "text", true, true),
-            array ("An", 9, true, "text", true, true),
-            array ("Abfasszeit", 8, false, "zeit", true, false),
-            array ("Inhalt", 25, true, "text", false, true),
+            array ("Von", 8, true, "text", true, true),
+            array ("An", 8, true, "text", true, true),
+            array ("Abfasszeit", 12, false, "zeit", true, false),
+            array ("Inhalt", 16, true, "text", false, true),
           );
           $stabZeilen = array ();
           foreach ($result as $row){
