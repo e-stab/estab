@@ -3312,18 +3312,29 @@ Nachricht als Sichtung anzeigen
     echo "<script src=\"../estab-password-policy.js\" defer></script>\n";
     echo "<title>eStab – Anmeldung</title>\n";
     echo "</head>\n";
-    echo "<body class=\"estab-auth-page\">\n";
-    echo "<main class=\"estab-auth-shell\">\n";
-    echo "<section class=\"estab-auth-card\" aria-labelledby=\"estab-auth-title\">\n";
+    /*
+     * Die Anmeldung passt auf einen Bildschirm.
+     *
+     * Sie tat es nicht: Kopf, Erklaersatz, Kontenliste und Zugangsdaten
+     * standen untereinander und ergaben 1843 Bildpunkte. Auf einem
+     * Laptopschirm von 640 sah man beim Aufschlagen die Liste, nach dem
+     * Scrollen die Felder -- und nie beides. Wer sein Konto in der Liste
+     * gewaehlt hatte, musste die Felder erst wiederfinden.
+     *
+     * Jetzt: ein Seitenkopf von einer Zeile (docs/GESTALTUNG.md 4.2), und
+     * darunter die beiden Tafeln nebeneinander, sobald der Platz reicht.
+     * Die Kontenliste scrollt in sich; die Seite selbst nicht.
+     */
+    echo "<body class=\"estab-auth-page estab-anmeldung-seite\">\n";
+    echo "<main class=\"estab-auth-shell estab-anmeldung\">\n";
+    echo "<header class=\"estab-tool-hero estab-anmeldung-kopf\">\n";
+    echo "<p class=\"estab-tool-eyebrow\">Anmeldung</p>\n";
     echo "<h1 id=\"estab-auth-title\">eStab-Funktionskonto</h1>\n";
-    echo "<p class=\"estab-auth-help\"><strong>".
-         estab_auth_html ($conf_4f ["Titelkurz"].$conf_4f ["SubTitel"]["env"]).
-         "</strong><br>Version ".estab_auth_html ($conf_4f ["Version"]).
-         " · ".estab_auth_html ($conf_4f ["Stelle"])."</p>\n";
     echo "<p class=\"estab-auth-exit\"><a class=\"estab-button\" ".
          "data-estab-auth-cancel href=\"".
          estab_auth_html (estab_application_root ()).
          "\" target=\"_top\">Anmeldung abbrechen · Zur Übersicht</a></p>\n";
+    echo "</header>\n";
     if ($loginInterrupted) {
       echo "<div class=\"estab-auth-error\" ".
            "data-estab-submission-discarded role=\"status\">".
@@ -3352,8 +3363,22 @@ Nachricht als Sichtung anzeigen
            estab_auth_html ($loginError)."</div>\n";
     }
 
+    /*
+     * Der Arbeitsbereich der Anmeldung.
+     *
+     * Er nimmt die Tafeln auf: die Kontenliste und die Zugangsdaten. Die
+     * Liste gibt in einem Fall die Seite selbst aus (Anmeldung mit
+     * bestehendem Konto), im anderen die Stelle weiter unten (Kontowahl
+     * ohne gewaehlten Weg) -- beide Male gehoert sie hier hinein, damit
+     * sie neben den Feldern steht und nicht darueber.
+     */
+    echo "<div class=\"estab-anmeldung-arbeit".
+         ($loginFlow === "new" ? " estab-anmeldung-arbeit--einspaltig" : "").
+         "\">\n";
+
     if ($loginFlow === null) {
-      echo "<h2>Wie möchten Sie fortfahren?</h2>\n";
+      echo "<section class=\"estab-tool-panel estab-anmeldung-tafel\">\n";
+      echo "<div class=\"estab-tool-panel-heading\"><h2>Wie möchten Sie fortfahren?</h2></div>\n";
       echo "<p class=\"estab-auth-help\">Wählen Sie, ob Sie sich mit einem bestehenden Funktionskonto anmelden oder ein neues Funktionskonto erstellen.</p>\n";
       echo "<div class=\"estab-auth-actions\">\n";
       echo "<form action=\"".$loginAction."\" method=\"POST\" target=\"_self\">\n";
@@ -3380,11 +3405,13 @@ Nachricht als Sichtung anzeigen
         echo "<p class=\"estab-auth-note\">Die Selbstregistrierung ist derzeit geschlossen. Bestehende Konten können sich weiterhin anmelden. Die zuständige Stelle legt neue Konten in der Benutzerverwaltung an oder gibt die Kontoanlage in der Administration zeitlich frei.</p>\n";
       }
       echo "<p class=\"estab-auth-note\">Ein Funktionskonto gewährt keinen Zugang zur separaten Administration.</p>\n";
+      echo "</section>\n";
     } elseif (
       $loginFlow === "new"
       && (!$registrationAvailable || !$registrationAllowed)
     ) {
-      echo "<h2>Neues Konto anlegen</h2>\n";
+      echo "<section class=\"estab-tool-panel estab-anmeldung-tafel\">\n";
+      echo "<div class=\"estab-tool-panel-heading\"><h2>Neues Konto anlegen</h2></div>\n";
       if ($loginError === "") {
         echo "<p class=\"estab-auth-error\" role=\"alert\" tabindex=\"-1\" autofocus>".
              ($registrationAvailable
@@ -3397,11 +3424,13 @@ Nachricht als Sichtung anzeigen
       echo $loginDestinationField."\n"; // nosemgrep: php.lang.security.injection.echoed-request.echoed-request
       echo "<button class=\"estab-button\" type=\"submit\" name=\"login\" value=\"Anmelden\">Zurück zur Auswahl</button>\n";
       echo "</form>\n";
+      echo "</section>\n";
     } elseif (
       $loginFlow === "new"
       && !is_array ($registrationPasswordPolicy)
     ) {
-      echo "<h2>Neues Konto anlegen</h2>\n";
+      echo "<section class=\"estab-tool-panel estab-anmeldung-tafel\">\n";
+      echo "<div class=\"estab-tool-panel-heading\"><h2>Neues Konto anlegen</h2></div>\n";
       echo "<p class=\"estab-auth-error\" role=\"alert\">Die aktuelle ".
            "Kennwortrichtlinie konnte nicht geladen werden. Ein neues Konto ".
            "kann deshalb momentan nicht sicher angelegt werden.</p>\n";
@@ -3410,14 +3439,22 @@ Nachricht als Sichtung anzeigen
       echo $loginDestinationField."\n"; // nosemgrep: php.lang.security.injection.echoed-request.echoed-request
       echo "<button class=\"estab-button\" type=\"submit\" name=\"login\" value=\"Anmelden\">Zurück zur Auswahl</button>\n";
       echo "</form>\n";
+      echo "</section>\n";
     } else {
       $isRegistration = $loginFlow === "new";
       $formTitle = $isRegistration
         ? "Neues Funktionskonto anlegen"
         : "Mit bestehendem Konto anmelden";
-      $formHelp = $isRegistration
-        ? "Erstellen Sie ein Konto nur nach organisatorischer Freigabe. Wählen Sie die Ihnen zugeteilte Funktion; eStab leitet daraus die Rolle gemäß Empfängermatrix ab."
-        : "Wählen Sie Ihr Konto aus der Liste oder geben Sie Name, Kürzel und Ihre zugeteilte Funktion ein. Verwenden Sie Ihr bestehendes Kennwort.";
+      /*
+       * Nur die Kontoanlage bekommt einen Erklaersatz, und zwar diesen: Er
+       * nennt eine Bedingung, die man der Maske nicht ansieht. Der Satz der
+       * Anmeldung nannte, was daneben steht -- Kontenliste links, vier
+       * beschriftete Felder rechts -- und ist gestrichen
+       * (docs/GESTALTUNG.md 4.1, Reihenfolge des Kuerzens).
+       */
+      $formHelp = "Erstellen Sie ein Konto nur nach organisatorischer "
+        ."Freigabe. Wählen Sie die Ihnen zugeteilte Funktion; eStab leitet "
+        ."daraus die Rolle gemäß Empfängermatrix ab.";
       $submitLabel = $isRegistration
         ? "Konto erstellen und anmelden"
         : "Anmelden";
@@ -3427,16 +3464,16 @@ Nachricht als Sichtung anzeigen
       $nameAutofocus = !$hasLoginError && !$identitySelected ? " autofocus" : "";
       $passwordAutofocus = !$hasLoginError && $identitySelected ? " autofocus" : "";
 
-      echo "<h2>".$formTitle."</h2>\n";
-      echo "<p class=\"estab-auth-help\">".$formHelp."</p>\n";
       /*
        * Die Kontenliste steht vor den Feldern, nicht dahinter.
        *
-       * Sie fuellt Name, Kuerzel und Funktion -- die drei Felder, die
-       * unmittelbar darunter stehen. Stand sie hinter dem Formular, lag sie
-       * eine volle Bildschirmhoehe tiefer: Wer sein Konto suchte, sah
-       * zuerst vier leere Felder und musste an ihnen vorbeiscrollen, um die
-       * Liste ueberhaupt zu finden.
+       * Sie fuellt Name, Kuerzel und Funktion. Stand sie hinter dem
+       * Formular, lag sie eine volle Bildschirmhoehe tiefer: Wer sein Konto
+       * suchte, sah zuerst vier leere Felder und musste an ihnen
+       * vorbeiscrollen, um die Liste ueberhaupt zu finden. Auf einem
+       * breiten Schirm steht sie jetzt *neben* den Feldern -- die Frage
+       * "davor oder dahinter" stellt sich dort nicht mehr, und wenn die
+       * Spalten untereinander rutschen, gilt wieder: erst die Liste.
        *
        * Vor dem <form> und nicht darin: Das Tabellenbauteil bringt sein
        * eigenes Suchformular mit, und ein Formular im Formular wirft der
@@ -3446,9 +3483,21 @@ Nachricht als Sichtung anzeigen
         benutzerstatus ("verlinkt", $loginDestination);
         $kontenlisteGezeigt = true;
       }
+      echo "<section class=\"estab-tool-panel estab-anmeldung-tafel ".
+           "estab-anmeldung-zugang\">\n";
+      echo "<div class=\"estab-tool-panel-heading\"><h2>".$formTitle.
+           "</h2></div>\n";
+      if ($isRegistration) {
+        echo "<p class=\"estab-auth-help\">".$formHelp."</p>\n";
+      }
       echo "<form action=\"".$loginAction."\" method=\"POST\" target=\"_self\">\n";
       echo "<fieldset class=\"estab-auth-form\">\n";
-      echo "<legend>Zugangsdaten</legend>\n";
+      /*
+       * Die Beschriftung der Gruppe steht nur fuer Vorleseprogramme da.
+       * Sichtbar stuende sie unmittelbar unter der Tafelueberschrift und
+       * saegte dieselbe Aussage ein zweites Mal in die Hoehe.
+       */
+      echo "<legend class=\"estab-visually-hidden\">Zugangsdaten</legend>\n";
       if ($isRegistration) {
         echo "<p id=\"estab-registration-password-policy\" class=\"estab-auth-note\">".
              estab_auth_html (estab_password_policy_requirements_text (
@@ -3464,15 +3513,26 @@ Nachricht als Sichtung anzeigen
              "UTF-8"
            )."\">\n";
       echo "<input type=\"hidden\" name=\"2teskennwort\" value=\"".$legacyConfirmation."\">\n";
-      echo "<table class=\"estab-auth-fields\"><tbody>\n";
-      echo "<tr><th><label for=\"estab-login-name\">Name, Vorname</label></th>\n";
-      echo "<td><input id=\"estab-login-name\" name=\"benutzer\" type=\"text\" value=\"".
-           estab_auth_html ($menuename)."\" maxlength=\"50\" autocomplete=\"name\" required".$nameAutofocus."></td></tr>\n";
-      echo "<tr><th><label for=\"estab-login-code\">Kürzel</label></th>\n";
-      echo "<td><input id=\"estab-login-code\" name=\"kuerzel\" type=\"text\" value=\"".
-           estab_auth_html ($menuekuerzel)."\" minlength=\"1\" maxlength=\"6\" pattern=\"[A-Za-z0-9_]{1,6}\" autocomplete=\"username\" required></td></tr>\n";
-      echo "<tr><th><label for=\"estab-login-function\">Funktion</label></th>\n";
-      echo "<td><select id=\"estab-login-function\" name=\"funktion\" required>\n";
+      /*
+       * Der Satzspiegel der Felder war eine Tabelle: Beschriftung links,
+       * Feld rechts, 13rem fest fuer die Spalte der Beschriftungen. In
+       * einer Tafel neben der Kontenliste bleibt fuer das Feld dann kaum
+       * mehr etwas uebrig. Beschriftung ueber dem Feld, Feldraster nach
+       * docs/GESTALTUNG.md 5.4 und 5.6 -- damit ist die letzte von Hand
+       * geschriebene Tabelle dieser Datei fort.
+       */
+      echo "<div class=\"estab-auth-fields\">\n";
+      echo "<p class=\"estab-auth-feld\">".
+           "<label for=\"estab-login-name\">Name, Vorname</label>".
+           "<input id=\"estab-login-name\" name=\"benutzer\" type=\"text\" value=\"".
+           estab_auth_html ($menuename)."\" maxlength=\"50\" autocomplete=\"name\" required".$nameAutofocus."></p>\n";
+      echo "<p class=\"estab-auth-feld\">".
+           "<label for=\"estab-login-code\">Kürzel</label>".
+           "<input id=\"estab-login-code\" name=\"kuerzel\" type=\"text\" value=\"".
+           estab_auth_html ($menuekuerzel)."\" minlength=\"1\" maxlength=\"6\" pattern=\"[A-Za-z0-9_]{1,6}\" autocomplete=\"username\" required></p>\n";
+      echo "<p class=\"estab-auth-feld\">".
+           "<label for=\"estab-login-function\">Funktion</label>".
+           "<select id=\"estab-login-function\" name=\"funktion\" required>\n";
       $placeholderSelected = $menuefunktion === "" ? " selected" : "";
       echo "<option value=\"\" disabled".$placeholderSelected.">Bitte Funktion wählen</option>\n";
       for ($i=1; $i <= count ($conf_empf); $i++) {
@@ -3483,24 +3543,26 @@ Nachricht als Sichtung anzeigen
         ));
         echo "<option value=\"".$funktion."\"".$selected.">".$funktionsname."</option>\n";
       }
-      echo "</select></td></tr>\n";
-      echo "<tr><th><label for=\"estab-login-password\">Kennwort</label></th>\n";
-      echo "<td><input id=\"estab-login-password\" name=\"kennwort1\" type=\"password\" maxlength=\"".
+      echo "</select></p>\n";
+      echo "<p class=\"estab-auth-feld\">".
+           "<label for=\"estab-login-password\">Kennwort</label>".
+           "<input id=\"estab-login-password\" name=\"kennwort1\" type=\"password\" maxlength=\"".
            ESTAB_AUTH_PASSWORD_INPUT_MAXIMUM_LENGTH."\" autocomplete=\"".
            $passwordAutocomplete."\"".
            ($isRegistration
              ? " data-estab-password-minimum-codepoints=\"".
                (int) $registrationPasswordPolicy ["minimum_length"].
                "\" aria-describedby=\"estab-registration-password-policy\""
-             : "")." required".$passwordAutofocus."></td></tr>\n";
+             : "")." required".$passwordAutofocus."></p>\n";
       if ($isRegistration) {
-        echo "<tr><th><label for=\"estab-login-password-confirm\">Kennwort wiederholen</label></th>\n";
-        echo "<td><input id=\"estab-login-password-confirm\" name=\"kennwort2\" type=\"password\" data-estab-password-minimum-codepoints=\"".
+        echo "<p class=\"estab-auth-feld\">".
+             "<label for=\"estab-login-password-confirm\">Kennwort wiederholen</label>".
+             "<input id=\"estab-login-password-confirm\" name=\"kennwort2\" type=\"password\" data-estab-password-minimum-codepoints=\"".
              (int) $registrationPasswordPolicy ["minimum_length"].
              "\" maxlength=\"".ESTAB_AUTH_PASSWORD_INPUT_MAXIMUM_LENGTH.
-             "\" autocomplete=\"new-password\" aria-describedby=\"estab-registration-password-policy\" required></td></tr>\n";
+             "\" autocomplete=\"new-password\" aria-describedby=\"estab-registration-password-policy\" required></p>\n";
       }
-      echo "</tbody></table>\n";
+      echo "</div>\n";
       echo "<div class=\"estab-auth-actions\">\n";
       echo "<button class=\"estab-button estab-button-primary\" type=\"submit\">".$submitLabel."</button>\n";
       echo "</div>\n";
@@ -3511,8 +3573,8 @@ Nachricht als Sichtung anzeigen
       echo $loginDestinationField."\n"; // nosemgrep: php.lang.security.injection.echoed-request.echoed-request
       echo "<button class=\"estab-button\" type=\"submit\" name=\"login\" value=\"Anmelden\">Andere Kontoaktion wählen</button>\n";
       echo "</form>\n";
+      echo "</section>\n";
     }
-    echo "</section>\n";
 
   }
 
@@ -3528,6 +3590,38 @@ if (estab_workflow_should_render_primary_view (
      ( ( $_SESSION ["menue"] == "WELCOME" OR $_SESSION ["menue"] == "LOGIN" )
        AND $loginFlow !== "new" ) )
   {
+    /*
+     * Als eigene Seite braucht die Kontenuebersicht auch einen Seitenkopf.
+     *
+     * Sie hatte keinen -- und deshalb auch kein <head> und kein
+     * Stilblatt. Die Bedingung des Zweiges, der pre_html() aufruft
+     * ("Stab lesen", ein paar hundert Zeilen weiter oben), schliesst
+     * "m2_benutzer_x" ausdruecklich aus; ausserhalb der Anmeldung gab
+     * diese Datei fuer diese Anfrage nur den Abschnitt der Liste aus.
+     * Im Browser stand die Liste damit in der Grundschrift des
+     * Browsers, mit blauen Verweisen als Spaltenkoepfen und ohne jede
+     * Tafel. Waehrend der Anmeldung ist das anders: Dort hat die Seite
+     * ihren Kopf schon, und die Liste ist eine Tafel darin.
+     */
+    $kontenlisteAlsSeite = !in_array (
+      ($_SESSION ["menue"] ?? ""),
+      array ("WELCOME", "LOGIN"),
+      true
+    );
+    if ($kontenlisteAlsSeite) {
+      pre_html (
+        "N",
+        "Benutzer ".$conf_4f ["Titelkurz"]." ".$conf_4f ["Version"],
+        "",
+        true
+      );
+      echo "<body class=\"estab-tool-page\">\n";
+      echo "<main class=\"estab-tool-main\">\n";
+      echo "<header class=\"estab-tool-hero\">";
+      echo "<p class=\"estab-tool-eyebrow\">Nachrichten</p>";
+      echo "<h1>Benutzer</h1>";
+      echo "</header>\n";
+    }
     // Bei der Anmeldung mit bestehendem Konto steht die Liste schon oben,
     // zwischen Hilfesatz und Zugangsdaten. Ein zweites Mal waere sie hier
     // eine zweite Tabelle mit derselben Kennung -- und damit ein zweites
@@ -3536,9 +3630,25 @@ if (estab_workflow_should_render_primary_view (
 		if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><br>";  }
       benutzerstatus ("verlinkt", $loginDestination);
     }
+    if ($kontenlisteAlsSeite) {
+      echo "</main>\n</body>\n</html>\n";
+    }
    }
 
 if ($_SESSION ["menue"] == "LOGIN" or $_SESSION ["menue"] == "WELCOME") {
+  echo "</div>\n";
+  /*
+   * Anwendung, Fassung und Stelle stehen im Fuss.
+   *
+   * Sie standen oben, zwischen Titel und Abbruchknopf, und schoben die
+   * eigentliche Anmeldung um drei Zeilen nach unten -- fuer eine Angabe,
+   * die man einmal im Leben liest und dann nur noch braucht, wenn man eine
+   * Stoerung meldet. Genau dafuer bleibt sie stehen.
+   */
+  echo "<p class=\"estab-anmeldung-fuss\"><strong>".
+       estab_auth_html ($conf_4f ["Titelkurz"].$conf_4f ["SubTitel"]["env"]).
+       "</strong> · Version ".estab_auth_html ($conf_4f ["Version"]).
+       " · ".estab_auth_html ($conf_4f ["Stelle"])."</p>\n";
   echo "</main>\n";
 }
 

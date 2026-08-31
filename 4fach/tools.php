@@ -755,39 +755,48 @@ bersichtlich dargestellt werden.
     }
 
     /*Benutzerliste*/
+    // Vor der Verzweigung: Auch der Fall "noch kein Konto" muss wissen, ob er
+    // auf der Anmeldeseite steht -- dort bringt die Seite die Huelle mit.
+    $loginSelectable = $what == "verlinkt"
+      && in_array (($_SESSION ["menue"] ?? ""), array ("WELCOME", "LOGIN"), true);
     if ($benutzer !== array ()){
       include ("../4fcfg/config.inc.php");
-      $loginSelectable = $what == "verlinkt"
-        && in_array (($_SESSION ["menue"] ?? ""), array ("WELCOME", "LOGIN"), true);
       if ($what == 'verlinkt'){
          /*
           * Die Kennung verbindet die Auswahlknoepfe der Kontenliste mit
           * diesem Formular.
           *
-          * Die Liste steht seit der Umstellung auf das Tabellenbauteil
-          * ausserhalb: Das Bauteil bringt ein eigenes Suchformular mit, und
-          * ein Formular in einem Formular wirft der Browser weg -- die Suche
-          * taete nichts, und die Kontenwahl womoeglich auch nicht mehr.
+          * Es traegt nur die verborgenen Felder und ist sofort wieder zu.
+          * Frueher umschloss es Ueberschrift und Hilfssatz und endete
+          * mitten im <fieldset>, das nach ihm begonnen hatte -- der
+          * Browser flickt das, aber verlassen sollte man sich darauf
+          * nicht. Die Auswahlknoepfe stehen ohnehin nicht darin: Sie
+          * haengen ueber form="estab-kontenwahl" daran, denn das
+          * Tabellenbauteil bringt sein eigenes Suchformular mit, und ein
+          * Formular im Formular wirft der Browser weg.
           */
          echo "\n\n<form id=\"estab-kontenwahl\" action=\"".estab_auth_html ($conf_4f ["MainURL"])."\" method=\"POST\" target=\"_self\">\n";
          echo estab_csrf_field ()."\n";
          echo estab_navigation_login_destination_field ($loginDestination)."\n";
          echo "<!-- Benutzerliste mit POST-Auswahl zur Anmeldung -->\n";
+         echo "</form>\n";
       }
 
-      echo "<section class=\"estab-auth-shell\">\n";
-      echo "<fieldset class=\"estab-auth-card\">";
-      echo "<legend><b><big>".
+      /*
+       * Nur die Tafel, keine Huelle: Die Anmeldeseite stellt die Liste in
+       * ihren Arbeitsbereich neben die Felder, die Kontenuebersicht der
+       * angemeldeten Sitzung in ihre Inhaltsspalte. Wer beides mitbraechte,
+       * haette zwei Huellen ineinander mit zwei Innenabstaenden.
+       */
+      echo "<section class=\"estab-tool-panel".
+           ($loginSelectable
+             ? " estab-anmeldung-tafel estab-anmeldung-konten"
+             : "")."\">\n";
+      echo "<div class=\"estab-tool-panel-heading\"><h2>".
            ($loginSelectable ? "Bestehendes Konto auswählen" : "Benutzerliste").
-           "</big></b></legend>\n";
+           "</h2></div>\n";
       if ($loginSelectable) {
-        echo "<p>Die Auswahl übernimmt Name, Kürzel und Funktion. Zum Anmelden benötigen Sie weiterhin das zugehörige Kennwort.</p>\n";
-      }
-      if ($what == 'verlinkt'){
-         // Vor der Tabelle schliessen: Das Bauteil bringt sein eigenes
-         // Formular mit, und ein Formular im Formular ist ungueltig. Die
-         // Auswahlknoepfe haengen ueber form= weiterhin an diesem hier.
-         echo "</form>\n";
+        echo "<p class=\"estab-auth-help\">Die Auswahl übernimmt Name, Kürzel und Funktion. Zum Anmelden benötigen Sie weiterhin das zugehörige Kennwort.</p>\n";
       }
       /*
        * Die Kontenliste kommt aus dem Tabellenbauteil (app/tabelle.php).
@@ -837,33 +846,36 @@ bersichtlich dargestellt werden.
       ksort ($kontenStati);
 
       /*
-       * Die Breiten sind auf den engsten Platz gerechnet, an dem diese
-       * Liste steht: die Anmeldekarte, rund 660 Bildpunkte. "Fernmelder"
-       * braucht dort etwa 95 Punkte, der Auswahlknopf etwa 120. Waren die
-       * Spalten schmaler, brach der Browser mitten im Wort um.
+       * Die Breiten sind an der engsten Lage gerechnet, in der diese Liste
+       * neben den Anmeldefeldern steht: Fenster 1024, Liste 656
+       * Bildpunkte. Jede Spalte muss dort ihren laengsten unteilbaren
+       * Inhalt tragen -- "Fernmelder" 68 Punkte, der Auswahlknopf 82, der
+       * Kopf "KÜRZEL" mit seinem Sortierzeichen 73 -- plus 16 Punkte
+       * Zellpolster. Waren die Spalten schmaler, brach der Browser mitten
+       * im Wort um, und der Knopf stand ausserhalb seiner Spalte.
        */
       $kontenSpalten = array (
         array ("schluessel" => "benutzer", "kopf" => "Benutzer",
-          "breite" => $loginSelectable ? 20 : 28,
+          "breite" => $loginSelectable ? 19 : 28,
           "sortierbar" => true, "suchbar" => true, "art" => "text"),
         array ("schluessel" => "kuerzel", "kopf" => "Kürzel",
-          "breite" => $loginSelectable ? 11 : 12,
+          "breite" => 12,
           "sortierbar" => true, "suchbar" => true, "art" => "text"),
         array ("schluessel" => "rolle", "kopf" => "Rolle",
-          "breite" => $loginSelectable ? 15 : 14,
+          "breite" => 14,
           "sortierbar" => true, "suchbar" => true, "art" => "text"),
         array ("schluessel" => "funktion", "kopf" => "Funktion",
-          "breite" => 16,
+          "breite" => $loginSelectable ? 15 : 16,
           "sortierbar" => true, "suchbar" => true, "art" => "text"),
         array ("schluessel" => "status", "kopf" => "Status",
-          "breite" => $loginSelectable ? 18 : 30,
+          "breite" => $loginSelectable ? 23 : 30,
           "sortierbar" => true, "suchbar" => true, "art" => "text",
           "filter" => array_keys ($kontenStati),
           "filtername" => "Alle Zustände"),
       );
       if ($loginSelectable) {
         $kontenSpalten[] = array (
-          "schluessel" => "kennung", "kopf" => "Aktion", "breite" => 20,
+          "schluessel" => "kennung", "kopf" => "Aktion", "breite" => 17,
           "sortierbar" => false, "suchbar" => false, "art" => "text",
           "zelle" => static function (array $z): string {
             return "<button class=\"estab-button\" type=\"submit\""
@@ -892,11 +904,12 @@ bersichtlich dargestellt werden.
         "zeilen" => $kontenZeilen,
         "leer" => "Kein Konto entspricht den gesetzten Filtern.",
       ));
-      echo "</fieldset>\n";
       echo "</section>\n";
     } else {
-      echo "<section class=\"estab-auth-shell\"><div class=\"estab-auth-card\">\n";
-      echo "<h2>Noch keine Konten vorhanden</h2>\n";
+      echo "<section class=\"estab-tool-panel".
+           ($loginSelectable ? " estab-anmeldung-tafel" : "")."\">\n";
+      echo "<div class=\"estab-tool-panel-heading\">".
+           "<h2>Noch keine Konten vorhanden</h2></div>\n";
       if ($registrationAvailable && $registrationAllowed) {
         echo "<p>Legen Sie das erste Funktionskonto über „Neues Konto anlegen“ an.</p>\n";
       } elseif (!$registrationAvailable) {
@@ -904,7 +917,7 @@ bersichtlich dargestellt werden.
       } else {
         echo "<p>Die Selbstregistrierung ist geschlossen. Die zuständige Stelle kann ein Konto in der Benutzerverwaltung anlegen oder die Kontoanlage zeitlich freigeben.</p>\n";
       }
-      echo "</div></section>\n";
+      echo "</section>\n";
     }
   }
 

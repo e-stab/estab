@@ -87,8 +87,6 @@ $offeneDateien = [
         . 'verhindern soll.'],
     '4fach/tools.php' => [6, 'Das alte Cockpit mit fest eingetragenen Grautönen.'],
     '4fadm/make_fkt.php' => [1, 'Die Empfängermatrix.'],
-    '4fach/mainindex.php' => [1, 'Der Satzspiegel der Anmeldefelder -- '
-        . 'Beschriftung und Feld nebeneinander, keine Liste.'],
     'handbuch/index.php' => [2, 'Zwei Übersichten im Handbuch. Sie stehen '
         . 'im Fließtext und werden nicht aus Daten erzeugt.'],
 ];
@@ -99,8 +97,12 @@ $offeneDateien = [
  * Vorher stand hier 22 -- gezählt wurden aber nur zwei Klassennamen. Die
  * ehrliche Zahl ist höher, und das ist der Punkt: Eine Ratsche, die nur
  * zählt, was sie kennt, misst ihren eigenen Blick, nicht den Bestand.
+ *
+ * 13 -> 12: Der Satzspiegel der Anmeldefelder war eine Tabelle mit einer
+ * festen Beschriftungsspalte von 13rem. Er ist ein Feldraster geworden --
+ * anders bekommt man die Zugangsdaten nicht neben die Kontenliste.
  */
-const ESTAB_TABELLEN_OFFEN = 13;
+const ESTAB_TABELLEN_OFFEN = 12;
 
 $verzeichnisse = [
     '4fach', '4fadm', '4fueltg', 'app', 'stabetb', 'fmtbb', 'stabinfo',
