@@ -190,87 +190,98 @@ function dv_operations_post_value(
 /** @param array<string, mixed> $values */
 function dv_operations_render_telecom_entry_fields(array $values): void
 {
-    $medium = is_string($values['medium'] ?? null)
-        && isset(ESTAB_DV_MEDIA_DEFINITIONS[$values['medium']])
-        ? $values['medium']
-        : '';
-    $definition = $medium === ''
+    /*
+     * Der Auswahlkasten fuehrt Wegarten, nicht Medien.
+     *
+     * "Funk (analog)" und "Funk (digital)" speichern beide das Medium `Fu` --
+     * das ist der Wert, den Feld 1 des Vordrucks druckt. Was sie
+     * unterscheidet, steht daneben in `funkart`. Der Bediener waehlt also die
+     * Sache, die er kennt, und der Vordruck merkt davon nichts.
+     */
+    $kind = estab_dv_telecom_route_kind(
+        $values['medium'] ?? null,
+        $values['funkart'] ?? null
+    );
+    if (is_string($values['wegart'] ?? null)
+        && isset(ESTAB_DV_TELECOM_ROUTE_KINDS[$values['wegart']])) {
+        $kind = $values['wegart'];
+    }
+    $definition = $kind === null
         ? null
-        : ESTAB_DV_MEDIA_DEFINITIONS[$medium];
-    $channelVisible = $definition === null
-        || $definition['kanal'] !== null;
-    $bandVisible = $definition === null
-        || $definition['bandlage'] !== null;
-    $channelRequired = $definition !== null
-        && $definition['kanal'] !== null;
-    $bandRequired = $definition !== null
-        && $definition['bandlage'] !== null;
+        : ESTAB_DV_TELECOM_ROUTE_KINDS[$kind];
+    $legacyRadio = $kind === null
+        && ($values['medium'] ?? null) !== null
+        && (string) $values['medium'] !== '';
     ?>
     <div class="estab-tool-form-grid">
-      <label>Betriebsstellen-Klarbezeichnung
+      <label>Stelle
         <input name="betriebsstelle" maxlength="255" required
           value="<?= dv_operations_html($values['betriebsstelle'] ?? '') ?>">
+        <small>Stelle des eigenen Verbundes: Führungsstelle,
+          Fernmeldezentrale, Meldekopf, Einheit.</small>
       </label>
-      <label>Rufname
-        <input name="rufname" maxlength="128" required
-          value="<?= dv_operations_html($values['rufname'] ?? '') ?>">
-      </label>
-      <label>Übertragungsmedium
-        <select name="medium" required data-estab-telecom-medium>
-          <option value="" <?= $medium === '' ? 'selected' : '' ?>>
-            Medium auswählen
+      <label>Wegart
+        <select name="wegart" required data-estab-telecom-kind>
+          <option value="" <?= $kind === null ? 'selected' : '' ?>>
+            Wegart auswählen
           </option>
-          <?php foreach (ESTAB_DV_MEDIA as $candidate): ?>
-            <option value="<?= dv_operations_html($candidate) ?>"
-              <?= $candidate === $medium ? 'selected' : '' ?>>
-              <?= dv_operations_html(
-                  estab_dv_telecom_medium_label($candidate)
-              ) ?>
+          <?php foreach (ESTAB_DV_TELECOM_ROUTE_KINDS as $key => $art): ?>
+            <option value="<?= dv_operations_html($key) ?>"
+              <?= $key === $kind ? 'selected' : '' ?>>
+              <?= dv_operations_html($art['label']) ?>
             </option>
           <?php endforeach; ?>
         </select>
       </label>
-      <label data-estab-telecom-field="kanal"
-        <?= $channelVisible ? '' : 'hidden' ?>>
-        <span data-estab-telecom-field-label="kanal"><?= dv_operations_html(
-            $definition['kanal'] ?? 'Kanal oder Rufgruppe'
+      <label>
+        <span data-estab-telecom-field-label="rufname"><?= dv_operations_html(
+            $definition['erreichbarkeit'] ?? 'Erreichbar unter'
         ) ?></span>
-        <input name="kanal" maxlength="64"
-          value="<?= dv_operations_html($values['kanal'] ?? '') ?>"
-          <?= $channelVisible
-              ? ($channelRequired ? 'required' : '')
-              : 'disabled' ?>>
+        <input name="rufname" maxlength="128" required
+          value="<?= dv_operations_html($values['rufname'] ?? '') ?>">
       </label>
-      <label data-estab-telecom-field="bandlage"
-        <?= $bandVisible ? '' : 'hidden' ?>>
-        <span data-estab-telecom-field-label="bandlage"><?= dv_operations_html(
-            $definition['bandlage'] ?? 'Bandlage'
-        ) ?></span>
-        <input name="bandlage" maxlength="64"
-          value="<?= dv_operations_html($values['bandlage'] ?? '') ?>"
-          <?= $bandVisible
-              ? ($bandRequired ? 'required' : '')
-              : 'disabled' ?>>
-      </label>
-      <label data-estab-telecom-field="verkehrsform">
-        <span data-estab-telecom-field-label="verkehrsform">
-          Verkehrsform oder besondere Behandlung
-        </span>
-        <input name="verkehrsform" maxlength="128" required
-          value="<?= dv_operations_html($values['verkehrsform'] ?? '') ?>">
-      </label>
+      <?php foreach (
+          ['band', 'kanal', 'bandlage', 'verkehrsform', 'relaisstelle',
+           'betriebsart', 'rufgruppe', 'anschlussart', 'datenart']
+          as $name
+      ):
+          $owned = $definition !== null
+              && isset($definition['felder'][$name]);
+          $needed = $definition !== null
+              && in_array($name, $definition['pflicht'], true);
+          $label = $definition['felder'][$name] ?? ucfirst($name);
+          $choices = ESTAB_DV_TELECOM_FIELD_CHOICES[$name] ?? null;
+          $current = (string) ($values[$name] ?? '');
+      ?>
+        <label data-estab-telecom-field="<?= dv_operations_html($name) ?>"
+          <?= $owned ? '' : 'hidden' ?>>
+          <span data-estab-telecom-field-label="<?= dv_operations_html($name)
+            ?>"><?= dv_operations_html($label) ?></span>
+          <?php if (is_array($choices)): ?>
+            <select name="<?= dv_operations_html($name) ?>"
+              <?= $owned ? ($needed ? 'required' : '') : 'disabled' ?>>
+              <option value="">ohne Angabe</option>
+              <?php foreach ($choices as $value => $text): ?>
+                <option value="<?= dv_operations_html($value) ?>"
+                  <?= $current === (string) $value ? 'selected' : '' ?>>
+                  <?= dv_operations_html($text) ?>
+                </option>
+              <?php endforeach; ?>
+            </select>
+          <?php else: ?>
+            <input name="<?= dv_operations_html($name) ?>" maxlength="128"
+              value="<?= dv_operations_html($current) ?>"
+              <?= $owned ? ($needed ? 'required' : '') : 'disabled' ?>>
+          <?php endif; ?>
+        </label>
+      <?php endforeach; ?>
     </div>
-    <?php if (
-        $medium !== 'Fu'
-        && (
-            trim((string) ($values['kanal'] ?? '')) !== ''
-            || trim((string) ($values['bandlage'] ?? '')) !== ''
-        )
-    ): ?>
+    <?php if ($legacyRadio): ?>
       <p class="estab-tool-notice estab-telecom-legacy-note">
-        Dieser übernommene Weg enthält technische Altangaben. Für das
-        gewählte Medium sind Kanal und Bandlage nicht vorgesehen; beim
-        Speichern dieses Wegs werden sie entfernt.
+        Dieser übernommene Weg stammt aus der Zeit vor der Trennung von
+        Analog- und Digitalfunk und sagt nicht, welche der beiden er meint.
+        Wählen Sie die Wegart; die Angaben, die zur gewählten Technik nicht
+        gehören, werden beim Speichern entfernt.
       </p>
     <?php endif; ?>
     <label>Besondere Vermerke
@@ -283,6 +294,9 @@ function dv_operations_render_telecom_entry_fields(array $values): void
       <textarea name="bemerkungen" maxlength="10000"><?=
         dv_operations_html($values['bemerkungen'] ?? '')
       ?></textarea>
+      <small>Betriebszeiten, Einschränkungen, Ersatzweg, Verkehrskreis
+        (Führung, Einsatz, Versorgung), Besonderheiten der Bedienung.
+        Gerätekennungen wie OPTA oder ISSI gehören nicht hierher.</small>
     </label>
     <?php
 }
@@ -1161,15 +1175,30 @@ foreach ($plans as $plan) {
           $wegeZeilen = [];
           $wegeMedien = [];
           foreach ($activePlan['eintraege'] as $entry) {
+              /*
+               * Die technische Kurzangabe fuehrt nur, was die Technik des
+               * Wegs kennt. Ein Digitalfunkweg hat keine Bandlage, ein
+               * Analogfunkweg keine Rufgruppe -- ein Feld, das leer bleibt,
+               * weil es nicht gemeint ist, gehoert nicht in die Zeile.
+               */
               $teile = array_values(array_filter([
-                  estab_dv_telecom_medium_label($entry['medium']),
+                  trim((string) ($entry['band'] ?? '')),
                   trim((string) $entry['kanal']),
                   trim((string) $entry['bandlage']),
+                  trim((string) ($entry['betriebsart'] ?? '')),
+                  trim((string) ($entry['rufgruppe'] ?? '')),
+                  trim((string) ($entry['relaisstelle'] ?? '')),
               ], static fn (string $part): bool => $part !== ''));
-              $mittel = estab_dv_telecom_medium_label($entry['medium']);
+              $mittel = estab_dv_telecom_route_label(
+                  $entry['medium'],
+                  $entry['funkart'] ?? null
+              );
               $wegeMedien[$mittel] = true;
               $wegeZeilen[] = [
                   'betriebsstelle' => (string) $entry['betriebsstelle'],
+                  'weg' => $entry['weg_nummer'] === null
+                      ? ''
+                      : 'Weg ' . (int) $entry['weg_nummer'],
                   'rufname' => (string) $entry['rufname'],
                   'mittel' => $mittel,
                   'technik' => implode(' · ', $teile),
@@ -1188,10 +1217,12 @@ foreach ($plans as $plan) {
               // waeren 928 gewesen und haetten quergescrollt.
               'mindestbreite' => '56rem',
               'spalten' => [
-                  ['schluessel' => 'betriebsstelle',
-                      'kopf' => 'Betriebsstelle', 'breite' => 18,
+                  ['schluessel' => 'weg', 'kopf' => 'Nr.', 'breite' => 6,
                       'sortierbar' => true, 'suchbar' => true, 'art' => 'text'],
-                  ['schluessel' => 'rufname', 'kopf' => 'Rufname',
+                  ['schluessel' => 'betriebsstelle',
+                      'kopf' => 'Stelle', 'breite' => 16,
+                      'sortierbar' => true, 'suchbar' => true, 'art' => 'text'],
+                  ['schluessel' => 'rufname', 'kopf' => 'Erreichbar unter',
                       'breite' => 16, 'sortierbar' => true,
                       'suchbar' => true, 'art' => 'text'],
                   /*
@@ -1493,7 +1524,10 @@ foreach ($plans as $plan) {
                         $entry['rufname']
                     ) ?></span>
                     <span><?= dv_operations_html(
-                        estab_dv_telecom_medium_label($entry['medium'])
+                        estab_dv_telecom_route_label(
+                            $entry['medium'],
+                            $entry['funkart'] ?? null
+                        )
                     ) ?></span>
                   </summary>
                   <form class="estab-tool-form" method="post"
@@ -1720,7 +1754,10 @@ foreach ($plans as $plan) {
                     <?php foreach ($plan['eintraege'] as $entry): ?>
                       <?php
                         $historyRouteParts = array_values(array_filter([
-                            estab_dv_telecom_medium_label($entry['medium']),
+                            estab_dv_telecom_route_label(
+                                $entry['medium'],
+                                $entry['funkart'] ?? null
+                            ),
                             trim((string) $entry['kanal']),
                             trim((string) $entry['bandlage']),
                             trim((string) $entry['verkehrsform']),
@@ -1956,19 +1993,29 @@ foreach ($plans as $plan) {
     <span>Alle Änderungen sind einsatzgebunden und hashverkettet.</span>
   </footer>
 </main>
-<script<?= estab_csp_script_attribute() ?> data-estab-telecom-media-fields>
+<script<?= estab_csp_script_attribute() ?> data-estab-telecom-kind-fields>
 (function () {
   'use strict';
-  var media = <?= json_encode(
-      ESTAB_DV_MEDIA_DEFINITIONS,
+  var arten = <?= json_encode(
+      ESTAB_DV_TELECOM_ROUTE_KINDS,
       JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE
           | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP
   ) ?>;
+  var felder = [
+    'band', 'kanal', 'bandlage', 'verkehrsform', 'relaisstelle',
+    'betriebsart', 'rufgruppe', 'anschlussart', 'datenart'
+  ];
   function update(form) {
-    var select = form.querySelector('[data-estab-telecom-medium]');
+    var select = form.querySelector('[data-estab-telecom-kind]');
     if (!select) return;
-    var definition = media[select.value] || null;
-    ['kanal', 'bandlage', 'verkehrsform'].forEach(function (fieldName) {
+    var art = arten[select.value] || null;
+    var reach = form.querySelector(
+      '[data-estab-telecom-field-label="rufname"]'
+    );
+    if (reach) {
+      reach.textContent = art ? art.erreichbarkeit : 'Erreichbar unter';
+    }
+    felder.forEach(function (fieldName) {
       var wrapper = form.querySelector(
         '[data-estab-telecom-field="' + fieldName + '"]'
       );
@@ -1977,12 +2024,13 @@ foreach ($plans as $plan) {
       var label = wrapper.querySelector(
         '[data-estab-telecom-field-label="' + fieldName + '"]'
       );
-      var fieldLabel = definition ? definition[fieldName] : null;
+      var fieldLabel = art && art.felder ? art.felder[fieldName] : null;
       var visible = typeof fieldLabel === 'string' && fieldLabel !== '';
       wrapper.hidden = !visible;
       if (input) {
         input.disabled = !visible;
-        input.required = visible;
+        input.required = visible
+          && art.pflicht.indexOf(fieldName) !== -1;
       }
       if (label && visible) label.textContent = fieldLabel;
     });
@@ -1990,7 +2038,7 @@ foreach ($plans as $plan) {
   document.querySelectorAll('[data-estab-telecom-entry-form]')
     .forEach(function (form) {
       update(form);
-      var select = form.querySelector('[data-estab-telecom-medium]');
+      var select = form.querySelector('[data-estab-telecom-kind]');
       if (select) select.addEventListener('change', function () {
         update(form);
       });

@@ -113,17 +113,30 @@ diesen Vorgang.
 
 ## P2 — Inhalt des Plans
 
-- [ ] **A06** `!` **M** Analog und digital trennen
+- [x] **A06** `!!` **L** Analog und digital trennen
       → `docker/db/migrations/123-fernmeldeweg-funkart.sql`, `app/dv_operations.php`, `4fach/fuehrungsstelle.php`
-      - [ ] `funkart`, `band`, `relaisstelle`, `betriebsart`, `rufgruppe`, `anschlussart`, `datenart`
-      - [ ] `bandlage` und `verkehrsform` bleiben `VARCHAR` und **ungeprüft** (O12); Geltung auf Analogfunk verengt
-      - [ ] `ESTAB_DV_MEDIA_DEFINITIONS` wird je Funkart aufgelöst; `FS` verschwindet aus der Planauswahl (O1)
-      - [ ] Altbestand: `funkart` bleibt `NULL`, der Altangaben-Hinweis aus [fuehrungsstelle.php:270](4fach/fuehrungsstelle.php:270) deckt ihn ab
-      - [ ] Kein Feld für OPTA oder ISSI (O2); die Ausfüllhilfe der Bemerkung sagt, dass sie auch dort nicht hineingehören
+      - [x] `funkart`, `band`, `relaisstelle`, `betriebsart`, `rufgruppe`, `anschlussart`, `datenart` — Migration 123
+      - [x] `bandlage` und `verkehrsform` bleiben `VARCHAR` und **ungeprüft** (O12); Geltung auf Analogfunk verengt
+      - [x] `ESTAB_DV_TELECOM_ROUTE_KINDS` löst je Funkart auf; `FS` verschwindet
+            aus `ESTAB_DV_PLAN_MEDIA` (O1)
+      - [x] Der Auswahlkasten führt **Wegarten**, nicht Medien; beide Funkarten
+            speichern `Fu`, damit Feld 1 unberührt bleibt
+      - [x] Altbestand: `funkart` bleibt `NULL` = **unbestimmt**; der Hinweis sagt
+            das jetzt auch so, statt „für dieses Medium nicht vorgesehen"
+      - [x] Kein Feld für OPTA oder ISSI (O2); die Ausfüllhilfe der Bemerkung sagt,
+            dass sie auch dort nicht hineingehören
       - **Prüfung:** Digitalfunkweg ohne Kanal und Bandlage speicherbar, Analogfunkweg nicht ohne sie; Bandlage nimmt jeden Text an
       - **Regel:** `FMP-FUNKART`, `FMP-DIGITAL-*` · **Spec:** 8
 
 - [ ] **A07** `·` **S** Ein Bemerkungsfeld, ein Begriff, eine Stellenart
+
+      **Bei A06 vorweggenommen**, weil die Tabelle sonst mit alten Köpfen über
+      neuen Daten gestanden hätte: Die Spaltenköpfe heißen „Stelle" und
+      „Erreichbar unter", das Formular beschriftet die Erreichbarkeit mit dem
+      Begriff des Mediums, und die Tabelle zeigt die Wegnummer aus A04.
+      Offen bleiben die Datenbankumbenennung, die Stellenart und die
+      Zusammenführung der beiden Vermerkfelder.
+
       → `app/dv_operations.php`, `4fach/fuehrungsstelle.php`
       - [ ] „Betriebsstellen-Klarbezeichnung" → **„Stelle"**, mit Ausfüllhilfe
       - [ ] `rufname` → **„Erreichbar unter"** als Spaltenkopf; im Formular der Begriff des Mediums

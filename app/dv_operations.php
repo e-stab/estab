@@ -47,43 +47,120 @@ const ESTAB_DV_MESSAGE_RUN_STATIONS = [
 ];
 const ESTAB_DV_MEDIA = ['Fe', 'Fu', 'Me', 'FAX', 'FS', '@'];
 const ESTAB_DV_LEGACY_AUDIT_MAX_BYTES = 60000;
-const ESTAB_DV_MEDIA_DEFINITIONS = [
+
+/**
+ * The transmission media a plan may still offer.
+ *
+ * One short of the message form: the telex network is switched off, so no
+ * station is reachable by `FS` any more. The form keeps its printed tick box
+ * and old messages keep their value -- a plan lists what is actually operated,
+ * and a medium without a device is not a route.
+ */
+const ESTAB_DV_PLAN_MEDIA = ['Fe', 'Fu', 'Me', 'FAX', '@'];
+
+/**
+ * The kinds of route a plan can carry, with the fields each one owns.
+ *
+ * "Analogfunk nutzt Kanäle. Digitalfunk nutzt Rufgruppen." Both travel under
+ * the medium `Fu`, because that is what Feld 1 of the message form prints; the
+ * distinction lives beside the medium in `funkart`, never inside it. A route
+ * therefore carries exactly the technical fields of its own technology: an
+ * analogue one has a band position, a digital one cannot have one at all.
+ *
+ * `erreichbarkeit` is the word the operator sees while filling the field in.
+ * The generic heading "Erreichbar unter" appears only where a table puts every
+ * medium into one column -- the paper never needed a generic word because it
+ * prints one line per medium.
+ */
+const ESTAB_DV_TELECOM_ROUTE_KINDS = [
     'Fe' => [
+        'medium' => 'Fe',
+        'funkart' => null,
         'label' => 'Fernsprecher',
-        'kanal' => null,
-        'bandlage' => null,
-        'verkehrsform' => 'Verkehrsform oder besondere Behandlung',
+        'erreichbarkeit' => 'Rufnummer',
+        'felder' => ['anschlussart' => 'Anschlussart'],
+        'pflicht' => [],
     ],
-    'Fu' => [
-        'label' => 'Funk',
-        'kanal' => 'Kanal oder Rufgruppe',
-        'bandlage' => 'Bandlage',
-        'verkehrsform' => 'Verkehrsform',
+    'Fu:ANALOG' => [
+        'medium' => 'Fu',
+        'funkart' => 'ANALOG',
+        'label' => 'Funk (analog)',
+        'erreichbarkeit' => 'Funkrufname',
+        'felder' => [
+            'band' => 'Band',
+            'kanal' => 'Kanal',
+            'bandlage' => 'Bandlage',
+            'verkehrsform' => 'Verkehrsform',
+            'relaisstelle' => 'Relaisstelle',
+        ],
+        'pflicht' => ['band', 'kanal', 'bandlage', 'verkehrsform'],
+    ],
+    'Fu:DIGITAL' => [
+        'medium' => 'Fu',
+        'funkart' => 'DIGITAL',
+        'label' => 'Funk (digital)',
+        'erreichbarkeit' => 'Funkrufname',
+        'felder' => [
+            'betriebsart' => 'Betriebsart',
+            'rufgruppe' => 'Rufgruppe',
+        ],
+        'pflicht' => ['betriebsart', 'rufgruppe'],
     ],
     'Me' => [
+        'medium' => 'Me',
+        'funkart' => null,
         'label' => 'Melder',
-        'kanal' => null,
-        'bandlage' => null,
-        'verkehrsform' => 'Verkehrsform oder besondere Behandlung',
+        'erreichbarkeit' => 'Meldekopf oder Sammelstelle',
+        'felder' => [],
+        'pflicht' => [],
     ],
     'FAX' => [
+        'medium' => 'FAX',
+        'funkart' => null,
         'label' => 'Telefax',
-        'kanal' => null,
-        'bandlage' => null,
-        'verkehrsform' => 'Verkehrsform oder besondere Behandlung',
-    ],
-    'FS' => [
-        'label' => 'Fernschreiber',
-        'kanal' => null,
-        'bandlage' => null,
-        'verkehrsform' => 'Verkehrsform oder besondere Behandlung',
+        'erreichbarkeit' => 'Faxnummer',
+        'felder' => ['anschlussart' => 'Anschlussart'],
+        'pflicht' => [],
     ],
     '@' => [
+        'medium' => '@',
+        'funkart' => null,
         'label' => 'Datenübertragung',
-        'kanal' => null,
-        'bandlage' => null,
-        'verkehrsform' => 'Verkehrsform oder besondere Behandlung',
+        'erreichbarkeit' => 'Adresse oder Kennung',
+        'felder' => ['datenart' => 'Art der Datenübertragung'],
+        'pflicht' => ['datenart'],
     ],
+];
+
+/** The closed value lists. Everything absent here is free text on purpose. */
+const ESTAB_DV_TELECOM_FIELD_CHOICES = [
+    'band' => ['2m' => '2 m', '4m' => '4 m'],
+    'betriebsart' => [
+        'TMO' => 'TMO — Netzbetrieb',
+        'DMO' => 'DMO — Direktbetrieb',
+    ],
+    'anschlussart' => [
+        'AMT' => 'Amtsanschluss',
+        'NST' => 'Nebenstelle',
+        'MOBIL' => 'Mobilfunk',
+        'SONDER' => 'Sondernetz',
+    ],
+    'datenart' => [
+        'MAIL' => 'E-Mail',
+        'MESSENGER' => 'Messenger',
+        'FACHANW' => 'Fachanwendung',
+        'INTERNET' => 'Internet',
+    ],
+];
+
+/**
+ * The technical columns a route row carries, in schema order.
+ *
+ * Named once so the statements below cannot drift apart from each other.
+ */
+const ESTAB_DV_TELECOM_TECHNICAL_COLUMNS = [
+    'funkart', 'band', 'kanal', 'bandlage', 'verkehrsform',
+    'relaisstelle', 'betriebsart', 'rufgruppe', 'anschlussart', 'datenart',
 ];
 
 final class EstabDvInputException extends InvalidArgumentException
@@ -116,27 +193,68 @@ function estab_dv_require_strict_incident_snapshot(
     }
 }
 
-/** @return array{label:string,kanal:?string,bandlage:?string,verkehrsform:?string} */
-function estab_dv_telecom_medium_definition(mixed $medium): array
+/**
+ * Resolve one route kind, the key that decides which fields a route owns.
+ *
+ * @return array{medium:string,funkart:?string,label:string,erreichbarkeit:string,felder:array<string,string>,pflicht:list<string>}
+ */
+function estab_dv_telecom_route_definition(mixed $kind): array
 {
     if (
-        !is_string($medium)
-        || !isset(ESTAB_DV_MEDIA_DEFINITIONS[$medium])
+        !is_string($kind)
+        || !isset(ESTAB_DV_TELECOM_ROUTE_KINDS[$kind])
     ) {
-        throw new EstabDvInputException('Medium ist ungültig.');
+        throw new EstabDvInputException('Wegart ist ungültig.');
     }
-    return ESTAB_DV_MEDIA_DEFINITIONS[$medium];
+    return ESTAB_DV_TELECOM_ROUTE_KINDS[$kind];
 }
 
+/**
+ * Name the route kind of a stored row.
+ *
+ * A radio route from before the separation carries no `funkart`. It resolves
+ * to no kind at all, and the application shows it as legacy instead of
+ * guessing: a plan of last year does not say whether it meant analogue or
+ * digital, and inventing the answer would put it into a released document.
+ */
+function estab_dv_telecom_route_kind(mixed $medium, mixed $funkart): ?string
+{
+    if (!is_string($medium) || $medium === '') {
+        return null;
+    }
+    $candidate = is_string($funkart) && $funkart !== ''
+        ? $medium . ':' . $funkart
+        : $medium;
+    return isset(ESTAB_DV_TELECOM_ROUTE_KINDS[$candidate])
+        ? $candidate
+        : null;
+}
+
+/** The plain medium label, also for media a plan no longer offers. */
 function estab_dv_telecom_medium_label(mixed $medium): string
 {
     if (!is_string($medium)) {
         return 'Unbekannt';
     }
-    $definition = ESTAB_DV_MEDIA_DEFINITIONS[$medium] ?? null;
-    return is_array($definition)
-        ? (string) $definition['label']
-        : 'Unbekannt (' . $medium . ')';
+    return match ($medium) {
+        'Fe' => 'Fernsprecher',
+        'Fu' => 'Funk',
+        'Me' => 'Melder',
+        'FAX' => 'Telefax',
+        'FS' => 'Fernschreiber',
+        '@' => 'Datenübertragung',
+        default => 'Unbekannt (' . $medium . ')',
+    };
+}
+
+/** The label a bediener reads for one route: "Funk (digital)". */
+function estab_dv_telecom_route_label(mixed $medium, mixed $funkart): string
+{
+    $kind = estab_dv_telecom_route_kind($medium, $funkart);
+    if ($kind === null) {
+        return estab_dv_telecom_medium_label($medium);
+    }
+    return (string) ESTAB_DV_TELECOM_ROUTE_KINDS[$kind]['label'];
 }
 
 function estab_dv_positive_id(mixed $value, string $label): int
@@ -4359,52 +4477,86 @@ function estab_dv_telecom_plan_header_audit_state(array $plan): array
     ];
 }
 
-/** @return array{betriebsstelle:string,rufname:string,medium:string,kanal:string,bandlage:string,verkehrsform:string,besondere_vermerke:string,bemerkungen:string} */
+/**
+ * Validate one route and return exactly the fields its own technology owns.
+ *
+ * The caller sends a route kind, not a medium: "Funk (analog)" and "Funk
+ * (digital)" are two kinds under one medium. Whatever a kind does not own is
+ * cleared rather than kept -- a digital route must not carry a band position,
+ * and a route that was analogue yesterday must not keep its channel in a
+ * column nobody reads any more.
+ *
+ * `bandlage` and `verkehrsform` are checked for presence, never for their
+ * value: the operator decided both are free text. The regulation that would
+ * carry the value lists is classified and not available, and a list invented
+ * here would reject what an operation actually used.
+ *
+ * @return array<string, string|null>
+ */
 function estab_dv_telecom_entry_values(array $input): array
 {
-    $medium = $input['medium'] ?? null;
-    $definition = estab_dv_telecom_medium_definition($medium);
-    $technicalValue = static function (
-        array $source,
+    $definition = estab_dv_telecom_route_definition($input['wegart'] ?? null);
+    $owned = $definition['felder'];
+    $required = $definition['pflicht'];
+
+    $field = static function (
         string $name,
-        ?string $label,
+        string $label,
         int $maximum
-    ): string {
-        if ($label === null) {
+    ) use ($input, $owned, $required): string {
+        if (!isset($owned[$name])) {
             return '';
         }
-        return estab_dv_text($source[$name] ?? null, $label, $maximum);
+        return estab_dv_text(
+            $input[$name] ?? '',
+            $label,
+            $maximum,
+            !in_array($name, $required, true)
+        );
     };
+    $choice = static function (
+        string $name,
+        string $label
+    ) use ($input, $owned, $required): ?string {
+        if (!isset($owned[$name])) {
+            return null;
+        }
+        $value = $input[$name] ?? null;
+        $value = is_string($value) ? trim($value) : '';
+        if ($value === '') {
+            if (in_array($name, $required, true)) {
+                throw new EstabDvInputException($label . ' ist erforderlich.');
+            }
+            return null;
+        }
+        if (!isset(ESTAB_DV_TELECOM_FIELD_CHOICES[$name][$value])) {
+            throw new EstabDvInputException($label . ' ist ungültig.');
+        }
+        return $value;
+    };
+
     return [
         'betriebsstelle' => estab_dv_text(
             $input['betriebsstelle'] ?? null,
-            'Betriebsstelle',
+            'Stelle',
             255
         ),
         'rufname' => estab_dv_text(
             $input['rufname'] ?? null,
-            'Rufname',
+            $definition['erreichbarkeit'],
             128
         ),
-        'medium' => $medium,
-        'kanal' => $technicalValue(
-            $input,
-            'kanal',
-            $definition['kanal'],
-            64
-        ),
-        'bandlage' => $technicalValue(
-            $input,
-            'bandlage',
-            $definition['bandlage'],
-            64
-        ),
-        'verkehrsform' => $technicalValue(
-            $input,
-            'verkehrsform',
-            $definition['verkehrsform'],
-            128
-        ),
+        'medium' => $definition['medium'],
+        'funkart' => $definition['funkart'],
+        'band' => $choice('band', 'Band'),
+        'kanal' => $field('kanal', 'Kanal', 64),
+        'bandlage' => $field('bandlage', 'Bandlage', 64),
+        'verkehrsform' => $field('verkehrsform', 'Verkehrsform', 128),
+        'relaisstelle' => $field('relaisstelle', 'Relaisstelle', 64),
+        'betriebsart' => $choice('betriebsart', 'Betriebsart'),
+        'rufgruppe' => $field('rufgruppe', 'Rufgruppe', 64),
+        'anschlussart' => $choice('anschlussart', 'Anschlussart'),
+        'datenart' => $choice('datenart', 'Art der Datenübertragung'),
         'besondere_vermerke' => estab_dv_text(
             $input['besondere_vermerke'] ?? '',
             'Besondere Vermerke',
@@ -4518,9 +4670,16 @@ function estab_dv_telecom_plan_revision(array $plan): string
             'betriebsstelle' => (string) ($entry['betriebsstelle'] ?? ''),
             'rufname' => (string) ($entry['rufname'] ?? ''),
             'medium' => (string) ($entry['medium'] ?? ''),
+            'funkart' => $entry['funkart'] ?? null,
+            'band' => $entry['band'] ?? null,
             'kanal' => (string) ($entry['kanal'] ?? ''),
             'bandlage' => (string) ($entry['bandlage'] ?? ''),
             'verkehrsform' => (string) ($entry['verkehrsform'] ?? ''),
+            'relaisstelle' => (string) ($entry['relaisstelle'] ?? ''),
+            'betriebsart' => $entry['betriebsart'] ?? null,
+            'rufgruppe' => (string) ($entry['rufgruppe'] ?? ''),
+            'anschlussart' => $entry['anschlussart'] ?? null,
+            'datenart' => $entry['datenart'] ?? null,
             'besondere_vermerke' =>
                 (string) ($entry['besondere_vermerke'] ?? ''),
             'bemerkungen' => (string) ($entry['bemerkungen'] ?? ''),
@@ -4829,10 +4988,10 @@ function estab_dv_start_telecom_plan_revision(
             $copyEntries = $connection->prepare(
                 'INSERT INTO `nv_fernmeldeplan_eintraege`'
                 . ' (`fernmeldeplan_id`, `sortierung`, `betriebsstelle`,'
-                . ' `rufname`, `medium`, `kanal`, `bandlage`, `verkehrsform`,'
+                . ' `rufname`, `medium`, `funkart`, `band`, `kanal`, `bandlage`, `verkehrsform`, `relaisstelle`, `betriebsart`, `rufgruppe`, `anschlussart`, `datenart`,'
                 . ' `besondere_vermerke`, `bemerkungen`)'
                 . ' SELECT ?, `sortierung`, `betriebsstelle`, `rufname`,'
-                . ' `medium`, `kanal`, `bandlage`, `verkehrsform`,'
+                . ' `medium`, `funkart`, `band`, `kanal`, `bandlage`, `verkehrsform`, `relaisstelle`, `betriebsart`, `rufgruppe`, `anschlussart`, `datenart`,'
                 . ' `besondere_vermerke`, `bemerkungen`'
                 . ' FROM `nv_fernmeldeplan_eintraege`'
                 . ' WHERE `fernmeldeplan_id` = ? ORDER BY `sortierung`'
@@ -5111,24 +5270,32 @@ function estab_dv_add_telecom_entry(
             $insert = $connection->prepare(
                 'INSERT INTO `nv_fernmeldeplan_eintraege`'
                 . ' (`fernmeldeplan_id`, `sortierung`, `betriebsstelle`,'
-                . ' `rufname`, `medium`, `kanal`, `bandlage`, `verkehrsform`,'
+                . ' `rufname`, `medium`, `funkart`, `band`, `kanal`, `bandlage`, `verkehrsform`, `relaisstelle`, `betriebsart`, `rufgruppe`, `anschlussart`, `datenart`,'
                 . ' `besondere_vermerke`, `bemerkungen`)'
-                . ' VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+                . ' VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,'
+                . ' ?, ?)'
             );
             if (!$insert) {
                 throw new RuntimeException('Planposition konnte nicht vorbereitet werden.');
             }
             try {
                 $insert->bind_param(
-                    'iissssssss',
+                    'iissssssssssssssss',
                     $planId,
                     $sort,
                     $values['betriebsstelle'],
                     $values['rufname'],
                     $values['medium'],
+                    $values['funkart'],
+                    $values['band'],
                     $values['kanal'],
                     $values['bandlage'],
                     $values['verkehrsform'],
+                    $values['relaisstelle'],
+                    $values['betriebsart'],
+                    $values['rufgruppe'],
+                    $values['anschlussart'],
+                    $values['datenart'],
                     $values['besondere_vermerke'],
                     $values['bemerkungen']
                 );
@@ -5300,7 +5467,7 @@ function estab_dv_update_telecom_entry(
             );
             $select = $connection->prepare(
                 'SELECT `sortierung`, `betriebsstelle`, `rufname`, `medium`,'
-                . ' `kanal`, `bandlage`, `verkehrsform`,'
+                . ' `funkart`, `band`, `kanal`, `bandlage`, `verkehrsform`, `relaisstelle`, `betriebsart`, `rufgruppe`, `anschlussart`, `datenart`,'
                 . ' `besondere_vermerke`, `bemerkungen`'
                 . ' FROM `nv_fernmeldeplan_eintraege`'
                 . ' WHERE `fernmeldeplan_eintrag_id` = ?'
@@ -5326,7 +5493,10 @@ function estab_dv_update_telecom_entry(
             $update = $connection->prepare(
                 'UPDATE `nv_fernmeldeplan_eintraege`'
                 . ' SET `betriebsstelle` = ?, `rufname` = ?, `medium` = ?,'
-                . ' `kanal` = ?, `bandlage` = ?, `verkehrsform` = ?,'
+                . ' `funkart` = ?, `band` = ?, `kanal` = ?, `bandlage` = ?,'
+                . ' `verkehrsform` = ?, `relaisstelle` = ?,'
+                . ' `betriebsart` = ?, `rufgruppe` = ?, `anschlussart` = ?,'
+                . ' `datenart` = ?,'
                 . ' `besondere_vermerke` = ?, `bemerkungen` = ?'
                 . ' WHERE `fernmeldeplan_eintrag_id` = ?'
                 . ' AND `fernmeldeplan_id` = ?'
@@ -5338,18 +5508,25 @@ function estab_dv_update_telecom_entry(
             }
             try {
                 $update->bind_param(
-                    'ssssssssii',
+                    'sssssssssssssssii',
                     $values['betriebsstelle'],
                     $values['rufname'],
                     $values['medium'],
+                    $values['funkart'],
+                    $values['band'],
                     $values['kanal'],
                     $values['bandlage'],
                     $values['verkehrsform'],
+                    $values['relaisstelle'],
+                    $values['betriebsart'],
+                    $values['rufgruppe'],
+                    $values['anschlussart'],
+                    $values['datenart'],
                     $values['besondere_vermerke'],
                     $values['bemerkungen'],
                     $entryId,
                     $planId
-                );
+);
                 if (!$update->execute() || $update->affected_rows > 1) {
                     throw new RuntimeException(
                         'Fernmeldeweg konnte nicht gespeichert werden.'
@@ -5425,7 +5602,7 @@ function estab_dv_delete_telecom_entry(
             );
             $select = $connection->prepare(
                 'SELECT `sortierung`, `betriebsstelle`, `rufname`, `medium`,'
-                . ' `kanal`, `bandlage`, `verkehrsform`,'
+                . ' `funkart`, `band`, `kanal`, `bandlage`, `verkehrsform`, `relaisstelle`, `betriebsart`, `rufgruppe`, `anschlussart`, `datenart`,'
                 . ' `besondere_vermerke`, `bemerkungen`'
                 . ' FROM `nv_fernmeldeplan_eintraege`'
                 . ' WHERE `fernmeldeplan_eintrag_id` = ?'
@@ -5894,7 +6071,9 @@ function estab_dv_telecom_plans(mysqli $connection, int $incidentId): array
     $statement = $connection->prepare(
         'SELECT p.*, e.`fernmeldeplan_eintrag_id`, e.`sortierung`,'
         . ' e.`betriebsstelle`, e.`rufname`, e.`medium`, e.`kanal`,'
-        . ' e.`bandlage`, e.`verkehrsform`, e.`besondere_vermerke`,'
+        . ' e.`bandlage`, e.`verkehrsform`, e.`funkart`, e.`band`,'
+        . ' e.`relaisstelle`, e.`betriebsart`, e.`rufgruppe`,'
+        . ' e.`anschlussart`, e.`datenart`, e.`besondere_vermerke`,'
         . ' e.`bemerkungen` AS `eintrag_bemerkungen`,'
         . ' zu.`weg_id`, w.`weg_nummer`'
         . ' FROM `nv_fernmeldeplaene` AS p'
@@ -5952,9 +6131,16 @@ function estab_dv_telecom_plans(mysqli $connection, int $incidentId): array
                     'betriebsstelle' => (string) $row['betriebsstelle'],
                     'rufname' => (string) $row['rufname'],
                     'medium' => (string) $row['medium'],
+                    'funkart' => $row['funkart'],
+                    'band' => $row['band'],
                     'kanal' => (string) $row['kanal'],
                     'bandlage' => (string) $row['bandlage'],
                     'verkehrsform' => (string) $row['verkehrsform'],
+                    'relaisstelle' => (string) ($row['relaisstelle'] ?? ''),
+                    'betriebsart' => $row['betriebsart'],
+                    'rufgruppe' => (string) ($row['rufgruppe'] ?? ''),
+                    'anschlussart' => $row['anschlussart'],
+                    'datenart' => $row['datenart'],
                     'besondere_vermerke' => $row['besondere_vermerke'],
                     'bemerkungen' => $row['eintrag_bemerkungen'],
                 ];
