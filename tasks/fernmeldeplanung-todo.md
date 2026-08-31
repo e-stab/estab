@@ -15,13 +15,42 @@ diesen Vorgang.
 
 ## P1 — Fundament: die dauerhafte Wegkennung
 
-- [ ] **A01** `·` **S** Regeln in die Register eintragen
-      → `app/dv_rules.php`, `app/ux_rules.php`
-      - [ ] Vorschriftenregeln: `FMP-MEDIUM-VORDRUCK`, `FMP-EIGENE-ERREICHBARKEIT`, `FMP-STELLENART`, `FMP-STELLENBILD`, `FMP-FUNKART`, `FMP-DIGITAL-BETRIEBSART`, `FMP-DIGITAL-GRUPPENRUF`, `FMP-DIGITAL-KEINE-GERAETEKENNUNG`, `FMP-DIGITAL-KEINE-TELEFONIE`, `FMP-DIGITAL-REPEATER-ANTRAG`, `FMP-DIGITAL-WIRKBEREICH`, `FMP-KOPFLEISTE`, `FMP-BETRIEBSLEITUNG`, `FMP-VERMERK-EINFACH`, `FMP-GEGENSTELLE-AM-WEG`, `FMP-GEGENSTELLE-KEIN-ERSATZ`, `FMP-GEGENSTELLE-FELDBEZUG`, `FMP-GEGENSTELLE-AUSWAHL`, `FMP-BETRIEBSUNTERLAGE-AKTUELL`, `FMP-VORSCHLAG-QUELLENSCHRANKE`, `FMP-WEG-IDENTITAET`, `FMP-RUECKFALLEBENE`, `FMP-EINGANGSWEG`, `FMP-EINGANGSWEG-ROLLEN`, `FMP-EINGANGSWEG-AUSSERPLAN`, `FMP-EINGANGSWEG-BEMERKUNG`, `FMP-WEG-AUSSERHALB-VORDRUCK`
-      - [ ] Bedienregeln: `FMP-UX-WORT-DES-MEDIUMS`, `FMP-UX-KEINE-TOTEN-FELDER`, `FMP-UX-ZWEI-TIEFEN`, `FMP-UX-ALTANGABE`, `FMP-UX-WEGEWAHL`, `FMP-UX-VORSCHLAG-HERKUNFT`, `FMP-UX-VORSCHLAG-WEG`
-      - [ ] Neue Quellen: PDV 800 (2017), THW-DV 1-820, NBHB THW in die Quellenliste
-      - **Prüfung:** `dv_rule_registry.php` und `ux_rule_registry.php` müssen **rot** werden — jede Regel ohne Test
-      - **Abhängigkeit:** keine. Steht bewusst vorn: Die roten Register sind ab jetzt die Fortschrittsanzeige
+- [x] **A01** `·` **XS** Die drei neuen Quellen in den Vorschriftenkatalog
+      → `app/dv_rules.php`
+      - [x] `ESTAB_DV_SOURCE_PDV_800` (Ausgabe 2017), `ESTAB_DV_SOURCE_DV_1_820`
+            (01.08.2016), `ESTAB_DV_SOURCE_NBHB_THW` (09.01.2025)
+      - [x] In `estab_dv_sources()` eintragen
+      - [x] `SPEC.md` Abschnitt 2.1 führt Q10 bis Q12 mit ihren Konstanten — die
+            Tabelle behauptet, die Quellenliste zu sein, und wäre sonst falsch
+      - **Prüfung:** `dv_rule_registry.php` bleibt **grün** — eine Quelle ohne
+        zitierende Regel ist zulässig, eine Regel ohne Quelle nicht
+      - **Abhängigkeit:** keine
+
+      **Korrektur gegenüber dem ersten Entwurf dieser Liste.** A01 lautete
+      ursprünglich: alle 34 Regeln auf einmal eintragen, damit die roten
+      Register die Fortschrittsanzeige sind. Das ist nach dem Lesen von
+      [dv_rule_registry.php:135](tests/php/dv_rule_registry.php:135) falsch.
+
+      Die Abdeckung wird nicht aus dem Quelltext gelesen, sondern durch
+      **Ausführung** bewiesen: Der Nachweis führt jeden Test aus, der
+      `estab_dv_requirement()` aufruft, und sammelt die tatsächlich
+      aufgelösten Kennungen. Eine katalogisierte Regel ohne Test lässt den
+      Nachweis hart scheitern.
+
+      34 Regeln vorab einzutragen hieße deshalb: die Suite ist über
+      **siebenundzwanzig Commits hinweg rot**. Damit verliert der Bauablauf
+      seinen wichtigsten Sinn — gegen eine dauerhaft rote Suite lässt sich
+      kein neuer Rückschritt mehr erkennen, und kein Commit ist mehr ein
+      sauberer Rücksprungpunkt.
+
+      **Stattdessen trägt jede Aufgabe ihre eigenen Regeln ein, zusammen mit
+      ihren Tests.** Die Regel-IDs stehen bei jeder Aufgabe unten unter
+      **Regel:**; die vollständige Liste steht in der Spec, Abschnitt 13.
+      Die Suite bleibt nach jeder Aufgabe grün.
+
+      Nur die drei Quellen kommen vorab, weil sie für sich harmlos sind: Der
+      Nachweis verlangt zu jeder Regel eine Quelle, aber nicht zu jeder Quelle
+      eine Regel.
 
 - [ ] **A02** `!` **S** Schema: `nv_fernmeldewege`
       → `docker/db/migrations/122-fernmeldeweg-identitaet.sql`, `docker/db/init/10-schema.sql`

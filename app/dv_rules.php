@@ -22,6 +22,15 @@ const ESTAB_DV_SOURCE_DV_1_101 =
     'Dienstvorschrift 1-101 Führen im THW, Stand 01.01.2006';
 const ESTAB_DV_SOURCE_MELDEWESEN =
     'Grundlagen des Meldewesens, THW-Ausbildungszentrum, Stand Mai 2024';
+const ESTAB_DV_SOURCE_PDV_800 =
+    'PDV 800, Informations- und Kommunikationstechnik im Einsatz, '
+    . 'Ausgabe 2017';
+const ESTAB_DV_SOURCE_DV_1_820 =
+    'THW-DV 1-820, Dienstvorschrift für den Digitalfunk BOS in der '
+    . 'Bundesanstalt Technisches Hilfswerk, Stand 01.08.2016';
+const ESTAB_DV_SOURCE_NBHB_THW =
+    'NBHB THW, Nutzungs- und Betriebshandbuch für den Digitalfunk BOS in '
+    . 'der Bundesanstalt Technisches Hilfswerk, Stand 09.01.2025';
 
 /**
  * Every document a rule may cite, keyed by its short name.
@@ -36,6 +45,12 @@ const ESTAB_DV_SOURCE_MELDEWESEN =
  * 2022 precede the service regulation of 2006, which applies wherever they
  * are silent.
  *
+ * PDV 800 (2017) is a special case: DV 1-101 chapter 6 names it as its own
+ * basis "in the currently valid version or a successor of this regulation",
+ * so it displaces that chapter wherever both regulate the same question.
+ * THW-DV 1-820 and the NBHB THW govern the digital radio, which the 2006
+ * regulation could not yet know.
+ *
  * @return array<string, string>
  */
 function estab_dv_sources(): array
@@ -46,6 +61,9 @@ function estab_dv_sources(): array
         'handbuch' => ESTAB_DV_SOURCE_HANDBUCH,
         'dv-1-101' => ESTAB_DV_SOURCE_DV_1_101,
         'meldewesen' => ESTAB_DV_SOURCE_MELDEWESEN,
+        'pdv-800' => ESTAB_DV_SOURCE_PDV_800,
+        'dv-1-820' => ESTAB_DV_SOURCE_DV_1_820,
+        'nbhb-thw' => ESTAB_DV_SOURCE_NBHB_THW,
     ];
 }
 

@@ -76,10 +76,22 @@ ausdrücklich als besondere Form der Meldung, die denselben Meldewegen folgt.
 | Q3 | Grundlagen des Meldewesens, Version 1.1 | Mai 2024 | `ESTAB_DV_SOURCE_MELDEWESEN` |
 | Q4 | THW-DV 1-101, Handbuch Führen im THW | 01.01.2006 | `ESTAB_DV_SOURCE_DV_1_101` |
 | Q5 | Handbuch ETB/TBB, Führung in der THW-Führungsstelle | März 2022 | `ESTAB_DV_SOURCE_HANDBUCH` |
+| Q10 | PDV 800, Informations- und Kommunikationstechnik im Einsatz | Ausgabe 2017 | `ESTAB_DV_SOURCE_PDV_800` |
+| Q11 | THW-DV 1-820, Dienstvorschrift für den Digitalfunk BOS in der BA THW | 01.08.2016 | `ESTAB_DV_SOURCE_DV_1_820` |
+| Q12 | NBHB THW, Nutzungs- und Betriebshandbuch für den Digitalfunk BOS | 09.01.2025 | `ESTAB_DV_SOURCE_NBHB_THW` |
 | P1 | Bedienanforderungen des Betreibers, Abschnitt 5.10 dieses Dokuments | — | eigener Katalog, siehe Abschnitt 10 |
 
-Q1 bis Q5 sind **fremdbestimmt**: Sie stammen aus Vorschriften und
-Ausbildungsunterlagen des THW und sind nicht verhandelbar. P1 ist
+Q6 bis Q9 tragen die Vordrucke und den Zeichensatz der Fernmeldeplanung.
+Sie stehen in `tasks/fernmeldeplanung-spec.md` und erzeugen keine Regel in
+diesem Katalog. Q10 bis Q12 stehen hier, weil Regeln sie zitieren: PDV 800
+verdrängt Q4 Kapitel 6, das sie selbst als seine Grundlage benennt — in der
+jeweils gültigen Fassung oder als Nachfolger; THW-DV 1-820 und NBHB THW
+regeln den Digitalfunk, den die Vorschrift von 2006 noch nicht kennen
+konnte.
+
+Q1 bis Q5 und Q10 bis Q12 sind **fremdbestimmt**: Sie stammen aus
+Vorschriften und
+Ausbildungsunterlagen des THW und der Polizei und sind nicht verhandelbar. P1 ist
 **selbstbestimmt**: Der Betreiber legt diese Anforderungen fest und kann sie
 ändern. Beide werden gleich streng nachgewiesen, aber getrennt geführt — sonst
 lässt sich die Frage einer Prüfung, was die Dienstvorschrift verlangt, nicht
