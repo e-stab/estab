@@ -46,6 +46,9 @@ $dvOperationsMigration = $read(
 $routeIdentityMigration = $read(
     $root . '/docker/db/migrations/122-fernmeldeweg-identitaet.sql'
 );
+$radioKindMigration = $read(
+    $root . '/docker/db/migrations/123-fernmeldeweg-funkart.sql'
+);
 $attachmentIntegrityMigration = $read(
     $root . '/docker/db/migrations/95-attachment-ingest-integrity.sql'
 );
@@ -2838,6 +2841,40 @@ $assert(
     'Route identity schema, its immutable assignment, or its read-only '
         . 'backfill is outside the gate'
 );
+// Analog fuehrt Kanaele, digital fuehrt Rufgruppen. Das Tor haelt beides
+// fest: die getrennten Felder UND dass Bandlage und Verkehrsform Freitext
+// bleiben -- die Werteliste dafuer steht in einer eingestuften Vorschrift,
+// die nicht vorliegt, und der Betreiber hat gegen das Erfinden entschieden.
+$assert(
+    str_contains($radioKindMigration, "`funkart` ENUM('ANALOG','DIGITAL')")
+        && str_contains($radioKindMigration, "`band` ENUM('2m','4m')")
+        && str_contains($radioKindMigration, "`betriebsart` ENUM('TMO','DMO')")
+        && str_contains($radioKindMigration, '`rufgruppe` VARCHAR(64)')
+        && str_contains($radioKindMigration, '`relaisstelle` VARCHAR(64)')
+        && str_contains(
+            $radioKindMigration,
+            "`anschlussart` ENUM('AMT','NST','MOBIL','SONDER')"
+        )
+        && str_contains(
+            $radioKindMigration,
+            "`datenart`\n        ENUM('MAIL','MESSENGER','FACHANW','INTERNET')"
+        )
+        && str_contains(
+            $radioKindMigration,
+            "'122-fernmeldeweg-identitaet.sql'"
+        )
+        && !str_contains($radioKindMigration, '`bandlage` ENUM')
+        && !str_contains($radioKindMigration, '`verkehrsform` ENUM')
+        && str_contains(
+            $radioKindMigration,
+            'no longer free text'
+        )
+        && str_contains(
+            $readiness,
+            "'123-fernmeldeweg-funkart.sql'"
+        ),
+    'Radio-kind separation or the free-text guarantee is outside the gate'
+);
 $etbMigrationFragments = [
     "table_name = 'nv_funktionsfaehigkeiten' AND table_type = 'BASE TABLE' "
         . "AND engine = 'InnoDB' AND table_collation = "
@@ -3133,7 +3170,7 @@ $assert(
         && str_contains($verifySql, "index_name <> 'PRIMARY') = 0")
         && str_contains(
             $verifySql,
-            '(SELECT COUNT(*) FROM `estab_schema_migrations`) = 28'
+            '(SELECT COUNT(*) FROM `estab_schema_migrations`) = 29'
         )
         && str_contains($verifySql, "'96-etb-duty-function.sql'")
         && str_contains(
@@ -3180,7 +3217,11 @@ $assert(
             $verifySql,
             "'122-fernmeldeweg-identitaet.sql'"
         )
-        && str_contains($verifySql, ") = 28) AS `schema_migrations_ok`")
+        && str_contains(
+            $verifySql,
+            "'123-fernmeldeweg-funkart.sql'"
+        )
+        && str_contains($verifySql, ") = 29) AS `schema_migrations_ok`")
         && str_contains(
             $verifySql,
             'Discarded telecommunications drafts are immutable evidence'
@@ -3207,7 +3248,7 @@ $assert(
         && str_contains($readinessSql, "index_name <> 'PRIMARY') = 0")
         && str_contains(
             $readinessSql,
-            '(SELECT COUNT(*) FROM estab_schema_migrations) = 28'
+            '(SELECT COUNT(*) FROM estab_schema_migrations) = 29'
         )
         && str_contains($readinessSql, "'96-etb-duty-function.sql'")
         && str_contains(
@@ -3259,7 +3300,7 @@ $assert(
         )
         && str_contains(
             $readinessSql,
-            "checksum REGEXP BINARY '^[0-9a-f]{64}$') = 28"
+            "checksum REGEXP BINARY '^[0-9a-f]{64}$') = 29"
         ),
     'Runtime readiness does not require the exact final ETB catalogue and ledger'
 );
@@ -3507,8 +3548,10 @@ $assert(
         && str_contains($verify, "'119-inactive-messenger-dispatch.sql'")
         && str_contains($verify, "'122-fernmeldeweg-identitaet.sql'")
         && str_contains($readiness, "'122-fernmeldeweg-identitaet.sql'")
-        && str_contains($verify, 'estab_schema_migrations`) = 28')
-        && str_contains($readiness, 'estab_schema_migrations) = 28'),
+        && str_contains($verify, "'123-fernmeldeweg-funkart.sql'")
+        && str_contains($readiness, "'123-fernmeldeweg-funkart.sql'")
+        && str_contains($verify, 'estab_schema_migrations`) = 29')
+        && str_contains($readiness, 'estab_schema_migrations) = 29'),
     'Migration ledger/readiness does not require all release migrations'
 );
 $assert(

@@ -506,6 +506,13 @@ function estab_readiness_schema_query(): string
         . "WHERE NOT EXISTS (SELECT 1 FROM nv_fernmeldeweg_zuordnung AS zu "
         . "WHERE zu.fernmeldeplan_eintrag_id = "
         . "eintrag.fernmeldeplan_eintrag_id)) = 0) "
+        // Analog fuehrt Kanaele, digital fuehrt Rufgruppen -- getrennte
+        // Felder, damit kein Digitalfunkweg eine Bandlage tragen kann.
+        . "AND ((SELECT COUNT(*) FROM information_schema.columns "
+        . "WHERE table_schema = DATABASE() AND table_name = "
+        . "'nv_fernmeldeplan_eintraege' AND column_name IN ("
+        . "'funkart','band','relaisstelle','betriebsart','rufgruppe',"
+        . "'anschlussart','datenart') AND is_nullable = 'YES') = 7) "
         . "AND ((SELECT COUNT(*) FROM information_schema.columns "
         . "WHERE table_schema = DATABASE() AND table_name = 'nv_nachrichten' "
         . "AND column_name = 'estab_fernmeldeplan_eintrag_id' "
@@ -1426,7 +1433,7 @@ function estab_readiness_schema_query(): string
         . "WHERE estab_status = 'closed' AND (estab_closed_at IS NULL "
         . "OR estab_retain_until IS NULL OR estab_retain_until "
         . "< DATE_ADD(estab_closed_at, INTERVAL 10 YEAR))) = 0) "
-        . "AND ((SELECT COUNT(*) FROM estab_schema_migrations) = 28) "
+        . "AND ((SELECT COUNT(*) FROM estab_schema_migrations) = 29) "
         . "AND ((SELECT COUNT(*) FROM estab_schema_migrations "
         . "WHERE version IN ('20-nullable-dates.sql','30-runtime-schema.sql',"
         . "'40-recipient-matrix-standard.sql','45-global-incidents-prepare.sql',"
@@ -1448,7 +1455,8 @@ function estab_readiness_schema_query(): string
         . "'119-inactive-messenger-dispatch.sql',"
         . "'120-single-function-relief.sql',"
         . "'121-transport-disposition-field-one.sql',"
-        . "'122-fernmeldeweg-identitaet.sql') "
+        . "'122-fernmeldeweg-identitaet.sql',"
+        . "'123-fernmeldeweg-funkart.sql') "
         . "AND state = 'applied' "
-        . "AND checksum REGEXP BINARY '^[0-9a-f]{64}$') = 28)";
+        . "AND checksum REGEXP BINARY '^[0-9a-f]{64}$') = 29)";
 }

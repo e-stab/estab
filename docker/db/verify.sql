@@ -427,6 +427,23 @@ SELECT
          OR `fuehrungsstellenname` REGEXP '\\p{C}'
        )) = 0
    AND
+   (SELECT COUNT(*)
+      FROM information_schema.columns
+     WHERE table_schema = DATABASE()
+       AND table_name = 'nv_fernmeldeplan_eintraege'
+       AND column_name IN (
+         'funkart', 'band', 'relaisstelle', 'betriebsart',
+         'rufgruppe', 'anschlussart', 'datenart'
+       )
+       AND is_nullable = 'YES') = 7
+   AND
+   (SELECT COUNT(*)
+      FROM information_schema.columns
+     WHERE table_schema = DATABASE()
+       AND table_name = 'nv_fernmeldeplan_eintraege'
+       AND column_name IN ('bandlage', 'verkehrsform')
+       AND data_type = 'varchar') = 2
+   AND
    (SELECT COUNT(*) FROM `nv_einsaetze`
      WHERE `fuehrungsstellenname_gesperrt` NOT IN (0, 1)
         OR (
@@ -1956,7 +1973,7 @@ SELECT
        BINARY 'STRICT', BINARY 'LOOSE'
      )) = 0)
        AS `incident_permission_mode_ok`,
-  ((SELECT COUNT(*) FROM `estab_schema_migrations`) = 28
+  ((SELECT COUNT(*) FROM `estab_schema_migrations`) = 29
    AND
    (SELECT COUNT(*)
       FROM `estab_schema_migrations`
@@ -1988,10 +2005,11 @@ SELECT
        '119-inactive-messenger-dispatch.sql',
        '120-single-function-relief.sql',
        '121-transport-disposition-field-one.sql',
-       '122-fernmeldeweg-identitaet.sql'
+       '122-fernmeldeweg-identitaet.sql',
+       '123-fernmeldeweg-funkart.sql'
      )
        AND `state` = 'applied'
-       AND `checksum` REGEXP BINARY '^[0-9a-f]{64}$') = 28)
+       AND `checksum` REGEXP BINARY '^[0-9a-f]{64}$') = 29)
        AS `schema_migrations_ok`;
 
 SELECT `table_name`, `engine`, `table_collation`
