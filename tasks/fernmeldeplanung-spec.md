@@ -28,6 +28,13 @@ entschieden werden:
 5. Digitalfunk und Analogfunk stehen unter einem Medium und teilen sich
    dieselben technischen Felder. Sie sind zu trennen.
 
+Zwei weitere Beschlüsse sind während der Arbeit hinzugekommen:
+
+6. Die nachgereichte PDV 800 (Q10) kennt die **Rückfallebene** als
+   Planungsgegenstand — Beschluss B6, Abschnitt 9.
+7. Auch der **Eingang** soll den Fernmeldeweg erfassen: vom Fernmelder gewählt,
+   vom LdF geprüft — Beschluss B7, Abschnitt 10.
+
 ---
 
 ## 2. Normative Quellen
@@ -86,8 +93,8 @@ vier Regeln bekommen eine bessere Quelle, eine Frage kommt neu hinzu.
 | **berichtigt** | Repeater und Gateway sind zu **beantragen**, nicht anzuzeigen (Q12 Kap. 2.3.3) |
 | **berichtigt** | Die Verkehrsform des Digitalfunks ist nicht „nicht vorgesehen", sondern **netzseitig festgelegt** (Q12 Kap. 2.4.2) |
 | **berichtigt** | Telefonie über den Digitalfunk ist **gesperrt** (Q12 Kap. 2.4.3) — ein Weg, den niemand planen darf |
-| **neu** | Q10 kennt die *Rückfallebene* als Planungsgegenstand → offene Frage **O9** |
-| **verkleinert** | Lücken L1 und L2 (Abschnitt 15) |
+| **neu** | Q10 kennt die *Rückfallebene* als Planungsgegenstand → Beschluss **B6** (Abschnitt 9) |
+| **verkleinert** | Lücken L1 und L2 (Abschnitt 17) |
 
 ---
 
@@ -120,7 +127,7 @@ eigenen Vermerk. Für den Wiedererkennungswert ist es ein Rückschritt: Wer den
 Vordruck kennt, sucht den Kasten seiner Stelle und findet eine flache Liste.
 
 Daraus folgt der Kern der Überarbeitung: **Speicherung je Weg, Darstellung je
-Stelle.** Beides ist ohne Widerspruch möglich (Abschnitt 10).
+Stelle.** Beides ist ohne Widerspruch möglich (Abschnitt 12).
 
 ### 3.3 Was schiefsteht
 
@@ -137,6 +144,7 @@ Stelle.** Beides ist ohne Widerspruch möglich (Abschnitt 10).
 | F9 | `nv_komplan` liegt tot im Schema und wird von `readiness.php` weiter geprüft | [readiness.php:150](app/readiness.php:150) |
 | F10 | Der Plan-Zweig der Vorschlagszuordnung schlägt die **eigene** Erreichbarkeit als Gegenstelle vor: `betriebsstelle` → `rufname` landet in Feld 6 | [read_authorization.php:270](app/read_authorization.php:270) |
 | F11 | Die Vorschläge sortieren nach Herkunft **vor** Güte; ein ähnlicher Historientreffer schlägt einen exakten Plantreffer | [read_authorization.php:695](app/read_authorization.php:695) |
+| F12 | Der Eingang erfasst nur das **Mittel**, keinen Weg des Plans: Der Wegbezug ist mit `04_richtung = 'A'` auf den Ausgang verriegelt | [message_repository.php:1770](app/message_repository.php:1770) |
 
 ---
 
@@ -257,7 +265,7 @@ Jeder Weg trägt eine geordnete Liste von Gegenstellen. Eine Gegenstelle hat
 
 | Angabe | Was | Speist |
 | --- | --- | --- |
-| `name` | Klarbezeichnung der Stelle oder Einheit | Feld 13 (Eingang), Feld 10 (Ausgang) |
+| `name` | Klarbezeichnung der Stelle oder Einheit | **Feld 15** Absender (Eingang), Feld 10 Anschrift (Ausgang) |
 | `erreichbarkeit` | Rufname, Rufnummer, Adresse — je nach Medium des Wegs | Feld 6 bzw. Feld 11 |
 
 Die Bemerkung der Gegenstelle nimmt auch die **Betriebszeiten** auf (Q4
@@ -274,7 +282,7 @@ Mediums, in der Tabelle „Erreichbar unter".
 
 **Welches Vordruckfeld gefüllt wird, entscheidet das Medium des Wegs:**
 
-| Medium des Wegs | Feld 6 (Rufname der Gegenstelle) | Feld 11 (Rufnummer) | Feld 13 / Feld 10 |
+| Medium des Wegs | Feld 6 (Rufname der Gegenstelle) | Feld 11 (Rufnummer) | Feld 15 / Feld 10 |
 | --- | --- | --- | --- |
 | `Fu` Funk | `erreichbarkeit` (Funkrufname) | — | `name` |
 | `Fe`, `FAX` | `name` | `erreichbarkeit` (Rufnummer) | `name` |
@@ -332,9 +340,11 @@ beim Bediener.
 | V3 | Die Herkunft ist **an jedem** Vorschlag sichtbar, nicht nur bei den LdF-Zuordnungen. Ein Vorschlag ohne Etikett ist ein Vorschlag aus der Historie und wird als solcher beschriftet. |
 | V4 | Ein Vorschlag aus dem Plan nennt den Weg, über den er gilt, im vorhandenen Bezugsfeld: „Aktiver S6-Fernmeldeplan · über Funk (digital), Rufgruppe …". |
 | V5 | A/W erhält bei `FM-Eingang` ebenfalls Plan-Vorschläge für Feld 6. Heute gibt es dort nur Historie ([read_authorization.php:205](app/read_authorization.php:205)). |
-| V6 | Feld 11 (`11_rufnummer`) wird vorschlagsfähig — heute lässt die Politik nur Feld 6 und Feld 13 zu. |
+| V6 | Feld 11 (`11_rufnummer`) wird vorschlagsfähig — heute lässt die Politik nur Feld 6 und Feld 15 zu. |
 | V7 | Freie Eingabe bleibt in allen Fällen möglich. Ein Vorschlag ist Hilfe, keine Auswahlliste. |
 | V8 | Der **Stab** erhält beim Abfassen einer ausgehenden Nachricht Vorschläge für Feld 10 — **ausschließlich aus dem Plan**, nie aus der Historie. |
+| V9 | Ein **eindeutiger exakter** Treffer aus dem Plan wird in das leere Feld **vorbelegt**, mit sichtbarem Hinweis auf die Herkunft. |
+| V10 | Aus der Historie wird **nie** vorbelegt. Sie erscheint ausschließlich in der Auswahlliste. |
 
 V7 ist keine Höflichkeit: Eine Gegenstelle, die im Plan fehlt, meldet sich
 trotzdem. Der Vordruck darf sie nicht abweisen.
@@ -370,13 +380,105 @@ Mit Entscheidung O7 ist die Kennzeichnung kein Schmuck mehr, sondern das
 **Gegengewicht zur Rangfolge**: Weil der Plan oben steht, muss erkennbar sein,
 dass er oben steht, *weil* er der Plan ist — und nicht, weil er besser passt.
 
-### 5.6 Die Wegewahl spricht so
+### 5.6 Vorbelegung aus dem Plan
+
+Ein Vorschlag, den der Bediener anklicken muss, ist ein halber Schritt. Wenn
+der Plan die Antwort **eindeutig** enthält, steht sie im Feld — und sagt, woher
+sie kommt.
+
+**Die Regel in einem Satz:** Der Plan belegt vor, die Historie schlägt vor.
+
+| Lage | Verhalten |
+| --- | --- |
+| Genau **ein** exakter Treffer im aktiven Plan | Das Feld ist vorbelegt. Daneben steht „aus der Fernmeldeplanung übernommen", dazu der Weg, über den der Treffer gilt |
+| **Mehrere** Treffer im Plan | Keine Vorbelegung. Das Feld bleibt leer, alle Treffer stehen zur Auswahl |
+| Nur ein **ähnlicher** Treffer im Plan | Keine Vorbelegung. Ähnlichkeit ist ein Angebot, keine Behauptung |
+| **Kein** Plantreffer | Das Feld bleibt leer. Die Auswahlliste bietet die Historie an, gekennzeichnet als solche |
+| Das Feld trägt bereits einen Wert | Keine Vorbelegung. Ein vorhandener Wert wird nie überschrieben |
+| Neudisposition nach einer Rückgabe | **Keine** Vorbelegung — siehe unten |
+
+Vorbelegt werden die Ziele der Zuordnung: im Ausgang Feld 6 (Rufname der
+Gegenstelle), im Eingang Feld 15 (Absender).
+
+**Zur Feldnummer.** Feld 15 ist in der Q1-Zählung der **Absender**; die
+Datenbank führt ihn unter `13_abseinheit`, weil dieser Spaltenname dem
+Zugriffsindex folgt und nicht der gedruckten Nummer
+([nv_field_numbers.php:69](app/nv_field_numbers.php:69)). Das ist die
+Nummernbrücke aus `SPEC.md` Abschnitt 3 in freier Wildbahn — im Text dieser
+Spec steht immer die **gedruckte** Nummer.
+
+#### Der Eingang: eine ausgewählte Gegenstelle wird nicht noch einmal geraten
+
+Der wichtigste Fall ist der Eingang, und er ist einfacher als die allgemeine
+Regel oben:
+
+1. **A/W füllt Feld 6.** Die Vorschlagsliste zeigt zuerst die Gegenstellen des
+   aktiven Plans, dahinter die Historie — jede mit ihrer Kennzeichnung.
+2. **Wählt A/W eine Gegenstelle des Plans aus**, wird diese Auswahl
+   festgehalten: nicht ihr Text, sondern **welche** Gegenstelle es war.
+3. **Der LdF bekommt Feld 15 vorbelegt** mit dem `name` genau dieser
+   Gegenstelle, gekennzeichnet als „aus der Fernmeldeplanung übernommen".
+4. **Tippt A/W frei**, gibt es keine Auswahl und keine Vorbelegung. Feld 15
+   bleibt leer, und die Auswahlliste des LdF bietet die Historie an.
+
+Der Unterschied zu Schritt 2 ist der Kern: Die Vorbelegung folgt einer
+**getroffenen Auswahl**, nicht einem nachträglichen Textvergleich. Damit
+entfällt hier die Eindeutigkeitsfrage von oben — es gibt nichts zu raten, weil
+A/W die Antwort bereits gegeben hat. Zwei Gegenstellen mit gleichem Rufnamen
+unter verschiedenen Wegen wären für ein Textverfahren mehrdeutig; für eine
+Auswahl sind sie es nicht.
+
+Festgehalten wird die Auswahl **außerhalb des Vordrucks**, in einer
+`estab_`-Spalte (Abschnitt 10.4) — der Vordruck kennt kein Feld dafür.
+
+#### Warum nur bei Eindeutigkeit
+
+Bei zwei passenden Einträgen müsste die Anwendung einen auswählen. Sie hätte
+dafür kein Kriterium außer Zufall — Häufigkeit und Jüngstes ordnen eine Liste,
+sie begründen keine Entscheidung. Eine Vorbelegung, die rät, ist schlimmer als
+keine: Sie sieht aus wie eine Auskunft.
+
+#### Warum die Historie nie vorbelegt
+
+Der Plan ist eine **freigegebene Unterlage** mit Stand und F.d.R.; ein
+bestätigtes Nachrichtenpaar ist eine **Beobachtung**. Eine Beobachtung darf
+erinnern, sie darf nicht behaupten. Q10 Nummer 2.6 sagt, wonach im Zweifel zu
+verfahren ist: nach dem Kommunikationsplan.
+
+#### Keine Vorbelegung nach einer Rückgabe
+
+Gibt A/W eine Nachricht an den LdF zurück, verlangt der Bestand ausdrücklich
+eine **andere** Disposition — „Nach einer Rückgabe ist ein anderes
+Übermittlungsmittel oder ein anderer Beförderungsweg zu disponieren."
+([message_repository.php:1905](app/message_repository.php:1905)). Eine
+Vorbelegung schöbe genau den Wert zurück, der eben nicht funktioniert hat. Der
+Zweig erkennt die Neudisposition bereits (`$redisposition`); die Vorbelegung
+hält sich dort heraus.
+
+#### Der Nachweis muss beides unterscheiden
+
+Ein vorbelegter Wert, den der LdF ohne Änderung absendet, ist seine Eintragung
+— dafür zeichnet er. Aber die Beweiskette muss sagen können, **wie** er dort
+hingekommen ist: selbst gewählt oder vorbelegt übernommen. Ohne diesen
+Unterschied lässt sich später nicht mehr feststellen, ob der LdF geprüft oder
+durchgewinkt hat.
+
+Die Ereigniszeile hält deshalb fest: die Herkunft (`plan`), die Version des
+Plans und ob der Wert unverändert übernommen oder überschrieben wurde. Der
+Ausgang führt für seine Disposition bereits eine solche Momentaufnahme
+([message_repository.php:1860](app/message_repository.php:1860)); die
+Vorbelegung reiht sich dort ein.
+
+**Die Vorbelegung bindet nicht.** Das Feld bleibt frei überschreibbar, und ein
+überschriebener Vorschlag wird nicht zurückgesetzt — V7 gilt unverändert.
+
+### 5.7 Die Wegewahl spricht so
 
 Die Auswahlliste bei der Disposition des LdF fragt nicht „an wen", sondern
 **„über welchen Weg"**. Die Gegenstellen des Wegs stehen als Erläuterung
 darunter — sie begründen die Wahl, sie sind nicht die Wahl.
 
-### 5.7 Abgrenzung
+### 5.8 Abgrenzung
 
 Ob ein Eintrag missbräuchlich eine fremde Stelle als Adressbucheintrag führt,
 prüft die Anwendung **nicht**. Eine Stelle einer Partnerorganisation, mit der
@@ -495,15 +597,22 @@ Das Medium bleibt `Fu` (Beschluss B1). Ein neues Feld `funkart` mit den Werten
 Auswahlliste erscheinen **zwei Einträge** — „Funk (analog)" und „Funk
 (digital)" —, die beide `Fu` speichern. Der Vordruck merkt davon nichts.
 
-**Analogfunk** (Werte vorbehaltlich L2):
+**Analogfunk:**
 
-| Feld | Pflicht | Werte |
+| Feld | Pflicht | Form |
 | --- | --- | --- |
 | `band` | ja | `2m`, `4m` — Q6 druckt „Kanal 2 m" und „Kanal 2 / 4 m" |
-| `kanal` | ja | Kanalnummer, frei |
-| `bandlage` | ja | `O` Oberband, `U` Unterband |
-| `verkehrsform` | ja | `W` Wechselverkehr, `G` Gegenverkehr, `bG` bedingter Gegenverkehr, `R` Richtungsverkehr |
-| `relaisstelle` | nein | Bezeichnung der Relaisstelle |
+| `kanal` | ja | Freitext |
+| `bandlage` | ja | **Freitext**, Ausfüllhilfe nennt Oberband und Unterband |
+| `verkehrsform` | ja | **Freitext**, Ausfüllhilfe nennt Wechsel-, Gegen-, bedingten Gegen- und Richtungsverkehr |
+| `relaisstelle` | nein | Freitext |
+
+**Bandlage und Verkehrsform werden nicht geprüft** (Entscheidung O12). Die
+üblichen Werte stehen als Ausfüllhilfe am Feld, nicht als Auswahlliste und
+nicht als Zurückweisung. Damit braucht die Anwendung für diese beiden Angaben
+**keine Quelle** — was sie zulässt, entscheidet der S6, nicht das Programm.
+Das schließt zugleich die letzte inhaltliche Lücke der Überarbeitung: Die
+PDV 810.2 wird nicht mehr gebraucht (L2).
 
 **Digitalfunk** (Q8):
 
@@ -589,7 +698,351 @@ dort bisher als „besondere Behandlung" landete, gehört nach Beschluss B3 in
 
 ---
 
-## 9. Kopfleiste nach Q6
+## 9. Beschluss B6 — Die Rückfallebene am Weg
+
+### 9.1 Anlass
+
+Q10 Anlage 20 definiert:
+
+> Rückfallebene — Ersatz für eine IuK-Verbindung, ggf. auch unter Inkaufnahme
+> einer Leistungsbeschränkung, z.B. Entfall der Verschlüsselung
+
+und Q10 Nummer 3 verlangt, Kommunikationspläne „erforderlichenfalls unter
+Berücksichtigung einer Rückfallebene" zu erstellen. Q10 Nummer 2.7 sagt, was
+sie im Ernstfall leistet: Bei fehlender Verbindung ist die Information dennoch
+zu übermitteln — durch Standortwechsel, **Nutzung anderer Dienste** oder
+persönliche Weiterleitung.
+
+### 9.2 Entscheidung
+
+Ein Weg kann als Rückfallebene **für einen bestimmten anderen Weg desselben
+Plans** gekennzeichnet werden. Im Formular ein Schalter, danach eine Auswahl:
+*„Rückfallebene für …"*.
+
+Damit beantwortet der Plan die Frage, die im Ausfall gestellt wird — nicht
+„gibt es hier irgendwo einen Ersatz", sondern „was tritt **an die Stelle
+dieses** Wegs".
+
+### 9.3 Der Weg bekommt eine eigene, dauerhafte Kennung
+
+Damit ein Weg auf einen anderen zeigen kann, muss der andere **eine Identität
+haben, die den Versionswechsel überlebt**. Die hat er bisher nicht.
+
+Heute ist ein Weg nur eine Zeile in einer Planversion. Die Versionskopie legt
+alle Wege mit `INSERT … SELECT` neu an
+([dv_operations.php:4829](app/dv_operations.php:4829)); sie erhalten dabei neue
+`fernmeldeplan_eintrag_id`. Ein Verweis auf diese Kennung zeigte nach dem
+Versionswechsel auf die Wege der **alten** Version. „Derselbe Funkweg wie in
+Version 3" ist im Bestand heute gar keine beantwortbare Frage — die Anwendung
+führt Zeilen, keine Wege.
+
+**Deshalb wird der Weg zu einem eigenen Gegenstand.** Eine schmale Tabelle
+vergibt die Identität, die Planversion trägt nur noch seinen jeweiligen
+Zustand:
+
+```
+nv_fernmeldewege
+  weg_id       BIGINT UNSIGNED  Schlüssel, dauerhaft, nie wiederverwendet
+  einsatz_id   BIGINT UNSIGNED  Bindung an den Einsatz
+  weg_nummer   INT UNSIGNED     laufende Nummer je Einsatz, für Menschen
+  angelegt_am / angelegt_von    Nachweis
+```
+
+`weg_id` ist die Kennung für die Maschine, `weg_nummer` die für den Bediener:
+Im Plan, im Ausdruck und in der Auswahlliste steht „Weg 3", nicht eine
+fünfstellige Zahl. Beide werden **einmal** vergeben und nie wieder geändert
+oder neu vergeben.
+
+Der Eintrag der Planversion bekommt dafür eine Spalte `weg_id`
+(Fremdschlüssel, Pflicht) und einen eindeutigen Schlüssel
+`(fernmeldeplan_id, weg_id)` — ein Weg steht in einer Version höchstens
+einmal.
+
+### 9.4 Was das nebenbei löst
+
+Die Trennung von Identität und Reihenfolge ist nicht nur die Voraussetzung für
+die Rückfallebene, sie räumt drei Dinge mit auf:
+
+| Bisher | Danach |
+| --- | --- |
+| `sortierung` trug zwei Aufgaben: Reihenfolge **und** faktische Wiedererkennung über Versionen hinweg | `sortierung` ist nur noch Anzeigereihenfolge — und darf damit endlich geändert werden. Wege umsortieren ist heute nicht möglich, ohne die Wiedererkennung zu zerstören |
+| „Seit wann besteht dieser Weg, was hat sich an ihm geändert?" ist nicht beantwortbar | Die Versionen eines Wegs sind über `weg_id` verkettet — ein echter Versionsvergleich, statt Zeilen nach Text zu paaren |
+| Ein einmal gestrichener Weg ist weg | Die Identität bleibt. Der Entwurf kann anbieten, einen früher geführten Weg **wieder aufzunehmen** — mit seiner Geschichte |
+
+**Der Nachweis bleibt unberührt.** Die Beweiskette der Nachricht zeigt weiter
+auf die **Zeile**, nicht auf die Identität:
+`estab_fernmeldeplan_eintrag_id`
+([message_repository.php:1849](app/message_repository.php:1849)) hält fest, über
+welchen Weg **in welchem Wortlaut** die Nachricht lief. Das ist richtig so und
+wird nicht angefasst. Die Identität kommt hinzu, sie ersetzt nichts.
+
+### 9.5 Der Verweis und seine Absicherung
+
+Gespeichert wird **eine** Spalte am Eintrag:
+
+```
+rueckfallebene_fuer_weg   BIGINT UNSIGNED NULL
+```
+
+`NULL` heißt „keine Rückfallebene", ein Wert heißt „Rückfallebene für den Weg
+mit dieser Kennung". Ein zusätzliches Wahrheitsfeld für den Schalter gäbe es
+nur, damit es dem Verweis widersprechen kann — angehakt ohne Ziel, Ziel ohne
+Haken. Diesen Zustand kann es so nicht geben; der Schalter ist Darstellung.
+
+| Absicherung | Wie |
+| --- | --- |
+| Ziel liegt im selben Plan **und** in derselben Version | zusammengesetzter Fremdschlüssel `(fernmeldeplan_id, rueckfallebene_fuer_weg)` → `(fernmeldeplan_id, weg_id)` |
+| Kein Weg ist seine eigene Rückfallebene | Prüfbedingung `rueckfallebene_fuer_weg <> weg_id` |
+| Keine Ringe | Die Anwendung geht die Kette beim Speichern ab und weist einen Ring zurück. **Ketten sind erlaubt**: Ein Ersatz darf selbst einen Ersatz haben |
+| Ein Weg, auf den zurückgefallen wird, verschwindet nicht unbemerkt | Fremdschlüssel mit `RESTRICT`. Das Löschen nennt die Wege, die auf ihn zurückfallen, statt sie stillschweigend zu lösen |
+
+Zu `RESTRICT`: Die bequeme Alternative wäre `SET NULL` — der Ersatz verliert
+seinen Bezug und niemand merkt es. Genau das darf in einer Betriebsunterlage
+nicht passieren. Wer den Hauptweg streicht, entscheidet auch über seinen
+Ersatz.
+
+Die Versionskopie nimmt beide Spalten unverändert mit — `SELECT ?, weg_id,
+sortierung, rueckfallebene_fuer_weg, …`. Weil die Identitäten dieselben
+bleiben, zeigt der Verweis in der neuen Version auf denselben Weg, **ohne eine
+Zeile Umrechnungscode**.
+
+### 9.6 Warum nicht die `sortierung`
+
+Ein früherer Entwurf dieses Abschnitts ließ den Verweis auf die `sortierung`
+zeigen. Sie ist im Bestand stabil — einmal als `MAX(sortierung) + 1` vergeben
+([dv_operations.php:5036](app/dv_operations.php:5036)), von der Änderung nicht
+angefasst ([dv_operations.php:5173](app/dv_operations.php:5173)), beim Löschen
+nicht neu vergeben ([dv_operations.php:5298](app/dv_operations.php:5298)) und
+von der Kopie wörtlich übernommen. Der Verweis hätte funktioniert.
+
+Er wird trotzdem verworfen, aus drei Gründen:
+
+1. **Sie ist keine Identität, sie sieht nur so aus.** Ihre Stabilität ist ein
+   Nebeneffekt davon, dass heute niemand umsortieren kann. Wer morgen
+   „Wege umsortieren" baut — eine naheliegende Bitte —, zerstört damit
+   stillschweigend alle Rückfallverweise. Ein Merkmal, dessen Richtigkeit
+   davon abhängt, dass eine andere Funktion nie gebaut wird, ist eine Falle.
+2. **Die Nummer wird wiederverwendet.** `MAX + 1` wird **je Planversion**
+   berechnet. Wer im Entwurf den letzten Weg löscht und einen neuen anlegt,
+   bekommt dieselbe Nummer für einen anderen Weg. Über Versionen hinweg wäre
+   das ein Identitätswechsel ohne Spur.
+3. **Sie beantwortet die interessantere Frage nicht.** Eine echte Kennung
+   liefert den Versionsvergleich aus Abschnitt 9.4 gratis mit; die
+   `sortierung` liefert ihn nie.
+
+Der Umweg ist hier festgehalten, weil er beim nächsten Lesen wieder verlockend
+aussieht.
+
+### 9.7 Bedienung
+
+| Fall | Verhalten |
+| --- | --- |
+| Erster Weg eines Plans | Der Schalter ist abgeschaltet, mit Begründung: Es gibt noch keinen Weg, für den er einspringen könnte |
+| Auswahlliste | Die übrigen Wege desselben Entwurfs, beschriftet wie der Bediener sie kennt: *Weg 3 · Stelle · Mittel · Erreichbar unter*. Ohne den Weg selbst und ohne die, die einen Ring schlössen |
+| Taktische Ansicht | Der Ersatz steht **eingerückt unter** dem Weg, den er ersetzt — die Leserichtung des Ausfalls |
+| Betriebliche Ansicht | Eigene Spalte „Rückfallebene für" |
+| Wegewahl des LdF | Ein Ersatzweg bleibt wählbar — er ist ein richtiger Weg. Die Auswahl kennzeichnet ihn, damit der LdF weiß, dass er auf den Ersatz greift |
+| Skizze | Dünnere, hellere Linie. Q10 sagt „ggf. unter Inkaufnahme einer Leistungsbeschränkung"; das Bild soll das nicht verschweigen |
+
+---
+
+## 10. Beschluss B7 — Der Eingangsweg
+
+### 10.1 Befund: Das Muster gibt es, aber nur für das Mittel
+
+Der Zweischritt „Fernmelder erfasst, LdF prüft" ist **bereits gebaut** — nur
+nicht für den Weg:
+
+| Schritt | Was heute geschieht | Fundstelle |
+| --- | --- | --- |
+| `FM-Eingang` | A/W erfasst Feld 1, das tatsächlich benutzte Übermittlungsmittel | [workflow.php:1972](app/workflow.php:1972) |
+| `LdF-Eingang` | LdF **muss bestätigen**: ohne `incoming_transport_confirmed` wird zurückgewiesen mit „Bestätigen Sie den vom Fernmelder erfassten Eingangsweg." und „LdF muss den Eingangsweg bestätigen." | [message_repository.php:1588](app/message_repository.php:1588) |
+
+Die Rollenteilung, die Sperre, die Beweiszeile — alles vorhanden. Was fehlt,
+ist der **Gegenstand**: Bestätigt wird eines von sechs Ankreuzfeldern, kein Weg
+des Fernmeldeplans. Die Spalte `estab_fernmeldeplan_eintrag_id` wird
+ausschließlich im Ausgang geschrieben, und ihre Leseabfrage ist mit
+`04_richtung = 'A'` verriegelt
+([message_repository.php:1770](app/message_repository.php:1770)).
+
+Der Eingang sagt heute „kam über Funk". Er sagt nicht „kam über Weg 3 — Funk
+digital, Rufgruppe …, unser Rufname …". Das ist **F12**.
+
+### 10.2 Warum das keine Kosmetik ist
+
+**Der Plan bekommt keine Rückmeldung.** Beschluss B2 hat den Plan auf die
+eigene Erreichbarkeit gestellt. Ohne Eingangsweg ist die Frage „welche unserer
+Erreichbarkeiten wird tatsächlich benutzt" nicht beantwortbar — und genau das
+ist die Auskunft, aus der der S6 die nächste Version baut. Der Plan bliebe eine
+Behauptung, die nie zurückhört.
+
+**Die Dokumentationspflicht gilt in beide Richtungen.** Q10 Nummer 2.8: „Der
+IuK-Einsatz ist zu dokumentieren." Der Eingang ist die Hälfte davon.
+
+**Ohne Eingangsweg lässt sich nicht steuern.** Q10 Nummer 2.5 verlangt, die
+Kommunikation auf das notwendige Maß zu beschränken; Q12 warnt vor der
+Auslastung des Zeitschlitzkontingents einer Basisstation. Wer nicht weiß, über
+welchen Weg wie viel hereinkommt, kann weder das eine noch das andere.
+
+### 10.3 Entscheidung
+
+Der Eingang erfasst den Weg wie der Ausgang — mit der Rollenteilung, die dort
+schon gilt, nur in der anderen Reihenfolge:
+
+| | Ausgang | Eingang |
+| --- | --- | --- |
+| Wählt den Weg | LdF disponiert | **A/W** — er hat die Nachricht angenommen und weiß, worüber sie kam |
+| Prüft | A/W führt aus | **LdF** bestätigt |
+
+Das ist keine neue Mechanik. Es ist die vorhandene Bestätigung, vom Mittel auf
+den Weg gehoben.
+
+**Der Weg ist freiwillig.** Feld 1 bleibt Pflicht — das Mittel weiß der
+Fernmelder immer. Den Weg weiß er meistens, aber nicht zwingend: Ein Anruf
+über eine Nummer, die der Plan nicht führt, oder ein Funkspruch mitten in der
+Annahme lässt sich nicht immer sofort zuordnen. Ein Pflichtfeld erzwänge dort
+eine Angabe, und eine erzwungene Angabe ist eine erfundene.
+
+Die Bestätigung des LdF richtet sich danach: Er bestätigt das Mittel immer und
+den Weg, wenn einer da ist. **Trägt er selbst einen nach**, wo A/W keinen
+angegeben hat, ist auch das eine Änderung und wird begründet.
+
+### 10.4 Das Mittel steht im Vordruck, der Weg daneben
+
+**Der Vordruck kennt keinen Fernmeldeweg.** Er hat Feld 1 für das benutzte
+Übermittlungsmittel — sechs Kästchen — und sonst nichts dergleichen. Ein
+Eingabefeld „Weg" zwischen die Vordruckfelder zu setzen, verstieße gegen
+`UX-PAPIERBILD` und gegen die Regel aus `SPEC.md` W3: Der Ausdruck darf kein
+Feld vortäuschen, das der Vordruck nicht hat.
+
+Deshalb die Trennung:
+
+| Angabe | Wo erfasst | Wo gespeichert |
+| --- | --- | --- |
+| **Mittel** (Feld 1) | **im Vordruck**, an seinem gedruckten Platz | `01_medium` |
+| **Weg** | **außerhalb des Vordrucks**, in der Betriebsleiste der Station | `estab_fernmeldeplan_eintrag_id` |
+
+Der Bestand kennt diese Trennung bereits und macht sie am Spaltennamen
+sichtbar: Vordruckfelder tragen ihre Feldnummer (`01_medium`, `06_befweg`),
+Angaben der Anwendung tragen das Präfix `estab_`
+([Migration 94, Zeile 687](docker/db/migrations/94-dv-organisational-controls.sql:687)).
+Der Weg ist eine Angabe der Anwendung und bleibt es.
+
+**Die Anwendung leitet Feld 1 nicht ab, sie prüft es.** Der naheliegende Weg
+wäre, das Mittel aus dem gewählten Weg zu setzen. Das wäre bequem und falsch:
+Es verlegte die Eingabe eines **Vordruckfeldes** nach außerhalb des Vordrucks,
+also genau in die Richtung, die diese Trennung vermeiden soll.
+
+Stattdessen: A/W trägt Feld 1 im Vordruck ein und wählt den Weg daneben.
+Stimmen Medium des Wegs und Feld 1 nicht überein, wird zurückgewiesen — die
+Doppelangabe wird damit zur **Probe**, nicht zum Widerspruch. Der Ausdruck
+zeigt weiterhin nur, was auf dem Papier steht.
+
+**Warum der Ausgang es anders macht, und warum das richtig bleibt.** Dort
+schreibt die Disposition Feld 1
+([message_repository.php:1853](app/message_repository.php:1853)), statt es
+abzufragen. Der Unterschied ist nicht technisch, sondern fachlich:
+
+| | Ausgang | Eingang |
+| --- | --- | --- |
+| Der LdF bzw. A/W … | **entscheidet** das Mittel, indem er den Weg disponiert | **beobachtet** das Mittel, über das die Nachricht kam |
+| Feld 1 ist damit … | die Aufzeichnung dieser Entscheidung — sie folgt aus dem Weg | eine eigene Feststellung — der Weg ist die Probe darauf |
+
+Wo entschieden wird, schreibt die Entscheidung das Feld. Wo festgestellt wird,
+steht die Feststellung im Vordruck und der Weg prüft sie. In beiden Fällen
+bleibt der **Weg** außerhalb des Vordrucks.
+
+### 10.5 Was am Bestand zu ändern ist
+
+**Keine neue Spalte.** `estab_fernmeldeplan_eintrag_id` trägt den Weg in beiden
+Richtungen; sie pinnt weiterhin die **Zeile**, also den Weg in dem Wortlaut, in
+dem die Nachricht lief (Abschnitt 9.4).
+
+| Ort | Änderung |
+| --- | --- |
+| [message_repository.php:1770](app/message_repository.php:1770) | Die Verriegelung `04_richtung = 'A'` fällt für den Wegbezug |
+| [message_repository.php:1588](app/message_repository.php:1588) | Die Bestätigung des LdF erstreckt sich auf den Weg, nicht nur auf das Mittel |
+| [workflow.php:1972](app/workflow.php:1972) | `FM-Eingang` gibt die Wegwahl frei |
+| [read_authorization.php:270](app/read_authorization.php:270) | A/W bekommt die Wegauswahl mit denselben Vorschlägen wie der LdF (V5) |
+
+### 10.6 Der Weg, den der Plan nicht führt
+
+Eine Gegenstelle ruft auf einem Weg an, den niemand geplant hat. Das kommt vor,
+und die Nachricht hört deswegen nicht auf zu existieren.
+
+**A/W darf ihn erfassen**, in derselben freien Form, die eine Führungsstelle
+ohne Stab schon heute benutzt (`FUEST-KLEIN-BEFOERDERUNG`, `SPEC.md`
+Abschnitt 5.3). Der LdF bestätigt ihn als das, was er ist.
+
+Und dann wird er **sichtbar gemacht**: Die Plantafel führt eine kurze Liste
+„Wege, über die Verkehr lief und die der Plan nicht führt". Das ist der
+Rückkanal aus Abschnitt 10.2 in seiner nützlichsten Form — Q10 Nummer 2.6
+verlangt, Abweichungen vom Kommunikationsplan zu vermeiden, und der erste
+Schritt dazu ist, sie zu sehen. Der S6 entscheidet dann, ob der Weg in die
+nächste Version gehört oder ob die Gegenstelle umzugewöhnen ist.
+
+### 10.7 Bedienung
+
+Die Wegauswahl bekommt ihren Platz dort, wo der LdF sie schon hat: in einer
+**Leiste über dem Vordruck**, nicht zwischen seinen Feldern. Der Bestand führt
+dort bereits einen Auswahlkasten mit den Wegen des aktiven Plans, beschriftet
+„Plan v3 · Funk · Betriebsstelle · Rufname · Kanal …"
+([official_message_form.php:2545](4fach/official_message_form.php:2545)). Der
+Eingang bekommt denselben Kasten — dieselbe Beschriftung, dieselbe Stelle,
+andere Station.
+
+**Beim Fernmelder (`FM-Eingang`), Leiste „Eingangsweg":**
+
+| Bedienelement | Verhalten |
+| --- | --- |
+| Auswahl „Eingangsweg" | Die Wege des aktiven Plans, Beschriftung wie bei der Disposition. **Freiwillig** — die erste Wahl lautet „kein Weg angegeben" |
+| Textfeld „Bemerkung zum Eingangsweg" | Freiwillig. Was der Fernmelder zum Weg zu sagen hat: schlechte Verständigung, Relaisbetrieb, Rückfrage nicht möglich |
+
+**Beim LdF (`LdF-Eingang`), in der vorhandenen Leiste „Eingangsweg durch LdF
+bestätigen"** ([official_message_form.php:2500](4fach/official_message_form.php:2500)):
+
+| Bedienelement | Verhalten |
+| --- | --- |
+| „Vom Fernmelder erfasst: …" | zeigt jetzt **Mittel und Weg**, wie heute schon das Mittel |
+| Bemerkung des Fernmelders | wird **angezeigt, nicht bearbeitbar** |
+| Auswahl „Eingangsweg" | derselbe Kasten; der LdF kann den Weg ändern oder einen nachtragen |
+| Häkchen „Eingangsweg geprüft und bestätigt" | unverändert Pflicht |
+| „Begründung nur bei Änderung" | unverändert das **eigene** Feld des LdF |
+
+### 10.8 Zwei Bemerkungen, zwei Urheber
+
+Die Bemerkung des Fernmelders ist für den LdF **unveränderlich**. Das ist
+keine Förmlichkeit, sondern die Trennlinie, auf der die ganze Station beruht:
+Der eine stellt fest, der andere prüft. Könnte der Prüfende die Feststellung
+umschreiben, wäre die Prüfung wertlos — und der Nachweis nicht mehr in der
+Lage zu sagen, wer was behauptet hat.
+
+| Feld | Urheber | Für den anderen |
+| --- | --- | --- |
+| Bemerkung zum Eingangsweg | A/W | nur lesbar |
+| Begründung bei Änderung | LdF | vom A/W gar nicht erreichbar — er ist zu diesem Zeitpunkt fertig |
+
+Technisch ist das kein neues Verfahren: Der Bestand weist bereits Werte
+zurück, die eine Station nicht schreiben darf, indem er sie aus ihrer
+Feldliste heraushält und einen abweichend gelieferten Wert verwirft
+([workflow.php:1965](app/workflow.php:1965)). Die Bemerkung des Fernmelders
+reiht sich dort ein: `LdF-Eingang` führt sie nicht in seinen schreibbaren
+Feldern.
+
+**Sie ersetzt die Bemerkung des Wegs im Plan nicht.** Der Plan sagt, was für
+diesen Weg allgemein gilt; die Bemerkung des Fernmelders sagt, was bei **dieser
+einen** Nachricht war. Das erste gehört dem S6, das zweite der Nachricht.
+
+### 10.9 Was daraus folgt
+
+Mit der dauerhaften Wegkennung aus Beschluss B6 wird die Auskunft erst
+vollständig: **„Über diesen Weg liefen im Einsatz 14 Nachrichten — 9 herein,
+5 hinaus"**, über alle Planversionen hinweg. Das ist die Zahl, aus der eine
+Fernmeldeplanung besser wird.
+
+---
+
+## 11. Kopfleiste nach Q6
 
 Q6, Allgemeines, verlangt eine dreigeteilte Kopfleiste:
 
@@ -624,7 +1077,7 @@ damit die Auslassung als Entscheidung erkennbar bleibt und nicht als Übersehen.
 
 ---
 
-## 10. Zwei Ansichten auf denselben Bestand
+## 12. Zwei Ansichten auf denselben Bestand
 
 Q6, Allgemeines, beschreibt zwei Leserkreise mit zwei Tiefen:
 
@@ -656,13 +1109,13 @@ Benennung — `SPEC.md` `UX-KEIN-BRUCH-IM-LAUFWEG` sinngemäß auch hier.
 
 ---
 
-## 11. Anforderungskatalog
+## 13. Anforderungskatalog
 
 Neue Regeln des Moduls **M7 `fuehrungsmittel`**. Vorschriftenregeln gehören
 nach `app/dv_rules.php`, Bedienregeln nach `app/ux_rules.php`; beide Register
 erzwingen einen Test je Regel.
 
-### 11.1 Vorschriftenregeln (Q4, Q6, Q7, Q8)
+### 13.1 Vorschriftenregeln (Q4, Q6, Q7, Q8)
 
 | ID | Quelle | Soll | Abnahme |
 | --- | --- | --- | --- |
@@ -670,7 +1123,7 @@ erzwingen einen Test je Regel.
 | `FMP-EIGENE-ERREICHBARKEIT` | Q4 Kap. 6.1.1, Q6, Q10 Anlage 20 | Eine Betriebsstelle ist eine Stelle im eigenen IuK-Netz, bei der Nachrichten aufgenommen, befördert oder übermittelt werden. Der Plan führt deren Erreichbarkeit, nicht die Gegenstellen einzelner Nachrichten. | Die Plantafel benennt das; die Gegenstelle ist ausschließlich Feld 6 der Nachricht |
 | `FMP-STELLENART` | Q4 Kap. 6.1.2, Q6 | Zu jeder Stelle ist erkennbar, ob die Verbindung vertikal nach oben, vertikal nach unten oder horizontal führt. | Jeder Eintrag trägt eine Stellenart; die taktische Ansicht zeigt sie |
 | `FMP-STELLENBILD` | Q6 Aufbau des Vordrucks, Q10 Anlage 1 | Die taktische Darstellung gruppiert die Wege je Stelle, wie beide Muster-Kommunikationspläne sie in Kästen setzen. | Die taktische Ansicht zeigt je Stelle einen Block mit allen ihren Wegen |
-| `FMP-FUNKART` | Q8 Rufgruppenbildung Folie 3 | Analogfunk wird über Kanäle geführt, Digitalfunk über Rufgruppen. Ein Weg trägt nur die Felder seiner Technik. | Für `ANALOG` sind Band, Kanal, Bandlage, Verkehrsform Pflicht und Rufgruppe unmöglich; für `DIGITAL` umgekehrt |
+| `FMP-FUNKART` | Q8 Rufgruppenbildung Folie 3 | Analogfunk wird über Kanäle geführt, Digitalfunk über Rufgruppen. Ein Weg trägt nur die Felder seiner Technik. | Für `ANALOG` sind Band, Kanal, Bandlage und Verkehrsform anzugeben und eine Rufgruppe unmöglich; für `DIGITAL` umgekehrt. Geprüft wird die **Anwesenheit** der Angabe, nicht ihr Wert (O12) |
 | `FMP-DIGITAL-BETRIEBSART` | Q8 Grundlagen Folie 3 | Ein Digitalfunkweg nennt TMO (Netzbetrieb) oder DMO (Direktbetrieb). | Betriebsart ist Pflicht, sobald `funkart = DIGITAL` |
 | `FMP-DIGITAL-KEINE-GERAETEKENNUNG` | Q12 Kap. 2.4, Q11 Kap. 2.2.1.3 | Verbindlich ist ausschließlich das gesprochene Wort; die OPTA erlaubt keine sichere Verifizierung der Identität. Die Teilnehmerverwaltung liegt bei der TTB-THW. | Es gibt kein Feld für OPTA oder ISSI; die Ausfüllhilfe der Bemerkung sagt, dass Gerätekennungen auch dort nicht hineingehören |
 | `FMP-DIGITAL-KEINE-TELEFONIE` | Q12 Kap. 2.4.3 | Die Überleitung des Digitalfunks in das öffentliche Telefonnetz ist gesperrt. | Die Ausfüllhilfe des Digitalfunkwegs sagt, dass er keine Telefonverbindung trägt |
@@ -679,14 +1132,22 @@ erzwingen einen Test je Regel.
 | `FMP-DIGITAL-GRUPPENRUF` | Q12 Kap. 2.4.1, 2.4.2 | Der Gruppenruf ist das Standardverfahren; der Einzelruf ist nur im Wechselverkehr freigeschaltet und auf das taktisch Notwendige zu beschränken. | Der Digitalfunkweg fragt keine Verkehrsform ab; die Ausfüllhilfe nennt die drei zulässigen Fälle des Einzelrufs |
 | `FMP-KOPFLEISTE` | Q6 Allgemeines | Der Kopf trägt herausgebende Dienststelle mit Funktion des Verfassers, Art und Verwendungsbereich, Gültigkeits- und Verschlusssachenvermerk sowie F.d.R. mit Dienststellung. | Alle sieben Angaben sind erfasst und werden im Kopf angezeigt und gedruckt |
 | `FMP-BETRIEBSLEITUNG` | Q4 Kap. 6.1.1 | In den Einsatzunterlagen sind Betriebsleitungen/-aufsicht anzugeben. | Betriebsleitung ist Pflichtangabe des Kopfes — bereits erfüllt |
+| `FMP-EINGANGSWEG` | Q10 Nr. 2.8, Q4 Kap. 6.6 | Der IuK-Einsatz ist zu dokumentieren — in beide Richtungen. Auch die eingehende Nachricht kann den Weg nennen, über den sie kam. | Eine eingehende Nachricht trägt den Wegbezug wie eine ausgehende; der Wegbezug ist nicht mehr auf `04_richtung = 'A'` verriegelt. Der Weg ist **freiwillig**, das Mittel bleibt Pflicht |
+| `FMP-EINGANGSWEG-BEMERKUNG` | `SPEC.md` `LW-EINGANG-STATIONEN` | Der Fernmelder stellt fest, der LdF prüft. Was der Fernmelder festgestellt hat, kann der Prüfende nicht umschreiben. | Die Bemerkung des Fernmelders zum Eingangsweg steht nicht in den schreibbaren Feldern von `LdF-Eingang`; ein abweichend geliefertes Wert wird verworfen. Der LdF behält sein eigenes Begründungsfeld |
+| `FMP-GEGENSTELLE-AUSWAHL` | Q10 Nr. 2.6 | Wählt der Fernmelder in Feld 6 eine Gegenstelle des Plans, folgt der Absender in Feld 15 daraus. | Die Auswahl wird als Verweis festgehalten, nicht als Text; Feld 15 ist beim LdF mit dem Namen genau dieser Gegenstelle vorbelegt und als aus dem Plan stammend gekennzeichnet. Ohne Auswahl bleibt Feld 15 leer |
+| `FMP-WEG-AUSSERHALB-VORDRUCK` | Q1 Feld 1, `SPEC.md` W3 und `UX-PAPIERBILD` | Der Vordruck kennt kein Feld für den Fernmeldeweg. Das Mittel wird im Vordruck erfasst, der Weg daneben. | Die Wegwahl steht außerhalb der Vordruckfelder und wird in einer `estab_`-Spalte geführt; der Ausdruck zeigt kein Wegfeld. Widerspricht das Medium des Wegs dem Feld 1, wird zurückgewiesen |
+| `FMP-EINGANGSWEG-ROLLEN` | Q4 Kap. 4.3.1.12, `SPEC.md` `LW-EINGANG-STATIONEN` | Der Fernmelder nimmt auf und wählt den Weg; der Leiter des Fernmeldebetriebs prüft ihn. | `FM-Eingang` gibt die Wegwahl frei, `LdF-Eingang` weist ohne Bestätigung des Wegs zurück; die Berichtigung durch den LdF hält beide Werte fest |
+| `FMP-EINGANGSWEG-AUSSERPLAN` | Q10 Nr. 2.6 | Abweichungen vom Kommunikationsplan sind zu vermeiden — und dafür zuerst zu erkennen. | Ein Eingang über einen Weg außerhalb des Plans ist erfassbar und erscheint in der Plantafel als Abweichung, statt zurückgewiesen zu werden |
+| `FMP-WEG-IDENTITAET` | Q10 Nr. 2.6, Q4 Kap. 6.6 | Eine Betriebsunterlage wird fortgeschrieben, nicht ersetzt. Ein Weg behält über alle Versionen eines Einsatzes dieselbe Kennung. | Jeder Weg trägt eine `weg_id`, die bei der Versionskopie unverändert bleibt; die Anwendung kann die Fassungen eines Wegs über die Versionen benennen |
+| `FMP-RUECKFALLEBENE` | Q10 Nr. 3, Nr. 2.7, Anlage 20 | Ein Kommunikationsplan ist erforderlichenfalls unter Berücksichtigung einer Rückfallebene zu erstellen. Der Ersatz ist einem bestimmten Weg zugeordnet. | Ein Weg kann genau einen anderen Weg desselben Plans als seinen Hauptweg benennen; Selbstbezug und Ringe werden zurückgewiesen, und der Verweis überlebt den Versionswechsel unverändert |
 | `FMP-VERMERK-EINFACH` | keine Quelle für zwei Felder | Ein Weg trägt **ein** Bemerkungsfeld. | Neue und geänderte Einträge schreiben nur `bemerkungen`; die Versionskopie führt Altbestand zusammen |
 | `FMP-GEGENSTELLE-AM-WEG` | Q4 Kap. 6.1.2, Q6 | Eine Gegenstelle steht immer an einem Weg und erbt dessen Medium. Es gibt keine Gegenstelle ohne Weg. | Die Gegenstelle hängt am Eintrag, nicht am Plan; sie trägt kein eigenes Medium |
-| `FMP-GEGENSTELLE-KEIN-ERSATZ` | Q1 Felder 6, 11 und Q2 Feld 13 | Der Plan liefert Vorschläge für die Gegenstellenfelder des Vordrucks, ersetzt sie aber nicht und schreibt sie nicht fest. | Freie Eingabe bleibt in Feld 6, 11 und 13 möglich; eine im Plan fehlende Gegenstelle führt zu keiner Zurückweisung |
+| `FMP-GEGENSTELLE-KEIN-ERSATZ` | Q1 Felder 6, 11, 15 | Der Plan liefert Vorschläge für die Gegenstellenfelder des Vordrucks, ersetzt sie aber nicht und schreibt sie nicht fest. | Freie Eingabe bleibt in Feld 6, 11 und 15 möglich; eine im Plan fehlende Gegenstelle führt zu keiner Zurückweisung |
 | `FMP-GEGENSTELLE-FELDBEZUG` | Q1 Felder 6 und 11 | Welches Vordruckfeld eine Erreichbarkeit füllt, entscheidet das Medium des Wegs. | Über einen Funkweg füllt die Erreichbarkeit Feld 6, über einen Fernsprech- oder Faxweg Feld 11 und der Name Feld 6 |
 | `FMP-BETRIEBSUNTERLAGE-AKTUELL` | Q10 Nr. 2.6, Q4 Kap. 6.6 | „Abweichungen von den im Kommunikationsplan festgelegten IuK-Verbindungen sind während des Einsatzes zu vermeiden." Die Betriebsunterlage geht der Erinnerung vor. | Ein Vorschlag aus dem Plan stammt ausschließlich aus der aktiven, zeitlich gültigen Version und steht über jedem Vorschlag aus der Historie |
 | `FMP-VORSCHLAG-QUELLENSCHRANKE` | `SPEC.md` Leserechte, `TKM-FERNMELDEPLAN` | Der Plan ist für die gesamte Besetzung einsehbar; die Nachrichtenhistorie ist es nicht. Wer keine Historie lesen darf, bekommt daraus auch keinen Vorschlag. | Die Vorschlagspolitik nennt je Rolle und Feld die zulässigen Quellen; für den Stab an Feld 10 ist das ausschließlich der Plan |
 
-### 11.2 Bedienregeln (P1)
+### 13.2 Bedienregeln (P1)
 
 | ID | Soll | Abnahme |
 | --- | --- | --- |
@@ -700,9 +1161,9 @@ erzwingen einen Test je Regel.
 
 ---
 
-## 12. Datenmodell (Soll)
+## 14. Datenmodell (Soll)
 
-### 12.1 `nv_fernmeldeplaene` — Ergänzungen
+### 14.1 `nv_fernmeldeplaene` — Ergänzungen
 
 | Spalte | Typ | Pflicht | Herkunft |
 | --- | --- | --- | --- |
@@ -710,7 +1171,7 @@ erzwingen einen Test je Regel.
 | `vs_vermerk` | `ENUM('OFFEN','NfD')` | ja, Vorbelegung `NfD` | Q6/Q7 Kopfleiste rechts |
 | `freigabe_dienststellung` | `VARCHAR(128)` | ja bei Freigabe | Q6 F.d.R. |
 
-### 12.2 `nv_fernmeldeplan_eintraege` — Soll
+### 14.2 `nv_fernmeldeplan_eintraege` — Soll
 
 | Spalte | Typ | Gilt für | Änderung |
 | --- | --- | --- | --- |
@@ -721,17 +1182,60 @@ erzwingen einen Test je Regel.
 | `funkart` | `ENUM('ANALOG','DIGITAL')` | `Fu` | **neu** |
 | `band` | `ENUM('2m','4m')` | `Fu`/analog | **neu** |
 | `kanal` | `VARCHAR(64)` | `Fu`/analog | Bedeutung verengt |
-| `bandlage` | `ENUM('O','U')` | `Fu`/analog | Typ verengt |
-| `verkehrsform` | `ENUM('W','G','bG','R')` | `Fu`/analog | Typ verengt, **nicht mehr für alle Medien** |
+| `bandlage` | `VARCHAR(64)` | `Fu`/analog | unverändert, **Freitext** — Geltung auf Analogfunk verengt |
+| `verkehrsform` | `VARCHAR(128)` | `Fu`/analog | unverändert, **Freitext** — **nicht mehr für alle Medien** |
 | `relaisstelle` | `VARCHAR(64)` | `Fu`/analog | **neu**, freiwillig |
 | `betriebsart` | `ENUM('TMO','DMO')` | `Fu`/digital | **neu** |
 | `rufgruppe` | `VARCHAR(64)` | `Fu`/digital | **neu** |
 | `anschlussart` | `ENUM('AMT','NST','MOBIL','SONDER')` | `Fe`, `FAX` | **neu**, freiwillig |
 | `datenart` | `ENUM('MAIL','MESSENGER','FACHANW','INTERNET')` | `@` | **neu** |
+| `weg_id` | `BIGINT UNSIGNED` | alle, Pflicht | **neu** — dauerhafte Kennung des Wegs, Fremdschlüssel auf `nv_fernmeldewege`; eindeutig je Plan |
+| `rueckfallebene_fuer_weg` | `BIGINT UNSIGNED NULL` | alle | **neu** — `weg_id` des Wegs, den dieser ersetzt |
+| `sortierung` | `INT UNSIGNED` | alle | Bedeutung verengt: **nur noch Anzeigereihenfolge**, keine Identität mehr |
 | `bemerkungen` | `TEXT` | alle | bleibt, einziges Vermerkfeld |
 | `besondere_vermerke` | `TEXT NULL` | alle | **nur noch lesend** |
 
-### 12.3 `nv_fernmeldeplan_gegenstellen` — neu
+### 14.3 `nv_nachrichten` — Ergänzungen außerhalb des Vordrucks
+
+Drei Spalten, alle mit `estab_`-Präfix, weil sie keine Vordruckfelder sind
+(Abschnitt 10.4). `estab_fernmeldeplan_eintrag_id` besteht bereits und wird
+nur entriegelt.
+
+| Spalte | Typ | Pflicht | Zweck |
+| --- | --- | --- | --- |
+| `estab_fernmeldeplan_eintrag_id` | `BIGINT UNSIGNED NULL` | freiwillig | der Weg — **bestehend**, künftig auch im Eingang |
+| `estab_eingangsweg_bemerkung` | `VARCHAR(2000) NULL` | freiwillig | **neu** — Bemerkung des Fernmelders zum Eingangsweg; für den LdF nur lesbar |
+| `estab_gegenstelle_id` | `BIGINT UNSIGNED NULL` | freiwillig | **neu** — welche Gegenstelle des Plans A/W in Feld 6 ausgewählt hat; Grundlage der Vorbelegung von Feld 15 |
+
+`estab_gegenstelle_id` verweist auf `nv_fernmeldeplan_gegenstellen` und damit
+auf die Gegenstelle **einer bestimmten Planversion** — dieselbe Lesart wie beim
+Weg (Abschnitt 9.4): Der Nachweis hält fest, was zum Zeitpunkt der Aufnahme im
+Plan stand, nicht was heute dort steht.
+
+### 14.4 `nv_fernmeldewege` — neu
+
+Die Identität des Wegs, getrennt von seinem Zustand in einer Planversion
+(Abschnitt 9.3). Zeilen dieser Tabelle werden angelegt und **nie geändert oder
+gelöscht** — eine Kennung, die verschwindet, ist keine.
+
+| Spalte | Typ | Pflicht | Zweck |
+| --- | --- | --- | --- |
+| `weg_id` | `BIGINT UNSIGNED AUTO_INCREMENT` | Schlüssel | dauerhafte Kennung für die Maschine |
+| `einsatz_id` | `BIGINT UNSIGNED` | ja, Fremdschlüssel | Bindung an den Einsatz |
+| `weg_nummer` | `INT UNSIGNED` | ja, eindeutig je Einsatz | laufende Nummer für den Bediener: „Weg 3" |
+| `angelegt_am` | `DATETIME(6)` | ja | Nachweis |
+| `angelegt_von` | `VARCHAR(6)` | ja, Fremdschlüssel auf `nv_benutzer` | Nachweis |
+
+`weg_nummer` wird als `MAX + 1` **je Einsatz** vergeben — nicht je Planversion.
+Damit ist die Wiederverwendung ausgeschlossen, an der die `sortierung`
+scheitert (Abschnitt 9.6).
+
+**Eine Identität ohne Verwendung wird nicht aufgeräumt.** Ein Weg, der im
+Entwurf angelegt und wieder gestrichen wurde, behält seine Nummer. Das ist
+kein Müll, sondern die Auskunft, dass dieser Weg einmal erwogen wurde — und
+die Voraussetzung dafür, ihn später mit seiner Geschichte wieder aufzunehmen.
+
+### 14.5 `nv_fernmeldeplan_gegenstellen` — neu
 
 Kindtabelle des Wegs. Sie erbt Medium und Technik vom Weg und trägt nur, was
 die Gegenstelle unterscheidet.
@@ -741,7 +1245,7 @@ die Gegenstelle unterscheidet.
 | `gegenstelle_id` | `BIGINT UNSIGNED AUTO_INCREMENT` | Schlüssel | — |
 | `fernmeldeplan_eintrag_id` | `BIGINT UNSIGNED` | ja, Fremdschlüssel | — |
 | `sortierung` | `INT UNSIGNED` | ja, eindeutig je Eintrag | Reihenfolge in der Anzeige |
-| `name` | `VARCHAR(255)` | ja | Feld 13 (Eingang), Feld 10 (Ausgang) |
+| `name` | `VARCHAR(255)` | ja | Feld 15 Absender (Eingang), Feld 10 Anschrift (Ausgang) |
 | `erreichbarkeit` | `VARCHAR(255)` | ja | Feld 6 oder Feld 11, je Medium des Wegs |
 | `bemerkungen` | `TEXT` | nein | — |
 
@@ -761,7 +1265,7 @@ freigegebene Fassung Jahre später noch dasselbe sagt.
 | [readiness.php:158](app/readiness.php:158) | Tabellen- und Auslöserprüfung |
 | [read_authorization.php:270](app/read_authorization.php:270) | Plan-Zweig der Zuordnung zeigt hierher (V1) |
 
-### 12.4 Migration
+### 14.6 Migration
 
 Der Grundsatz ist **additiv**. Keine Migration schreibt eine Zeile eines
 aktiven oder ersetzten Plans um; die Unveränderlichkeitsauslöser aus
@@ -770,15 +1274,32 @@ Migration 94 und 117 bleiben unberührt.
 1. Neue Spalten anlegen, alle `NULL`-fähig.
 2. `rufname` → `erreichbarkeit` umbenennen (`ALTER TABLE … CHANGE`; kein
    Wertewechsel, damit kein Auslöser feuert).
+2a. `nv_fernmeldewege` anlegen und **jede bestehende Eintragszeile mit einer
+   eigenen, frischen Identität versehen**. Kein Versuch, gleiche Wege über
+   Versionen hinweg zusammenzuführen — siehe unten.
+2b. `rueckfallebene_fuer_weg` anlegen, dazu der zusammengesetzte Fremdschlüssel
+   auf `(fernmeldeplan_id, weg_id)` und die Prüfbedingung gegen den
+   Selbstbezug. Bestandszeilen bleiben `NULL`. Die Versionskopie in
+   [dv_operations.php:4829](app/dv_operations.php:4829) nimmt `weg_id` und
+   `rueckfallebene_fuer_weg` unverändert mit.
 3. Bestehende `Fu`-Einträge: `funkart` bleibt `NULL` = **unbestimmt**. Sie
    werden in der Oberfläche als Altbestand gekennzeichnet und beim nächsten
    Bearbeiten entschieden. Kein Raten.
-4. `bandlage` und `verkehrsform` erhalten die engen Typen erst, wenn kein
-   Altbestand mehr außerhalb der Werteliste liegt; bis dahin bleiben sie
-   `VARCHAR` mit Prüfung in der Anwendung. Die Verengung ist ein eigener,
-   späterer Schritt.
+4. `bandlage` und `verkehrsform` bleiben `VARCHAR` und ungeprüft (O12). Kein
+   Schema-Eingriff, kein Altbestand, der außerhalb einer Werteliste liegen
+   könnte — es gibt keine.
 5. `nv_komplan` (F9) wird in dieser Überarbeitung **nicht** angefasst. Ihr
-   Abbau ist entschieden, läuft aber als eigener Vorgang — Abschnitt 13.
+   Abbau ist entschieden, läuft aber als eigener Vorgang — Abschnitt 15.
+5a. **Warum Altbestand keine gemeinsamen Identitäten bekommt.** Es liegt nahe,
+   Wege gleicher `sortierung` über die Versionen eines Einsatzes zu einer
+   Identität zu verketten — die Kopie hat die Nummer ja erhalten. Das wäre
+   *fast* richtig und deshalb gefährlich: Wer in einem Entwurf den letzten Weg
+   gelöscht und einen neuen angelegt hat, bekam dieselbe Nummer für einen
+   **anderen** Weg (`MAX + 1` je Planversion). Die Verkettung verschmölze dann
+   zwei verschiedene Wege zu einem, unbemerkt und unumkehrbar. Eine Identität
+   zu erfinden, die nie erfasst wurde, ist schlimmer als keine zu haben. Der
+   Versionsvergleich aus Abschnitt 9.4 beginnt deshalb mit dem nächsten Plan,
+   nicht rückwirkend.
 6. `nv_fernmeldeplan_gegenstellen` wird **leer** angelegt. Es findet keine
    Ableitung aus `betriebsstelle`/`rufname` bestehender Pläne statt: Diese
    Werte sind die eigene Erreichbarkeit, nicht die der Gegenstelle. Sie
@@ -789,9 +1310,9 @@ Migration 94 und 117 bleiben unberührt.
 
 ---
 
-## 13. Abbau der Alttabelle `nv_komplan` (Entscheidung O4)
+## 15. Abbau der Alttabelle `nv_komplan` (Entscheidung O4)
 
-### 13.1 Nachweis, dass sie ungenutzt ist
+### 15.1 Nachweis, dass sie ungenutzt ist
 
 Die Prüfung ist vollständig: Kein Anwendungspfad liest oder schreibt
 `nv_komplan`.
@@ -807,7 +1328,7 @@ Die Prüfung ist vollständig: Kein Anwendungspfad liest oder schreibt
 Damit ist F9 kein Verdacht mehr, sondern ein Befund: eine Tabelle, die
 ausschließlich sich selbst begründet.
 
-### 13.2 Abbau
+### 15.2 Abbau
 
 Eigener Vorgang, **nicht** Teil der Fernmeldeplanung — er berührt sie nur,
 weil er hier gefunden wurde. Reihenfolge:
@@ -830,17 +1351,17 @@ weil er hier gefunden wurde. Reihenfolge:
 
 Der Gestaltvorwurf aus Abschnitt 3.2 bleibt davon unberührt: Was
 `nv_komplan` richtig machte — ein Kasten je Stelle — lebt in der taktischen
-Ansicht weiter (Abschnitt 10), nicht in der Tabelle.
+Ansicht weiter (Abschnitt 12), nicht in der Tabelle.
 
 ---
 
-## 14. Erzeugte Kommunikationsskizze (Entscheidung O5)
+## 16. Erzeugte Kommunikationsskizze (Entscheidung O5)
 
-### 14.1 Umfang
+### 16.1 Umfang
 
 Aus den Plandaten wird die **taktische** Kommunikationsskizze erzeugt: Stellen
 als Kästen mit taktischem Zeichen, Verbindungen als Linien je Mittel,
-beschriftet mit der Erreichbarkeit. Kopfleiste nach Abschnitt 9, Querformat,
+beschriftet mit der Erreichbarkeit. Kopfleiste nach Abschnitt 11, Querformat,
 mindestens DIN A4 — so verlangt es Q6 („Bewährt hat sich die Darstellung im
 Querformat").
 
@@ -852,7 +1373,7 @@ zweite Wahrheit, die auseinanderlaufen könnte.
 „sämtliche Einzelheiten technischer und betrieblicher Art" mit Schaltzeichen —
 das ist eine Zeichnung, kein Bericht (Lücke L3).
 
-### 14.2 Anordnung
+### 16.2 Anordnung
 
 Die Anordnung folgt der Stellenart aus Abschnitt 5.2, nicht einem
 Grafikalgorithmus. Q4 Kapitel 6.1.2 gibt die Achsen vor: vertikal von oben
@@ -869,7 +1390,7 @@ nach unten, horizontal zur Seite.
 Damit ist die Skizze bei jeder Größe vorhersehbar und ohne Handarbeit lesbar.
 Verbindungen laufen von `EIGEN` zu jeder anderen Stelle, eine Linie je Weg.
 
-### 14.3 Linienart je Mittel — trägt auch ohne Zeichen
+### 16.3 Linienart je Mittel — trägt auch ohne Zeichen
 
 Die Skizze ist **ohne** die taktischen Zeichen baubar und wird mit ihnen
 besser. Sie hängt nicht an ihnen:
@@ -880,8 +1401,9 @@ besser. Sie hängt nicht an ihnen:
 | `Fu` analog | gestrichelt |
 | `Fu` digital | gestrichelt, doppelt |
 | `Me` Melder | gepunktet |
+| Rückfallebene (jedes Mittel) | zusätzlich dünner und heller — Q10 Anlage 20: „unter Inkaufnahme einer Leistungsbeschränkung" |
 
-### 14.4 Zeichensatz (Q9)
+### 16.4 Zeichensatz (Q9)
 
 Q6 sagt: „Fernmeldestellen werden nur mit dem taktischen Zeichen für die
 Einheit / Einrichtung eingezeichnet." Die Sammlung von Jonas Köritz (Q9) deckt
@@ -917,11 +1439,11 @@ Verbindungsbeschriftung braucht:
 | `FAX` Telefax | `Fernmeldewesen/Bedingung_Fax` |
 | `Fu` digital, TMO | `Fernmeldewesen/Bedingung_TMO` |
 | `Fu` digital, DMO | `Fernmeldewesen/Bedingung_DMO` |
-| `Fu` analog | Linienart nach Abschnitt 14.3 plus Textmarke „Kanal 2 m" / „Kanal 4 m" — wie auf dem Papier (Q6) |
+| `Fu` analog | Linienart nach Abschnitt 16.3 plus Textmarke „Kanal 2 m" / „Kanal 4 m" — wie auf dem Papier (Q6) |
 | Relaisbetrieb analog | `Fernmeldewesen/RS2_2m-2m`, `/RS2_2m-4m`, `/RS2_4m-4m` |
 | DMO-Repeater, DMO-TMO-Gateway | dieselben `RS2_*`-Zeichen: Q12 Kap. 2.3.3 und 2.3.4 stellen Repeater und Gateway ausdrücklich neben Rs1-Relais und Rs2-Überleiteinrichtung |
 | `@` Datenübertragung | `Fernmeldewesen/Datenverbindung` |
-| `Me` Melder | Linienart nach Abschnitt 14.3 |
+| `Me` Melder | Linienart nach Abschnitt 16.3 |
 
 Für den Analogfunk gibt es kein `Bedingung_2m`/`Bedingung_4m`. Das ist kein
 Mangel: Q6 schreibt die Bandangabe als Text („Kanal 2 / 4 m"), und genau so
@@ -938,7 +1460,7 @@ zeigen soll: `Wähltelefon_analog`, `Wähltelefon_ISDN`, `Wähltelefon_IP`,
 nennt beide ausdrücklich). Gruppe C aus der ursprünglichen Anfrage ist damit
 erledigt, bevor sie gestellt wurde.
 
-### 14.5 Was die Übernahme kostet
+### 16.5 Was die Übernahme kostet
 
 Die Zeichen sind **nicht** so gebaut, wie ich sie zuerst angefragt hatte. Drei
 Punkte sind zu klären, keiner davon blockierend.
@@ -966,7 +1488,7 @@ Schriftart nicht.
 | `release.zip` (v2.0.0, 24.06.2024) | gemeinfrei, CC0-1.0 laut README | zwei Jahre alt; neuere Zeichen fehlen |
 | Aus den Vorlagen bauen (`make svg`, benötigt `j2cli`) | CC-BY-4.0 — Namensnennung nötig | ein einmaliger Entwicklerschritt |
 
-**Vorschlag: aus den Vorlagen bauen.** Die Namensnennung kostet nichts — die
+**Entschieden (O11): aus den Vorlagen bauen.** Die Namensnennung kostet nichts — die
 Anwendung führt ohnehin `THIRD_PARTY_NOTICES.md` —, und eine ausdrückliche
 Lizenz ist tragfähiger als ein Satz im README über den Stand eines Archivs.
 Gebaut wird **einmal**, die benötigten SVG werden als Bestand aufgenommen;
@@ -979,21 +1501,21 @@ unter Apache-2.0.
 
 ---
 
-## 15. Lücken
+## 17. Lücken
 
 | Nr. | Lücke | Wirkung |
 | --- | --- | --- |
 | **L1** | **geschlossen.** NBHB THW (Q12) und THW-DV 1-820 (Q11) liegen vor; alle `FMP-DIGITAL-*`-Regeln zitieren jetzt die Vorschrift statt der Ausbildungsunterlage. | Offen bleibt allein die *Ergänzende Loseblattsammlung Digitalfunk BOS* mit den Rufgruppenplänen — siehe L5. |
-| **L2** | **verkleinert.** PDV 800 (Q10) liegt vor, führt die Wertelisten des Analogfunks aber nicht: Sie verweist für Sprech- und Datenfunk auf die **PDV 810.2 VS-NfD „Sprech- und Datenfunkverkehr"**. Diese ist eingestuft und liegt nicht vor. | Bandlage und Verkehrsform des Analogfunks bleiben **nicht quellengestützt**. Schritt 4 der Migration bleibt bestehen: keine Typverengung, bevor die Werte belegt sind. |
-| **L3** | Q7 kennt zwei Skizzen: eine taktische und eine betriebliche mit sämtlichen Schaltzeichen. | Die **taktische** wird erzeugt (Abschnitt 14). Die **betriebliche** bleibt draußen — sie ist eine Zeichnung, kein Bericht. |
+| **L2** | **erledigt.** PDV 800 (Q10) liegt vor. Die Wertelisten des Analogfunks führt sie nicht — sie verweist auf die eingestufte PDV 810.2. | **Ohne Wirkung** (O12): Bandlage und Verkehrsform sind Freitext und werden nicht geprüft. Eine Quelle wird dafür nicht gebraucht. |
+| **L3** | Q7 kennt zwei Skizzen: eine taktische und eine betriebliche mit sämtlichen Schaltzeichen. | Die **taktische** wird erzeugt (Abschnitt 16). Die **betriebliche** bleibt draußen — sie ist eine Zeichnung, kein Bericht. |
 | **L4** | Kanal- und Frequenzverzeichnisse des Analogfunks sind landesrechtlich geregelt. | `kanal` bleibt Freitext; keine Prüfung gegen ein Verzeichnis. |
 | **L5** | Rufgruppenübersichten TMO/DMO der Landesverbände stehen nach Q11 Kap. 2.2.1.4 in der Loseblattsammlung Digitalfunk BOS und sind nicht Teil der Anwendung. | `rufgruppe` bleibt Freitext; die Ausfüllhilfe verweist auf die Loseblattsammlung. |
 | **L6** | Für den **Analogfunk** führt Q9 keine `Bedingung_*`-Zeichen (2 m, 4 m). | Kein Mangel: Q6 schreibt die Bandangabe als Text. Die Skizze setzt sie ebenso. |
-| **L7** | Die THW-Funkrufnamenregelung (THW-FuRnR), von Q11 Kap. 2.2.1.2 als zuständige Regelung benannt, liegt nicht vor. | Ohne Wirkung auf das Schema: Der Plan trägt den Funkrufnamen als Text und prüft ihn nicht gegen eine Regel. |
+| **L7** | **hingenommen** (Betreiberentscheidung). Die THW-Funkrufnamenregelung (THW-FuRnR), von Q11 Kap. 2.2.1.2 als zuständige Regelung benannt, liegt nicht vor. | Ohne Wirkung: Funkrufnamen werden ausdrücklich **nicht** geprüft. Der Plan trägt sie als Text. Keine Beschaffung nötig. |
 
 ---
 
-## 16. Abnahme
+## 18. Abnahme
 
 ```console
 # statische Suite mit Regelkatalog-Nachweis (kein lokales php auf dieser Maschine)
@@ -1016,9 +1538,10 @@ ESTAB_CONTAINER_CLI=podman npm run test:e2e
 Fertig ist die Überarbeitung, wenn zusätzlich zur `Definition of Done` aus
 `SPEC.md` Abschnitt 12 gilt:
 
-- [ ] Jede Regel aus Abschnitt 11 steht im jeweiligen Register und hat einen Test.
+- [ ] Jede Regel aus Abschnitt 13 steht im jeweiligen Register und hat einen Test.
 - [ ] `tests/php/schema_migration_contract.php` kennt die neuen Spalten.
 - [ ] Ein Digitalfunkweg lässt sich ohne Kanal und ohne Bandlage speichern, ein Analogfunkweg nicht ohne sie.
+- [ ] Bandlage und Verkehrsform nehmen jeden Text an; kein Wert wird zurückgewiesen.
 - [ ] Ein bestehender, aktiver Plan ist nach der Migration unverändert lesbar und trägt dieselbe Prüfsumme im Ausleitungsvergleich.
 - [ ] Die taktische Ansicht zeigt einen Plan mit zwanzig Wegen als Stellenblöcke ohne Querlauf bei 916 Bildpunkten (`docs/GESTALTUNG.md`).
 - [ ] Die Bedienprüfung (`tools/bedienpruefung/`) belegt mit Bildschirmabzug, dass Formular und Tabelle je Medium nur ihre Felder zeigen.
@@ -1026,70 +1549,119 @@ Fertig ist die Überarbeitung, wenn zusätzlich zur `Definition of Done` aus
 - [ ] Jeder Treffer aus dem Plan steht über jedem Treffer aus der Historie, und beide sind sichtbar (F11 ist geschlossen).
 - [ ] Der Stab bekommt an Feld 10 Vorschläge aus dem Plan und **keinen einzigen** aus der Nachrichtenhistorie.
 - [ ] Jede Option der Vorschlagsliste trägt eine Herkunftsangabe, auch bei `FM-Eingang`.
-- [ ] Eine Gegenstelle, die im Plan fehlt, lässt sich in Feld 6, 11 und 13 frei eintragen.
+- [ ] Eine Gegenstelle, die im Plan fehlt, lässt sich in Feld 6, 11 und 15 frei eintragen.
+- [ ] Eine eingehende Nachricht trägt nach dem Abschluss einen Wegbezug, und der `LdF-Eingang` weist ohne dessen Bestätigung zurück.
+- [ ] Feld 1 wird im Vordruck eingetragen, die Wegwahl steht außerhalb; ein Widerspruch zwischen beiden wird zurückgewiesen.
+- [ ] Der gedruckte Vordruck zeigt kein Feld für den Fernmeldeweg.
+- [ ] Ein Eingang über einen Weg außerhalb des Plans lässt sich erfassen und erscheint in der Plantafel als Abweichung.
+- [ ] Eine eingehende Nachricht lässt sich **ohne** Weg abschließen; das Mittel bleibt Pflicht.
+- [ ] Der `LdF-Eingang` kann die Bemerkung des Fernmelders zum Eingangsweg nicht überschreiben; ein mitgeschickter abweichender Wert wird verworfen.
+- [ ] Wählt A/W in Feld 6 eine Gegenstelle des Plans, ist Feld 15 beim LdF vorbelegt und gekennzeichnet; tippt A/W frei, ist es leer.
+- [ ] Ein eindeutiger, exakter Plantreffer steht vorbelegt im Feld, sichtbar gekennzeichnet; bei zwei Plantreffern bleibt das Feld leer.
+- [ ] Kein Wert aus der Historie belegt jemals ein Feld vor.
+- [ ] Der Nachweis unterscheidet, ob ein Wert vorbelegt übernommen oder selbst gewählt wurde.
 - [ ] Weder Formular noch Datenbank kennen ein Feld für OPTA oder ISSI.
 - [ ] Die Skizze eines Plans mit vier Stellen und acht Wegen ist im Querformat ohne Überlappung lesbar und trägt Kopfleiste, Version und F.d.R. des Plans.
-- [ ] Die Skizze entsteht auch ohne taktische Zeichen (Linienart je Mittel, Abschnitt 14.3).
+- [ ] Die Skizze entsteht auch ohne taktische Zeichen (Linienart je Mittel, Abschnitt 16.3).
 - [ ] Die taktischen Zeichen behalten ihre Farben; im dunklen Erscheinungsbild stehen sie auf heller Fläche.
-- [ ] `THIRD_PARTY_NOTICES.md` führt Q9 mit Urheber, Fundstelle und Lizenz.
+- [ ] `THIRD_PARTY_NOTICES.md` führt Q9 mit Urheber, Fundstelle und Lizenz CC-BY-4.0.
+- [ ] Ein Weg lässt sich nicht als seine eigene Rückfallebene speichern, und ein Ring wird zurückgewiesen.
+- [ ] Nach einem Versionswechsel zeigt jede Rückfallebene auf denselben Weg wie zuvor — geprüft an einem Plan mit einer Kette aus drei Wegen.
+- [ ] Das Löschen eines Wegs, auf den zurückgefallen wird, wird zurückgewiesen und nennt die abhängigen Wege.
 - [ ] Der Abbau von `nv_komplan` läuft als **eigener** Vorgang; seine Migration bricht bei nicht leerer Tabelle ab, statt Zeilen zu verwerfen.
 
 ---
 
-## 17. Entscheidungen und offene Fragen
+## 19. Entscheidungen
 
-### 17.1 Entschieden durch den Betreiber
+### 19.1 Entschieden durch den Betreiber
 
 | Nr. | Frage | Entscheidung | Steht in |
 | --- | --- | --- | --- |
 | O1 | Fernschreiber (`FS`) aus der Auswahlliste des Plans nehmen? | **ja** — der Vordruck behält sein Kästchen | Abschnitt 4.3 |
-| O2 | OPTA und ISSI erfassen? | **nein** — personen- bzw. gerätescharf, und der Plan trägt „N f D". Der Plan führt den Funkrufnamen. Auch die Bemerkung ist kein Hintereingang | Abschnitt 8.2, Regel `FMP-DIGITAL-KEINE-GERAETEKENNUNG` |
+| O2 | OPTA und ISSI erfassen? | **nein**. Q12 Kap. 2.4 bestätigt es normativ: Verbindlich ist das gesprochene Wort, die OPTA erlaubt keine sichere Verifizierung | Abschnitt 8.2, Regel `FMP-DIGITAL-KEINE-GERAETEKENNUNG` |
 | O3 | Verkehrskreis als eigenes Feld? | **nein** — nur Ausfüllhilfe der Bemerkung | Abschnitt 6.1 |
-| O4 | Alttabelle `nv_komplan`? | **entfernen**, da nachweislich ungenutzt — als eigener Vorgang | Abschnitt 13 |
-| O5 | Kommunikationsskizze erzeugen? | **ja**, die taktische. Die Zeichen kommen aus Q9 und decken den Bedarf vollständig | Abschnitt 14 |
-| O6 | Planvorschläge für den Stab an Feld 10? | **ja** — aber ausschließlich aus dem Plan, nie aus der Historie. Die Vorschlagspolitik bekommt eine Quellenachse | Abschnitt 5.5 (V8), Regel `FMP-VORSCHLAG-QUELLENSCHRANKE` |
-| O7 | Plan oder Historie zuerst? | **Plan zuerst**, beide werden angezeigt, beide gekennzeichnet | Abschnitt 5.4 (F11), 5.5 (V2) |
+| O4 | Alttabelle `nv_komplan`? | **entfernen**, da nachweislich ungenutzt — als eigener Vorgang | Abschnitt 15 |
+| O5 | Kommunikationsskizze erzeugen? | **ja**, die taktische, mit den Zeichen aus Q9 | Abschnitt 16 |
+| O6 | Planvorschläge für den Stab an Feld 10 (Anschrift)? | **ja** — ausschließlich aus dem Plan, nie aus der Historie | Abschnitt 5.5 (V8), Regel `FMP-VORSCHLAG-QUELLENSCHRANKE` |
+| O7 | Plan oder Historie zuerst? | **Plan zuerst**, beide sichtbar, beide gekennzeichnet. Q10 Nr. 2.6 bestätigt es normativ | Abschnitt 5.4 (F11), 5.5 (V2) |
 | O8 | Feld für die Erreichbarkeitszeit einer Gegenstelle? | **nein** — nur Bemerkung | Abschnitt 5.3 |
+| O9 | Rückfallebene? | **ja** — Schalter plus Auswahl, für welche Verbindung. Daraus wurde Beschluss B6 | Abschnitt 9 |
+| O10 | Funkrufnamen gegen die THW-FuRnR prüfen? | **nein** — Freitext, keine Prüfung. Lücke L7 ist damit hingenommen, nicht offen | Abschnitt 17 |
+| O11 | Bezugsweg der taktischen Zeichen? | **bestätigt**: aus den Vorlagen bauen, CC-BY-4.0 mit Namensnennung | Abschnitt 16.5 |
+| O12 | Bandlage und Verkehrsform gegen eine Werteliste prüfen? | **nein** — Freitext mit Ausfüllhilfe. Damit entfällt der Bedarf an der PDV 810.2; Lücke L2 ist gegenstandslos | Abschnitt 8.2 |
+| O13 | Woran hängt der Verweis der Rückfallebene? | **an einer dauerhaften Kennung des Wegs**, nicht an der `sortierung`. Daraus wurde die Tabelle `nv_fernmeldewege` | Abschnitt 9.3, 9.6 |
+| O14 | Soll auch der **Eingang** einen Fernmeldeweg tragen? | **ja** — vom Fernmelder gewählt, vom LdF geprüft. Daraus wurde Beschluss B7 | Abschnitt 10 |
+| O15 | Soll ein Plantreffer das Feld **vorbelegen**? | **ja**, bei eindeutigem exaktem Treffer, mit sichtbarem Hinweis auf die Herkunft. Ohne Plantreffer bleibt das Feld leer und die Historie steht nur zur Auswahl | Abschnitt 5.6 |
+| O16 | Wo wird der Weg erfasst? | **außerhalb des Vordrucks**; im Vordruck steht das Mittel. Die Anwendung leitet Feld 1 nicht ab, sondern prüft es gegen den Weg | Abschnitt 10.4, Regel `FMP-WEG-AUSSERHALB-VORDRUCK` |
+| O17 | Ist der Eingangsweg Pflicht? | **nein**, freiwillig. Das Mittel bleibt Pflicht | Abschnitt 10.3 |
+| O18 | Darf der LdF die Bemerkung des Fernmelders ändern? | **nein** — sie ist für ihn nur lesbar; er behält sein eigenes Begründungsfeld | Abschnitt 10.8 |
+| O19 | Wie kommt Feld 15 zu seinem Wert? | Aus der **in Feld 6 ausgewählten** Gegenstelle des Plans — als Verweis festgehalten, nicht als Textvergleich | Abschnitt 5.6 |
 
-Damit ist keine Frage dieser Überarbeitung mehr offen.
+**Damit ist jede Frage dieser Überarbeitung entschieden.**
 
-### 17.2 Neu aufgeworfen durch Q10 — bitte entscheiden
-
-| Nr. | Frage | Vorschlag |
-| --- | --- | --- |
-| **O9** | Q10 kennt die **Rückfallebene** — „Ersatz für eine IuK-Verbindung, ggf. auch unter Inkaufnahme einer Leistungsbeschränkung" (Anlage 20) — und verlangt in Nummer 3, Kommunikationspläne „erforderlichenfalls unter Berücksichtigung einer Rückfallebene" zu erstellen. Soll ein Weg als Rückfallebene **gekennzeichnet** werden können? | ja, als **Schalter** `rueckfallebene` am Weg, nicht als Verweis auf einen anderen Weg. Der Schalter beantwortet die Frage, die im Einsatz gestellt wird — „was habe ich noch, wenn dieser Weg ausfällt" —, ohne ein Beziehungsgeflecht zu pflegen, das keiner nachführt. |
-
-Das ist die einzige Frage, die Q10 bis Q12 neu aufgeworfen haben. Sie ist
-bewusst als Frage gestellt und nicht entschieden: Zweimal — bei O3 und O8 —
-hat der Betreiber der Bemerkung vor einem neuen Feld den Vorzug gegeben. Hier
-spricht dagegen, dass die Rückfallebene **strukturell** ist: Man will nach ihr
-filtern, nicht in ihr lesen.
-
-### 17.3 Zwei Folgen, die festgehalten gehören
+### 19.2 Drei Folgen, die festgehalten gehören
 
 **Aus O7.** Ein *ähnlicher* Treffer aus dem Plan steht über einem *exakten*
-aus der Historie. Das ist gewollt: Die freigegebene Betriebsunterlage geht der
-Erinnerung vor (Q4 Kapitel 6.6). Die Kennzeichnung aus V3 ist das Gegengewicht
+aus der Historie. Das ist gewollt: Q10 Nummer 2.6 verlangt, Abweichungen vom
+Kommunikationsplan zu vermeiden. Die Kennzeichnung aus V3 ist das Gegengewicht
 — sie macht sichtbar, dass der Plan oben steht, *weil* er der Plan ist.
 
-**Aus O6.** Die Vorschlagspolitik entscheidet künftig über zwei Achsen: Feld
-und Quelle. Ohne die zweite wäre die Öffnung für den Stab ein Rückbau des
-Schutzes vor Historienlecks; mit ihr ist sie keiner.
+**Aus O6.** Die Vorschlagspolitik entscheidet über zwei Achsen: Feld und
+Quelle. Ohne die zweite wäre die Öffnung für den Stab ein Rückbau des Schutzes
+vor Historienlecks; mit ihr ist sie keiner.
 
-### 17.4 Was noch fehlt
+**Aus O13.** Ein früherer Entwurf ließ den Verweis auf die `sortierung`
+zeigen. Sie ist im Bestand stabil, aber nur, weil niemand umsortieren kann —
+eine Stabilität, die die erste Umsortierfunktion zerstört hätte, und eine
+Nummer, die bei `MAX + 1` je Planversion wiederverwendet wird. Der Weg bekommt
+deshalb eine eigene Kennung (Abschnitt 9.3). Das kostet eine schmale Tabelle
+und liefert den Versionsvergleich gratis mit: „seit wann besteht dieser Weg,
+was hat sich an ihm geändert" ist damit erstmals beantwortbar (Abschnitt 9.4).
 
-**Vom Betreiber:** die Antwort auf O9 und die Bestätigung des Bezugswegs für
-die taktischen Zeichen (Abschnitt 14.5 — Vorlagen bauen unter CC-BY statt
-gemeinfreies Altarchiv).
+### 19.3 Was an Vorschriften offenbleibt
 
-**An Vorschriften** bleiben drei Stücke offen, alle drei nicht entscheidbar,
-sondern nur zu beschaffen:
+**Nichts mit inhaltlicher Wirkung.**
 
 | Fehlt | Wirkung |
 | --- | --- |
-| PDV 810.2 VS-NfD „Sprech- und Datenfunkverkehr" (L2) | die einzige inhaltliche Lücke: Bandlage und Verkehrsform des Analogfunks bleiben unbelegt |
+| PDV 810.2 VS-NfD „Sprech- und Datenfunkverkehr" (L2) | keine — durch O12 gegenstandslos: Bandlage und Verkehrsform sind ungeprüfter Freitext |
 | Ergänzende Loseblattsammlung Digitalfunk BOS (L5) | keine — `rufgruppe` ist bewusst Freitext |
-| THW-Funkrufnamenregelung (L7) | keine — der Funkrufname wird nicht geprüft |
+| THW-Funkrufnamenregelung (L7) | keine — durch O10 hingenommen |
 
 L1 ist mit Q11 und Q12 geschlossen, L3 und L6 durch die Entscheidung zur
 Skizze erledigt, L4 ist eine bewusste Grenze.
+
+Damit ist keine Beschaffung mehr nötig. Die drei verbliebenen Lücken sind
+Entscheidungen, keine Hindernisse: An jeder Stelle, an der eine fehlende
+Vorschrift eine Werteliste hätte liefern müssen, hat der Betreiber sich
+bewusst für Freitext entschieden — und trägt die fachliche Verantwortung
+dafür selbst, statt sie an eine Prüfung im Programm abzugeben.
+
+### 19.4 Nächster Schritt
+
+Die Spec ist entscheidungsreif. Als Nächstes gehören dazu — nach dem Muster
+der Rückmeldungen — ein `tasks/fernmeldeplanung-plan.md` mit der Baureihenfolge
+und ein `tasks/fernmeldeplanung-todo.md` mit den Einzelschritten.
+
+Die Baureihenfolge ergibt sich bereits aus den Abhängigkeiten:
+
+```
+1  nv_fernmeldewege + weg_id          (Abschnitt 9.3)  ─┐
+2  Feldtrennung analog/digital        (Abschnitt 8)     ├─ Schema
+3  Gegenstellen                       (Abschnitt 5.3)   │
+4  Rückfallebene                      (Abschnitt 9.5)  ─┘  hängt an 1
+5  Kopfleiste                         (Abschnitt 11)
+6  Zwei Ansichten                     (Abschnitt 12)      hängt an 2 und 3
+7  Eingangsweg                        (Abschnitt 10)      hängt an 2
+8  Vorschläge und Vorbelegung         (Abschnitt 5.5)     hängt an 3 und 7
+9  Skizze                             (Abschnitt 16)      hängt an 6
+10 Abbau nv_komplan                   (Abschnitt 15)      unabhängig
+```
+
+Schritt 1 steht vorn, weil vier der übrigen an ihm hängen — und weil er der
+einzige ist, der eine Migration über **alle** Bestandszeilen führt.
+
+Schritt 7 steht vor 8, weil der Eingangsweg dem A/W dieselbe Wegauswahl gibt,
+die der LdF schon hat: Erst wenn beide Stationen aus dem Plan wählen, lohnt es,
+Vorschläge und Vorbelegung an beiden Enden anzufassen.
