@@ -129,13 +129,15 @@ CREATE TABLE IF NOT EXISTS `nv_fernmeldeweg_zuordnung` (
 -- A mapping is never re-pointed. Whoever wants a different route for a plan
 -- entry writes a different entry; the identity of an existing one is a fact,
 -- not a setting.
+DELIMITER //
 CREATE OR REPLACE TRIGGER `estab_dv122_wegzuordnung_update`
 BEFORE UPDATE ON `nv_fernmeldeweg_zuordnung`
 FOR EACH ROW
 BEGIN
   SIGNAL SQLSTATE '45000'
     SET MESSAGE_TEXT = 'Route identity assignments are immutable';
-END;
+END//
+DELIMITER ;
 
 -- Backfill. Every existing plan entry receives its own identity, ordered so
 -- the numbering is reproducible: incident, then plan version, then the
