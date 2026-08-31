@@ -4706,6 +4706,16 @@ function estab_dv_telecom_plan_revision(array $plan): string
             'stellenart' => $entry['stellenart'] ?? null,
             'rueckfallebene_fuer_weg' =>
                 $entry['rueckfallebene_fuer_weg'] ?? null,
+            'gegenstellen' => array_map(
+                static fn (array $gegenstelle): array => [
+                    'name' => (string) ($gegenstelle['name'] ?? ''),
+                    'erreichbarkeit' =>
+                        (string) ($gegenstelle['erreichbarkeit'] ?? ''),
+                    'bemerkungen' =>
+                        (string) ($gegenstelle['bemerkungen'] ?? ''),
+                ],
+                $entry['gegenstellen'] ?? []
+            ),
             'erreichbarkeit' => (string) ($entry['erreichbarkeit'] ?? ''),
             'medium' => (string) ($entry['medium'] ?? ''),
             'funkart' => $entry['funkart'] ?? null,
@@ -5107,6 +5117,43 @@ function estab_dv_start_telecom_plan_revision(
             } finally {
                 $copyIdentities->close();
             }
+            /*
+             * Die Gegenstellen ziehen mit. Alt und neu werden ueber die
+             * `sortierung` gepaart -- oertlich eindeutig, weil die neuen
+             * Zeilen soeben in derselben Transaktion aus den alten entstanden
+             * sind (siehe die Kennungen oben).
+             */
+            $copyCounterparts = $connection->prepare(
+                'INSERT INTO `nv_fernmeldeplan_gegenstellen`'
+                . ' (`fernmeldeplan_eintrag_id`, `sortierung`, `name`,'
+                . ' `erreichbarkeit`, `bemerkungen`)'
+                . ' SELECT neu.`fernmeldeplan_eintrag_id`, g.`sortierung`,'
+                . ' g.`name`, g.`erreichbarkeit`, g.`bemerkungen`'
+                . ' FROM `nv_fernmeldeplan_eintraege` AS neu'
+                . ' JOIN `nv_fernmeldeplan_eintraege` AS alt'
+                . ' ON alt.`fernmeldeplan_id` = ?'
+                . ' AND alt.`sortierung` = neu.`sortierung`'
+                . ' JOIN `nv_fernmeldeplan_gegenstellen` AS g'
+                . ' ON g.`fernmeldeplan_eintrag_id`'
+                . ' = alt.`fernmeldeplan_eintrag_id`'
+                . ' WHERE neu.`fernmeldeplan_id` = ?'
+            );
+            if (!$copyCounterparts) {
+                throw new RuntimeException(
+                    'Gegenstellen konnten nicht zum Entwurf kopiert werden.'
+                );
+            }
+            try {
+                $copyCounterparts->bind_param('ii', $sourcePlanId, $planId);
+                if (!$copyCounterparts->execute()) {
+                    throw new RuntimeException(
+                        'Gegenstellen konnten nicht zum Entwurf kopiert '
+                        . 'werden.'
+                    );
+                }
+            } finally {
+                $copyCounterparts->close();
+            }
             if ($copiedIdentities !== $copiedEntries) {
                 // Ein Weg ohne Kennung waere ein Weg, auf den keine
                 // Rueckfallebene mehr zeigen kann. Lieber laut abbrechen.
@@ -5394,6 +5441,42 @@ function estab_dv_add_telecom_entry(
 }
 
 /**
+ * Validate one counterpart of a route.
+ *
+ * A counterpart carries two things, because the message form needs two: the
+ * plain name of the station, which fills Feld 15 on an incoming message and
+ * Feld 10 on an outgoing one, and the address it answers at, which fills
+ * Feld 6 or Feld 11 depending on the medium of its route.
+ *
+ * It carries no medium of its own. That is the whole point -- the medium is
+ * the route's, and the sentence the plan states is "over THIS way, THAT
+ * station answers at THIS address".
+ *
+ * @return array{name:string,erreichbarkeit:string,bemerkungen:string}
+ */
+function estab_dv_telecom_counterpart_values(array $input): array
+{
+    return [
+        'name' => estab_dv_text(
+            $input['name'] ?? null,
+            'Name der Gegenstelle',
+            255
+        ),
+        'erreichbarkeit' => estab_dv_text(
+            $input['erreichbarkeit'] ?? null,
+            'Erreichbarkeit der Gegenstelle',
+            255
+        ),
+        'bemerkungen' => estab_dv_text(
+            $input['bemerkungen'] ?? '',
+            'Bemerkungen',
+            10000,
+            true
+        ),
+    ];
+}
+
+/**
  * Refuse a fallback that points at itself or closes a ring.
  *
  * The database already guarantees that a fallback stays inside its own plan
@@ -5546,6 +5629,208 @@ function estab_dv_telecom_assign_route_identity(
         $mapping->close();
     }
     return $wegId;
+}
+
+/** Add one counterpart to a route of an editable draft. */
+function estab_dv_add_telecom_counterpart(
+    mysqli $connection,
+    int $incidentId,
+    int $planId,
+    int $entryId,
+    array $identity,
+    array $input,
+    string $expectedRevision,
+    string $protocolTable = 'nv_protokoll'
+): int {
+    $incidentId = estab_incident_positive_id($incidentId);
+    $planId = estab_dv_positive_id($planId, 'Fernmeldeplan');
+    $entryId = estab_dv_positive_id($entryId, 'Fernmeldeweg');
+    $values = estab_dv_telecom_counterpart_values($input);
+    $expectedRevision = estab_dv_telecom_revision_token($expectedRevision);
+    return estab_incident_with_active_write(
+        $connection,
+        static function (array $incident) use (
+            $connection,
+            $incidentId,
+            $planId,
+            $entryId,
+            $identity,
+            $values,
+            $expectedRevision,
+            $protocolTable
+        ): int {
+            estab_dv_require_strict_incident_snapshot($incident, $incidentId);
+            $selected = estab_dv_require_write_capability(
+                $connection,
+                $incidentId,
+                $identity,
+                'FERNMELDEPLANUNG'
+            );
+            $userCode = $selected['kuerzel'];
+            estab_dv_lock_telecom_draft($connection, $incidentId, $planId);
+            estab_dv_require_telecom_plan_revision(
+                $connection,
+                $incidentId,
+                $planId,
+                $expectedRevision
+            );
+            $next = $connection->prepare(
+                'SELECT COALESCE(MAX(g.`sortierung`), 0) + 1 AS `sortierung`'
+                . ' FROM `nv_fernmeldeplan_gegenstellen` AS g'
+                . ' JOIN `nv_fernmeldeplan_eintraege` AS e'
+                . ' ON e.`fernmeldeplan_eintrag_id`'
+                . ' = g.`fernmeldeplan_eintrag_id`'
+                . ' WHERE g.`fernmeldeplan_eintrag_id` = ?'
+                . ' AND e.`fernmeldeplan_id` = ? FOR UPDATE'
+            );
+            if (!$next) {
+                throw new RuntimeException(
+                    'Gegenstelle konnte nicht vorbereitet werden.'
+                );
+            }
+            try {
+                $next->bind_param('ii', $entryId, $planId);
+                $next->execute();
+                $sort = (int) (
+                    $next->get_result()->fetch_assoc()['sortierung'] ?? 0
+                );
+            } finally {
+                $next->close();
+            }
+            $insert = $connection->prepare(
+                'INSERT INTO `nv_fernmeldeplan_gegenstellen`'
+                . ' (`fernmeldeplan_eintrag_id`, `sortierung`, `name`,'
+                . ' `erreichbarkeit`, `bemerkungen`)'
+                . ' SELECT ?, ?, ?, ?, ?'
+                . ' FROM `nv_fernmeldeplan_eintraege`'
+                . ' WHERE `fernmeldeplan_eintrag_id` = ?'
+                . ' AND `fernmeldeplan_id` = ?'
+            );
+            if (!$insert) {
+                throw new RuntimeException(
+                    'Gegenstelle konnte nicht vorbereitet werden.'
+                );
+            }
+            try {
+                $insert->bind_param(
+                    'iisssii',
+                    $entryId,
+                    $sort,
+                    $values['name'],
+                    $values['erreichbarkeit'],
+                    $values['bemerkungen'],
+                    $entryId,
+                    $planId
+                );
+                if (!$insert->execute() || $insert->affected_rows !== 1) {
+                    throw new EstabDvConflictException(
+                        'Der Fernmeldeweg gehört nicht zu diesem Entwurf.'
+                    );
+                }
+                $counterpartId = (int) $connection->insert_id;
+            } finally {
+                $insert->close();
+            }
+            estab_dv_audit(
+                $connection,
+                $protocolTable,
+                $incidentId,
+                'DV Fernmeldeplan',
+                [
+                    'action' => 'plan_counterpart_added',
+                    'plan_id' => $planId,
+                    'entry_id' => $entryId,
+                    'counterpart_id' => $counterpartId,
+                    'name' => $values['name'],
+                    'actor' => $userCode,
+                    'actor_function' => (string) $selected['funktion'],
+                ]
+            );
+            return $counterpartId;
+        }
+    );
+}
+
+/** Remove one counterpart from a route of an editable draft. */
+function estab_dv_remove_telecom_counterpart(
+    mysqli $connection,
+    int $incidentId,
+    int $planId,
+    int $counterpartId,
+    array $identity,
+    string $expectedRevision,
+    string $protocolTable = 'nv_protokoll'
+): void {
+    $incidentId = estab_incident_positive_id($incidentId);
+    $planId = estab_dv_positive_id($planId, 'Fernmeldeplan');
+    $counterpartId = estab_dv_positive_id($counterpartId, 'Gegenstelle');
+    $expectedRevision = estab_dv_telecom_revision_token($expectedRevision);
+    estab_incident_with_active_write(
+        $connection,
+        static function (array $incident) use (
+            $connection,
+            $incidentId,
+            $planId,
+            $counterpartId,
+            $identity,
+            $expectedRevision,
+            $protocolTable
+        ): bool {
+            estab_dv_require_strict_incident_snapshot($incident, $incidentId);
+            $selected = estab_dv_require_write_capability(
+                $connection,
+                $incidentId,
+                $identity,
+                'FERNMELDEPLANUNG'
+            );
+            $userCode = $selected['kuerzel'];
+            estab_dv_lock_telecom_draft($connection, $incidentId, $planId);
+            estab_dv_require_telecom_plan_revision(
+                $connection,
+                $incidentId,
+                $planId,
+                $expectedRevision
+            );
+            $delete = $connection->prepare(
+                'DELETE g FROM `nv_fernmeldeplan_gegenstellen` AS g'
+                . ' JOIN `nv_fernmeldeplan_eintraege` AS e'
+                . ' ON e.`fernmeldeplan_eintrag_id`'
+                . ' = g.`fernmeldeplan_eintrag_id`'
+                . ' WHERE g.`gegenstelle_id` = ?'
+                . ' AND e.`fernmeldeplan_id` = ?'
+            );
+            if (!$delete) {
+                throw new RuntimeException(
+                    'Gegenstelle konnte nicht zum Entfernen vorbereitet '
+                    . 'werden.'
+                );
+            }
+            try {
+                $delete->bind_param('ii', $counterpartId, $planId);
+                if (!$delete->execute() || $delete->affected_rows !== 1) {
+                    throw new EstabDvConflictException(
+                        'Die Gegenstelle wurde zwischenzeitlich geändert.'
+                    );
+                }
+            } finally {
+                $delete->close();
+            }
+            estab_dv_audit(
+                $connection,
+                $protocolTable,
+                $incidentId,
+                'DV Fernmeldeplan',
+                [
+                    'action' => 'plan_counterpart_removed',
+                    'plan_id' => $planId,
+                    'counterpart_id' => $counterpartId,
+                    'actor' => $userCode,
+                    'actor_function' => (string) $selected['funktion'],
+                ]
+            );
+            return true;
+        }
+    );
 }
 
 function estab_dv_update_telecom_entry(
@@ -6315,6 +6600,67 @@ function estab_dv_telecom_plans(mysqli $connection, int $incidentId): array
             }
         }
         $result->free();
+        /*
+         * Die Gegenstellen kommen in einem zweiten Zug. Ein Verbund in der
+         * Hauptabfrage vervielfachte jede Wegzeile je Gegenstelle, und der
+         * Aufbau oben zaehlt Wege.
+         */
+        if ($plans !== []) {
+            $counterpartStatement = $connection->prepare(
+                'SELECT g.`gegenstelle_id`, g.`fernmeldeplan_eintrag_id`,'
+                . ' g.`sortierung`, g.`name`, g.`erreichbarkeit`,'
+                . ' g.`bemerkungen`'
+                . ' FROM `nv_fernmeldeplan_gegenstellen` AS g'
+                . ' JOIN `nv_fernmeldeplan_eintraege` AS e'
+                . ' ON e.`fernmeldeplan_eintrag_id`'
+                . ' = g.`fernmeldeplan_eintrag_id`'
+                . ' JOIN `nv_fernmeldeplaene` AS p'
+                . ' ON p.`fernmeldeplan_id` = e.`fernmeldeplan_id`'
+                . ' WHERE p.`einsatz_id` = ?'
+                . ' ORDER BY g.`fernmeldeplan_eintrag_id`, g.`sortierung`'
+            );
+            if (!$counterpartStatement) {
+                throw new RuntimeException(
+                    'Gegenstellen konnten nicht gelesen werden.'
+                );
+            }
+            try {
+                $counterpartStatement->bind_param('i', $incidentId);
+                $counterpartStatement->execute();
+                $counterpartResult = $counterpartStatement->get_result();
+                $counterparts = [];
+                while (
+                    ($counterpartRow = $counterpartResult->fetch_assoc())
+                    !== null
+                ) {
+                    $counterparts[
+                        (int) $counterpartRow['fernmeldeplan_eintrag_id']
+                    ][] = [
+                        'gegenstelle_id' =>
+                            (int) $counterpartRow['gegenstelle_id'],
+                        'sortierung' => (int) $counterpartRow['sortierung'],
+                        'name' => (string) $counterpartRow['name'],
+                        'erreichbarkeit' =>
+                            (string) $counterpartRow['erreichbarkeit'],
+                        'bemerkungen' => $counterpartRow['bemerkungen'],
+                    ];
+                }
+                $counterpartResult->free();
+            } finally {
+                $counterpartStatement->close();
+            }
+            foreach ($plans as &$planWithCounterparts) {
+                foreach (
+                    $planWithCounterparts['eintraege'] as &$entryReference
+                ) {
+                    $entryReference['gegenstellen'] = $counterparts[
+                        (int) $entryReference['fernmeldeplan_eintrag_id']
+                    ] ?? [];
+                }
+                unset($entryReference);
+            }
+            unset($planWithCounterparts);
+        }
         foreach ($plans as &$plan) {
             $plan['revision'] = estab_dv_telecom_plan_revision($plan);
         }

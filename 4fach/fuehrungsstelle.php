@@ -107,6 +107,8 @@ function dv_operations_is_telecom_revision_action(mixed $action): bool
             'add_plan_entry',
             'update_plan_entry',
             'delete_plan_entry',
+            'add_plan_counterpart',
+            'delete_plan_counterpart',
             'discard_plan',
             'activate_plan',
         ],
@@ -489,6 +491,62 @@ if ($requestMethod === 'POST') {
                 'fernmeldeplan-entwurf'
             );
         }
+        if ($action === 'add_plan_counterpart') {
+            $planId = estab_dv_positive_id(
+                $_POST['fernmeldeplan_id'] ?? null,
+                'Fernmeldeplan'
+            );
+            $entryId = estab_dv_positive_id(
+                $_POST['fernmeldeplan_eintrag_id'] ?? null,
+                'Fernmeldeweg'
+            );
+            estab_dv_add_telecom_counterpart(
+                $connection,
+                $incidentId,
+                $planId,
+                $entryId,
+                $operationIdentity,
+                $_POST,
+                estab_dv_telecom_revision_token(
+                    $_POST['plan_revision'] ?? null
+                ),
+                $conf_4f_tbl['protokoll']
+            );
+            dv_operations_redirect(
+                'counterpart_added',
+                'fernmeldeweg-' . $entryId,
+                ['entry' => $entryId]
+            );
+        }
+        if ($action === 'delete_plan_counterpart') {
+            $planId = estab_dv_positive_id(
+                $_POST['fernmeldeplan_id'] ?? null,
+                'Fernmeldeplan'
+            );
+            $entryId = estab_dv_positive_id(
+                $_POST['fernmeldeplan_eintrag_id'] ?? null,
+                'Fernmeldeweg'
+            );
+            estab_dv_remove_telecom_counterpart(
+                $connection,
+                $incidentId,
+                $planId,
+                estab_dv_positive_id(
+                    $_POST['gegenstelle_id'] ?? null,
+                    'Gegenstelle'
+                ),
+                $operationIdentity,
+                estab_dv_telecom_revision_token(
+                    $_POST['plan_revision'] ?? null
+                ),
+                $conf_4f_tbl['protokoll']
+            );
+            dv_operations_redirect(
+                'counterpart_removed',
+                'fernmeldeweg-' . $entryId,
+                ['entry' => $entryId]
+            );
+        }
         if ($action === 'update_plan_entry') {
             $planId = estab_dv_positive_id(
                 $_POST['fernmeldeplan_id'] ?? null,
@@ -825,6 +883,10 @@ $flashMessages = [
         'Sie haben die Schichtübernahme persönlich bestätigt. Die '
         . 'Nachfolgeschicht ist jetzt aktiv.',
     'plan_created' => 'Der erste Fernmeldeplanentwurf wurde angelegt.',
+    'counterpart_added' =>
+        'Die Gegenstelle wurde am Weg erfasst. Sie steht dem Fernmelder und '
+        . 'dem LdF künftig als Vorschlag zur Verfügung.',
+    'counterpart_removed' => 'Die Gegenstelle wurde vom Weg entfernt.',
     'plan_revision_started' => 'Der aktive Fernmeldeplan wurde vollständig '
         . 'in einen bearbeitbaren Entwurf kopiert.',
     'plan_updated' => 'Die Kopfdaten des Entwurfs wurden gespeichert.',
@@ -1241,6 +1303,7 @@ foreach ($plans as $plan) {
                   trim((string) ($entry['betriebsart'] ?? '')),
                   trim((string) ($entry['rufgruppe'] ?? '')),
                   trim((string) ($entry['relaisstelle'] ?? '')),
+                  trim((string) $entry['verkehrsform']),
               ], static fn (string $part): bool => $part !== ''));
               $mittel = estab_dv_telecom_route_label(
                   $entry['medium'],
@@ -1255,10 +1318,15 @@ foreach ($plans as $plan) {
                   'rufname' => (string) $entry['erreichbarkeit'],
                   'mittel' => $mittel,
                   'technik' => implode(' · ', $teile),
-                  'verkehrsform' => (string) $entry['verkehrsform'],
                   'ersatz' => $entry['rueckfallebene_fuer_weg'] === null
                       ? ''
                       : 'für Weg ' . (int) $entry['rueckfallebene_fuer_weg'],
+                  'gegenstellen' => implode(' · ', array_map(
+                      static fn (array $g): string =>
+                          (string) $g['name'] . ' ('
+                          . (string) $g['erreichbarkeit'] . ')',
+                      $entry['gegenstellen'] ?? []
+                  )),
                   'vermerke' => trim(
                       (string) $entry['besondere_vermerke']
                       . ' ' . (string) $entry['bemerkungen']
@@ -1292,17 +1360,18 @@ foreach ($plans as $plan) {
                       'filter' => array_keys($wegeMedien),
                       'filtername' => 'Alle Mittel'],
                   ['schluessel' => 'technik',
-                      'kopf' => 'Technische Angaben', 'breite' => 16,
+                      'kopf' => 'Technische Angaben', 'breite' => 18,
                       'sortierbar' => false, 'suchbar' => true,
                       'art' => 'text'],
-                  ['schluessel' => 'verkehrsform', 'kopf' => 'Verkehrsform',
-                      'breite' => 12, 'sortierbar' => true,
-                      'suchbar' => true, 'art' => 'text'],
                   ['schluessel' => 'ersatz', 'kopf' => 'Rückfallebene',
                       'breite' => 12, 'sortierbar' => true,
                       'suchbar' => true, 'art' => 'text'],
+                  ['schluessel' => 'gegenstellen',
+                      'kopf' => 'Erreicht', 'breite' => 12,
+                      'sortierbar' => false, 'suchbar' => true,
+                      'art' => 'text', 'klammern' => true],
                   ['schluessel' => 'vermerke', 'kopf' => 'Vermerke',
-                      'breite' => 12, 'sortierbar' => false,
+                      'breite' => 10, 'sortierbar' => false,
                       'suchbar' => true, 'art' => 'text',
                       'klammern' => true],
               ],
@@ -1653,6 +1722,91 @@ foreach ($plans as $plan) {
                       Weg aus dem Entwurf entfernen
                     </button>
                   </form>
+                  <section class="estab-telecom-counterparts">
+                    <h4>Gegenstellen über diesen Weg</h4>
+                    <p>Wer ist über diesen Weg zu erreichen, und unter welcher
+                      Erreichbarkeit? Die Angaben stehen dem Fernmelder und
+                      dem LdF später als Vorschlag im Vordruck zur Verfügung;
+                      sie ersetzen die Felder der Nachricht nicht.</p>
+                    <?php $gegenstellen = $entry['gegenstellen'] ?? []; ?>
+                    <?php if ($gegenstellen === []): ?>
+                      <p class="estab-tool-notice">Für diesen Weg ist noch
+                        keine Gegenstelle erfasst.</p>
+                    <?php else: ?>
+                      <ul class="estab-telecom-counterpart-list">
+                        <?php foreach ($gegenstellen as $gegenstelle): ?>
+                          <li>
+                            <span><strong><?= dv_operations_html(
+                                $gegenstelle['name']
+                            ) ?></strong> ·
+                            <?= dv_operations_html(
+                                $gegenstelle['erreichbarkeit']
+                            ) ?><?= trim(
+                                (string) ($gegenstelle['bemerkungen'] ?? '')
+                            ) === ''
+                                ? ''
+                                : ' · ' . dv_operations_html(
+                                    (string) $gegenstelle['bemerkungen']
+                                ) ?></span>
+                            <form method="post" action="fuehrungsstelle.php">
+                              <?= estab_csrf_field() ?>
+                              <input type="hidden" name="operation_action"
+                                value="delete_plan_counterpart">
+                              <input type="hidden" name="fernmeldeplan_id"
+                                value="<?= $planId ?>">
+                              <input type="hidden"
+                                name="fernmeldeplan_eintrag_id"
+                                value="<?= $entryId ?>">
+                              <input type="hidden" name="gegenstelle_id"
+                                value="<?= (int)
+                                  $gegenstelle['gegenstelle_id'] ?>">
+                              <input type="hidden" name="plan_revision"
+                                value="<?= dv_operations_html($revision) ?>">
+                              <button
+                                class="estab-button estab-button-danger-outline"
+                                type="submit">Entfernen</button>
+                            </form>
+                          </li>
+                        <?php endforeach; ?>
+                      </ul>
+                    <?php endif; ?>
+                    <form class="estab-tool-form" method="post"
+                      action="fuehrungsstelle.php" data-estab-dirty-guard>
+                      <?= estab_csrf_field() ?>
+                      <input type="hidden" name="operation_action"
+                        value="add_plan_counterpart">
+                      <input type="hidden" name="fernmeldeplan_id"
+                        value="<?= $planId ?>">
+                      <input type="hidden" name="fernmeldeplan_eintrag_id"
+                        value="<?= $entryId ?>">
+                      <input type="hidden" name="plan_revision"
+                        value="<?= dv_operations_html($revision) ?>">
+                      <div class="estab-tool-form-grid">
+                        <label>Name der Gegenstelle
+                          <input name="name" maxlength="255" required>
+                          <small>Klarbezeichnung der Stelle oder Einheit.</small>
+                        </label>
+                        <label><?= dv_operations_html(
+                            'Erreichbar unter ('
+                            . estab_dv_telecom_route_label(
+                                $entry['medium'],
+                                $entry['funkart'] ?? null
+                            ) . ')'
+                        ) ?>
+                          <input name="erreichbarkeit" maxlength="255" required>
+                          <small>Das Mittel ist das dieses Wegs.</small>
+                        </label>
+                      </div>
+                      <label>Bemerkungen
+                        <textarea name="bemerkungen"
+                          maxlength="10000"></textarea>
+                        <small>Betriebszeiten, Einschränkungen.</small>
+                      </label>
+                      <button class="estab-button" type="submit">
+                        Gegenstelle am Weg erfassen
+                      </button>
+                    </form>
+                  </section>
                 </details>
               <?php endforeach; ?>
               </div>

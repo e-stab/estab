@@ -166,13 +166,16 @@ diesen Vorgang.
 
 > **Prüfpunkt C2.** Kette, Ring, Selbstbezug, Löschsperre.
 
-- [ ] **A09** `!` **M** Gegenstellen am Weg
+- [x] **A09** `!!` **L** Gegenstellen am Weg
       → `docker/db/migrations/125-fernmeldeplan-gegenstellen.sql`, `app/dv_operations.php`, `4fach/fuehrungsstelle.php`
-      - [ ] `nv_fernmeldeplan_gegenstellen`: `name`, `erreichbarkeit`, `sortierung`, `bemerkungen`
-      - [ ] Eigene Unveränderlichkeitsauslöser nach dem Muster `estab_dv94_fernmeldeplan_entry_*`
-      - [ ] Die Versionskopie kopiert die Gegenstellen mit
-      - [ ] **Kein eigenes Medium** — es ist das des Wegs
-      - [ ] Ausfüllhilfe der Bemerkung nennt die Betriebszeiten (O8)
+      - [x] `nv_fernmeldeplan_gegenstellen`: `name`, `erreichbarkeit`,
+            `sortierung`, `bemerkungen` — Migration 126
+      - [x] Drei eigene Unveränderlichkeitsauslöser — neu geschrieben, weil eine
+            ausgelieferte Migration prüfsummengebunden ist
+      - [x] Die Versionskopie kopiert die Gegenstellen mit
+      - [x] Anlegen und Entfernen im Entwurf, Anzeige in der Plantafel
+      - [x] **Kein eigenes Medium** — es ist das des Wegs; das Vertragstor prüft es
+      - [x] Ausfüllhilfe der Bemerkung nennt die Betriebszeiten (O8)
       - **Prüfung:** `schema_migration_contract.php`; ein Versionswechsel überträgt Gegenstellen vollständig
       - **Abhängigkeit:** A04 · **Regel:** `FMP-GEGENSTELLE-AM-WEG` · **Spec:** 5.3
 
@@ -182,9 +185,10 @@ diesen Vorgang.
       - **Prüfung:** `tests/integration/incident_export.php`
       - **Abhängigkeit:** A06, A08, A09
 
-- [ ] **A11** `·` **XS** Bestandsprüfung nachführen
+- [x] **A11** `·` **XS** Bestandsprüfung nachführen
       → `app/readiness.php`
-      - [ ] Neue Tabellen, Spalten, Fremdschlüssel und Auslöser in die Prüfung
+      - [x] Neue Tabellen, Spalten, Fremdschlüssel und Auslöser in die Prüfung —
+            laufend mit jeder Migration mitgezogen
       - **Prüfung:** `readiness` meldet vollständig
       - **Abhängigkeit:** A09
 

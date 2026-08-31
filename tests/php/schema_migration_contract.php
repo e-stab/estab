@@ -55,6 +55,9 @@ $reachabilityMigration = $read(
 $fallbackMigration = $read(
     $root . '/docker/db/migrations/125-fernmeldeweg-rueckfallebene.sql'
 );
+$counterpartMigration = $read(
+    $root . '/docker/db/migrations/126-fernmeldeplan-gegenstellen.sql'
+);
 $attachmentIntegrityMigration = $read(
     $root . '/docker/db/migrations/95-attachment-ingest-integrity.sql'
 );
@@ -2940,6 +2943,46 @@ $assert(
     'Fallback reference, its identity target, or its delete rule is outside '
         . 'the gate'
 );
+// Eine Gegenstelle haengt an genau einem Weg und erbt dessen Mittel -- sie
+// traegt selbst keines. Und sie ist nur im Entwurf veraenderlich, wie ihr Weg.
+$assert(
+    str_contains(
+        $counterpartMigration,
+        'CREATE TABLE IF NOT EXISTS `nv_fernmeldeplan_gegenstellen`'
+    )
+        && str_contains($counterpartMigration, 'ON DELETE CASCADE')
+        && !str_contains($counterpartMigration, '`medium`')
+        && str_contains(
+            $counterpartMigration,
+            'estab_dv126_gegenstelle_insert'
+        )
+        && str_contains(
+            $counterpartMigration,
+            'estab_dv126_gegenstelle_update'
+        )
+        && str_contains(
+            $counterpartMigration,
+            'estab_dv126_gegenstelle_delete'
+        )
+        && str_contains(
+            $counterpartMigration,
+            'Activated telecommunications counterparts are immutable'
+        )
+        && str_contains(
+            $counterpartMigration,
+            "'125-fernmeldeweg-rueckfallebene.sql'"
+        )
+        && str_contains(
+            $verify,
+            'estab:migration:126-fernmeldeplan-gegenstellen:v1'
+        )
+        && str_contains(
+            $readiness,
+            "'126-fernmeldeplan-gegenstellen.sql'"
+        ),
+    'Counterpart table, its inherited medium, or its draft-only mutability is '
+        . 'outside the gate'
+);
 $etbMigrationFragments = [
     "table_name = 'nv_funktionsfaehigkeiten' AND table_type = 'BASE TABLE' "
         . "AND engine = 'InnoDB' AND table_collation = "
@@ -3235,7 +3278,7 @@ $assert(
         && str_contains($verifySql, "index_name <> 'PRIMARY') = 0")
         && str_contains(
             $verifySql,
-            '(SELECT COUNT(*) FROM `estab_schema_migrations`) = 31'
+            '(SELECT COUNT(*) FROM `estab_schema_migrations`) = 32'
         )
         && str_contains($verifySql, "'96-etb-duty-function.sql'")
         && str_contains(
@@ -3294,7 +3337,11 @@ $assert(
             $verifySql,
             "'125-fernmeldeweg-rueckfallebene.sql'"
         )
-        && str_contains($verifySql, ") = 31) AS `schema_migrations_ok`")
+        && str_contains(
+            $verifySql,
+            "'126-fernmeldeplan-gegenstellen.sql'"
+        )
+        && str_contains($verifySql, ") = 32) AS `schema_migrations_ok`")
         && str_contains(
             $verifySql,
             'Discarded telecommunications drafts are immutable evidence'
@@ -3321,7 +3368,7 @@ $assert(
         && str_contains($readinessSql, "index_name <> 'PRIMARY') = 0")
         && str_contains(
             $readinessSql,
-            '(SELECT COUNT(*) FROM estab_schema_migrations) = 31'
+            '(SELECT COUNT(*) FROM estab_schema_migrations) = 32'
         )
         && str_contains($readinessSql, "'96-etb-duty-function.sql'")
         && str_contains(
@@ -3373,7 +3420,7 @@ $assert(
         )
         && str_contains(
             $readinessSql,
-            "checksum REGEXP BINARY '^[0-9a-f]{64}$') = 31"
+            "checksum REGEXP BINARY '^[0-9a-f]{64}$') = 32"
         ),
     'Runtime readiness does not require the exact final ETB catalogue and ledger'
 );
@@ -3627,8 +3674,10 @@ $assert(
         && str_contains($readiness, "'124-fernmeldeweg-erreichbarkeit.sql'")
         && str_contains($verify, "'125-fernmeldeweg-rueckfallebene.sql'")
         && str_contains($readiness, "'125-fernmeldeweg-rueckfallebene.sql'")
-        && str_contains($verify, 'estab_schema_migrations`) = 31')
-        && str_contains($readiness, 'estab_schema_migrations) = 31'),
+        && str_contains($verify, "'126-fernmeldeplan-gegenstellen.sql'")
+        && str_contains($readiness, "'126-fernmeldeplan-gegenstellen.sql'")
+        && str_contains($verify, 'estab_schema_migrations`) = 32')
+        && str_contains($readiness, 'estab_schema_migrations) = 32'),
     'Migration ledger/readiness does not require all release migrations'
 );
 $assert(

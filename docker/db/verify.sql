@@ -19,8 +19,9 @@ SELECT
          'nv_dienstuebergaben',
          'nv_fernmeldeplaene', 'nv_fernmeldeplan_eintraege',
          'nv_melderauftraege', 'nv_selbstregistrierung',
-         'nv_fernmeldewege', 'nv_fernmeldeweg_zuordnung'
-       )) = 34) AS `base_tables_ok`,
+         'nv_fernmeldewege', 'nv_fernmeldeweg_zuordnung',
+         'nv_fernmeldeplan_gegenstellen'
+       )) = 35) AS `base_tables_ok`,
   ((SELECT COUNT(*)
       FROM information_schema.tables
      WHERE table_schema = DATABASE()
@@ -463,6 +464,22 @@ SELECT
      WHERE constraint_schema = DATABASE()
        AND constraint_name = 'fk_fernmeldeweg_rueckfallebene'
        AND delete_rule = 'RESTRICT') = 1
+   AND
+   (SELECT COUNT(*)
+      FROM information_schema.tables
+     WHERE table_schema = DATABASE()
+       AND table_name = 'nv_fernmeldeplan_gegenstellen'
+       AND table_comment =
+         'estab:migration:126-fernmeldeplan-gegenstellen:v1') = 1
+   AND
+   (SELECT COUNT(*)
+      FROM information_schema.triggers
+     WHERE trigger_schema = DATABASE()
+       AND trigger_name IN (
+         'estab_dv126_gegenstelle_insert',
+         'estab_dv126_gegenstelle_update',
+         'estab_dv126_gegenstelle_delete'
+       )) = 3
    AND
    (SELECT COUNT(*) FROM `nv_einsaetze`
      WHERE `fuehrungsstellenname_gesperrt` NOT IN (0, 1)
@@ -1993,7 +2010,7 @@ SELECT
        BINARY 'STRICT', BINARY 'LOOSE'
      )) = 0)
        AS `incident_permission_mode_ok`,
-  ((SELECT COUNT(*) FROM `estab_schema_migrations`) = 31
+  ((SELECT COUNT(*) FROM `estab_schema_migrations`) = 32
    AND
    (SELECT COUNT(*)
       FROM `estab_schema_migrations`
@@ -2028,10 +2045,11 @@ SELECT
        '122-fernmeldeweg-identitaet.sql',
        '123-fernmeldeweg-funkart.sql',
        '124-fernmeldeweg-erreichbarkeit.sql',
-       '125-fernmeldeweg-rueckfallebene.sql'
+       '125-fernmeldeweg-rueckfallebene.sql',
+       '126-fernmeldeplan-gegenstellen.sql'
      )
        AND `state` = 'applied'
-       AND `checksum` REGEXP BINARY '^[0-9a-f]{64}$') = 31)
+       AND `checksum` REGEXP BINARY '^[0-9a-f]{64}$') = 32)
        AS `schema_migrations_ok`;
 
 SELECT `table_name`, `engine`, `table_collation`

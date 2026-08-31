@@ -262,6 +262,47 @@ $assert(
     'legacy radio routes no longer read as undetermined'
 );
 /*
+ * Eine Gegenstelle traegt zwei Angaben, weil der Vordruck zwei braucht: den
+ * Namen der Stelle und die Adresse, unter der sie antwortet. Ein eigenes
+ * Medium hat sie NICHT -- das ist das des Wegs, und genau darin liegt die
+ * Aussage "ueber DIESEN Weg antwortet JENE Stelle unter DIESER Adresse".
+ */
+$gegenstelle = estab_dv_telecom_counterpart_values([
+    'name' => 'Kreisleitstelle',
+    'erreichbarkeit' => 'Leitstelle Kreis',
+    'bemerkungen' => 'rund um die Uhr besetzt',
+]);
+$assert(
+    $gegenstelle === [
+        'name' => 'Kreisleitstelle',
+        'erreichbarkeit' => 'Leitstelle Kreis',
+        'bemerkungen' => 'rund um die Uhr besetzt',
+    ]
+        && !array_key_exists('medium', $gegenstelle)
+        && !array_key_exists('funkart', $gegenstelle),
+    'a counterpart carries a medium of its own'
+);
+foreach (['name', 'erreichbarkeit'] as $pflicht) {
+    $eingabe = [
+        'name' => 'Kreisleitstelle',
+        'erreichbarkeit' => 'Leitstelle Kreis',
+    ];
+    $eingabe[$pflicht] = '';
+    $expect(
+        EstabDvInputException::class,
+        static fn (): array => estab_dv_telecom_counterpart_values($eingabe),
+        'a counterpart without ' . $pflicht . ' was accepted'
+    );
+}
+$assert(
+    estab_dv_telecom_counterpart_values([
+        'name' => 'Kreisleitstelle',
+        'erreichbarkeit' => 'Leitstelle Kreis',
+    ])['bemerkungen'] === '',
+    'a counterpart without a note was refused'
+);
+
+/*
  * Die Rueckfallebene ist ein Verweis, kein Schalter mit Ziel. Sie nimmt eine
  * Kennung an oder nichts; ein zweites Wahrheitsfeld gaebe es nur, damit es
  * dem Verweis widersprechen kann.

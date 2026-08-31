@@ -151,7 +151,7 @@ foreach (['meldeart', 'nachrichtenart', 'message_kind'] as $invented) {
 foreach (glob($root . '/docker/db/migrations/*.sql') ?: [] as $migration) {
     $number = (int) basename($migration);
     $assert(
-        $number <= 125,
+        $number <= 126,
         estab_dv_requirement(
             'MW-MELDEART',
             'Es ist eine neue Migration hinzugekommen: '

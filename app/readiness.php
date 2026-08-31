@@ -157,7 +157,8 @@ function estab_readiness_schema_query(): string
         . "'nv_dienstuebergaben',"
         . "'nv_fernmeldeplaene','nv_fernmeldeplan_eintraege',"
         . "'nv_melderauftraege','nv_selbstregistrierung',"
-        . "'nv_fernmeldewege','nv_fernmeldeweg_zuordnung')) = 34) "
+        . "'nv_fernmeldewege','nv_fernmeldeweg_zuordnung',"
+        . "'nv_fernmeldeplan_gegenstellen')) = 35) "
         . "AND ((SELECT COUNT(*) FROM nv_empfmtx) = 20) "
         . "AND ((SELECT COUNT(DISTINCT mtx_x, mtx_y) FROM nv_empfmtx) = 20) "
         . "AND ((SELECT COUNT(*) FROM nv_empfmtx "
@@ -523,6 +524,12 @@ function estab_readiness_schema_query(): string
         . "referential_constraints WHERE constraint_schema = DATABASE() "
         . "AND constraint_name = 'fk_fernmeldeweg_rueckfallebene' "
         . "AND delete_rule = 'RESTRICT') = 1) "
+        // Eine Gegenstelle ist nur im Entwurf veraenderlich -- wie ihr Weg.
+        . "AND ((SELECT COUNT(*) FROM information_schema.triggers "
+        . "WHERE trigger_schema = DATABASE() AND trigger_name IN ("
+        . "'estab_dv126_gegenstelle_insert',"
+        . "'estab_dv126_gegenstelle_update',"
+        . "'estab_dv126_gegenstelle_delete')) = 3) "
         . "AND ((SELECT COUNT(*) FROM information_schema.columns "
         . "WHERE table_schema = DATABASE() AND table_name = 'nv_nachrichten' "
         . "AND column_name = 'estab_fernmeldeplan_eintrag_id' "
@@ -1443,7 +1450,7 @@ function estab_readiness_schema_query(): string
         . "WHERE estab_status = 'closed' AND (estab_closed_at IS NULL "
         . "OR estab_retain_until IS NULL OR estab_retain_until "
         . "< DATE_ADD(estab_closed_at, INTERVAL 10 YEAR))) = 0) "
-        . "AND ((SELECT COUNT(*) FROM estab_schema_migrations) = 31) "
+        . "AND ((SELECT COUNT(*) FROM estab_schema_migrations) = 32) "
         . "AND ((SELECT COUNT(*) FROM estab_schema_migrations "
         . "WHERE version IN ('20-nullable-dates.sql','30-runtime-schema.sql',"
         . "'40-recipient-matrix-standard.sql','45-global-incidents-prepare.sql',"
@@ -1468,7 +1475,8 @@ function estab_readiness_schema_query(): string
         . "'122-fernmeldeweg-identitaet.sql',"
         . "'123-fernmeldeweg-funkart.sql',"
         . "'124-fernmeldeweg-erreichbarkeit.sql',"
-        . "'125-fernmeldeweg-rueckfallebene.sql') "
+        . "'125-fernmeldeweg-rueckfallebene.sql',"
+        . "'126-fernmeldeplan-gegenstellen.sql') "
         . "AND state = 'applied' "
-        . "AND checksum REGEXP BINARY '^[0-9a-f]{64}$') = 31)";
+        . "AND checksum REGEXP BINARY '^[0-9a-f]{64}$') = 32)";
 }
