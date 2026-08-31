@@ -1198,7 +1198,7 @@ foreach ($plans as $plan) {
                   'betriebsstelle' => (string) $entry['betriebsstelle'],
                   'weg' => $entry['weg_nummer'] === null
                       ? ''
-                      : 'Weg ' . (int) $entry['weg_nummer'],
+                      : (string) (int) $entry['weg_nummer'],
                   'rufname' => (string) $entry['rufname'],
                   'mittel' => $mittel,
                   'technik' => implode(' · ', $teile),
@@ -1217,7 +1217,7 @@ foreach ($plans as $plan) {
               // waeren 928 gewesen und haetten quergescrollt.
               'mindestbreite' => '56rem',
               'spalten' => [
-                  ['schluessel' => 'weg', 'kopf' => 'Nr.', 'breite' => 6,
+                  ['schluessel' => 'weg', 'kopf' => 'Weg', 'breite' => 6,
                       'sortierbar' => true, 'suchbar' => true, 'art' => 'text'],
                   ['schluessel' => 'betriebsstelle',
                       'kopf' => 'Stelle', 'breite' => 16,
@@ -1236,14 +1236,14 @@ foreach ($plans as $plan) {
                       'filter' => array_keys($wegeMedien),
                       'filtername' => 'Alle Mittel'],
                   ['schluessel' => 'technik',
-                      'kopf' => 'Technische Angaben', 'breite' => 20,
+                      'kopf' => 'Technische Angaben', 'breite' => 18,
                       'sortierbar' => false, 'suchbar' => true,
                       'art' => 'text'],
                   ['schluessel' => 'verkehrsform', 'kopf' => 'Verkehrsform',
                       'breite' => 14, 'sortierbar' => true,
                       'suchbar' => true, 'art' => 'text'],
                   ['schluessel' => 'vermerke', 'kopf' => 'Vermerke',
-                      'breite' => 18, 'sortierbar' => false,
+                      'breite' => 16, 'sortierbar' => false,
                       'suchbar' => true, 'art' => 'text',
                       'klammern' => true],
               ],
