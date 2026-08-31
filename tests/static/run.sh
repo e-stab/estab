@@ -256,6 +256,7 @@ for test_name in \
     rm_keine_doppelsendung \
     rm_nachweis_weg \
     zeit_sortierung \
+    bedingte_funktionen \
     pruefungen_vollstaendig
 do
     [ -f "$repo_root/tests/php/$test_name.php" ] || continue

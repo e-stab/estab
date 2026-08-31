@@ -232,6 +232,16 @@ function estab_tabelle_spalte(array $spalte): array
         // unbrauchbar -- und der ganze Text steht im Vordruck, den ein Klick
         // oeffnet.
         'klammern' => (bool) ($spalte['klammern'] ?? false),
+        /*
+         * Die Spalte, die ihre Zeile benennt.
+         *
+         * Ein Vorleseprogramm liest zu jeder Zelle deren Spaltenkopf vor.
+         * Welche Zeile es war, sagt nur ein `<th scope="row">` -- ohne ihn
+         * heisst es "Kontostatus: nicht gesperrt" ohne das Konto dazu. Die
+         * Schichtverwaltung hatte das von Hand; das Bauteil kann es jetzt
+         * selbst, und damit jede Liste.
+         */
+        'zeilenkopf' => (bool) ($spalte['zeilenkopf'] ?? false),
     ];
 }
 
@@ -1095,9 +1105,12 @@ function estab_tabelle_markup(array $tabelle): string
                     (string) ($zeile[$spalte['schluessel']] ?? '')
                 );
             }
-            $markup .= '<td data-label="' . estab_message_html($spalte['kopf']) . '"'
+            $marke = $spalte['zeilenkopf'] ? 'th' : 'td';
+            $markup .= '<' . $marke
+                . ($spalte['zeilenkopf'] ? ' scope="row"' : '')
+                . ' data-label="' . estab_message_html($spalte['kopf']) . '"'
                 . ($spalte['zahlenspalte'] ? ' class="estab-tabelle-zahl"' : '')
-                . '>' . $inhalt . '</td>';
+                . '>' . $inhalt . '</' . $marke . '>';
         }
         if ($aktion !== null) {
             $markup .= '<td data-label="Aktion">' . $aktion($zeile) . '</td>';

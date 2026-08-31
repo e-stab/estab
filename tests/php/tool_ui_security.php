@@ -211,7 +211,15 @@ $assert(
             $tabellenbauteil,
             '<caption class="estab-visually-hidden">'
         )
-        && str_contains($tabellenbauteil, "'<td data-label=\"'")
+        /*
+         * Die Marke der Zelle steht in einer Variablen, seit eine Spalte
+         * ihre Zeile benennen kann: Sie wird dann zu <th scope="row">,
+         * damit ein Vorleseprogramm sagt, um welche Zeile es geht. Die
+         * Bezeichnung, an der die Kartenansicht sich orientiert, traegt
+         * jede Zelle weiterhin.
+         */
+        && str_contains($tabellenbauteil, "' data-label=\"'")
+        && str_contains($tabellenbauteil, "\$marke = \$spalte['zeilenkopf'] ? 'th' : 'td';")
         && substr_count($users, 'autocomplete="new-password"') === 4
         && str_contains($users, 'aria-labelledby="estab-create-user-title"')
         && str_contains($users, 'name="admin_action" value="create"')

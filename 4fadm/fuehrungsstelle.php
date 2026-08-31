@@ -36,6 +36,80 @@ try {
     }
 }
 
+require_once __DIR__ . '/../app/tabelle.php';
+
+/**
+ * Eine Tafel der Führungsstellenverwaltung aus dem Tabellenbauteil.
+ *
+ * Die vier Listen dieser Seite -- Konten, Konten mit Schichten, geplante
+ * und laufende Besetzung -- schrieben ihr Tabellenmarkup selbst. Das ist
+ * die Uneinheitlichkeit, die im Betrieb auffällt: Wer sich in einer
+ * Liste zurechtgefunden hat, findet sich in der nächsten nicht wieder.
+ *
+ * Sie tragen `baender => false`, also die zweite Betriebsart des
+ * Bauteils: einen festen Stand ohne Suchfeld, Filter und Blätterer. Eine
+ * Schicht hat fünf Besetzungen; eine Volltextsuche darüber wäre Zierrat,
+ * und ein Blätterer für fünf Zeilen ist eine Bedienung, die nichts
+ * bedient. Was das Bauteil hier bringt, ist das Gemeinsame: dieselbe
+ * Kopfzeile, dieselben Abstände, dieselbe Karte auf schmalem Schirm,
+ * derselbe Satz bei leerer Liste -- und die Zusicherung, dass eine Zeile
+ * genau so viele Zellen hat wie die Tabelle Spalten.
+ *
+ * Der Inhalt jeder Zelle bleibt, wie er war: Er wird zwischengespeichert
+ * und danach zerlegt. Aus dem Quelltext einer Vorlage ist nicht ablesbar,
+ * welches `<td>` zu welcher Spalte gehört -- aus dem Ergebnis schon.
+ *
+ * @param list<string> $koepfe
+ * @param list<string> $zeilenMarkup Je Eintrag das rohe Markup der Zellen.
+ */
+function fuehrungsstelle_tafel(
+    string $id,
+    string $beschriftung,
+    array $koepfe,
+    array $zeilenMarkup,
+    string $leer
+): string {
+    $breite = (int) floor(100 / max(1, count($koepfe)));
+    $spalten = [];
+    foreach ($koepfe as $nummer => $kopf) {
+        $spalten[] = [
+            'schluessel' => 'z' . $nummer,
+            'kopf' => $kopf,
+            'breite' => $breite,
+            'sortierbar' => false,
+            'suchbar' => false,
+            'art' => 'text',
+            /*
+             * Die erste Spalte benennt ihre Zeile: das Benutzerkonto, die
+             * Funktion. Ein Vorleseprogramm sagt damit "Benutzerkonto Meier,
+             * Kontostatus nicht gesperrt" statt nur "Kontostatus nicht
+             * gesperrt". Die Schichtverwaltung hatte das von Hand als
+             * <th scope="row">; das Bauteil setzt es jetzt.
+             */
+            'zeilenkopf' => $nummer === 0,
+            'zelle' => static fn (array $z): string => (string) $z['z' . $nummer],
+        ];
+    }
+    $zeilen = [];
+    foreach ($zeilenMarkup as $nummer => $markup) {
+        $zellen = estab_tabelle_zeile_zerlegen($markup, count($koepfe));
+        $zeile = ['id' => (string) $nummer];
+        foreach ($zellen as $stelle => $inhalt) {
+            $zeile['z' . $stelle] = $inhalt;
+        }
+        $zeilen[] = $zeile;
+    }
+    return estab_tabelle_markup([
+        'id' => $id,
+        'beschriftung' => $beschriftung,
+        'baender' => false,
+        'mindestbreite' => '38rem',
+        'spalten' => $spalten,
+        'zeilen' => $zeilen,
+        'leer' => $leer,
+    ]);
+}
+
 if ($shiftAdminMode === ESTAB_PERMISSION_MODE_LOOSE) {
 
 session_start();
@@ -54,6 +128,7 @@ header('Cache-Control: private, no-store, max-age=0');
 header('Pragma: no-cache');
 header('Referrer-Policy: no-referrer');
 header('X-Robots-Tag: noindex, nofollow');
+
 
 function shift_admin_redirect(string $result): never
 {
@@ -606,23 +681,9 @@ foreach ($shifts as $shift) {
             <?php endif; ?>
           </div>
 
-          <?php if ($members === []): ?>
-            <div class="estab-tool-table-wrap">
-              <p class="estab-tool-empty">Dieser Schicht ist noch kein Konto
-                zugeordnet.</p>
-            </div>
-          <?php else: ?>
-            <div class="estab-tool-table-wrap estab-tool-table-responsive">
-              <table class="estab-tool-table">
-                <thead><tr>
-                  <th>Benutzerkonto</th>
-                  <th>Feste Funktion</th>
-                  <th>Kontostatus</th>
-                  <th>Aktion</th>
-                </tr></thead>
-                <tbody>
-                <?php foreach ($members as $member): ?>
-                  <?php
+          <?php
+          $kontoMarkup = [];
+          foreach ($members as $member) {
                   $blocked = (int) $member['estab_gesperrt'] === 1;
                   $memberCode = (string) $member['benutzer_kuerzel'];
                   $memberName = trim((string) ($member['benutzer'] ?? ''));
@@ -661,9 +722,9 @@ foreach ($shifts as $shift) {
                           . 'Zuordnungen. Der Kontozugang ist anschließend '
                           . 'deaktiviert.';
                   }
-                  ?>
-                  <tr>
-                    <th scope="row" data-label="Benutzerkonto"
+              ob_start();
+              ?>
+                    <td
                       class="estab-tool-identity">
                       <strong><?= estab_admin_html(
                           $member['benutzer'] !== ''
@@ -673,7 +734,7 @@ foreach ($shifts as $shift) {
                       <span><?= estab_admin_html(
                           $member['benutzer_kuerzel']
                       ) ?></span>
-                    </th>
+                    </td>
                     <td data-label="Feste Funktion">
                       <strong><?= estab_admin_html(
                           estab_function_identity_display_name(
@@ -722,12 +783,17 @@ foreach ($shifts as $shift) {
                         </form>
                       </details>
                     </td>
-                  </tr>
-                <?php endforeach; ?>
-                </tbody>
-              </table>
-            </div>
-          <?php endif; ?>
+              <?php
+              $kontoMarkup[] = (string) ob_get_clean();
+          }
+          echo fuehrungsstelle_tafel(
+              'zugangsschicht-' . $shiftId,
+              'Konten der Zugangsschicht ' . $shiftLabel,
+              ['Benutzerkonto', 'Feste Funktion', 'Kontostatus', 'Aktion'],
+              $kontoMarkup,
+              'Dieser Schicht ist noch kein Konto zugeordnet.'
+          );
+          ?>
 
           <?php if ($availableUsers !== []): ?>
             <form class="estab-tool-form" method="post"
@@ -801,20 +867,9 @@ foreach ($shifts as $shift) {
         <p>Diese Übersicht trennt individuelle Sperren, optionale
           Schichtsteuerung und feste Fachfunktion sichtbar voneinander.</p>
       </header>
-      <?php if ($users === []): ?>
-        <p class="estab-tool-empty">Keine Benutzerkonten vorhanden.</p>
-      <?php else: ?>
-        <div class="estab-tool-table-wrap estab-tool-table-responsive">
-          <table class="estab-tool-table">
-            <thead><tr>
-              <th>Benutzerkonto</th>
-              <th>Feste Funktion</th>
-              <th>Schichten</th>
-              <th>Wirksamer Zugang</th>
-            </tr></thead>
-            <tbody>
-            <?php foreach ($users as $user): ?>
-              <?php
+      <?php
+      $zugangMarkup = [];
+      foreach ($users as $user) {
               $code = (string) $user['kuerzel'];
               $memberships = $shiftMembershipsByUser[$code] ?? [];
               $blocked = (int) $user['estab_gesperrt'] === 1;
@@ -838,13 +893,13 @@ foreach ($shifts as $shift) {
                   $accessLabel = 'Durch Schichtplanung deaktiviert';
                   $accessBadge = 'estab-tool-badge-warning';
               }
-              ?>
-              <tr>
-                <th scope="row" data-label="Benutzerkonto"
+          ob_start();
+          ?>
+                <td
                   class="estab-tool-identity">
                   <strong><?= estab_admin_html($user['benutzer']) ?></strong>
                   <span><?= estab_admin_html($code) ?></span>
-                </th>
+                </td>
                 <td data-label="Feste Funktion">
                   <strong><?= estab_admin_html(
                       estab_function_identity_display_name(
@@ -874,12 +929,18 @@ foreach ($shifts as $shift) {
                     <?= estab_admin_html($accessLabel) ?>
                   </span>
                 </td>
-              </tr>
-            <?php endforeach; ?>
-            </tbody>
-          </table>
-        </div>
-      <?php endif; ?>
+          <?php
+          $zugangMarkup[] = (string) ob_get_clean();
+      }
+      echo fuehrungsstelle_tafel(
+          'zugang-nach-konto',
+          'Zugangsübersicht nach Konto mit Sperre, Schichten und '
+              . 'wirksamem Zugang',
+          ['Benutzerkonto', 'Feste Funktion', 'Schichten', 'Wirksamer Zugang'],
+          $zugangMarkup,
+          'Keine Benutzerkonten vorhanden.'
+      );
+      ?>
     </section>
   <?php endif; ?>
 
@@ -1385,29 +1446,32 @@ foreach ($handoverRequests as $handoverRequest) {
           <p>Geplant · Funktionsträger müssen ihre Zuweisung noch selbst
             annehmen.</p>
         </header>
-        <div class="estab-tool-table-wrap">
-          <table class="estab-tool-table">
-            <thead><tr>
-              <th>Funktion</th><th>Person</th><th>Status</th>
-            </tr></thead>
-            <tbody>
-            <?php foreach ($shift['besetzungen'] as $hat): ?>
-              <tr>
-                <td><?= estab_admin_html(
-                    estab_function_identity_display_name(
-                        (string) $hat['funktion'],
-                        (string) $hat['rolle']
-                    )
-                ) ?></td>
-                <td><?= estab_admin_html(
-                    $hat['benutzer'] . ' (' . $hat['benutzer_kuerzel'] . ')'
-                ) ?></td>
-                <td><?= estab_admin_html($hat['status']) ?></td>
-              </tr>
-            <?php endforeach; ?>
-            </tbody>
-          </table>
-        </div>
+        <?php
+        $besetzungMarkup = [];
+        foreach ($shift['besetzungen'] as $hat) {
+            ob_start();
+            ?>
+              <td><?= estab_admin_html(
+                  estab_function_identity_display_name(
+                      (string) $hat['funktion'],
+                      (string) $hat['rolle']
+                  )
+              ) ?></td>
+              <td><?= estab_admin_html(
+                  $hat['benutzer'] . ' (' . $hat['benutzer_kuerzel'] . ')'
+              ) ?></td>
+              <td><?= estab_admin_html($hat['status']) ?></td>
+            <?php
+            $besetzungMarkup[] = (string) ob_get_clean();
+        }
+        echo fuehrungsstelle_tafel(
+            'geplante-schicht-' . (int) $shift['dienstschicht_id'],
+            'Geplante Besetzung der Schicht #' . (int) $shift['nummer'],
+            ['Funktion', 'Person', 'Status'],
+            $besetzungMarkup,
+            'Für diese Schicht ist noch niemand eingeplant.'
+        );
+        ?>
         <form class="estab-tool-form" method="post"
           action="fuehrungsstelle.php">
           <?= estab_csrf_field() ?>
@@ -1591,13 +1655,11 @@ foreach ($handoverRequests as $handoverRequest) {
             ETB-Führung wechselt ausschließlich mit einer bestätigten
             Schichtübergabe.</p>
         </header>
-        <div class="estab-tool-table-wrap">
-          <table class="estab-tool-table">
-            <thead><tr><th>Funktion</th><th>Person</th><th>Status</th>
-              <th>Einzelablösung</th></tr></thead>
-            <tbody>
-            <?php foreach ($activeShift['besetzungen'] as $hat): ?>
-              <tr>
+        <?php
+        $besetzungMarkup = [];
+        foreach ($activeShift['besetzungen'] as $hat) {
+            ob_start();
+            ?>
                 <td><?= estab_admin_html(
                     estab_function_identity_display_name(
                         (string) $hat['funktion'],
@@ -1654,11 +1716,17 @@ foreach ($handoverRequests as $handoverRequest) {
                     </form>
                   <?php endif; ?>
                 </td>
-              </tr>
-            <?php endforeach; ?>
-            </tbody>
-          </table>
-        </div>
+            <?php
+            $besetzungMarkup[] = (string) ob_get_clean();
+        }
+        echo fuehrungsstelle_tafel(
+            'aktive-schicht-' . (int) $activeShift['dienstschicht_id'],
+            'Besetzung der aktiven Schicht #' . (int) $activeShift['nummer'],
+            ['Funktion', 'Person', 'Status', 'Einzelablösung'],
+            $besetzungMarkup,
+            'Diese Schicht hat keine Besetzung.'
+        );
+        ?>
         <form class="estab-tool-form" method="post"
           action="fuehrungsstelle.php">
           <?= estab_csrf_field() ?>

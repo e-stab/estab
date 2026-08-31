@@ -1858,6 +1858,183 @@ audio[data-estab-sidebar-audio] {
     margin-top: var(--abstand-6);
 }
 
+/* ---------------------------------------------------------------------
+   Die Anmeldeseite.
+
+   Sie war 1843 Bildpunkte hoch: Titel, Fassung, Abbruchknopf, zweite
+   Ueberschrift, Erklaersatz, dann die volle Kontenliste und darunter die
+   vier Felder. Auf einem Laptopschirm von 640 sah man beim Aufschlagen die
+   Liste und nach dem Scrollen die Felder -- nie beides. Wer sein Konto
+   gewaehlt hatte, suchte anschliessend die Felder wieder.
+
+   Ab 64rem Fensterbreite steht die Liste jetzt *neben* den Feldern, und die
+   Seite ist genau so hoch wie das Fenster: Was scrollt, ist die Liste in
+   ihrer Tafel, nicht die Seite. Darunter rutschen die Tafeln untereinander,
+   und dann gilt wieder die alte Reihenfolge -- erst die Liste, dann die
+   Felder, denn die Liste fuellt sie. Auf einem Telefon bleibt ein Rest zu
+   scrollen; Suchband, Liste, vier Felder und zwei Knoepfe passen dort nicht
+   zugleich, und eine Tafel abzuschneiden waere schlimmer als zu scrollen.
+   --------------------------------------------------------------------- */
+.estab-anmeldung-seite {
+    min-height: 100vh;
+}
+
+.estab-anmeldung {
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    gap: var(--abstand-6);
+    margin: 0 auto;
+    max-width: 96rem;
+    min-height: 100vh;
+    padding: var(--abstand-4) var(--abstand-6) var(--abstand-7);
+}
+
+/* Der Seitenkopf ist eine Zeile: Bereichsmarke, Titel, Abbruch rechts. */
+.estab-anmeldung-kopf {
+    flex: 0 0 auto;
+    margin: 0;
+}
+
+.estab-anmeldung-kopf .estab-auth-exit {
+    margin: 0 0 0 auto;
+}
+
+/* Der Arbeitsbereich nimmt auf, was die Seite an Tafeln hat.
+
+   Flex und nicht Raster: Je nach Weg sind es eine, zwei oder drei -- eine
+   Spaltenvorgabe muesste dann jedes Mal eine andere sein. */
+.estab-anmeldung-arbeit {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    gap: var(--abstand-6);
+    min-height: 0;
+}
+
+/* Das Formular der Kontenwahl traegt nur verborgene Felder; die
+   Auswahlknoepfe der Liste haengen ueber form="..." daran. Ohne diese Regel
+   waere es ein Kind des Arbeitsbereichs wie jede Tafel -- und stuende dort
+   als leerer Platz zwischen ihnen. */
+#estab-kontenwahl {
+    display: contents;
+}
+
+/* `flex-shrink: 1`: Nebeneinander muessen die Tafeln schmaler werden
+   duerfen. Ohne diese Erlaubnis behaelt eine Tafel die Breite ihres
+   laengsten Satzes -- die Auswahltafel mit ihren Hinweisen brachte damit
+   1044 Bildpunkte Ueberlauf mit, und die Liste daneben fiel auf
+   Kartenbreite zusammen. */
+.estab-anmeldung-tafel {
+    display: flex;
+    flex: 0 1 auto;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.estab-anmeldung-konten > .estab-tabelle {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
+/* Die Liste ist der Teil, der scrollen darf -- untereinander gedeckelt,
+   damit die Anmeldefelder nicht eine Bildschirmhoehe tiefer liegen. */
+.estab-anmeldung-konten .estab-tabelle-rahmen {
+    max-height: 40vh;
+    overflow-y: auto;
+}
+
+/* Der Auswahlknopf steht in der schmalsten Spalte der Liste. Bricht sein
+   Wort, wird die Zeile zwei Zeilen hoch, und aus acht sichtbaren Konten
+   werden fuenf. */
+/* Der Auswahlknopf steht in der schmalsten Spalte der Liste. Bricht sein
+   Wort, wird die Zeile zwei Zeilen hoch, und aus zehn sichtbaren Konten
+   werden sechs. Sein Seitenpolster faellt dafuer auf eine Stufe zurueck --
+   die Klickflaeche verliert dabei nichts an Hoehe, und in der engsten
+   zweispaltigen Lage (Fenster 960) stehen der Spalte 84 Bildpunkte zur
+   Verfuegung: genug fuer das Wort, nicht genug fuer das Wort mit dem
+   groesseren Polster. */
+.estab-anmeldung-konten .estab-tabelle-blatt tbody .estab-button {
+    padding-left: var(--abstand-3);
+    padding-right: var(--abstand-3);
+    white-space: nowrap;
+}
+
+.estab-anmeldung-fuss {
+    color: var(--tinte-neben);
+    flex: 0 0 auto;
+    font-size: var(--schrift-2);
+    margin: 0;
+}
+
+/* Ohne Kontenliste gibt es nichts nebeneinanderzustellen: Die Kontoanlage
+   ist ein Formular und bleibt eine Spalte. Ueber die volle Breite eines
+   28-Zoll-Schirms gezogen waere sie kein Formular mehr, sondern eine
+   Landebahn. */
+.estab-anmeldung-arbeit--einspaltig .estab-anmeldung-tafel {
+    max-width: 46rem;
+}
+
+/* 64rem und nicht 60: Bei 960 Bildpunkten blieben der Liste 592, und darin
+   brach die Rollenspalte "Fernmelder" mitten im Wort, waehrend der
+   Auswahlknopf am Spaltenrand abgeschnitten wurde. Zwei Spalten sind erst
+   dann besser als eine, wenn beide lesbar sind. */
+@media (min-width: 64rem) {
+    /* `height`, nicht `min-height`: Eine Mindesthoehe waechst mit dem
+       Inhalt, und dann schiebt die Kontenliste die Seite wieder auf. */
+    .estab-anmeldung {
+        height: 100vh;
+    }
+
+    .estab-anmeldung-arbeit:not(.estab-anmeldung-arbeit--einspaltig) {
+        flex-direction: row;
+    }
+
+    /* Nebeneinander sind die Tafeln so hoch wie der Bereich. Damit ihr
+       Inhalt darin schrumpfen darf -- und nicht unten herausragt --, muss
+       die inhaltsbezogene Mindesthoehe fallen. */
+    .estab-anmeldung-arbeit:not(.estab-anmeldung-arbeit--einspaltig)
+    .estab-anmeldung-tafel {
+        min-height: 0;
+    }
+
+    /* Die Zugangsdaten brauchen eine Spaltenbreite, keine halbe Seite: vier
+       Felder untereinander. Was uebrig bleibt, gehoert der Liste. */
+    .estab-anmeldung-arbeit:not(.estab-anmeldung-arbeit--einspaltig)
+    .estab-anmeldung-tafel:not(.estab-anmeldung-konten) {
+        /* So hoch wie ihr Inhalt. Eine Tafel mit vier Feldern, die sich auf
+           Fensterhoehe zieht, ist unten zu drei Vierteln leer.
+
+           18rem und nicht 24, solange das Fenster schmaler als 72rem ist:
+           Der Liste blieben sonst 560 Bildpunkte, und ihre Tabelle braucht
+           576. Sie scrollte dann waagerecht, und der Auswahlknopf stand
+           ausserhalb. */
+        align-self: start;
+        flex: 0 0 18rem;
+    }
+
+    .estab-anmeldung-arbeit:not(.estab-anmeldung-arbeit--einspaltig)
+    .estab-anmeldung-konten {
+        flex: 1 1 auto;
+    }
+
+    .estab-anmeldung-arbeit:not(.estab-anmeldung-arbeit--einspaltig)
+    .estab-anmeldung-konten .estab-tabelle-rahmen {
+        flex: 1 1 auto;
+        max-height: none;
+        min-height: 4rem;
+    }
+}
+
+/* Ist der Platz da, bekommen die Felder ihre volle Breite zurueck. */
+@media (min-width: 72rem) {
+    .estab-anmeldung-arbeit:not(.estab-anmeldung-arbeit--einspaltig)
+    .estab-anmeldung-tafel:not(.estab-anmeldung-konten) {
+        flex: 0 0 24rem;
+    }
+}
+
 .estab-auth-actions form {
     margin: 0;
 }
@@ -2046,37 +2223,42 @@ audio[data-estab-sidebar-audio] {
     margin-bottom: var(--abstand-5);
 }
 
+/* Das Feldraster der Anmeldung (docs/GESTALTUNG.md 5.4 und 5.6).
+
+   Es war eine Tabelle: Beschriftung links in einer festen Spalte von 13rem,
+   Feld rechts mit fester Breite 24rem. Zusammen 37rem -- mehr, als eine
+   Tafel neben der Kontenliste ueberhaupt hergibt. Beschriftung ueber dem
+   Feld, und die Spalten richten sich nach dem Platz statt nach einer Zahl. */
 .estab-auth-fields {
-    border-collapse: collapse;
-    width: 100%;
+    display: grid;
+    gap: var(--abstand-5);
+    grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
 }
 
-.estab-auth-fields th,
-.estab-auth-fields td {
-    padding: var(--abstand-4) var(--abstand-3);
-    text-align: left;
-    vertical-align: top;
+.estab-auth-feld {
+    display: grid;
+    gap: var(--abstand-1);
+    margin: 0;
+    min-width: 0;
 }
 
-.estab-auth-fields th {
-    width: 13rem;
-}
-
-.estab-auth-fields label {
-    display: inline-block;
-    font-weight: var(--stark-voll);
-    padding-top: var(--abstand-4);
+.estab-auth-feld label {
+    font-size: var(--schrift-3);
+    font-weight: var(--stark-halb);
 }
 
 .estab-auth-fields input,
 .estab-auth-fields select {
-    border: 1px solid var(--linie-spalte);
+    background: var(--grund-tafel);
+    border: 1px solid var(--rand-bedienelement);
     border-radius: var(--radius-2);
     box-sizing: border-box;
+    color: var(--tinte);
     font: inherit;
-    max-width: 100%;
-    padding: var(--abstand-4);
-    width: 24rem;
+    font-size: var(--schrift-3);
+    min-height: 2rem;
+    padding: var(--abstand-3) var(--abstand-4);
+    width: 100%;
 }
 
 .estab-account-list {
@@ -4842,19 +5024,6 @@ form[data-estab-incident-disabled="true"]::before {
         width: 100%;
     }
 
-    .estab-auth-fields,
-    .estab-auth-fields tbody,
-    .estab-auth-fields tr,
-    .estab-auth-fields th,
-    .estab-auth-fields td {
-        display: block;
-        width: 100%;
-    }
-
-    .estab-auth-fields th {
-        padding-bottom: 0;
-    }
-
     .estab-root-menu {
         grid-template-columns: 1fr;
     }
@@ -5331,11 +5500,17 @@ body.estab-message-form-body {
 }
 
 /* Das Zeichen steht neben dem Namen der Spalte, nicht statt seiner: Ein
-   Pfeil allein sagt nicht, wonach sortiert wuerde. */
+   Pfeil allein sagt nicht, wonach sortiert wuerde.
+
+   `flex-wrap: wrap`, weil ein inline-flex ohne diese Angabe nicht umbricht:
+   In einer schmalen Spalte stand "KÜRZEL 1" auf dem Schirm -- das Zeichen
+   lief aus der Zelle heraus und wurde am Rand abgeschnitten. Es rutscht
+   jetzt in die zweite Zeile des Kopfes. */
 .estab-tabelle-sortknopf {
     align-items: baseline;
     color: inherit;
     display: inline-flex;
+    flex-wrap: wrap;
     gap: var(--abstand-2);
     text-decoration: none;
 }
@@ -5354,8 +5529,10 @@ body.estab-message-form-body {
    in die Zeile passt -- nicht schon dann, wenn ein Bruch die Spalte etwas
    schmaler machen koennte. Mit `anywhere` stand in der Rollenspalte
    "Fernmelde / r", obwohl das Wort gepasst haette. */
-.estab-tabelle-blatt tbody td {
+.estab-tabelle-blatt tbody td,
+.estab-tabelle-blatt tbody th {
     border-bottom: 1px solid var(--linie);
+    font-weight: inherit;
     font-size: var(--schrift-3);
     overflow-wrap: break-word;
     padding: var(--abstand-2) var(--abstand-4);
@@ -5363,7 +5540,8 @@ body.estab-message-form-body {
     vertical-align: top;
 }
 
-.estab-tabelle-blatt tbody tr:last-child td {
+.estab-tabelle-blatt tbody tr:last-child td,
+.estab-tabelle-blatt tbody tr:last-child th {
     border-bottom: 0;
 }
 
@@ -5390,7 +5568,8 @@ body.estab-message-form-body {
    erst, wenn es allein nicht in die Zeile passt: "Auswaehlen" bleibt
    ganz, "Energieversorger" in einer Spalte von 89 Bildpunkten bricht --
    und muss brechen. */
-.estab-tabelle-blatt tbody td * {
+.estab-tabelle-blatt tbody td *,
+.estab-tabelle-blatt tbody th * {
     max-width: 100%;
     min-width: 0;
 }
@@ -5401,7 +5580,8 @@ body.estab-message-form-body {
    fest im Markup, also von aussen nicht erreichbar und von keinem
    Kontrastwaechter geprueft. Schwarz auf diesem Gelb ist blass; die
    Achtungsmarken der Anwendung sind es nicht. */
-.estab-tabelle-blatt tbody tr.estab-tabelle-zeile--achtung > td {
+.estab-tabelle-blatt tbody tr.estab-tabelle-zeile--achtung > td,
+.estab-tabelle-blatt tbody tr.estab-tabelle-zeile--achtung > th {
     background: var(--achtung-flaeche);
     color: var(--achtung-tinte);
     font-weight: 600;
@@ -5566,14 +5746,16 @@ body.estab-message-form-body {
         padding: var(--abstand-3) 0;
     }
 
-    .estab-tabelle:not(.estab-tabelle--schmal) .estab-tabelle-blatt tbody td {
+    .estab-tabelle:not(.estab-tabelle--schmal) .estab-tabelle-blatt tbody td,
+    .estab-tabelle:not(.estab-tabelle--schmal) .estab-tabelle-blatt tbody th {
         border-bottom: 0;
         display: block;
         padding: var(--abstand-1) var(--abstand-4);
         text-align: left;
     }
 
-    .estab-tabelle:not(.estab-tabelle--schmal) .estab-tabelle-blatt tbody td::before {
+    .estab-tabelle:not(.estab-tabelle--schmal) .estab-tabelle-blatt tbody td::before,
+    .estab-tabelle:not(.estab-tabelle--schmal) .estab-tabelle-blatt tbody th::before {
         content: attr(data-label) ": ";
         font-weight: 700;
     }
@@ -5595,14 +5777,16 @@ body.estab-message-form-body {
         padding: var(--abstand-3) 0;
     }
 
-    .estab-tabelle--schmal .estab-tabelle-blatt tbody td {
+    .estab-tabelle--schmal .estab-tabelle-blatt tbody td,
+    .estab-tabelle--schmal .estab-tabelle-blatt tbody th {
         border-bottom: 0;
         display: block;
         padding: var(--abstand-1) var(--abstand-4);
         text-align: left;
     }
 
-    .estab-tabelle--schmal .estab-tabelle-blatt tbody td::before {
+    .estab-tabelle--schmal .estab-tabelle-blatt tbody td::before,
+    .estab-tabelle--schmal .estab-tabelle-blatt tbody th::before {
         content: attr(data-label) ": ";
         font-weight: 700;
     }

@@ -720,7 +720,7 @@ $assert(
 $stil = (string) file_get_contents($root . "/estab-ui.css");
 $assert(
     preg_match(
-        '~\.estab-tabelle-blatt\s+tbody\s+td\s+\*\s*\{[^}]*max-width:\s*100%~su',
+        '~\.estab-tabelle-blatt\s+tbody\s+td\s+\*[^{]*\{[^}]*max-width:\s*100%~su',
         $stil
     ) === 1,
     estab_ux_requirement(

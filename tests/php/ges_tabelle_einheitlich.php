@@ -86,7 +86,6 @@ $offeneDateien = [
         . 'die 14 Tabellen Luft lässt, ist genau der Freibrief, den sie '
         . 'verhindern soll.'],
     '4fach/tools.php' => [6, 'Das alte Cockpit mit fest eingetragenen Grautönen.'],
-    '4fadm/fuehrungsstelle.php' => [4, 'Die Schicht- und Dienstverwaltung.'],
     '4fadm/make_fkt.php' => [1, 'Die Empfängermatrix.'],
     '4fach/mainindex.php' => [1, 'Der Satzspiegel der Anmeldefelder -- '
         . 'Beschriftung und Feld nebeneinander, keine Liste.'],
@@ -101,7 +100,7 @@ $offeneDateien = [
  * ehrliche Zahl ist höher, und das ist der Punkt: Eine Ratsche, die nur
  * zählt, was sie kennt, misst ihren eigenen Blick, nicht den Bestand.
  */
-const ESTAB_TABELLEN_OFFEN = 17;
+const ESTAB_TABELLEN_OFFEN = 13;
 
 $verzeichnisse = [
     '4fach', '4fadm', '4fueltg', 'app', 'stabetb', 'fmtbb', 'stabinfo',

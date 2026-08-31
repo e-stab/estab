@@ -317,7 +317,23 @@ $assert(
         && str_contains($adminUi, 'Funktion einzeln ablösen')
         && str_contains($adminUi, 'name="nachfolger_kuerzel"')
         && str_contains($adminUi, 'name="abloesungsgrund"')
-        && str_contains($adminUi, '<th>Einzelablösung</th>'),
+        /*
+         * Die Spalte hiess frueher <th>Einzelablösung</th> im
+         * handgeschriebenen Tabellenmarkup. Die Besetzungsliste kommt
+         * jetzt aus dem Tabellenbauteil, das seine Koepfe selbst setzt;
+         * die Anforderung ist dieselbe geblieben, nur ihr Anker nicht.
+         * Geprueft wird deshalb, dass *die Tafel der aktiven Schicht*
+         * diese Spalte nennt -- nicht irgendeine Stelle der Datei.
+         */
+        && preg_match(
+            // Kein ".*?" ueber Anweisungsgrenzen hinweg: Der erste
+            // Versuch fand das Wort irgendwo spaeter in der Datei und
+            // haette eine geloeschte Spalte durchgewunken. "[^;]"
+            // haelt die Suche im Aufruf.
+            '~fuehrungsstelle_tafel\(\s*.aktive-schicht-[^;]*'
+                . 'Einzelablösung[^;]*\);~su',
+            $adminUi
+        ) === 1,
     estab_dv_requirement(
         'FUEST-KLEIN-ABLOESUNG',
         'Die Führungsstellenverwaltung bietet die Einzelablösung nicht in '
