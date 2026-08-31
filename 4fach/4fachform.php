@@ -1767,7 +1767,7 @@ HTML;
         $routeId = (string) $route ["fernmeldeplan_eintrag_id"];
         $routeParts = array_values (array_filter (array (
           trim ((string) ($route ["betriebsstelle"] ?? "")),
-          trim ((string) ($route ["rufname"] ?? "")),
+          trim ((string) ($route ["erreichbarkeit"] ?? "")),
           trim ((string) ($route ["kanal"] ?? "")),
           trim ((string) ($route ["bandlage"] ?? "")),
           trim ((string) ($route ["verkehrsform"] ?? "")),

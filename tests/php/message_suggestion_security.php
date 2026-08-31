@@ -92,7 +92,7 @@ $assert(
     estab_read_ldf_mapping_policy($ldf, 'E') === [
         'message_context' => '`05_gegenstelle`',
         'message_target' => '`13_abseinheit`',
-        'plan_context' => '`rufname`',
+        'plan_context' => '`erreichbarkeit`',
         'plan_target' => '`betriebsstelle`',
     ],
     'incoming LdF callsign-to-sender mapping changed'
@@ -102,7 +102,7 @@ $assert(
         'message_context' => '`10_anschrift`',
         'message_target' => '`05_gegenstelle`',
         'plan_context' => '`betriebsstelle`',
-        'plan_target' => '`rufname`',
+        'plan_target' => '`erreichbarkeit`',
     ],
     'outgoing LdF destination-to-callsign mapping changed'
 );

@@ -272,14 +272,14 @@ function estab_read_ldf_mapping_policy(
         'E' => [
             'message_context' => '`05_gegenstelle`',
             'message_target' => '`13_abseinheit`',
-            'plan_context' => '`rufname`',
+            'plan_context' => '`erreichbarkeit`',
             'plan_target' => '`betriebsstelle`',
         ],
         'A' => [
             'message_context' => '`10_anschrift`',
             'message_target' => '`05_gegenstelle`',
             'plan_context' => '`betriebsstelle`',
-            'plan_target' => '`rufname`',
+            'plan_target' => '`erreichbarkeit`',
         ],
         default => throw new InvalidArgumentException(
             'Die Zuordnungsrichtung ist ungültig.'
@@ -440,7 +440,7 @@ function estab_read_mapping_normalized_sql(string $expression): string
         [
             'candidate.`05_gegenstelle`',
             'candidate.`10_anschrift`',
-            'plan_entry.`rufname`',
+            'plan_entry.`erreichbarkeit`',
             'plan_entry.`betriebsstelle`',
             'scope.`context_value`',
         ],

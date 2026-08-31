@@ -1830,7 +1830,7 @@ function estab_message_update_locked_operator_stage(
                     $routeParts = array_values(array_filter(
                         [
                             trim((string) ($route['betriebsstelle'] ?? '')),
-                            trim((string) ($route['rufname'] ?? '')),
+                            trim((string) ($route['erreichbarkeit'] ?? '')),
                             trim((string) ($route['kanal'] ?? '')),
                             trim((string) ($route['bandlage'] ?? '')),
                             trim((string) ($route['verkehrsform'] ?? '')),
@@ -1863,7 +1863,7 @@ function estab_message_update_locked_operator_stage(
                     $event['snapshot']['route'] = [
                         'betriebsstelle' =>
                             (string) ($route['betriebsstelle'] ?? ''),
-                        'rufname' => (string) ($route['rufname'] ?? ''),
+                        'erreichbarkeit' => (string) ($route['erreichbarkeit'] ?? ''),
                         'kanal' => (string) ($route['kanal'] ?? ''),
                         'bandlage' => (string) ($route['bandlage'] ?? ''),
                         'verkehrsform' =>

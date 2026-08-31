@@ -220,6 +220,23 @@ function dv_operations_render_telecom_entry_fields(array $values): void
         <small>Stelle des eigenen Verbundes: Führungsstelle,
           Fernmeldezentrale, Meldekopf, Einheit.</small>
       </label>
+      <label>Stellenart
+        <select name="stellenart">
+          <option value="">ohne Angabe</option>
+          <?php foreach (
+              ESTAB_DV_TELECOM_STATION_KINDS as $artWert => $artText
+          ): ?>
+            <option value="<?= dv_operations_html($artWert) ?>"
+              <?= ($values['stellenart'] ?? null) === $artWert
+                  ? 'selected'
+                  : '' ?>>
+              <?= dv_operations_html($artText) ?>
+            </option>
+          <?php endforeach; ?>
+        </select>
+        <small>Zeigt die Verbindung nach oben, nach unten oder zur
+          Seite?</small>
+      </label>
       <label>Wegart
         <select name="wegart" required data-estab-telecom-kind>
           <option value="" <?= $kind === null ? 'selected' : '' ?>>
@@ -237,8 +254,8 @@ function dv_operations_render_telecom_entry_fields(array $values): void
         <span data-estab-telecom-field-label="rufname"><?= dv_operations_html(
             $definition['erreichbarkeit'] ?? 'Erreichbar unter'
         ) ?></span>
-        <input name="rufname" maxlength="128" required
-          value="<?= dv_operations_html($values['rufname'] ?? '') ?>">
+        <input name="erreichbarkeit" maxlength="255" required
+          value="<?= dv_operations_html($values['erreichbarkeit'] ?? '') ?>">
       </label>
       <?php foreach (
           ['band', 'kanal', 'bandlage', 'verkehrsform', 'relaisstelle',
@@ -1199,7 +1216,7 @@ foreach ($plans as $plan) {
                   'weg' => $entry['weg_nummer'] === null
                       ? ''
                       : (string) (int) $entry['weg_nummer'],
-                  'rufname' => (string) $entry['rufname'],
+                  'rufname' => (string) $entry['erreichbarkeit'],
                   'mittel' => $mittel,
                   'technik' => implode(' · ', $teile),
                   'verkehrsform' => (string) $entry['verkehrsform'],
@@ -1521,7 +1538,7 @@ foreach ($plans as $plan) {
                     <span><strong><?= dv_operations_html(
                         $entry['betriebsstelle']
                     ) ?></strong> · <?= dv_operations_html(
-                        $entry['rufname']
+                        $entry['erreichbarkeit']
                     ) ?></span>
                     <span><?= dv_operations_html(
                         estab_dv_telecom_route_label(
@@ -1537,7 +1554,7 @@ foreach ($plans as $plan) {
                     data-estab-dirty-guard
                     data-estab-telecom-form-label="<?= dv_operations_html(
                         'Fernmeldeweg ' . $entry['betriebsstelle']
-                            . ' / ' . $entry['rufname']
+                            . ' / ' . $entry['erreichbarkeit']
                     ) ?>"
                     <?= $entryHasError
                         ? 'data-estab-dirty-initial="true"'
@@ -1583,8 +1600,10 @@ foreach ($plans as $plan) {
               $addValues = [];
               foreach (
                   [
-                      'betriebsstelle', 'rufname', 'medium', 'kanal',
-                      'bandlage', 'verkehrsform', 'besondere_vermerke',
+                      'betriebsstelle', 'stellenart', 'erreichbarkeit',
+                      'wegart', 'band', 'kanal', 'bandlage', 'verkehrsform',
+                      'relaisstelle', 'betriebsart', 'rufgruppe',
+                      'anschlussart', 'datenart', 'besondere_vermerke',
                       'bemerkungen',
                   ] as $field
               ) {
@@ -1773,7 +1792,7 @@ foreach ($plans as $plan) {
                         <span><strong><?= dv_operations_html(
                             $entry['betriebsstelle']
                         ) ?></strong><small><?= dv_operations_html(
-                            $entry['rufname']
+                            $entry['erreichbarkeit']
                         ) ?></small></span>
                         <span><?= dv_operations_html(
                             implode(' · ', $historyRouteParts)

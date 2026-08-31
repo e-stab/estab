@@ -88,7 +88,7 @@ $assert(
 $analog = estab_dv_telecom_entry_values([
     'wegart' => 'Fu:ANALOG',
     'betriebsstelle' => 'Führungsstelle',
-    'rufname' => 'Funkrufname',
+    'erreichbarkeit' => 'Funkrufname',
     'band' => '4m',
     'kanal' => '55',
     'bandlage' => 'Oberband',
@@ -116,7 +116,7 @@ $assert(
 $digital = estab_dv_telecom_entry_values([
     'wegart' => 'Fu:DIGITAL',
     'betriebsstelle' => 'Führungsstelle',
-    'rufname' => 'Funkrufname',
+    'erreichbarkeit' => 'Funkrufname',
     'betriebsart' => 'DMO',
     'rufgruppe' => '726_B*',
     'kanal' => 'geschmuggelter Kanal',
@@ -145,7 +145,7 @@ $assert(
 $freitext = estab_dv_telecom_entry_values([
     'wegart' => 'Fu:ANALOG',
     'betriebsstelle' => 'Führungsstelle',
-    'rufname' => 'Funkrufname',
+    'erreichbarkeit' => 'Funkrufname',
     'band' => '2m',
     'kanal' => 'K 31',
     'bandlage' => 'irgendetwas, das keine Liste kennt',
@@ -161,7 +161,7 @@ foreach (['Fe' => 'anschlussart', 'FAX' => 'anschlussart'] as $kind => $field) {
     $werte = estab_dv_telecom_entry_values([
         'wegart' => $kind,
         'betriebsstelle' => 'Führungsstelle',
-        'rufname' => '0228 940-0',
+        'erreichbarkeit' => '0228 940-0',
         $field => 'NST',
         'kanal' => 'geschmuggelt',
         'bandlage' => 'geschmuggelt',
@@ -181,7 +181,7 @@ foreach (['Fe' => 'anschlussart', 'FAX' => 'anschlussart'] as $kind => $field) {
 $melder = estab_dv_telecom_entry_values([
     'wegart' => 'Me',
     'betriebsstelle' => 'Meldekopf Nord',
-    'rufname' => 'Sammelstelle Tor 2',
+    'erreichbarkeit' => 'Sammelstelle Tor 2',
 ]);
 $assert(
     $melder['medium'] === 'Me'
@@ -196,7 +196,7 @@ $expect(
     static fn (): array => estab_dv_telecom_entry_values([
         'wegart' => 'Fu',
         'betriebsstelle' => 'Führungsstelle',
-        'rufname' => 'Funkrufname',
+        'erreichbarkeit' => 'Funkrufname',
     ]),
     'a radio route without its kind was accepted'
 );
@@ -205,7 +205,7 @@ $expect(
     static fn (): array => estab_dv_telecom_entry_values([
         'wegart' => 'FS',
         'betriebsstelle' => 'Führungsstelle',
-        'rufname' => 'Fernschreibkennung',
+        'erreichbarkeit' => 'Fernschreibkennung',
     ]),
     'the plan accepted a telex route'
 );
@@ -214,7 +214,7 @@ $expect(
     static fn (): array => estab_dv_telecom_entry_values([
         'wegart' => 'Funk (analog)',
         'betriebsstelle' => 'Führungsstelle',
-        'rufname' => 'Funkrufname',
+        'erreichbarkeit' => 'Funkrufname',
     ]),
     'expanded display label was accepted as a storage value'
 );
@@ -223,7 +223,7 @@ $expect(
     static fn (): array => estab_dv_telecom_entry_values([
         'wegart' => 'Fu:ANALOG',
         'betriebsstelle' => 'Führungsstelle',
-        'rufname' => 'Funkrufname',
+        'erreichbarkeit' => 'Funkrufname',
         'band' => '4m',
         'kanal' => '',
         'bandlage' => 'Oberband',
@@ -236,7 +236,7 @@ $expect(
     static fn (): array => estab_dv_telecom_entry_values([
         'wegart' => 'Fu:DIGITAL',
         'betriebsstelle' => 'Führungsstelle',
-        'rufname' => 'Funkrufname',
+        'erreichbarkeit' => 'Funkrufname',
         'betriebsart' => 'TETRA',
         'rufgruppe' => '726_B*',
     ]),
@@ -247,7 +247,7 @@ $expect(
     static fn (): array => estab_dv_telecom_entry_values([
         'wegart' => 'Fu:DIGITAL',
         'betriebsstelle' => 'Führungsstelle',
-        'rufname' => 'Funkrufname',
+        'erreichbarkeit' => 'Funkrufname',
         'rufgruppe' => '726_B*',
     ]),
     'a digital route without its operating mode was accepted'
@@ -261,6 +261,39 @@ $assert(
         && estab_dv_telecom_route_kind('FS', null) === null,
     'legacy radio routes no longer read as undetermined'
 );
+/* Die Stellenart sagt, in welche Richtung die Verbindung zeigt. */
+$mitArt = estab_dv_telecom_entry_values([
+    'wegart' => 'Fe',
+    'betriebsstelle' => 'Kreisleitstelle',
+    'stellenart' => 'UEBER',
+    'erreichbarkeit' => '0228 940-0',
+]);
+$assert(
+    $mitArt['stellenart'] === 'UEBER'
+        && array_keys(ESTAB_DV_TELECOM_STATION_KINDS)
+            === ['EIGEN', 'UEBER', 'UNTER', 'NEBEN'],
+    'the station kind was not kept or its value list changed'
+);
+$ohneArt = estab_dv_telecom_entry_values([
+    'wegart' => 'Fe',
+    'betriebsstelle' => 'Kreisleitstelle',
+    'erreichbarkeit' => '0228 940-0',
+]);
+$assert(
+    $ohneArt['stellenart'] === null,
+    'a route without a station kind was not accepted'
+);
+$expect(
+    EstabDvInputException::class,
+    static fn (): array => estab_dv_telecom_entry_values([
+        'wegart' => 'Fe',
+        'betriebsstelle' => 'Kreisleitstelle',
+        'stellenart' => 'SEITWAERTS',
+        'erreichbarkeit' => '0228 940-0',
+    ]),
+    'an invented station kind was accepted'
+);
+
 $assert(
     estab_dv_telecom_route_label('Fu', null) === 'Funk'
         && estab_dv_telecom_route_label('Fu', 'DIGITAL') === 'Funk (digital)'

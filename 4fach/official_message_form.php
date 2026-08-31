@@ -2539,7 +2539,7 @@ HTML;
             foreach ($this->activeTelecomRoutes as $route) {
                 $parts = array_values(array_filter([
                     trim((string)($route['betriebsstelle'] ?? '')),
-                    trim((string)($route['rufname'] ?? '')),
+                    trim((string)($route['erreichbarkeit'] ?? '')),
                     trim((string)($route['kanal'] ?? '')),
                     trim((string)($route['bandlage'] ?? '')),
                     trim((string)($route['verkehrsform'] ?? '')),

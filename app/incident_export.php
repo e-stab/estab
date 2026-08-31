@@ -1370,7 +1370,10 @@ function estab_incident_export_load(
             $connection,
             'SELECT e.`fernmeldeplan_eintrag_id`, e.`fernmeldeplan_id`,'
                 . ' p.`version` AS `plan_version`, e.`sortierung`,'
-                . ' e.`betriebsstelle`, e.`rufname`, e.`medium`,'
+                . ' e.`betriebsstelle`, e.`stellenart`, e.`erreichbarkeit`,'
+                . ' e.`medium`, e.`funkart`, e.`band`, e.`relaisstelle`,'
+                . ' e.`betriebsart`, e.`rufgruppe`, e.`anschlussart`,'
+                . ' e.`datenart`,'
                 . ' e.`kanal`, e.`bandlage`, e.`verkehrsform`,'
                 . ' e.`besondere_vermerke`, e.`bemerkungen`'
                 . ' FROM `nv_fernmeldeplan_eintraege` AS e'

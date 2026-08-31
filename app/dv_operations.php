@@ -132,6 +132,14 @@ const ESTAB_DV_TELECOM_ROUTE_KINDS = [
     ],
 ];
 
+/** Which way a connection points -- Q4 Kapitel 6.1.2, vertikal und horizontal. */
+const ESTAB_DV_TELECOM_STATION_KINDS = [
+    'EIGEN' => 'eigene Führungsstelle',
+    'UEBER' => 'übergeordnete Stelle',
+    'UNTER' => 'nachgeordnete Stelle',
+    'NEBEN' => 'benachbarte Stelle oder Partnerorganisation',
+];
+
 /** The closed value lists. Everything absent here is free text on purpose. */
 const ESTAB_DV_TELECOM_FIELD_CHOICES = [
     'band' => ['2m' => '2 m', '4m' => '4 m'],
@@ -4498,6 +4506,19 @@ function estab_dv_telecom_entry_values(array $input): array
     $definition = estab_dv_telecom_route_definition($input['wegart'] ?? null);
     $owned = $definition['felder'];
     $required = $definition['pflicht'];
+    /*
+     * Die Stellenart sagt, in welche Richtung die Verbindung zeigt: nach
+     * oben, nach unten, zur Seite oder auf die eigene Stelle. Q4 Kapitel
+     * 6.1.2 verlangt Verbindungen vertikal UND horizontal; ohne die Angabe
+     * fuehrt ein Plan Stellen, aber keine Ordnung.
+     */
+    $stellenart = $input['stellenart'] ?? null;
+    $stellenart = is_string($stellenart) ? trim($stellenart) : '';
+    if ($stellenart === '') {
+        $stellenart = null;
+    } elseif (!isset(ESTAB_DV_TELECOM_STATION_KINDS[$stellenart])) {
+        throw new EstabDvInputException('Stellenart ist ungültig.');
+    }
 
     $field = static function (
         string $name,
@@ -4541,10 +4562,11 @@ function estab_dv_telecom_entry_values(array $input): array
             'Stelle',
             255
         ),
-        'rufname' => estab_dv_text(
-            $input['rufname'] ?? null,
+        'stellenart' => $stellenart,
+        'erreichbarkeit' => estab_dv_text(
+            $input['erreichbarkeit'] ?? null,
             $definition['erreichbarkeit'],
-            128
+            255
         ),
         'medium' => $definition['medium'],
         'funkart' => $definition['funkart'],
@@ -4668,7 +4690,8 @@ function estab_dv_telecom_plan_revision(array $plan): string
             'id' => (int) ($entry['fernmeldeplan_eintrag_id'] ?? 0),
             'sortierung' => (int) ($entry['sortierung'] ?? 0),
             'betriebsstelle' => (string) ($entry['betriebsstelle'] ?? ''),
-            'rufname' => (string) ($entry['rufname'] ?? ''),
+            'stellenart' => $entry['stellenart'] ?? null,
+            'erreichbarkeit' => (string) ($entry['erreichbarkeit'] ?? ''),
             'medium' => (string) ($entry['medium'] ?? ''),
             'funkart' => $entry['funkart'] ?? null,
             'band' => $entry['band'] ?? null,
@@ -4988,11 +5011,24 @@ function estab_dv_start_telecom_plan_revision(
             $copyEntries = $connection->prepare(
                 'INSERT INTO `nv_fernmeldeplan_eintraege`'
                 . ' (`fernmeldeplan_id`, `sortierung`, `betriebsstelle`,'
-                . ' `rufname`, `medium`, `funkart`, `band`, `kanal`, `bandlage`, `verkehrsform`, `relaisstelle`, `betriebsart`, `rufgruppe`, `anschlussart`, `datenart`,'
+                . ' `stellenart`, `erreichbarkeit`, `medium`, `funkart`, `band`, `kanal`, `bandlage`, `verkehrsform`, `relaisstelle`, `betriebsart`, `rufgruppe`, `anschlussart`, `datenart`,'
                 . ' `besondere_vermerke`, `bemerkungen`)'
-                . ' SELECT ?, `sortierung`, `betriebsstelle`, `rufname`,'
+                . ' SELECT ?, `sortierung`, `betriebsstelle`, `stellenart`,'
+                . ' `erreichbarkeit`,'
                 . ' `medium`, `funkart`, `band`, `kanal`, `bandlage`, `verkehrsform`, `relaisstelle`, `betriebsart`, `rufgruppe`, `anschlussart`, `datenart`,'
-                . ' `besondere_vermerke`, `bemerkungen`'
+                /*
+                 * Hier verschwindet die Zweiteilung der Vermerke.
+                 *
+                 * Weder Fb Fue 76 noch PDV 800 kennt zwei Vermerkfelder; der
+                 * Plan fuehrt kuenftig eines. Eine freigegebene Fassung darf
+                 * aber nicht nachtraeglich anders lauten, also wird nichts
+                 * umgeschrieben: Die KOPIE fuehrt beide Werte zusammen, die
+                 * alte Version behaelt ihre beiden. Die Trennung verschwindet
+                 * mit der naechsten Version von selbst.
+                 */
+                . " '', CONCAT_WS('\n\n',"
+                . ' NULLIF(`besondere_vermerke`, \'\'),'
+                . ' NULLIF(`bemerkungen`, \'\'))'
                 . ' FROM `nv_fernmeldeplan_eintraege`'
                 . ' WHERE `fernmeldeplan_id` = ? ORDER BY `sortierung`'
             );
@@ -5270,7 +5306,7 @@ function estab_dv_add_telecom_entry(
             $insert = $connection->prepare(
                 'INSERT INTO `nv_fernmeldeplan_eintraege`'
                 . ' (`fernmeldeplan_id`, `sortierung`, `betriebsstelle`,'
-                . ' `rufname`, `medium`, `funkart`, `band`, `kanal`, `bandlage`, `verkehrsform`, `relaisstelle`, `betriebsart`, `rufgruppe`, `anschlussart`, `datenart`,'
+                . ' `stellenart`, `erreichbarkeit`, `medium`, `funkart`, `band`, `kanal`, `bandlage`, `verkehrsform`, `relaisstelle`, `betriebsart`, `rufgruppe`, `anschlussart`, `datenart`,'
                 . ' `besondere_vermerke`, `bemerkungen`)'
                 . ' VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,'
                 . ' ?, ?)'
@@ -5280,11 +5316,12 @@ function estab_dv_add_telecom_entry(
             }
             try {
                 $insert->bind_param(
-                    'iissssssssssssssss',
+                    'iisssssssssssssssss',
                     $planId,
                     $sort,
                     $values['betriebsstelle'],
-                    $values['rufname'],
+                    $values['stellenart'],
+                    $values['erreichbarkeit'],
                     $values['medium'],
                     $values['funkart'],
                     $values['band'],
@@ -5466,7 +5503,8 @@ function estab_dv_update_telecom_entry(
                 $expectedRevision
             );
             $select = $connection->prepare(
-                'SELECT `sortierung`, `betriebsstelle`, `rufname`, `medium`,'
+                'SELECT `sortierung`, `betriebsstelle`, `stellenart`,'
+                . ' `erreichbarkeit`, `medium`,'
                 . ' `funkart`, `band`, `kanal`, `bandlage`, `verkehrsform`, `relaisstelle`, `betriebsart`, `rufgruppe`, `anschlussart`, `datenart`,'
                 . ' `besondere_vermerke`, `bemerkungen`'
                 . ' FROM `nv_fernmeldeplan_eintraege`'
@@ -5492,7 +5530,8 @@ function estab_dv_update_telecom_entry(
             }
             $update = $connection->prepare(
                 'UPDATE `nv_fernmeldeplan_eintraege`'
-                . ' SET `betriebsstelle` = ?, `rufname` = ?, `medium` = ?,'
+                . ' SET `betriebsstelle` = ?, `stellenart` = ?,'
+                . ' `erreichbarkeit` = ?, `medium` = ?,'
                 . ' `funkart` = ?, `band` = ?, `kanal` = ?, `bandlage` = ?,'
                 . ' `verkehrsform` = ?, `relaisstelle` = ?,'
                 . ' `betriebsart` = ?, `rufgruppe` = ?, `anschlussart` = ?,'
@@ -5508,9 +5547,10 @@ function estab_dv_update_telecom_entry(
             }
             try {
                 $update->bind_param(
-                    'sssssssssssssssii',
+                    'ssssssssssssssssii',
                     $values['betriebsstelle'],
-                    $values['rufname'],
+                    $values['stellenart'],
+                    $values['erreichbarkeit'],
                     $values['medium'],
                     $values['funkart'],
                     $values['band'],
@@ -5601,7 +5641,8 @@ function estab_dv_delete_telecom_entry(
                 $expectedRevision
             );
             $select = $connection->prepare(
-                'SELECT `sortierung`, `betriebsstelle`, `rufname`, `medium`,'
+                'SELECT `sortierung`, `betriebsstelle`, `stellenart`,'
+                . ' `erreichbarkeit`, `medium`,'
                 . ' `funkart`, `band`, `kanal`, `bandlage`, `verkehrsform`, `relaisstelle`, `betriebsart`, `rufgruppe`, `anschlussart`, `datenart`,'
                 . ' `besondere_vermerke`, `bemerkungen`'
                 . ' FROM `nv_fernmeldeplan_eintraege`'
@@ -6070,7 +6111,8 @@ function estab_dv_telecom_plans(mysqli $connection, int $incidentId): array
     $incidentId = estab_incident_positive_id($incidentId);
     $statement = $connection->prepare(
         'SELECT p.*, e.`fernmeldeplan_eintrag_id`, e.`sortierung`,'
-        . ' e.`betriebsstelle`, e.`rufname`, e.`medium`, e.`kanal`,'
+        . ' e.`betriebsstelle`, e.`stellenart`, e.`erreichbarkeit`,'
+        . ' e.`medium`, e.`kanal`,'
         . ' e.`bandlage`, e.`verkehrsform`, e.`funkart`, e.`band`,'
         . ' e.`relaisstelle`, e.`betriebsart`, e.`rufgruppe`,'
         . ' e.`anschlussart`, e.`datenart`, e.`besondere_vermerke`,'
@@ -6129,7 +6171,8 @@ function estab_dv_telecom_plans(mysqli $connection, int $incidentId): array
                         ? null
                         : (int) $row['weg_nummer'],
                     'betriebsstelle' => (string) $row['betriebsstelle'],
-                    'rufname' => (string) $row['rufname'],
+                    'stellenart' => $row['stellenart'],
+                    'erreichbarkeit' => (string) $row['erreichbarkeit'],
                     'medium' => (string) $row['medium'],
                     'funkart' => $row['funkart'],
                     'band' => $row['band'],

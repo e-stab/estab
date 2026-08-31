@@ -2668,19 +2668,27 @@ final class EstabIncidentPdf extends vordruckaspdf
                             $entry['fernmeldeplan_eintrag_id'] ?? ''
                         )
                         . ' · '
-                        . (string) ($entry['rufname'] ?? '')
+                        . (string) ($entry['erreichbarkeit'] ?? '')
                 );
                 foreach ([
                     'Planeintrag-ID' => 'fernmeldeplan_eintrag_id',
                     'Fernmeldeplan-ID' => 'fernmeldeplan_id',
                     'Planversion' => 'plan_version',
                     'Sortierung' => 'sortierung',
-                    'Betriebsstelle' => 'betriebsstelle',
-                    'Rufname' => 'rufname',
+                    'Stelle' => 'betriebsstelle',
+                    'Stellenart' => 'stellenart',
+                    'Erreichbar unter' => 'erreichbarkeit',
                     'Medium' => 'medium',
+                    'Funkart' => 'funkart',
+                    'Band' => 'band',
                     'Kanal' => 'kanal',
                     'Bandlage' => 'bandlage',
                     'Verkehrsform' => 'verkehrsform',
+                    'Relaisstelle' => 'relaisstelle',
+                    'Betriebsart' => 'betriebsart',
+                    'Rufgruppe' => 'rufgruppe',
+                    'Anschlussart' => 'anschlussart',
+                    'Art der Datenübertragung' => 'datenart',
                     'Besondere Vermerke' => 'besondere_vermerke',
                     'Bemerkungen' => 'bemerkungen',
                 ] as $label => $field) {

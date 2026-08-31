@@ -49,6 +49,9 @@ $routeIdentityMigration = $read(
 $radioKindMigration = $read(
     $root . '/docker/db/migrations/123-fernmeldeweg-funkart.sql'
 );
+$reachabilityMigration = $read(
+    $root . '/docker/db/migrations/124-fernmeldeweg-erreichbarkeit.sql'
+);
 $attachmentIntegrityMigration = $read(
     $root . '/docker/db/migrations/95-attachment-ingest-integrity.sql'
 );
@@ -2875,6 +2878,35 @@ $assert(
         ),
     'Radio-kind separation or the free-text guarantee is outside the gate'
 );
+// Der Weg heisst, was er traegt. Und die zweite Vermerkspalte BLEIBT: Sie
+// wird nicht zusammengefuehrt, sondern nur nicht mehr beschrieben -- eine
+// freigegebene Fassung darf nicht nachtraeglich anders lauten.
+$assert(
+    str_contains(
+        $reachabilityMigration,
+        'CHANGE COLUMN `rufname` `erreichbarkeit`'
+    )
+        && str_contains(
+            $reachabilityMigration,
+            "`stellenart` ENUM('EIGEN','UEBER','UNTER','NEBEN')"
+        )
+        && !str_contains($reachabilityMigration, 'DROP COLUMN')
+        && !str_contains($reachabilityMigration, 'UPDATE `nv_fernmeldeplan')
+        && str_contains(
+            $reachabilityMigration,
+            'the legacy note column was removed'
+        )
+        && str_contains(
+            $reachabilityMigration,
+            "'123-fernmeldeweg-funkart.sql'"
+        )
+        && str_contains(
+            $readiness,
+            "'124-fernmeldeweg-erreichbarkeit.sql'"
+        ),
+    'Reachability rename, station kind, or the kept legacy note is outside '
+        . 'the gate'
+);
 $etbMigrationFragments = [
     "table_name = 'nv_funktionsfaehigkeiten' AND table_type = 'BASE TABLE' "
         . "AND engine = 'InnoDB' AND table_collation = "
@@ -3170,7 +3202,7 @@ $assert(
         && str_contains($verifySql, "index_name <> 'PRIMARY') = 0")
         && str_contains(
             $verifySql,
-            '(SELECT COUNT(*) FROM `estab_schema_migrations`) = 29'
+            '(SELECT COUNT(*) FROM `estab_schema_migrations`) = 30'
         )
         && str_contains($verifySql, "'96-etb-duty-function.sql'")
         && str_contains(
@@ -3221,7 +3253,11 @@ $assert(
             $verifySql,
             "'123-fernmeldeweg-funkart.sql'"
         )
-        && str_contains($verifySql, ") = 29) AS `schema_migrations_ok`")
+        && str_contains(
+            $verifySql,
+            "'124-fernmeldeweg-erreichbarkeit.sql'"
+        )
+        && str_contains($verifySql, ") = 30) AS `schema_migrations_ok`")
         && str_contains(
             $verifySql,
             'Discarded telecommunications drafts are immutable evidence'
@@ -3248,7 +3284,7 @@ $assert(
         && str_contains($readinessSql, "index_name <> 'PRIMARY') = 0")
         && str_contains(
             $readinessSql,
-            '(SELECT COUNT(*) FROM estab_schema_migrations) = 29'
+            '(SELECT COUNT(*) FROM estab_schema_migrations) = 30'
         )
         && str_contains($readinessSql, "'96-etb-duty-function.sql'")
         && str_contains(
@@ -3300,7 +3336,7 @@ $assert(
         )
         && str_contains(
             $readinessSql,
-            "checksum REGEXP BINARY '^[0-9a-f]{64}$') = 29"
+            "checksum REGEXP BINARY '^[0-9a-f]{64}$') = 30"
         ),
     'Runtime readiness does not require the exact final ETB catalogue and ledger'
 );
@@ -3550,8 +3586,10 @@ $assert(
         && str_contains($readiness, "'122-fernmeldeweg-identitaet.sql'")
         && str_contains($verify, "'123-fernmeldeweg-funkart.sql'")
         && str_contains($readiness, "'123-fernmeldeweg-funkart.sql'")
-        && str_contains($verify, 'estab_schema_migrations`) = 29')
-        && str_contains($readiness, 'estab_schema_migrations) = 29'),
+        && str_contains($verify, "'124-fernmeldeweg-erreichbarkeit.sql'")
+        && str_contains($readiness, "'124-fernmeldeweg-erreichbarkeit.sql'")
+        && str_contains($verify, 'estab_schema_migrations`) = 30')
+        && str_contains($readiness, 'estab_schema_migrations) = 30'),
     'Migration ledger/readiness does not require all release migrations'
 );
 $assert(

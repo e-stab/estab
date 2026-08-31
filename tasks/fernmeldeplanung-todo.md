@@ -128,7 +128,7 @@ diesen Vorgang.
       - **Prüfung:** Digitalfunkweg ohne Kanal und Bandlage speicherbar, Analogfunkweg nicht ohne sie; Bandlage nimmt jeden Text an
       - **Regel:** `FMP-FUNKART`, `FMP-DIGITAL-*` · **Spec:** 8
 
-- [ ] **A07** `·` **S** Ein Bemerkungsfeld, ein Begriff, eine Stellenart
+- [x] **A07** `!` **M** Ein Bemerkungsfeld, ein Begriff, eine Stellenart
 
       **Bei A06 vorweggenommen**, weil die Tabelle sonst mit alten Köpfen über
       neuen Daten gestanden hätte: Die Spaltenköpfe heißen „Stelle" und
@@ -138,11 +138,16 @@ diesen Vorgang.
       Zusammenführung der beiden Vermerkfelder.
 
       → `app/dv_operations.php`, `4fach/fuehrungsstelle.php`
-      - [ ] „Betriebsstellen-Klarbezeichnung" → **„Stelle"**, mit Ausfüllhilfe
-      - [ ] `rufname` → **„Erreichbar unter"** als Spaltenkopf; im Formular der Begriff des Mediums
-      - [ ] `stellenart` (`EIGEN`, `UEBER`, `UNTER`, `NEBEN`)
-      - [ ] `besondere_vermerke` wird nur noch gelesen; die Versionskopie führt beide Werte in `bemerkungen` zusammen
-      - [ ] Vorspann der Plantafel: „Der Fernmeldeplan sagt, wie die Stellen des eigenen Verbundes erreichbar sind…"
+      - [x] „Betriebsstellen-Klarbezeichnung" → **„Stelle"**, mit Ausfüllhilfe
+      - [x] Spalte `rufname` → `erreichbarkeit` (Migration 124), auf 255 Zeichen
+            verbreitert; Spaltenkopf „Erreichbar unter", im Formular der Begriff
+            der Wegart
+      - [x] `stellenart` (`EIGEN`, `UEBER`, `UNTER`, `NEBEN`), freiwillig
+      - [x] `besondere_vermerke` wird nur noch gelesen; die Versionskopie führt
+            beide Werte in `bemerkungen` zusammen — die Migration fasst keine
+            Zeile an
+      - [ ] Vorspann der Plantafel: „Der Fernmeldeplan sagt, wie die Stellen des eigenen Verbundes erreichbar sind…" — steht noch aus
+      - [x] Die Ausleitung nach PDF führt jetzt vierzehn statt sechs Wegfelder
       - **Prüfung:** Bedienprüfung mit Bildschirmabzug; ein Versionswechsel führt Altvermerke zusammen und lässt Altversionen unberührt
       - **Regel:** `FMP-VERMERK-EINFACH`, `FMP-EIGENE-ERREICHBARKEIT`, `FMP-STELLENART`, `FMP-UX-WORT-DES-MEDIUMS`
 
