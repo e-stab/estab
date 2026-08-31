@@ -4952,6 +4952,71 @@ try {
                 === 'Rückfallebene über Fernsprecher',
         'clone changed complete header or route fields, optional notes, or IDs'
     );
+    /*
+     * Die Kennung ueberlebt den Versionswechsel -- das ist ihr ganzer Zweck.
+     * Die Zeilenkennungen sind neu (oben geprueft), die Wegkennungen sind
+     * dieselben. Beides zusammen ist die Aussage: eine neue Fassung
+     * desselben Wegs, nicht ein neuer Weg.
+     */
+    $routeIdentities = static fn (array $plan): array => array_map(
+        static fn (array $entry): array => [
+            (int) ($entry['weg_id'] ?? 0),
+            (int) ($entry['weg_nummer'] ?? 0),
+        ],
+        $plan['eintraege']
+    );
+    $sourceIdentities = $routeIdentities($sourceAfterClone);
+    $draftIdentities = $routeIdentities($draftAfterClone);
+    $assert(
+        $sourceIdentities === $draftIdentities
+            && count($sourceIdentities) === 2
+            && min(array_merge(...$sourceIdentities)) > 0
+            && $sourceIdentities[0][0] !== $sourceIdentities[1][0]
+            && $sourceIdentities[0][1] !== $sourceIdentities[1][1],
+        'cloned draft did not inherit the durable route identities'
+    );
+    $assert(
+        (int) $scalar(
+            $connection,
+            'SELECT COUNT(DISTINCT `weg_id`)'
+                . ' FROM `nv_fernmeldeweg_zuordnung` AS zu'
+                . ' JOIN `nv_fernmeldeplaene` AS p'
+                . ' ON p.`fernmeldeplan_id` = zu.`fernmeldeplan_id`'
+                . ' WHERE p.`einsatz_id` = ?',
+            'i',
+            $incidentId
+        ) === count($sourceIdentities),
+        'route identities multiplied across plan versions'
+    );
+    /*
+     * Eine Zuordnung wird nie umgehaengt. Wer einen anderen Weg will,
+     * schreibt einen anderen Eintrag; die Kennung eines bestehenden ist eine
+     * Tatsache, keine Einstellung.
+     */
+    $mappingRepointed = false;
+    $repoint = $connection->prepare(
+        'UPDATE `nv_fernmeldeweg_zuordnung` SET `weg_id` = ?'
+            . ' WHERE `fernmeldeplan_eintrag_id` = ?'
+    );
+    if (!$repoint) {
+        throw new RuntimeException('Could not prepare the re-point probe');
+    }
+    try {
+        $repoint->bind_param(
+            'ii',
+            $sourceIdentities[1][0],
+            $sourceEntryIds[0]
+        );
+        $mappingRepointed = $repoint->execute();
+    } catch (Throwable) {
+        // Der Ausloeser estab_dv122_wegzuordnung_update weist genau das ab.
+    } finally {
+        $repoint->close();
+    }
+    $assert(
+        !$mappingRepointed,
+        'a route identity assignment could be re-pointed'
+    );
     $revisionStartedEvent = $telecomPlanEvent(
         $connection,
         $incidentId,

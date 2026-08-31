@@ -4853,6 +4853,56 @@ function estab_dv_start_telecom_plan_revision(
             } finally {
                 $copyEntries->close();
             }
+            /*
+             * Die Kopie behaelt die Kennung -- das ist der ganze Zweck: Ein
+             * Weg ist in Version 4 derselbe wie in Version 3.
+             *
+             * Alt und neu werden ueber die `sortierung` gepaart, und das ist
+             * hier zulaessig, obwohl sie ausdruecklich KEINE Identitaet ist:
+             * Die neuen Zeilen sind soeben in derselben Transaktion aus den
+             * alten entstanden und haben deren Sortierung uebernommen. Die
+             * Zuordnung ist damit oertlich eindeutig. Wer sie spaeter global
+             * benutzt, baut den Fehler ein, den Migration 122 beschreibt.
+             */
+            $copyIdentities = $connection->prepare(
+                'INSERT INTO `nv_fernmeldeweg_zuordnung`'
+                . ' (`fernmeldeplan_eintrag_id`, `fernmeldeplan_id`,'
+                . ' `weg_id`)'
+                . ' SELECT neu.`fernmeldeplan_eintrag_id`,'
+                . ' neu.`fernmeldeplan_id`, quelle.`weg_id`'
+                . ' FROM `nv_fernmeldeplan_eintraege` AS neu'
+                . ' JOIN `nv_fernmeldeplan_eintraege` AS alt'
+                . ' ON alt.`fernmeldeplan_id` = ?'
+                . ' AND alt.`sortierung` = neu.`sortierung`'
+                . ' JOIN `nv_fernmeldeweg_zuordnung` AS quelle'
+                . ' ON quelle.`fernmeldeplan_eintrag_id`'
+                . ' = alt.`fernmeldeplan_eintrag_id`'
+                . ' WHERE neu.`fernmeldeplan_id` = ?'
+            );
+            if (!$copyIdentities) {
+                throw new RuntimeException(
+                    'Wegkennungen konnten nicht zum Entwurf kopiert werden.'
+                );
+            }
+            try {
+                $copyIdentities->bind_param('ii', $sourcePlanId, $planId);
+                if (!$copyIdentities->execute()) {
+                    throw new RuntimeException(
+                        'Wegkennungen konnten nicht zum Entwurf kopiert '
+                        . 'werden.'
+                    );
+                }
+                $copiedIdentities = $copyIdentities->affected_rows;
+            } finally {
+                $copyIdentities->close();
+            }
+            if ($copiedIdentities !== $copiedEntries) {
+                // Ein Weg ohne Kennung waere ein Weg, auf den keine
+                // Rueckfallebene mehr zeigen kann. Lieber laut abbrechen.
+                throw new RuntimeException(
+                    'Der Entwurf haette Wege ohne Kennung erhalten.'
+                );
+            }
             estab_dv_audit(
                 $connection,
                 $protocolTable,
@@ -5032,6 +5082,17 @@ function estab_dv_add_telecom_entry(
                     $expectedRevision
                 );
             }
+            /*
+             * `sortierung` ist Anzeigereihenfolge und sonst nichts.
+             *
+             * Sie sah lange wie eine Identitaet aus, weil die Versionskopie
+             * sie erhaelt und niemand umsortieren kann. Beides ist Zufall:
+             * `MAX + 1` wird je Planversion gerechnet, wer also im Entwurf
+             * den letzten Weg loescht und einen neuen anlegt, bekommt
+             * dieselbe Nummer fuer einen anderen Weg. Die Identitaet traegt
+             * seit Migration 122 `nv_fernmeldewege`. Umsortieren ist damit
+             * gefahrlos moeglich -- es ist nur noch nicht gebaut.
+             */
             $next = $connection->prepare(
                 'SELECT COALESCE(MAX(`sortierung`), 0) + 1 AS `sortierung`'
                 . ' FROM `nv_fernmeldeplan_eintraege`'
@@ -5078,6 +5139,13 @@ function estab_dv_add_telecom_entry(
             } finally {
                 $insert->close();
             }
+            $wegId = estab_dv_telecom_assign_route_identity(
+                $connection,
+                $incidentId,
+                $planId,
+                $entryId,
+                $userCode
+            );
             estab_dv_audit(
                 $connection,
                 $protocolTable,
@@ -5087,6 +5155,7 @@ function estab_dv_add_telecom_entry(
                     'action' => 'plan_entry_added',
                     'plan_id' => $planId,
                     'entry_id' => $entryId,
+                    'weg_id' => $wegId,
                     'actor' => $userCode,
                     'actor_function' => (string) $selected['funktion'],
                 ]
@@ -5094,6 +5163,90 @@ function estab_dv_add_telecom_entry(
             return $entryId;
         }
     );
+}
+
+/**
+ * Give one newly created route its durable identity.
+ *
+ * The identity lives beside the plan entries, never inside them. Filling a
+ * column on `nv_fernmeldeplan_eintraege` would collide with
+ * `estab_dv94_fernmeldeplan_entry_update` the moment a released plan is
+ * involved; migration 122 carries the full reasoning. The number is allocated
+ * per incident and never reused, so a plan can print "Weg 3" and mean the
+ * same route in every version.
+ */
+function estab_dv_telecom_assign_route_identity(
+    mysqli $connection,
+    int $incidentId,
+    int $planId,
+    int $entryId,
+    string $userCode
+): int {
+    $next = $connection->prepare(
+        'SELECT COALESCE(MAX(`weg_nummer`), 0) + 1 AS `weg_nummer`'
+        . ' FROM `nv_fernmeldewege` WHERE `einsatz_id` = ? FOR UPDATE'
+    );
+    if (!$next) {
+        throw new RuntimeException(
+            'Wegnummer konnte nicht reserviert werden.'
+        );
+    }
+    try {
+        $next->bind_param('i', $incidentId);
+        $next->execute();
+        $number = (int) (
+            $next->get_result()->fetch_assoc()['weg_nummer'] ?? 0
+        );
+    } finally {
+        $next->close();
+    }
+    if ($number < 1) {
+        throw new RuntimeException(
+            'Wegnummer konnte nicht reserviert werden.'
+        );
+    }
+    $identity = $connection->prepare(
+        'INSERT INTO `nv_fernmeldewege`'
+        . ' (`einsatz_id`, `weg_nummer`, `angelegt_von`)'
+        . ' VALUES (?, ?, ?)'
+    );
+    if (!$identity) {
+        throw new RuntimeException(
+            'Wegkennung konnte nicht vorbereitet werden.'
+        );
+    }
+    try {
+        $identity->bind_param('iis', $incidentId, $number, $userCode);
+        if (!$identity->execute()) {
+            throw new RuntimeException(
+                'Wegkennung konnte nicht gespeichert werden.'
+            );
+        }
+        $wegId = (int) $connection->insert_id;
+    } finally {
+        $identity->close();
+    }
+    $mapping = $connection->prepare(
+        'INSERT INTO `nv_fernmeldeweg_zuordnung`'
+        . ' (`fernmeldeplan_eintrag_id`, `fernmeldeplan_id`, `weg_id`)'
+        . ' VALUES (?, ?, ?)'
+    );
+    if (!$mapping) {
+        throw new RuntimeException(
+            'Wegzuordnung konnte nicht vorbereitet werden.'
+        );
+    }
+    try {
+        $mapping->bind_param('iii', $entryId, $planId, $wegId);
+        if (!$mapping->execute()) {
+            throw new RuntimeException(
+                'Wegzuordnung konnte nicht gespeichert werden.'
+            );
+        }
+    } finally {
+        $mapping->close();
+    }
+    return $wegId;
 }
 
 function estab_dv_update_telecom_entry(
@@ -5742,10 +5895,16 @@ function estab_dv_telecom_plans(mysqli $connection, int $incidentId): array
         'SELECT p.*, e.`fernmeldeplan_eintrag_id`, e.`sortierung`,'
         . ' e.`betriebsstelle`, e.`rufname`, e.`medium`, e.`kanal`,'
         . ' e.`bandlage`, e.`verkehrsform`, e.`besondere_vermerke`,'
-        . ' e.`bemerkungen` AS `eintrag_bemerkungen`'
+        . ' e.`bemerkungen` AS `eintrag_bemerkungen`,'
+        . ' zu.`weg_id`, w.`weg_nummer`'
         . ' FROM `nv_fernmeldeplaene` AS p'
         . ' LEFT JOIN `nv_fernmeldeplan_eintraege` AS e'
         . ' ON e.`fernmeldeplan_id` = p.`fernmeldeplan_id`'
+        . ' LEFT JOIN `nv_fernmeldeweg_zuordnung` AS zu'
+        . ' ON zu.`fernmeldeplan_eintrag_id`'
+        . ' = e.`fernmeldeplan_eintrag_id`'
+        . ' LEFT JOIN `nv_fernmeldewege` AS w'
+        . ' ON w.`weg_id` = zu.`weg_id`'
         . ' WHERE p.`einsatz_id` = ?'
         . ' ORDER BY p.`version` DESC, e.`sortierung`'
     );
@@ -5784,6 +5943,12 @@ function estab_dv_telecom_plans(mysqli $connection, int $incidentId): array
                     'fernmeldeplan_eintrag_id' =>
                         (int) $row['fernmeldeplan_eintrag_id'],
                     'sortierung' => (int) $row['sortierung'],
+                    'weg_id' => $row['weg_id'] === null
+                        ? null
+                        : (int) $row['weg_id'],
+                    'weg_nummer' => $row['weg_nummer'] === null
+                        ? null
+                        : (int) $row['weg_nummer'],
                     'betriebsstelle' => (string) $row['betriebsstelle'],
                     'rufname' => (string) $row['rufname'],
                     'medium' => (string) $row['medium'],

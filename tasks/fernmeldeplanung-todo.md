@@ -88,17 +88,22 @@ diesen Vorgang.
       Das Vertragstor hält genau das fest, damit es niemand später
       „vereinfacht".
 
-- [ ] **A04** `!` **S** Versionskopie trägt die Kennung
+- [x] **A04** `!` **S** Versionskopie trägt die Kennung
       → `app/dv_operations.php`
-      - [ ] Die Kopie in [dv_operations.php:4829](app/dv_operations.php:4829) nimmt `weg_id` unverändert mit
-      - [ ] Neue Wege im Entwurf holen sich eine frische Kennung
+      - [x] Die Kopie nimmt die Kennung unverändert mit und bricht ab, wenn dabei
+            ein Weg ohne Kennung entstünde
+      - [x] Neue Wege im Entwurf holen sich eine frische Kennung
+      - [x] Die Leseabfrage gibt `weg_id` und `weg_nummer` heraus
+      - [x] Integrationstest: Zeilenkennungen neu, Wegkennungen gleich; eine
+            Zuordnung lässt sich nicht umhängen
       - **Prüfung:** Ein Versionswechsel erhält alle Kennungen; ein neuer Weg bekommt eine neue
       - **Abhängigkeit:** A03
 
-- [ ] **A05** `·` **S** `sortierung` ist nur noch Reihenfolge
+- [x] **A05** `·` **S** `sortierung` ist nur noch Reihenfolge
       → `app/dv_operations.php`, `4fach/fuehrungsstelle.php`
-      - [ ] Kommentar an der Spalte: keine Identität mehr, Lücken sind zulässig
-      - [ ] Der Bedienung wird **kein** Umsortieren hinzugefügt — das ist ein eigener Wunsch. Aber es ist ab jetzt gefahrlos möglich
+      - [x] Kommentar an der Vergabestelle: keine Identität mehr, mit beiden
+            Gründen, warum sie nur so aussah
+      - [x] Der Bedienung wird **kein** Umsortieren hinzugefügt — das ist ein eigener Wunsch. Aber es ist ab jetzt gefahrlos möglich
       - **Prüfung:** volle Suite
 
 > **Prüfpunkt C1.** Bestandsplan unverändert lesbar, Ausleitung identisch,
