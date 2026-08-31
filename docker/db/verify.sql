@@ -458,6 +458,12 @@ SELECT
        AND table_name = 'nv_fernmeldeplan_eintraege'
        AND column_name IN ('stellenart', 'rufname')) = 1
    AND
+   (SELECT COUNT(*)
+      FROM information_schema.referential_constraints
+     WHERE constraint_schema = DATABASE()
+       AND constraint_name = 'fk_fernmeldeweg_rueckfallebene'
+       AND delete_rule = 'RESTRICT') = 1
+   AND
    (SELECT COUNT(*) FROM `nv_einsaetze`
      WHERE `fuehrungsstellenname_gesperrt` NOT IN (0, 1)
         OR (
@@ -1987,7 +1993,7 @@ SELECT
        BINARY 'STRICT', BINARY 'LOOSE'
      )) = 0)
        AS `incident_permission_mode_ok`,
-  ((SELECT COUNT(*) FROM `estab_schema_migrations`) = 30
+  ((SELECT COUNT(*) FROM `estab_schema_migrations`) = 31
    AND
    (SELECT COUNT(*)
       FROM `estab_schema_migrations`
@@ -2021,10 +2027,11 @@ SELECT
        '121-transport-disposition-field-one.sql',
        '122-fernmeldeweg-identitaet.sql',
        '123-fernmeldeweg-funkart.sql',
-       '124-fernmeldeweg-erreichbarkeit.sql'
+       '124-fernmeldeweg-erreichbarkeit.sql',
+       '125-fernmeldeweg-rueckfallebene.sql'
      )
        AND `state` = 'applied'
-       AND `checksum` REGEXP BINARY '^[0-9a-f]{64}$') = 30)
+       AND `checksum` REGEXP BINARY '^[0-9a-f]{64}$') = 31)
        AS `schema_migrations_ok`;
 
 SELECT `table_name`, `engine`, `table_collation`

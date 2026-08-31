@@ -151,12 +151,16 @@ diesen Vorgang.
       - **Prüfung:** Bedienprüfung mit Bildschirmabzug; ein Versionswechsel führt Altvermerke zusammen und lässt Altversionen unberührt
       - **Regel:** `FMP-VERMERK-EINFACH`, `FMP-EIGENE-ERREICHBARKEIT`, `FMP-STELLENART`, `FMP-UX-WORT-DES-MEDIUMS`
 
-- [ ] **A08** `!` **M** Rückfallebene
+- [x] **A08** `!` **M** Rückfallebene
       → `docker/db/migrations/124-fernmeldeweg-rueckfallebene.sql`, `app/dv_operations.php`, `4fach/fuehrungsstelle.php`
-      - [ ] `rueckfallebene_fuer_weg`, zusammengesetzter Fremdschlüssel auf `(fernmeldeplan_id, weg_id)`, `RESTRICT`
-      - [ ] Prüfbedingung gegen den Selbstbezug; Ringprüfung in der Anwendung, **Ketten erlaubt**
-      - [ ] Schalter plus Auswahl „Rückfallebene für …"; beim ersten Weg abgeschaltet mit Begründung
-      - [ ] Kein zweites Wahrheitsfeld — `NULL` ist der Schalter
+      - [x] `rueckfallebene_fuer_weg`, zusammengesetzter Fremdschlüssel auf die
+            Zuordnung, `RESTRICT` — Migration 125
+      - [x] Selbstbezug und Ring in der **Anwendung** — ein Spalten-`CHECK` sieht
+            die eigene Kennung nicht, sie steht in der Zuordnung. Ketten erlaubt
+      - [x] Auswahl „Rückfallebene für …" mit den übrigen Wegen des Entwurfs;
+            ohne anderen Weg abgeschaltet mit Begründung
+      - [x] Kein zweites Wahrheitsfeld — `NULL` ist der Schalter
+      - [x] Tabellenspalte „Rückfallebene"
       - **Prüfung:** Kette aus drei Wegen über zwei Versionswechsel; Ring zurückgewiesen; Löschen des Hauptwegs nennt die Ersatzwege
       - **Abhängigkeit:** A04 · **Regel:** `FMP-RUECKFALLEBENE` · **Spec:** 9
 

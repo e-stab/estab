@@ -4512,6 +4512,18 @@ function estab_dv_telecom_entry_values(array $input): array
      * 6.1.2 verlangt Verbindungen vertikal UND horizontal; ohne die Angabe
      * fuehrt ein Plan Stellen, aber keine Ordnung.
      */
+    /*
+     * Die Rueckfallebene zeigt auf die dauerhafte Kennung eines anderen Wegs
+     * desselben Plans. NULL heisst "keine" -- ein zweites Wahrheitsfeld gaebe
+     * es nur, damit es dem Verweis widersprechen kann.
+     */
+    $fallback = $input['rueckfallebene_fuer_weg'] ?? null;
+    $fallback = is_string($fallback) ? trim($fallback) : $fallback;
+    if ($fallback === null || $fallback === '') {
+        $fallback = null;
+    } else {
+        $fallback = estab_dv_positive_id($fallback, 'Rückfallebene');
+    }
     $stellenart = $input['stellenart'] ?? null;
     $stellenart = is_string($stellenart) ? trim($stellenart) : '';
     if ($stellenart === '') {
@@ -4563,6 +4575,7 @@ function estab_dv_telecom_entry_values(array $input): array
             255
         ),
         'stellenart' => $stellenart,
+        'rueckfallebene_fuer_weg' => $fallback,
         'erreichbarkeit' => estab_dv_text(
             $input['erreichbarkeit'] ?? null,
             $definition['erreichbarkeit'],
@@ -4691,6 +4704,8 @@ function estab_dv_telecom_plan_revision(array $plan): string
             'sortierung' => (int) ($entry['sortierung'] ?? 0),
             'betriebsstelle' => (string) ($entry['betriebsstelle'] ?? ''),
             'stellenart' => $entry['stellenart'] ?? null,
+            'rueckfallebene_fuer_weg' =>
+                $entry['rueckfallebene_fuer_weg'] ?? null,
             'erreichbarkeit' => (string) ($entry['erreichbarkeit'] ?? ''),
             'medium' => (string) ($entry['medium'] ?? ''),
             'funkart' => $entry['funkart'] ?? null,
@@ -5011,10 +5026,11 @@ function estab_dv_start_telecom_plan_revision(
             $copyEntries = $connection->prepare(
                 'INSERT INTO `nv_fernmeldeplan_eintraege`'
                 . ' (`fernmeldeplan_id`, `sortierung`, `betriebsstelle`,'
-                . ' `stellenart`, `erreichbarkeit`, `medium`, `funkart`, `band`, `kanal`, `bandlage`, `verkehrsform`, `relaisstelle`, `betriebsart`, `rufgruppe`, `anschlussart`, `datenart`,'
+                . ' `stellenart`, `erreichbarkeit`, `rueckfallebene_fuer_weg`,'
+                . ' `medium`, `funkart`, `band`, `kanal`, `bandlage`, `verkehrsform`, `relaisstelle`, `betriebsart`, `rufgruppe`, `anschlussart`, `datenart`,'
                 . ' `besondere_vermerke`, `bemerkungen`)'
                 . ' SELECT ?, `sortierung`, `betriebsstelle`, `stellenart`,'
-                . ' `erreichbarkeit`,'
+                . ' `erreichbarkeit`, `rueckfallebene_fuer_weg`,'
                 . ' `medium`, `funkart`, `band`, `kanal`, `bandlage`, `verkehrsform`, `relaisstelle`, `betriebsart`, `rufgruppe`, `anschlussart`, `datenart`,'
                 /*
                  * Hier verschwindet die Zweiteilung der Vermerke.
@@ -5303,10 +5319,17 @@ function estab_dv_add_telecom_entry(
             } finally {
                 $next->close();
             }
+            estab_dv_telecom_assert_fallback(
+                $connection,
+                $planId,
+                null,
+                $values['rueckfallebene_fuer_weg']
+            );
             $insert = $connection->prepare(
                 'INSERT INTO `nv_fernmeldeplan_eintraege`'
                 . ' (`fernmeldeplan_id`, `sortierung`, `betriebsstelle`,'
-                . ' `stellenart`, `erreichbarkeit`, `medium`, `funkart`, `band`, `kanal`, `bandlage`, `verkehrsform`, `relaisstelle`, `betriebsart`, `rufgruppe`, `anschlussart`, `datenart`,'
+                . ' `stellenart`, `erreichbarkeit`, `rueckfallebene_fuer_weg`,'
+                . ' `medium`, `funkart`, `band`, `kanal`, `bandlage`, `verkehrsform`, `relaisstelle`, `betriebsart`, `rufgruppe`, `anschlussart`, `datenart`,'
                 . ' `besondere_vermerke`, `bemerkungen`)'
                 . ' VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,'
                 . ' ?, ?)'
@@ -5316,12 +5339,13 @@ function estab_dv_add_telecom_entry(
             }
             try {
                 $insert->bind_param(
-                    'iisssssssssssssssss',
+                    'iisssisssssssssssss',
                     $planId,
                     $sort,
                     $values['betriebsstelle'],
                     $values['stellenart'],
                     $values['erreichbarkeit'],
+                    $values['rueckfallebene_fuer_weg'],
                     $values['medium'],
                     $values['funkart'],
                     $values['band'],
@@ -5367,6 +5391,77 @@ function estab_dv_add_telecom_entry(
             return $entryId;
         }
     );
+}
+
+/**
+ * Refuse a fallback that points at itself or closes a ring.
+ *
+ * The database already guarantees that a fallback stays inside its own plan
+ * version -- the composite foreign key carries `fernmeldeplan_id`. What it
+ * cannot see is the entry's own identity: that lives in the mapping table, so
+ * a column CHECK has nothing to compare against. The walk below does it.
+ *
+ * Chains stay allowed on purpose. A substitute may have a substitute; only a
+ * ring is refused, because a ring answers "what takes the place of this one"
+ * with itself.
+ */
+function estab_dv_telecom_assert_fallback(
+    mysqli $connection,
+    int $planId,
+    ?int $ownRouteId,
+    ?int $target
+): void {
+    if ($target === null) {
+        return;
+    }
+    if ($ownRouteId !== null && $ownRouteId === $target) {
+        throw new EstabDvInputException(
+            'Ein Weg kann nicht seine eigene Rückfallebene sein.'
+        );
+    }
+    $step = $connection->prepare(
+        'SELECT e.`rueckfallebene_fuer_weg`'
+        . ' FROM `nv_fernmeldeweg_zuordnung` AS z'
+        . ' JOIN `nv_fernmeldeplan_eintraege` AS e'
+        . ' ON e.`fernmeldeplan_eintrag_id` = z.`fernmeldeplan_eintrag_id`'
+        . ' WHERE z.`fernmeldeplan_id` = ? AND z.`weg_id` = ?'
+    );
+    if (!$step) {
+        throw new RuntimeException(
+            'Die Rückfallebene konnte nicht geprüft werden.'
+        );
+    }
+    try {
+        $seen = [];
+        $current = $target;
+        while ($current !== null) {
+            if (isset($seen[$current])) {
+                throw new EstabDvInputException(
+                    'Die Rückfallebenen bilden einen Ring.'
+                );
+            }
+            $seen[$current] = true;
+            if ($ownRouteId !== null && $current === $ownRouteId) {
+                throw new EstabDvInputException(
+                    'Die Rückfallebenen bilden einen Ring.'
+                );
+            }
+            $step->bind_param('ii', $planId, $current);
+            $step->execute();
+            $row = $step->get_result()->fetch_assoc();
+            if (!is_array($row)) {
+                // Der Fremdschluessel laesst nur Ziele desselben Plans zu;
+                // fehlt die Zeile trotzdem, ist der Verweis nicht tragfaehig.
+                throw new EstabDvInputException(
+                    'Die Rückfallebene benennt keinen Weg dieses Plans.'
+                );
+            }
+            $next = $row['rueckfallebene_fuer_weg'];
+            $current = $next === null ? null : (int) $next;
+        }
+    } finally {
+        $step->close();
+    }
 }
 
 /**
@@ -5504,7 +5599,7 @@ function estab_dv_update_telecom_entry(
             );
             $select = $connection->prepare(
                 'SELECT `sortierung`, `betriebsstelle`, `stellenart`,'
-                . ' `erreichbarkeit`, `medium`,'
+                . ' `erreichbarkeit`, `rueckfallebene_fuer_weg`, `medium`,'
                 . ' `funkart`, `band`, `kanal`, `bandlage`, `verkehrsform`, `relaisstelle`, `betriebsart`, `rufgruppe`, `anschlussart`, `datenart`,'
                 . ' `besondere_vermerke`, `bemerkungen`'
                 . ' FROM `nv_fernmeldeplan_eintraege`'
@@ -5528,10 +5623,34 @@ function estab_dv_update_telecom_entry(
                     'Der Fernmeldeweg gehört nicht zu diesem Entwurf.'
                 );
             }
+            $ownRoute = null;
+            $ownStatement = $connection->prepare(
+                'SELECT `weg_id` FROM `nv_fernmeldeweg_zuordnung`'
+                . ' WHERE `fernmeldeplan_eintrag_id` = ?'
+            );
+            if ($ownStatement) {
+                try {
+                    $ownStatement->bind_param('i', $entryId);
+                    $ownStatement->execute();
+                    $ownRow = $ownStatement->get_result()->fetch_assoc();
+                    $ownRoute = is_array($ownRow) && $ownRow['weg_id'] !== null
+                        ? (int) $ownRow['weg_id']
+                        : null;
+                } finally {
+                    $ownStatement->close();
+                }
+            }
+            estab_dv_telecom_assert_fallback(
+                $connection,
+                $planId,
+                $ownRoute,
+                $values['rueckfallebene_fuer_weg']
+            );
             $update = $connection->prepare(
                 'UPDATE `nv_fernmeldeplan_eintraege`'
                 . ' SET `betriebsstelle` = ?, `stellenart` = ?,'
-                . ' `erreichbarkeit` = ?, `medium` = ?,'
+                . ' `erreichbarkeit` = ?, `rueckfallebene_fuer_weg` = ?,'
+                . ' `medium` = ?,'
                 . ' `funkart` = ?, `band` = ?, `kanal` = ?, `bandlage` = ?,'
                 . ' `verkehrsform` = ?, `relaisstelle` = ?,'
                 . ' `betriebsart` = ?, `rufgruppe` = ?, `anschlussart` = ?,'
@@ -5547,10 +5666,11 @@ function estab_dv_update_telecom_entry(
             }
             try {
                 $update->bind_param(
-                    'ssssssssssssssssii',
+                    'sssisssssssssssssii',
                     $values['betriebsstelle'],
                     $values['stellenart'],
                     $values['erreichbarkeit'],
+                    $values['rueckfallebene_fuer_weg'],
                     $values['medium'],
                     $values['funkart'],
                     $values['band'],
@@ -5642,7 +5762,7 @@ function estab_dv_delete_telecom_entry(
             );
             $select = $connection->prepare(
                 'SELECT `sortierung`, `betriebsstelle`, `stellenart`,'
-                . ' `erreichbarkeit`, `medium`,'
+                . ' `erreichbarkeit`, `rueckfallebene_fuer_weg`, `medium`,'
                 . ' `funkart`, `band`, `kanal`, `bandlage`, `verkehrsform`, `relaisstelle`, `betriebsart`, `rufgruppe`, `anschlussart`, `datenart`,'
                 . ' `besondere_vermerke`, `bemerkungen`'
                 . ' FROM `nv_fernmeldeplan_eintraege`'
@@ -6112,6 +6232,7 @@ function estab_dv_telecom_plans(mysqli $connection, int $incidentId): array
     $statement = $connection->prepare(
         'SELECT p.*, e.`fernmeldeplan_eintrag_id`, e.`sortierung`,'
         . ' e.`betriebsstelle`, e.`stellenart`, e.`erreichbarkeit`,'
+        . ' e.`rueckfallebene_fuer_weg`,'
         . ' e.`medium`, e.`kanal`,'
         . ' e.`bandlage`, e.`verkehrsform`, e.`funkart`, e.`band`,'
         . ' e.`relaisstelle`, e.`betriebsart`, e.`rufgruppe`,'
@@ -6172,6 +6293,10 @@ function estab_dv_telecom_plans(mysqli $connection, int $incidentId): array
                         : (int) $row['weg_nummer'],
                     'betriebsstelle' => (string) $row['betriebsstelle'],
                     'stellenart' => $row['stellenart'],
+                    'rueckfallebene_fuer_weg' =>
+                        $row['rueckfallebene_fuer_weg'] === null
+                            ? null
+                            : (int) $row['rueckfallebene_fuer_weg'],
                     'erreichbarkeit' => (string) $row['erreichbarkeit'],
                     'medium' => (string) $row['medium'],
                     'funkart' => $row['funkart'],

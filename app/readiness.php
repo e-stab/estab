@@ -518,6 +518,11 @@ function estab_readiness_schema_query(): string
         . "WHERE table_schema = DATABASE() AND table_name = "
         . "'nv_fernmeldeplan_eintraege' AND column_name IN ("
         . "'stellenart','rufname')) = 1) "
+        // Wer den Hauptweg streicht, entscheidet auch ueber seinen Ersatz.
+        . "AND ((SELECT COUNT(*) FROM information_schema."
+        . "referential_constraints WHERE constraint_schema = DATABASE() "
+        . "AND constraint_name = 'fk_fernmeldeweg_rueckfallebene' "
+        . "AND delete_rule = 'RESTRICT') = 1) "
         . "AND ((SELECT COUNT(*) FROM information_schema.columns "
         . "WHERE table_schema = DATABASE() AND table_name = 'nv_nachrichten' "
         . "AND column_name = 'estab_fernmeldeplan_eintrag_id' "
@@ -1438,7 +1443,7 @@ function estab_readiness_schema_query(): string
         . "WHERE estab_status = 'closed' AND (estab_closed_at IS NULL "
         . "OR estab_retain_until IS NULL OR estab_retain_until "
         . "< DATE_ADD(estab_closed_at, INTERVAL 10 YEAR))) = 0) "
-        . "AND ((SELECT COUNT(*) FROM estab_schema_migrations) = 30) "
+        . "AND ((SELECT COUNT(*) FROM estab_schema_migrations) = 31) "
         . "AND ((SELECT COUNT(*) FROM estab_schema_migrations "
         . "WHERE version IN ('20-nullable-dates.sql','30-runtime-schema.sql',"
         . "'40-recipient-matrix-standard.sql','45-global-incidents-prepare.sql',"
@@ -1462,7 +1467,8 @@ function estab_readiness_schema_query(): string
         . "'121-transport-disposition-field-one.sql',"
         . "'122-fernmeldeweg-identitaet.sql',"
         . "'123-fernmeldeweg-funkart.sql',"
-        . "'124-fernmeldeweg-erreichbarkeit.sql') "
+        . "'124-fernmeldeweg-erreichbarkeit.sql',"
+        . "'125-fernmeldeweg-rueckfallebene.sql') "
         . "AND state = 'applied' "
-        . "AND checksum REGEXP BINARY '^[0-9a-f]{64}$') = 30)";
+        . "AND checksum REGEXP BINARY '^[0-9a-f]{64}$') = 31)";
 }

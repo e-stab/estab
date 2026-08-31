@@ -237,6 +237,42 @@ function dv_operations_render_telecom_entry_fields(array $values): void
         <small>Zeigt die Verbindung nach oben, nach unten oder zur
           Seite?</small>
       </label>
+      <?php
+        /*
+         * Die Rueckfallebene ist ein Verweis, kein Schalter mit Ziel: NULL
+         * heisst "keine". Angeboten werden nur die uebrigen Wege desselben
+         * Entwurfs -- der eigene faellt heraus, weil ein Weg nicht seine
+         * eigene Rueckfallebene sein kann.
+         */
+        $andereWege = [];
+        foreach ($values['geschwister'] ?? [] as $geschwister) {
+            if ((int) ($geschwister['weg_id'] ?? 0) < 1) {
+                continue;
+            }
+            if (($geschwister['eigen'] ?? false) === true) {
+                continue;
+            }
+            $andereWege[] = $geschwister;
+        }
+      ?>
+      <label>Rückfallebene für
+        <select name="rueckfallebene_fuer_weg"
+          <?= $andereWege === [] ? 'disabled' : '' ?>>
+          <option value="">keine Rückfallebene</option>
+          <?php foreach ($andereWege as $geschwister): ?>
+            <option value="<?= (int) $geschwister['weg_id'] ?>"
+              <?= (int) ($values['rueckfallebene_fuer_weg'] ?? 0)
+                  === (int) $geschwister['weg_id'] ? 'selected' : '' ?>>
+              <?= dv_operations_html($geschwister['bezeichnung']) ?>
+            </option>
+          <?php endforeach; ?>
+        </select>
+        <small><?= $andereWege === []
+            ? 'Noch kein anderer Weg vorhanden, für den dieser einspringen '
+              . 'könnte.'
+            : 'Dieser Weg tritt an die Stelle des gewählten, wenn der '
+              . 'ausfällt.' ?></small>
+      </label>
       <label>Wegart
         <select name="wegart" required data-estab-telecom-kind>
           <option value="" <?= $kind === null ? 'selected' : '' ?>>
@@ -1220,6 +1256,9 @@ foreach ($plans as $plan) {
                   'mittel' => $mittel,
                   'technik' => implode(' · ', $teile),
                   'verkehrsform' => (string) $entry['verkehrsform'],
+                  'ersatz' => $entry['rueckfallebene_fuer_weg'] === null
+                      ? ''
+                      : 'für Weg ' . (int) $entry['rueckfallebene_fuer_weg'],
                   'vermerke' => trim(
                       (string) $entry['besondere_vermerke']
                       . ' ' . (string) $entry['bemerkungen']
@@ -1237,7 +1276,7 @@ foreach ($plans as $plan) {
                   ['schluessel' => 'weg', 'kopf' => 'Weg', 'breite' => 6,
                       'sortierbar' => true, 'suchbar' => true, 'art' => 'text'],
                   ['schluessel' => 'betriebsstelle',
-                      'kopf' => 'Stelle', 'breite' => 16,
+                      'kopf' => 'Stelle', 'breite' => 14,
                       'sortierbar' => true, 'suchbar' => true, 'art' => 'text'],
                   ['schluessel' => 'rufname', 'kopf' => 'Erreichbar unter',
                       'breite' => 16, 'sortierbar' => true,
@@ -1248,19 +1287,22 @@ foreach ($plans as $plan) {
                    * sucht die Funkwege.
                    */
                   ['schluessel' => 'mittel', 'kopf' => 'Mittel',
-                      'breite' => 14, 'sortierbar' => true,
+                      'breite' => 12, 'sortierbar' => true,
                       'suchbar' => true, 'art' => 'text',
                       'filter' => array_keys($wegeMedien),
                       'filtername' => 'Alle Mittel'],
                   ['schluessel' => 'technik',
-                      'kopf' => 'Technische Angaben', 'breite' => 18,
+                      'kopf' => 'Technische Angaben', 'breite' => 16,
                       'sortierbar' => false, 'suchbar' => true,
                       'art' => 'text'],
                   ['schluessel' => 'verkehrsform', 'kopf' => 'Verkehrsform',
-                      'breite' => 14, 'sortierbar' => true,
+                      'breite' => 12, 'sortierbar' => true,
+                      'suchbar' => true, 'art' => 'text'],
+                  ['schluessel' => 'ersatz', 'kopf' => 'Rückfallebene',
+                      'breite' => 12, 'sortierbar' => true,
                       'suchbar' => true, 'art' => 'text'],
                   ['schluessel' => 'vermerke', 'kopf' => 'Vermerke',
-                      'breite' => 16, 'sortierbar' => false,
+                      'breite' => 12, 'sortierbar' => false,
                       'suchbar' => true, 'art' => 'text',
                       'klammern' => true],
               ],
@@ -1504,6 +1546,26 @@ foreach ($plans as $plan) {
               <?php foreach ($plan['eintraege'] as $entry): ?>
                 <?php
                   $entryId = (int) $entry['fernmeldeplan_eintrag_id'];
+                  /*
+                   * Die uebrigen Wege des Entwurfs, damit die Auswahl der
+                   * Rueckfallebene sie anbieten kann. Der eigene ist
+                   * gekennzeichnet und faellt in der Auswahl heraus.
+                   */
+                  $geschwister = [];
+                  foreach ($plan['eintraege'] as $anderer) {
+                      $geschwister[] = [
+                          'weg_id' => (int) ($anderer['weg_id'] ?? 0),
+                          'eigen' => (int) $anderer['fernmeldeplan_eintrag_id']
+                              === $entryId,
+                          'bezeichnung' => 'Weg '
+                              . (int) ($anderer['weg_nummer'] ?? 0)
+                              . ' · ' . (string) $anderer['betriebsstelle']
+                              . ' · ' . estab_dv_telecom_route_label(
+                                  $anderer['medium'],
+                                  $anderer['funkart'] ?? null
+                              ),
+                      ];
+                  }
                   $entryValues = $entry;
                   foreach (array_keys($entryValues) as $field) {
                       $entryValues[$field] = dv_operations_post_value(
@@ -1569,7 +1631,7 @@ foreach ($plans as $plan) {
                     <input type="hidden" name="plan_revision"
                       value="<?= dv_operations_html($revision) ?>">
                     <?php dv_operations_render_telecom_entry_fields(
-                        $entryValues
+                        $entryValues + ['geschwister' => $geschwister]
                     ); ?>
                     <button class="estab-button" type="submit">
                       Änderungen am Weg speichern
@@ -1637,7 +1699,25 @@ foreach ($plans as $plan) {
                   value="<?= $planId ?>">
                 <input type="hidden" name="plan_revision"
                   value="<?= dv_operations_html($revision) ?>">
-                <?php dv_operations_render_telecom_entry_fields($addValues); ?>
+                <?php
+                  $neueGeschwister = [];
+                  foreach ($plan['eintraege'] as $anderer) {
+                      $neueGeschwister[] = [
+                          'weg_id' => (int) ($anderer['weg_id'] ?? 0),
+                          'eigen' => false,
+                          'bezeichnung' => 'Weg '
+                              . (int) ($anderer['weg_nummer'] ?? 0)
+                              . ' · ' . (string) $anderer['betriebsstelle']
+                              . ' · ' . estab_dv_telecom_route_label(
+                                  $anderer['medium'],
+                                  $anderer['funkart'] ?? null
+                              ),
+                      ];
+                  }
+                  dv_operations_render_telecom_entry_fields(
+                      $addValues + ['geschwister' => $neueGeschwister]
+                  );
+                ?>
                 <button class="estab-button" type="submit">
                   Weg zum Entwurf hinzufügen
                 </button>

@@ -261,6 +261,46 @@ $assert(
         && estab_dv_telecom_route_kind('FS', null) === null,
     'legacy radio routes no longer read as undetermined'
 );
+/*
+ * Die Rueckfallebene ist ein Verweis, kein Schalter mit Ziel. Sie nimmt eine
+ * Kennung an oder nichts; ein zweites Wahrheitsfeld gaebe es nur, damit es
+ * dem Verweis widersprechen kann.
+ */
+$mitErsatz = estab_dv_telecom_entry_values([
+    'wegart' => 'Fe',
+    'betriebsstelle' => 'Kreisleitstelle',
+    'erreichbarkeit' => '0228 940-0',
+    'rueckfallebene_fuer_weg' => '7',
+]);
+$assert(
+    $mitErsatz['rueckfallebene_fuer_weg'] === 7,
+    'the fallback reference was not kept as an identity'
+);
+$ohneErsatz = estab_dv_telecom_entry_values([
+    'wegart' => 'Fe',
+    'betriebsstelle' => 'Kreisleitstelle',
+    'erreichbarkeit' => '0228 940-0',
+    'rueckfallebene_fuer_weg' => '',
+]);
+$assert(
+    $ohneErsatz['rueckfallebene_fuer_weg'] === null,
+    'an empty fallback was not read as "no fallback"'
+);
+$expect(
+    EstabDvInputException::class,
+    static fn (): array => estab_dv_telecom_entry_values([
+        'wegart' => 'Fe',
+        'betriebsstelle' => 'Kreisleitstelle',
+        'erreichbarkeit' => '0228 940-0',
+        'rueckfallebene_fuer_weg' => '0',
+    ]),
+    'a fallback pointing at no route was accepted'
+);
+$assert(
+    function_exists('estab_dv_telecom_assert_fallback'),
+    'the fallback ring check is missing'
+);
+
 /* Die Stellenart sagt, in welche Richtung die Verbindung zeigt. */
 $mitArt = estab_dv_telecom_entry_values([
     'wegart' => 'Fe',

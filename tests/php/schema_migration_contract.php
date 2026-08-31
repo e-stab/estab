@@ -52,6 +52,9 @@ $radioKindMigration = $read(
 $reachabilityMigration = $read(
     $root . '/docker/db/migrations/124-fernmeldeweg-erreichbarkeit.sql'
 );
+$fallbackMigration = $read(
+    $root . '/docker/db/migrations/125-fernmeldeweg-rueckfallebene.sql'
+);
 $attachmentIntegrityMigration = $read(
     $root . '/docker/db/migrations/95-attachment-ingest-integrity.sql'
 );
@@ -2907,6 +2910,36 @@ $assert(
     'Reachability rename, station kind, or the kept legacy note is outside '
         . 'the gate'
 );
+// Die Rueckfallebene zeigt auf die dauerhafte Kennung, nie auf eine Zeile --
+// sonst zeigte sie nach dem ersten Versionswechsel auf die Vorgaengerversion.
+// Und sie verweigert das Loeschen ihres Hauptwegs, statt still zu verwaisen.
+$assert(
+    str_contains(
+        $fallbackMigration,
+        '`rueckfallebene_fuer_weg` BIGINT UNSIGNED NULL'
+    )
+        && str_contains(
+            $fallbackMigration,
+            'FOREIGN KEY (`fernmeldeplan_id`, `rueckfallebene_fuer_weg`)'
+        )
+        && str_contains(
+            $fallbackMigration,
+            'REFERENCES `nv_fernmeldeweg_zuordnung`'
+        )
+        && str_contains($fallbackMigration, 'ON DELETE RESTRICT')
+        && !str_contains($fallbackMigration, 'ON DELETE SET NULL')
+        && !str_contains(
+            $fallbackMigration,
+            '`fernmeldeplan_eintrag_id`)\n        REFERENCES'
+        )
+        && str_contains(
+            $fallbackMigration,
+            '124-fernmeldeweg-erreichbarkeit.sql'
+        )
+        && str_contains($readiness, "'125-fernmeldeweg-rueckfallebene.sql'"),
+    'Fallback reference, its identity target, or its delete rule is outside '
+        . 'the gate'
+);
 $etbMigrationFragments = [
     "table_name = 'nv_funktionsfaehigkeiten' AND table_type = 'BASE TABLE' "
         . "AND engine = 'InnoDB' AND table_collation = "
@@ -3202,7 +3235,7 @@ $assert(
         && str_contains($verifySql, "index_name <> 'PRIMARY') = 0")
         && str_contains(
             $verifySql,
-            '(SELECT COUNT(*) FROM `estab_schema_migrations`) = 30'
+            '(SELECT COUNT(*) FROM `estab_schema_migrations`) = 31'
         )
         && str_contains($verifySql, "'96-etb-duty-function.sql'")
         && str_contains(
@@ -3257,7 +3290,11 @@ $assert(
             $verifySql,
             "'124-fernmeldeweg-erreichbarkeit.sql'"
         )
-        && str_contains($verifySql, ") = 30) AS `schema_migrations_ok`")
+        && str_contains(
+            $verifySql,
+            "'125-fernmeldeweg-rueckfallebene.sql'"
+        )
+        && str_contains($verifySql, ") = 31) AS `schema_migrations_ok`")
         && str_contains(
             $verifySql,
             'Discarded telecommunications drafts are immutable evidence'
@@ -3284,7 +3321,7 @@ $assert(
         && str_contains($readinessSql, "index_name <> 'PRIMARY') = 0")
         && str_contains(
             $readinessSql,
-            '(SELECT COUNT(*) FROM estab_schema_migrations) = 30'
+            '(SELECT COUNT(*) FROM estab_schema_migrations) = 31'
         )
         && str_contains($readinessSql, "'96-etb-duty-function.sql'")
         && str_contains(
@@ -3336,7 +3373,7 @@ $assert(
         )
         && str_contains(
             $readinessSql,
-            "checksum REGEXP BINARY '^[0-9a-f]{64}$') = 30"
+            "checksum REGEXP BINARY '^[0-9a-f]{64}$') = 31"
         ),
     'Runtime readiness does not require the exact final ETB catalogue and ledger'
 );
@@ -3588,8 +3625,10 @@ $assert(
         && str_contains($readiness, "'123-fernmeldeweg-funkart.sql'")
         && str_contains($verify, "'124-fernmeldeweg-erreichbarkeit.sql'")
         && str_contains($readiness, "'124-fernmeldeweg-erreichbarkeit.sql'")
-        && str_contains($verify, 'estab_schema_migrations`) = 30')
-        && str_contains($readiness, 'estab_schema_migrations) = 30'),
+        && str_contains($verify, "'125-fernmeldeweg-rueckfallebene.sql'")
+        && str_contains($readiness, "'125-fernmeldeweg-rueckfallebene.sql'")
+        && str_contains($verify, 'estab_schema_migrations`) = 31')
+        && str_contains($readiness, 'estab_schema_migrations) = 31'),
     'Migration ledger/readiness does not require all release migrations'
 );
 $assert(
