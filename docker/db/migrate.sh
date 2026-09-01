@@ -284,11 +284,18 @@ SELECT COUNT(*)
    AND table_name IN (
      'nv_nachrichten', 'nv_empfmtx', 'nv_benutzer',
      'nv_masterkatego', 'nv_masterkategolink', 'nv_protokoll',
-     'nv_anhang', 'nv_etb', 'nv_tbb', 'nv_ubb', 'nv_komplan',
+     'nv_anhang', 'nv_etb', 'nv_tbb', 'nv_ubb',
      'nv_bhp50', 'nv_etbtitel', 'nv_tbbtitel'
    )")
-    if [ "$baseline_table_count" != "14" ]; then
-        echo "Fresh schema baseline is incomplete; expected 14 runtime tables" >&2
+    # nv_komplan steht hier nicht mehr.
+    #
+    # Die Grundfassung legt die Tabelle weiterhin an -- ihre Pruefsumme haengt
+    # daran --, aber Migration 130 raeumt sie danach weg. Diese Zaehlung laeuft
+    # bei JEDEM Start, also auch lange nach dem Abbau; sie zaehlt deshalb die
+    # Tabellen der Grundfassung, die noch gelten. Wer die abgebaute mitzaehlt,
+    # laesst jede Installation nach dem Abbau nicht mehr hochfahren.
+    if [ "$baseline_table_count" != "13" ]; then
+        echo "Fresh schema baseline is incomplete; expected 13 runtime tables" >&2
         exit 1
     fi
 fi

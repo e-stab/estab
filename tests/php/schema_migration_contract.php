@@ -67,6 +67,10 @@ $planHeaderMigration = $read(
 $counterpartKindMigration = $read(
     $root . '/docker/db/migrations/129-gegenstelle-stellenart.sql'
 );
+$legacyPlanRemoval = $read(
+    $root . '/docker/db/migrations/130-komplan-abbau.sql'
+);
+$freshSchema = $read($root . '/docker/db/init/10-schema.sql');
 $attachmentIntegrityMigration = $read(
     $root . '/docker/db/migrations/95-attachment-ingest-integrity.sql'
 );
@@ -237,7 +241,7 @@ $assert(
     && str_contains($runner, 'CREATE TABLE IF NOT EXISTS estab_schema_baselines')
     && str_contains($runner, 'Retrying interrupted fresh schema baseline')
     && str_contains($runner, 'Checksum mismatch for fresh schema baseline')
-    && str_contains($runner, 'expected 14 runtime tables')
+    && str_contains($runner, 'expected 13 runtime tables')
     && str_contains($runner, 'database_apply < "$ESTAB_SCHEMA_BASELINE_FILE"'),
     'Fresh installation lacks a checksum-ledgered, retryable embedded baseline'
 );
@@ -3017,6 +3021,55 @@ $assert(
         . 'of a counterpart foreign key is outside the gate'
 );
 /*
+ * Der Abbau der ungenutzten Alttabelle.
+ *
+ * Ein DROP ist die eine Operation, die dieses Schema nicht zuruecknehmen
+ * kann. Deshalb bricht die Migration ab, wenn auch nur eine Zeile darin
+ * steht, und sagt, was zu tun ist -- eine Installation, die dort doch Daten
+ * hat, muss es VORHER merken.
+ *
+ * Und die Grundfassung behaelt die Tabelle. Sie ist in
+ * `estab_schema_baselines` pruefsummengebunden; sie zu aendern liesse jede
+ * bestehende Installation mit "Checksum mismatch for fresh schema baseline"
+ * scheitern. Eine Neuinstallation legt die Tabelle deshalb an, die
+ * Migrationen 45, 50 und 97 finden sie, und diese hier raeumt sie am Ende
+ * weg -- derselbe Weg, den eine bestehende Installation geht.
+ */
+$assert(
+    str_contains($legacyPlanRemoval, 'DROP TABLE IF EXISTS `nv_komplan`;')
+        && str_contains(
+            $legacyPlanRemoval,
+            'nv_komplan still holds rows'
+        )
+        && str_contains(
+            $legacyPlanRemoval,
+            'DROP TRIGGER IF EXISTS `estab_komplan_bi_einsatz`;'
+        )
+        && str_contains(
+            $legacyPlanRemoval,
+            'DROP TRIGGER IF EXISTS `estab_komplan_bu_einsatz`;'
+        )
+        && str_contains(
+            $legacyPlanRemoval,
+            'DROP TRIGGER IF EXISTS `estab_komplan_bd_einsatz`;'
+        )
+        && str_contains(
+            $legacyPlanRemoval,
+            'the current plan schema is incomplete'
+        )
+        && str_contains(
+            $legacyPlanRemoval,
+            "'129-gegenstelle-stellenart.sql'"
+        )
+        // Die Grundfassung behaelt die Tabelle -- ihre Pruefsumme haengt daran.
+        && str_contains($freshSchema, 'CREATE TABLE IF NOT EXISTS `nv_komplan`')
+        // Und die Laufzeit kennt sie nicht mehr.
+        && !str_contains($readiness, 'nv_komplan')
+        && !str_contains($verify, 'nv_komplan'),
+    'The legacy plan removal, its refusal on non-empty data, or the '
+        . 'preserved fresh-schema baseline is outside the gate'
+);
+/*
  * Die Stellenart gehoert der GEGENSTELLE, nicht dem eigenen Weg.
  *
  * Der Plan fuehrt die EIGENEN Erreichbarkeiten; ueber- und untergeordnet sind
@@ -3380,7 +3433,7 @@ $assert(
         && str_contains($verifySql, "index_name <> 'PRIMARY') = 0")
         && str_contains(
             $verifySql,
-            '(SELECT COUNT(*) FROM `estab_schema_migrations`) = 35'
+            '(SELECT COUNT(*) FROM `estab_schema_migrations`) = 36'
         )
         && str_contains($verifySql, "'96-etb-duty-function.sql'")
         && str_contains(
@@ -3452,7 +3505,8 @@ $assert(
             $verifySql,
             "'129-gegenstelle-stellenart.sql'"
         )
-        && str_contains($verifySql, ") = 35) AS `schema_migrations_ok`")
+        && str_contains($verifySql, "'130-komplan-abbau.sql'")
+        && str_contains($verifySql, ") = 36) AS `schema_migrations_ok`")
         && str_contains(
             $verifySql,
             'Discarded telecommunications drafts are immutable evidence'
@@ -3479,7 +3533,7 @@ $assert(
         && str_contains($readinessSql, "index_name <> 'PRIMARY') = 0")
         && str_contains(
             $readinessSql,
-            '(SELECT COUNT(*) FROM estab_schema_migrations) = 35'
+            '(SELECT COUNT(*) FROM estab_schema_migrations) = 36'
         )
         && str_contains($readinessSql, "'96-etb-duty-function.sql'")
         && str_contains(
@@ -3531,7 +3585,7 @@ $assert(
         )
         && str_contains(
             $readinessSql,
-            "checksum REGEXP BINARY '^[0-9a-f]{64}$') = 35"
+            "checksum REGEXP BINARY '^[0-9a-f]{64}$') = 36"
         ),
     'Runtime readiness does not require the exact final ETB catalogue and ledger'
 );
@@ -3793,8 +3847,10 @@ $assert(
         && str_contains($readiness, "'128-fernmeldeplan-kopfleiste.sql'")
         && str_contains($verify, "'129-gegenstelle-stellenart.sql'")
         && str_contains($readiness, "'129-gegenstelle-stellenart.sql'")
-        && str_contains($verify, 'estab_schema_migrations`) = 35')
-        && str_contains($readiness, 'estab_schema_migrations) = 35'),
+        && str_contains($verify, "'130-komplan-abbau.sql'")
+        && str_contains($readiness, "'130-komplan-abbau.sql'")
+        && str_contains($verify, 'estab_schema_migrations`) = 36')
+        && str_contains($readiness, 'estab_schema_migrations) = 36'),
     'Migration ledger/readiness does not require all release migrations'
 );
 $assert(

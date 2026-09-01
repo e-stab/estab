@@ -267,6 +267,59 @@ $assert(
  * Medium hat sie NICHT -- das ist das des Wegs, und genau darin liegt die
  * Aussage "ueber DIESEN Weg antwortet JENE Stelle unter DIESER Adresse".
  */
+/*
+ * Die Versionskopie und die Rueckfallebene.
+ *
+ * Der Verweis zeigt ueber einen zusammengesetzten Fremdschluessel auf die
+ * Wegzuordnung DESSELBEN Plans -- und die entsteht erst NACH den Zeilen. Wer
+ * ihn gleich mitkopiert, laesst die Kopie am Fremdschluessel scheitern, und
+ * zwar erst dann, wenn ein Plan zum ersten Mal eine Rueckfallebene hat. Genau
+ * so ist es im Betrieb aufgefallen: "Die Aktion konnte nicht vollstaendig
+ * gespeichert werden", sobald der Betreiber die vierte Fassung bearbeiten
+ * wollte.
+ *
+ * Deshalb: Zeilen mit NULL kopieren, Kennungen anlegen, dann nachtragen.
+ */
+$revisionQuelle = file_get_contents(
+    dirname(__DIR__, 2) . '/app/dv_operations.php'
+);
+$assert(
+    is_string($revisionQuelle),
+    'Die Fernmeldeplanung ist nicht lesbar.'
+);
+$revisionQuelle = (string) $revisionQuelle;
+$kopieAnfang = strpos(
+    $revisionQuelle,
+    'function estab_dv_start_telecom_plan_revision('
+);
+$kopieEnde = strpos(
+    $revisionQuelle,
+    'function estab_dv_update_telecom_plan_draft(',
+    $kopieAnfang === false ? 0 : $kopieAnfang
+);
+$kopie = ($kopieAnfang !== false && $kopieEnde !== false)
+    ? substr($revisionQuelle, $kopieAnfang, $kopieEnde - $kopieAnfang)
+    : '';
+$stelleZeilen = strpos($kopie, 'INSERT INTO `nv_fernmeldeplan_eintraege`');
+$stelleKennungen = strpos($kopie, 'INSERT INTO `nv_fernmeldeweg_zuordnung`');
+$stelleNachtrag = strpos($kopie, 'SET neu.`rueckfallebene_fuer_weg`');
+$assert(
+    $stelleZeilen !== false
+        && $stelleKennungen !== false
+        && $stelleNachtrag !== false
+        && $stelleZeilen < $stelleKennungen
+        && $stelleKennungen < $stelleNachtrag,
+    'the version copy writes a fallback before the route identities exist'
+);
+$assert(
+    str_contains($kopie, "' `erreichbarkeit`, NULL,'"),
+    'the version copy carries the fallback into a plan that cannot hold it yet'
+);
+$assert(
+    str_contains($kopie, "AND alt.`rueckfallebene_fuer_weg` IS NOT NULL"),
+    'the version copy touches routes that never had a fallback'
+);
+
 $gegenstelle = estab_dv_telecom_counterpart_values([
     'name' => 'Kreisleitstelle',
     'stellenart' => 'NEBEN',

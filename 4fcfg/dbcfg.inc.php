@@ -17,7 +17,6 @@ $conf_4f_tbl  ["protokoll"]     = "nv_protokoll";
 $conf_4f_tbl  ["anhang"]        = "nv_anhang"; 
 $conf_4f_tbl  ["usrtblprefix"]  = "usr_"; 
 $conf_tbl     ["bhp50"]         = "nv_bhp50"; 
-$conf_tbl     ["komplan"]       = "nv_komplan"; 
 $conf_tbl     ["etb"]           = "nv_etb"; 
 $conf_tbl     ["tbb"]           = "nv_tbb"; 
 $conf_tbl     ["ubb"]           = "nv_ubb";

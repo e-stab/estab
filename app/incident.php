@@ -778,7 +778,6 @@ function estab_incident_has_operational_data(
         . ' OR EXISTS(SELECT 1 FROM `nv_ubb` WHERE `einsatz_id` = ?)'
         . ' OR EXISTS(SELECT 1 FROM `nv_protokoll` WHERE `einsatz_id` = ?)'
         . ' OR EXISTS(SELECT 1 FROM `nv_bhp50` WHERE `einsatz_id` = ?)'
-        . ' OR EXISTS(SELECT 1 FROM `nv_komplan` WHERE `einsatz_id` = ?)'
         . ' OR EXISTS(SELECT 1 FROM `nv_etbtitel` WHERE `einsatz_id` = ?)'
         . ' OR EXISTS(SELECT 1 FROM `nv_tbbtitel` WHERE `einsatz_id` = ?)'
         // Every assignment belongs to a duty shift through a restrictive FK.
@@ -804,8 +803,7 @@ function estab_incident_has_operational_data(
     }
     try {
         $statement->bind_param(
-            'iiiiiiiiiiiiiiiiii',
-            $incidentId,
+            'iiiiiiiiiiiiiiiii',
             $incidentId,
             $incidentId,
             $incidentId,

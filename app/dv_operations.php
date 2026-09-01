@@ -5129,8 +5129,19 @@ function estab_dv_start_telecom_plan_revision(
                 . ' `stellenart`, `erreichbarkeit`, `rueckfallebene_fuer_weg`,'
                 . ' `medium`, `funkart`, `band`, `kanal`, `bandlage`, `verkehrsform`, `relaisstelle`, `betriebsart`, `rufgruppe`, `anschlussart`, `datenart`,'
                 . ' `besondere_vermerke`, `bemerkungen`)'
+                /*
+                 * Die Rueckfallebene kommt hier als NULL und wird unten
+                 * nachgetragen.
+                 *
+                 * Sie verweist ueber einen zusammengesetzten Fremdschluessel
+                 * auf die Wegzuordnung DIESES Plans -- und die entsteht erst
+                 * nach den Zeilen. Wer sie gleich mitkopiert, laesst die
+                 * Kopie am Fremdschluessel scheitern, und zwar erst dann,
+                 * wenn ein Plan zum ersten Mal eine Rueckfallebene hat.
+                 * Genau so ist es aufgefallen.
+                 */
                 . ' SELECT ?, `sortierung`, `betriebsstelle`, `stellenart`,'
-                . ' `erreichbarkeit`, `rueckfallebene_fuer_weg`,'
+                . ' `erreichbarkeit`, NULL,'
                 . ' `medium`, `funkart`, `band`, `kanal`, `bandlage`, `verkehrsform`, `relaisstelle`, `betriebsart`, `rufgruppe`, `anschlussart`, `datenart`,'
                 /*
                  * Hier verschwindet die Zweiteilung der Vermerke.
@@ -5206,6 +5217,45 @@ function estab_dv_start_telecom_plan_revision(
                 $copiedIdentities = $copyIdentities->affected_rows;
             } finally {
                 $copyIdentities->close();
+            }
+            /*
+             * Jetzt erst die Rueckfallebenen -- die Wegzuordnung des neuen
+             * Plans steht.
+             *
+             * Der Verweis bleibt derselbe WERT: Er zeigt auf eine dauerhafte
+             * Wegkennung, und die ueberlebt den Versionswechsel. Genau dafuer
+             * gibt es sie (Migration 122). Uebernommen wird nur, was im neuen
+             * Plan auch ankommt -- ein Ersatzweg, dessen Hauptweg
+             * zwischenzeitlich gestrichen wurde, bliebe sonst ein Verweis ins
+             * Leere.
+             */
+            $copyFallbacks = $connection->prepare(
+                'UPDATE `nv_fernmeldeplan_eintraege` AS neu'
+                . ' JOIN `nv_fernmeldeplan_eintraege` AS alt'
+                . ' ON alt.`fernmeldeplan_id` = ?'
+                . ' AND alt.`sortierung` = neu.`sortierung`'
+                . ' JOIN `nv_fernmeldeweg_zuordnung` AS ziel'
+                . ' ON ziel.`fernmeldeplan_id` = neu.`fernmeldeplan_id`'
+                . ' AND ziel.`weg_id` = alt.`rueckfallebene_fuer_weg`'
+                . ' SET neu.`rueckfallebene_fuer_weg` = ziel.`weg_id`'
+                . ' WHERE neu.`fernmeldeplan_id` = ?'
+                . ' AND alt.`rueckfallebene_fuer_weg` IS NOT NULL'
+            );
+            if (!$copyFallbacks) {
+                throw new RuntimeException(
+                    'Rückfallebenen konnten nicht zum Entwurf kopiert werden.'
+                );
+            }
+            try {
+                $copyFallbacks->bind_param('ii', $sourcePlanId, $planId);
+                if (!$copyFallbacks->execute()) {
+                    throw new RuntimeException(
+                        'Rückfallebenen konnten nicht zum Entwurf kopiert '
+                        . 'werden.'
+                    );
+                }
+            } finally {
+                $copyFallbacks->close();
             }
             /*
              * Die Gegenstellen ziehen mit. Alt und neu werden ueber die

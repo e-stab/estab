@@ -652,7 +652,8 @@ foreach ([
     'nv_ubb',
     'nv_protokoll',
     'nv_bhp50',
-    'nv_komplan',
+    // nv_komplan steht hier nicht mehr: Migration 130 hat die ungenutzte
+    // Alttabelle abgebaut. Der Fernmeldeplan lebt in nv_fernmeldeplaene.
     'nv_etbtitel',
     'nv_tbbtitel',
     'nv_dienstschichten',
@@ -848,8 +849,10 @@ $assert(
         && str_contains($readiness, "'128-fernmeldeplan-kopfleiste.sql'")
         && str_contains($verify, "'129-gegenstelle-stellenart.sql'")
         && str_contains($readiness, "'129-gegenstelle-stellenart.sql'")
-        && str_contains($verify, 'estab_schema_migrations`) = 35')
-        && str_contains($readiness, 'estab_schema_migrations) = 35')
+        && str_contains($verify, "'130-komplan-abbau.sql'")
+        && str_contains($readiness, "'130-komplan-abbau.sql'")
+        && str_contains($verify, 'estab_schema_migrations`) = 36')
+        && str_contains($readiness, 'estab_schema_migrations) = 36')
         && str_contains($verify, 'inactive_messenger_target_allowed')
         && str_contains($readiness, 'inactive_messenger_target_allowed')
         && str_contains($readiness, 'nv_zugangsschicht_mitglieder')

@@ -8,7 +8,7 @@ SELECT
        AND table_name IN (
          'nv_nachrichten', 'nv_empfmtx', 'nv_empfmtx_standard', 'nv_benutzer',
          'nv_masterkatego', 'nv_masterkategolink', 'nv_protokoll',
-         'nv_anhang', 'nv_etb', 'nv_tbb', 'nv_ubb', 'nv_komplan',
+         'nv_anhang', 'nv_etb', 'nv_tbb', 'nv_ubb',
          'nv_bhp50', 'nv_etbtitel', 'nv_tbbtitel', 'nv_einsaetze',
          'nv_einsatz_status', 'nv_einsatz_ereignisse',
          'nv_nachrichten_ereignisse', 'nv_nachrichten_nachweiskopf',
@@ -21,7 +21,7 @@ SELECT
          'nv_melderauftraege', 'nv_selbstregistrierung',
          'nv_fernmeldewege', 'nv_fernmeldeweg_zuordnung',
          'nv_fernmeldeplan_gegenstellen'
-       )) = 35) AS `base_tables_ok`,
+       )) = 34) AS `base_tables_ok`,
   ((SELECT COUNT(*)
       FROM information_schema.tables
      WHERE table_schema = DATABASE()
@@ -539,9 +539,9 @@ SELECT
        AND is_nullable = 'YES'
        AND table_name IN (
          'nv_nachrichten', 'nv_anhang', 'nv_etb', 'nv_tbb', 'nv_ubb',
-         'nv_protokoll', 'nv_bhp50', 'nv_komplan',
+         'nv_protokoll', 'nv_bhp50',
          'nv_etbtitel', 'nv_tbbtitel'
-       )) = 10
+       )) = 9
    AND
    (SELECT COUNT(*)
       FROM information_schema.referential_constraints
@@ -556,10 +556,9 @@ SELECT
          'fk_ubb_einsatz',
          'fk_protokoll_einsatz',
          'fk_bhp50_einsatz',
-         'fk_komplan_einsatz',
          'fk_etbtitel_einsatz',
          'fk_tbbtitel_einsatz'
-       )) = 12)
+       )) = 11)
        AS `incident_schema_ok`,
   ((SELECT COUNT(*) FROM `nv_einsatz_status`
       WHERE `singleton_id` = 1 AND `revision` >= 0) = 1
@@ -579,9 +578,9 @@ SELECT
        AND event_manipulation IN ('INSERT', 'UPDATE', 'DELETE')
        AND event_object_table IN (
          'nv_nachrichten', 'nv_anhang', 'nv_etb', 'nv_tbb', 'nv_ubb',
-         'nv_bhp50', 'nv_komplan', 'nv_etbtitel', 'nv_tbbtitel'
+         'nv_bhp50', 'nv_etbtitel', 'nv_tbbtitel'
        )
-       AND trigger_name LIKE 'estab\\_%\\_einsatz') = 27
+       AND trigger_name LIKE 'estab\\_%\\_einsatz') = 24
    AND
    (SELECT COUNT(DISTINCT CONCAT(
         event_object_table, ':', event_manipulation
@@ -592,9 +591,9 @@ SELECT
        AND event_manipulation IN ('INSERT', 'UPDATE', 'DELETE')
        AND event_object_table IN (
          'nv_nachrichten', 'nv_anhang', 'nv_etb', 'nv_tbb', 'nv_ubb',
-         'nv_bhp50', 'nv_komplan', 'nv_etbtitel', 'nv_tbbtitel'
+         'nv_bhp50', 'nv_etbtitel', 'nv_tbbtitel'
        )
-       AND trigger_name LIKE 'estab\\_%\\_einsatz') = 27
+       AND trigger_name LIKE 'estab\\_%\\_einsatz') = 24
    AND
    (SELECT COUNT(*)
       FROM information_schema.triggers
@@ -618,7 +617,6 @@ SELECT
    + (SELECT COUNT(*) FROM `nv_tbb` WHERE `einsatz_id` IS NULL)
    + (SELECT COUNT(*) FROM `nv_ubb` WHERE `einsatz_id` IS NULL)
    + (SELECT COUNT(*) FROM `nv_bhp50` WHERE `einsatz_id` IS NULL)
-   + (SELECT COUNT(*) FROM `nv_komplan` WHERE `einsatz_id` IS NULL)
    + (SELECT COUNT(*) FROM `nv_etbtitel` WHERE `einsatz_id` IS NULL)
    + (SELECT COUNT(*) FROM `nv_tbbtitel` WHERE `einsatz_id` IS NULL) = 0)
        AS `incident_assignment_ok`,
@@ -2020,7 +2018,7 @@ SELECT
        BINARY 'STRICT', BINARY 'LOOSE'
      )) = 0)
        AS `incident_permission_mode_ok`,
-  ((SELECT COUNT(*) FROM `estab_schema_migrations`) = 35
+  ((SELECT COUNT(*) FROM `estab_schema_migrations`) = 36
    AND
    (SELECT COUNT(*)
       FROM `estab_schema_migrations`
@@ -2059,10 +2057,11 @@ SELECT
        '126-fernmeldeplan-gegenstellen.sql',
        '127-eingangsweg.sql',
        '128-fernmeldeplan-kopfleiste.sql',
-       '129-gegenstelle-stellenart.sql'
+       '129-gegenstelle-stellenart.sql',
+       '130-komplan-abbau.sql'
      )
        AND `state` = 'applied'
-       AND `checksum` REGEXP BINARY '^[0-9a-f]{64}$') = 35)
+       AND `checksum` REGEXP BINARY '^[0-9a-f]{64}$') = 36)
        AS `schema_migrations_ok`;
 
 SELECT `table_name`, `engine`, `table_collation`
