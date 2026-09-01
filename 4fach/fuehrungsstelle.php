@@ -12,6 +12,7 @@ require_once __DIR__ . '/../app/navigation.php';
 require_once __DIR__ . '/../app/read_authorization.php';
 require_once __DIR__ . '/../app/session_ui.php';
 require_once __DIR__ . '/../app/tabelle.php';
+require_once __DIR__ . '/../app/telecom_sketch.php';
 
 estab_session_ui_start($_SESSION);
 estab_navigation_require_session(
@@ -24,6 +25,31 @@ if ($identity === null) {
     throw new LogicException('Authenticated command-post identity missing');
 }
 $operationIdentity = estab_read_session_identity($_SESSION) ?? $identity;
+
+/*
+ * Zwei Ansichten auf denselben Bestand.
+ *
+ * Fb Fü 76 beschreibt zwei Leserkreise mit zwei Tiefen: der taktische Führer
+ * bekommt nur, was er für seine Entscheidung braucht, das Betriebspersonal
+ * sämtliche technischen Einzelheiten. Das ist kein Widerspruch im Vordruck,
+ * sondern die Beschreibung zweier Unterlagen -- eStab führt einen Bestand und
+ * zwei Ansichten darauf.
+ *
+ * Die Wahl steht in der Sitzung, nicht in der Adresse: wer umgeschaltet hat,
+ * soll nach dem Speichern eines Weges dieselbe Ansicht wiederfinden, und die
+ * Umschaltung ist ein Wunsch der Person, keine Eigenschaft der Seite.
+ * Umgeschaltet wird mit einem Verweis; JavaScript ist dafür nicht nötig.
+ */
+$tiefenSchluessel = 'estab_fernmeldeplan_tiefe';
+$gewuenschteTiefe = $_GET['ansicht'] ?? null;
+if (in_array($gewuenschteTiefe, ['taktisch', 'betrieblich'], true)) {
+    $_SESSION[$tiefenSchluessel] = $gewuenschteTiefe;
+}
+$planTiefe = in_array(
+    $_SESSION[$tiefenSchluessel] ?? null,
+    ['taktisch', 'betrieblich'],
+    true
+) ? (string) $_SESSION[$tiefenSchluessel] : 'taktisch';
 
 header('Content-Type: text/html; charset=UTF-8');
 header('Cache-Control: private, no-store, max-age=0');
@@ -727,6 +753,8 @@ $isAw = false;
 $selectedIdentity = null;
 $plansLoaded = false;
 $strictMode = true;
+$ausserplan = ['ohne_weg' => [], 'abgeloest' => []];
+$fuehrungsstellenName = '';
 $activeDutyShift = null;
 $hats = [];
 $handoverRequests = [];
@@ -807,6 +835,26 @@ try {
             );
             $plans = estab_dv_telecom_plans($connection, $incidentId);
             $plansLoaded = true;
+            $fuehrungsstellenName = estab_incident_command_post_name($status);
+            /*
+             * Was lief, das der Plan nicht fuehrt -- hier geladen, nicht in
+             * der Ansicht: die Verbindung wird lange vor dem Seitenaufbau
+             * geschlossen, und eine Ansicht, die selbst noch abfragt, waere
+             * eine zweite Stelle, an der eine Berechtigung geprueft werden
+             * muesste.
+             */
+            try {
+                $ausserplan = estab_read_unplanned_incoming_routes(
+                    $connection,
+                    'nv_nachrichten',
+                    $operationIdentity
+                );
+            } catch (Throwable $unplannedException) {
+                error_log(
+                    'eStab unplanned incoming routes are temporarily '
+                    . 'unavailable'
+                );
+            }
             $jobs = estab_dv_messenger_jobs(
                 $connection,
                 $incidentId,
@@ -1329,6 +1377,49 @@ foreach ($plans as $plan) {
            * Rufnamen sucht, über den er gerade sprechen soll, suchte ihn
            * bisher mit dem Finger am Bildschirm.
            */
+          /*
+           * Die taktische Ansicht: je Stelle ein Kasten.
+           *
+           * Gruppiert wird nach der Stelle, weil die Frage des taktischen
+           * Führers "wen erreiche ich womit" lautet und nicht "welche Wege
+           * gibt es". Ein Ersatzweg steht eingerückt unter dem Weg, den er
+           * ersetzt, und nicht noch einmal für sich -- sonst stünde derselbe
+           * Weg zweimal im Bild und man müsste raten, welcher gilt.
+           */
+          $wegeNachKennung = [];
+          foreach ($activePlan['eintraege'] as $entry) {
+              if ($entry['weg_nummer'] !== null) {
+                  $wegeNachKennung[(int) $entry['weg_nummer']] = $entry;
+              }
+          }
+          $ersatzwegeZu = [];
+          foreach ($activePlan['eintraege'] as $entry) {
+              $ersetzt = $entry['rueckfallebene_fuer_weg'];
+              if ($ersetzt !== null && isset($wegeNachKennung[(int) $ersetzt])) {
+                  $ersatzwegeZu[(int) $ersetzt][] = $entry;
+              }
+          }
+          $stellen = [];
+          foreach ($activePlan['eintraege'] as $entry) {
+              $ersetzt = $entry['rueckfallebene_fuer_weg'];
+              if ($ersetzt !== null && isset($wegeNachKennung[(int) $ersetzt])) {
+                  continue;
+              }
+              $stelle = (string) $entry['betriebsstelle'];
+              if (!isset($stellen[$stelle])) {
+                  $stellen[$stelle] = [
+                      'stellenart' => $entry['stellenart'],
+                      'wege' => [],
+                  ];
+              }
+              if (
+                  $stellen[$stelle]['stellenart'] === null
+                  && $entry['stellenart'] !== null
+              ) {
+                  $stellen[$stelle]['stellenart'] = $entry['stellenart'];
+              }
+              $stellen[$stelle]['wege'][] = $entry;
+          }
           $wegeZeilen = [];
           $wegeMedien = [];
           foreach ($activePlan['eintraege'] as $entry) {
@@ -1376,7 +1467,7 @@ foreach ($plans as $plan) {
               ];
           }
           ksort($wegeMedien);
-          echo estab_tabelle_markup([
+          $wegeTafel = [
               'id' => 'fernmeldewege',
               'beschriftung' => 'Wege des aktiven Fernmeldeplans',
               // Gemessen stehen hier 916 Bildpunkte zur Verfuegung; 58rem
@@ -1419,8 +1510,165 @@ foreach ($plans as $plan) {
               ],
               'zeilen' => $wegeZeilen,
               'leer' => 'Kein Weg entspricht den gesetzten Filtern.',
-          ]);
+          ];
+          /*
+           * Ein Weg im taktischen Bild -- als eigene Funktion, weil ein
+           * Ersatzweg genauso dargestellt wird wie der Weg, den er ersetzt.
+           * Nur die Einrückung unterscheidet sie, nicht der Inhalt.
+           */
+          $wegZeile = static function (array $weg): string {
+              $stuecke = [
+                  '<span class="estab-telecom-station-medium">'
+                  . dv_operations_html(estab_dv_telecom_route_label(
+                      $weg['medium'],
+                      $weg['funkart'] ?? null
+                  )) . '</span>',
+                  '<span class="estab-telecom-station-address">'
+                  . dv_operations_html((string) $weg['erreichbarkeit'])
+                  . '</span>',
+              ];
+              if ($weg['weg_nummer'] !== null) {
+                  $stuecke[] = '<span class="estab-telecom-station-route">Weg '
+                      . (int) $weg['weg_nummer'] . '</span>';
+              }
+              return implode(' ', $stuecke);
+          };
         ?>
+        <nav class="estab-telecom-depth" aria-label="Tiefe der Ansicht">
+          <?php foreach ([
+              'taktisch' => 'Taktisch',
+              'betrieblich' => 'Betrieblich',
+          ] as $tiefe => $beschriftung): ?>
+            <?php if ($planTiefe === $tiefe): ?>
+              <strong class="estab-telecom-depth-current"
+                aria-current="true"><?= dv_operations_html($beschriftung)
+              ?></strong>
+            <?php else: ?>
+              <a class="estab-telecom-depth-link"
+                href="fuehrungsstelle.php?ansicht=<?= dv_operations_html($tiefe)
+                ?>#fernmeldeplan"><?= dv_operations_html($beschriftung) ?></a>
+            <?php endif; ?>
+          <?php endforeach; ?>
+          <span class="estab-telecom-depth-hint"><?= $planTiefe === 'taktisch'
+              ? 'Nur, was für die Führungsentscheidung nötig ist.'
+              : 'Sämtliche technischen und betrieblichen Einzelheiten.'
+          ?></span>
+        </nav>
+        <?php if ($planTiefe === 'betrieblich'): ?>
+          <?= estab_tabelle_markup($wegeTafel) ?>
+        <?php else: ?>
+          <ol class="estab-telecom-stations">
+            <?php foreach ($stellen as $stelleName => $stelle): ?>
+              <li class="estab-telecom-station">
+                <h3 class="estab-telecom-station-name"><?=
+                  dv_operations_html((string) $stelleName)
+                ?><?php if ($stelle['stellenart'] !== null): ?>
+                  <span class="estab-telecom-station-kind"><?=
+                    dv_operations_html(
+                      ESTAB_DV_TELECOM_STATION_KINDS[$stelle['stellenart']]
+                        ?? (string) $stelle['stellenart']
+                    )
+                  ?></span>
+                <?php endif; ?></h3>
+                <ul class="estab-telecom-station-routes">
+                  <?php foreach ($stelle['wege'] as $weg): ?>
+                    <li>
+                      <?= $wegZeile($weg) ?>
+                      <?php $erreicht = $weg['gegenstellen'] ?? []; ?>
+                      <?php if ($erreicht !== []): ?>
+                        <ul class="estab-telecom-station-counterparts">
+                          <?php foreach ($erreicht as $gegenstelle): ?>
+                            <li><?= dv_operations_html(
+                              (string) $gegenstelle['name'] . ' · '
+                              . (string) $gegenstelle['erreichbarkeit']
+                            ) ?></li>
+                          <?php endforeach; ?>
+                        </ul>
+                      <?php endif; ?>
+                      <?php
+                        $ersatz = $weg['weg_nummer'] === null
+                          ? []
+                          : ($ersatzwegeZu[(int) $weg['weg_nummer']] ?? []);
+                      ?>
+                      <?php if ($ersatz !== []): ?>
+                        <ul class="estab-telecom-station-fallbacks">
+                          <?php foreach ($ersatz as $ersatzweg): ?>
+                            <li><span class="estab-telecom-station-fallback-mark">Ersatzweg</span>
+                              <?= $wegZeile($ersatzweg) ?><?php
+                                $fremd = (string) $ersatzweg['betriebsstelle'];
+                              ?><?php if ($fremd !== (string) $stelleName): ?>
+                                <span class="estab-telecom-station-elsewhere">über <?=
+                                  dv_operations_html($fremd)
+                                ?></span>
+                              <?php endif; ?></li>
+                          <?php endforeach; ?>
+                        </ul>
+                      <?php endif; ?>
+                    </li>
+                  <?php endforeach; ?>
+                </ul>
+              </li>
+            <?php endforeach; ?>
+          </ol>
+          <?php if ($stellen === []): ?>
+            <p>Der aktive Plan führt keine Wege.</p>
+          <?php endif; ?>
+          <?php
+            /*
+             * Die Skizze ist erzeugt, nicht gezeichnet.
+             *
+             * Sie trägt denselben Stand wie die Liste darüber, weil sie aus
+             * denselben Daten entsteht. Eine von Hand gepflegte Skizze wäre
+             * nach der zweiten Planänderung falsch, ohne dass es jemand
+             * merkte.
+             */
+          ?>
+          <details class="estab-telecom-sketch-holder">
+            <summary>Kommunikationsskizze nach Fb Fü 77</summary>
+            <p class="estab-telecom-sketch-note">Erzeugt aus Version
+              <?= (int) $activePlan['version'] ?> des Plans. Die Anordnung
+              folgt der Stellenart: übergeordnet oben, nachgeordnet unten,
+              benachbart seitlich. Die Linienart nennt das Mittel, auch ohne
+              Farbe.</p>
+            <?= estab_telecom_sketch_svg(
+                $activePlan,
+                $fuehrungsstellenName === ''
+                    ? (string) $activePlan['herkunft']
+                    : $fuehrungsstellenName
+            ) ?>
+          </details>
+        <?php endif; ?>
+        <?php if ($ausserplan['ohne_weg'] !== []
+            || $ausserplan['abgeloest'] !== []): ?>
+          <section class="estab-telecom-offplan"
+            aria-labelledby="fernmeldeplan-ausserplan">
+            <h3 id="fernmeldeplan-ausserplan">Verkehr, den der Plan nicht
+              führt</h3>
+            <?php foreach ([
+                'ohne_weg' => 'Eingänge ohne Wegangabe',
+                'abgeloest' => 'Eingänge über einen Weg, den die aktive '
+                    . 'Fassung nicht mehr führt',
+            ] as $art => $ueberschrift): ?>
+              <?php if ($ausserplan[$art] !== []): ?>
+                <h4><?= dv_operations_html($ueberschrift) ?></h4>
+                <ul>
+                  <?php foreach ($ausserplan[$art] as $zeile): ?>
+                    <li><?= dv_operations_html(
+                        estab_dv_telecom_medium_label($zeile['medium'])
+                      ) ?>: <?= (int) $zeile['anzahl'] ?>
+                      <?= $zeile['anzahl'] === 1 ? 'Eingang' : 'Eingänge' ?><?=
+                        $zeile['zuletzt'] === null
+                          ? ''
+                          : ', zuletzt ' . dv_operations_html(
+                              (string) $zeile['zuletzt']
+                          )
+                      ?></li>
+                  <?php endforeach; ?>
+                </ul>
+              <?php endif; ?>
+            <?php endforeach; ?>
+          </section>
+        <?php endif; ?>
       <?php endif; ?>
     </section>
 

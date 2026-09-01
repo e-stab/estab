@@ -183,6 +183,7 @@ for test_name in \
     fuest_route_roles \
     etb_append_only_and_retention \
     tkm_telecom_plan \
+    fmp_skizze \
     ux_paper_image \
     ux_help_and_feedback \
     ux_location_awareness \

@@ -948,6 +948,85 @@ function estab_read_plan_counterpart_suggestion_details(
     }
 }
 
+/**
+ * Verkehr, den der geltende Plan nicht abdeckt.
+ *
+ * Beschluss B2 setzt den Plan auf die eigene Erreichbarkeit; "welche unserer
+ * Erreichbarkeiten wird tatsaechlich benutzt" ist die Frage, aus der der S6
+ * die naechste Fassung baut. Sie ist erst beantwortbar, seit der Eingang
+ * seinen Weg benennt -- und sie hat zwei Haelften:
+ *
+ *   * Eingaenge OHNE Wegangabe. Der Weg ist freiwillig; eine hohe Zahl hier
+ *     heisst entweder, dass der Plan den Weg nicht fuehrt, oder dass die
+ *     Aufnahme ihn nicht kennt. Beides gehoert dem S6 gesagt.
+ *   * Eingaenge ueber einen Weg, den der AKTIVE Plan nicht mehr fuehrt --
+ *     also ueber eine abgeloeste Fassung. Der Weg lief, die neue Fassung
+ *     kennt ihn nicht: entweder er wurde zu Recht gestrichen und die Stelle
+ *     ruft trotzdem, oder das Streichen war ein Fehler.
+ *
+ * Gezaehlt wird, nicht zitiert. Die Rueckgabe traegt Mittel, Anzahl und die
+ * letzte Zeit -- keinen Rufnamen, keinen Betreff, keinen Inhalt. Der S6 ist
+ * eine Stabsfunktion; er soll aus dem Verkehr LERNEN duerfen, ohne fremde
+ * Nachrichten zu LESEN.
+ *
+ * @return array{ohne_weg:list<array{medium:string,anzahl:int,zuletzt:?string}>,abgeloest:list<array{medium:string,anzahl:int,zuletzt:?string}>}
+ */
+function estab_read_unplanned_incoming_routes(
+    mysqli $connection,
+    string $messageTable,
+    array $identity
+): array {
+    $scope = estab_read_require_operational_scope($connection, $identity);
+    $incidentId = (int) $scope['incident']['active_einsatz_id'];
+    $table = estab_message_table($messageTable);
+    $lesen = static function (
+        string $bedingung
+    ) use ($connection, $table, $incidentId): array {
+        $statement = estab_message_execute(
+            $connection,
+            'SELECT `01_medium`, COUNT(*) AS `anzahl`,'
+            . ' MAX(`01_datum`) AS `zuletzt` FROM ' . $table
+            . ' WHERE `einsatz_id` = ?'
+            . " AND `04_richtung` = 'E'"
+            . ' AND ' . $bedingung
+            . ' GROUP BY `01_medium`'
+            . ' ORDER BY `anzahl` DESC, `01_medium`',
+            [$incidentId]
+        );
+        try {
+            $result = $statement->get_result();
+            $zeilen = [];
+            while (($row = $result->fetch_assoc()) !== null) {
+                $zeilen[] = [
+                    'medium' => (string) $row['01_medium'],
+                    'anzahl' => (int) $row['anzahl'],
+                    'zuletzt' => $row['zuletzt'] === null
+                        ? null
+                        : (string) $row['zuletzt'],
+                ];
+            }
+            $result->free();
+            return $zeilen;
+        } finally {
+            $statement->close();
+        }
+    };
+    return [
+        'ohne_weg' => $lesen('`estab_fernmeldeplan_eintrag_id` IS NULL'),
+        'abgeloest' => $lesen(
+            '`estab_fernmeldeplan_eintrag_id` IS NOT NULL'
+            . ' AND NOT EXISTS ('
+            . 'SELECT 1 FROM `nv_fernmeldeplan_eintraege` AS e'
+            . ' JOIN `nv_fernmeldeplaene` AS p'
+            . ' ON p.`fernmeldeplan_id` = e.`fernmeldeplan_id`'
+            . ' WHERE e.`fernmeldeplan_eintrag_id`'
+            . ' = ' . $table . '.`estab_fernmeldeplan_eintrag_id`'
+            . " AND p.`status` = 'AKTIV'"
+            . ')'
+        ),
+    ];
+}
+
 function estab_read_message_suggestions(
     mysqli $connection,
     string $messageTable,

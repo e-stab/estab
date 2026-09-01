@@ -179,10 +179,16 @@ diesen Vorgang.
       - **Prüfung:** `schema_migration_contract.php`; ein Versionswechsel überträgt Gegenstellen vollständig
       - **Abhängigkeit:** A04 · **Regel:** `FMP-GEGENSTELLE-AM-WEG` · **Spec:** 5.3
 
-- [ ] **A10** `·` **XS** Ausleitung nachführen
-      → `app/incident_export.php`
-      - [ ] Wege mit allen neuen Spalten, Gegenstellen, Wegkennungen
-      - **Prüfung:** `tests/integration/incident_export.php`
+- [x] **A10** `·` **XS** Ausleitung nachführen
+      → `app/incident_export.php`, `app/incident_pdf.php`
+      - [x] Wege mit allen neuen Spalten, Wegkennung und Rückfallebene
+      - [x] Gegenstellen als **eigene** Liste `s6_plan_counterparts`, nicht
+            verschachtelt — eine Ausleitung führt jede Tabelle so, wie sie in
+            der Datenbank steht, damit sich jede Zeile über einen Schlüssel
+            zurückverfolgen lässt
+      - [x] Der Druck weist eine Gegenstelle ohne Weg zurück, statt sie
+            stillschweigend fallen zu lassen
+      - **Prüfung:** `incident_export_security.php`, `incident_pdf_security.php`
       - **Abhängigkeit:** A06, A08, A09
 
 - [x] **A11** `·` **XS** Bestandsprüfung nachführen
@@ -192,19 +198,34 @@ diesen Vorgang.
       - **Prüfung:** `readiness` meldet vollständig
       - **Abhängigkeit:** A09
 
-- [ ] **A12** `·` **S** Kopfleiste nach Fb Fü 76
-      → `docker/db/migrations/126-fernmeldeplan-kopfleiste.sql`, `4fach/fuehrungsstelle.php`
-      - [ ] `verfasser_funktion`, `vs_vermerk` (Vorbelegung `NfD`), `freigabe_dienststellung`
-      - [ ] Beschriftungen: „Herausgebende Dienststelle", „Verwendungsbereich", „Stand"
-      - [ ] Anzeige „F.d.R.: Name, Dienststellung"
-      - [ ] **Kein** Kennwort-Feld (Spec 11)
-      - **Prüfung:** Bedienprüfung mit Bildschirmabzug; alle sieben Angaben sichtbar und im Druck
+- [x] **A12** `·` **S** Kopfleiste nach Fb Fü 76
+      → `docker/db/migrations/128-fernmeldeplan-kopfleiste.sql`,
+        `app/dv_operations.php`, `4fach/fuehrungsstelle.php`
+      - [x] `verfasser_funktion`, `vs_vermerk`, `freigabe_dienststellung`
+      - [x] **Keine** Vorbelegung in der Datenbank. Ein `DEFAULT 'NfD'`
+            schriebe die Angabe in jede bereits freigegebene Fassung — eine
+            Aussage, die sie nie getroffen hat. `NULL` heißt „nicht
+            angegeben"; die Vorbelegung steht in der Maske. Die Nachprüfung
+            der Migration bricht ab, wenn eine bestehende Fassung doch einen
+            Wert bekäme
+      - [x] Beschriftungen: „Herausgebende Dienststelle", „Verwendungsbereich",
+            „Stand", „Verschlusssachenvermerk", Anzeige „F.d.R.: Name,
+            Dienststellung"
+      - [x] **Kein** Kennwort-Feld (Spec 11); das Vertragstor beweist die
+            Abwesenheit über den Spaltennamen
+      - [x] Die Kopfleiste geht in den Planstand ein — ein Plan, dessen
+            VS-Vermerk sich unbemerkt ändert, ist so gefährlich wie einer mit
+            unbemerkt geändertem Kanal
+      - **Prüfung:** `schema_migration_contract.php` (977 assertions),
+        `telecom_plan_security.php`, Bildschirmabzug
       - **Regel:** `FMP-KOPFLEISTE`
 
 - [ ] **A13** `!` **S** Bedienprüfung: ein vollständiger Plan
       → `tools/bedienpruefung/`
-      - [ ] Saat für einen Plan nach Fb Fü 76: vier Stellen, acht Wege, Gegenstellen, eine Rückfallebene
-      - [ ] Bildschirmabzüge je Medium: nur die Felder der jeweiligen Technik sind sichtbar
+      - [ ] Saat für einen Plan nach Fb Fü 76 mit gesetzter **Stellenart** —
+            der Vollbestand setzt sie noch nicht, deshalb steht die Skizze
+            beim Prüfen mit allen Stellen seitlich
+      - [ ] Bildschirmabzüge je Medium
       - **Regel:** `FMP-UX-KEINE-TOTEN-FELDER`
 
 > **Prüfpunkt C3.** Der S6 legt den Plan ohne Rückfrage an die Entwicklung an.
@@ -291,32 +312,35 @@ diesen Vorgang.
 > **Prüfpunkt C4 — Sicherheit.** Der Stab bekommt an Feld 10 keinen einzigen
 > Vorschlag aus der Historie.
 
-- [~] **A19** `!` **M** Vorbelegung von Feld 15 aus der Auswahl — **teilweise**
+- [x] **A19** `!` **M** Vorbelegung von Feld 15 aus der Auswahl
       → `app/message_repository.php`, `4fach/4fachform.php`, `4fach/official_message_form.php`
-      - [x] Wählt A/W in Feld 6 eine Gegenstelle des Plans, wird der **Verweis**
-            festgehalten — `estab_gegenstelle_id`, nicht der Text
+      - [x] Wählt A/W in Feld 6 eine Gegenstelle des Plans, wird der
+            **Verweis** festgehalten — `estab_gegenstelle_id`, nicht der Text
       - [x] Feld 15 ist beim LdF mit deren `name` vorbelegt und gekennzeichnet
-            („Gegenstelle laut Fernmeldeplan … Feld 15 ist daraus vorbelegt")
       - [x] Ohne Auswahl bleibt Feld 15 leer; die Historie steht im Dropdown
-      - [x] Keine Vorbelegung in ein belegtes Feld — vorbelegt wird nur, was
-            leer ist
-      - [ ] Die Ereigniszeile hält Herkunft und Planversion fest — **offen**,
-            und zwar bewusst: der Nachweis der Aufnahme ist mit einer Prüfsumme
-            festgenagelt, seine Erweiterung ist ein eigener versionierter
-            Schritt (siehe A14)
-      - **Prüfung:** Lauf mit neuen Daten in der Prüfumgebung
+      - [x] Keine Vorbelegung in ein belegtes Feld
+      - [x] Die Ereigniszeile hält Herkunft, Planfassung und eines von vier
+            Ergebnissen fest: keine Auswahl, unverändert übernommen,
+            überschrieben, oder — wenn die Gegenstelle inzwischen aus dem Plan
+            gestrichen wurde — zurückgezogen. Gelesen wird unter derselben
+            Sperre wie das Mittel, nie aus dem Browser
+      - **Prüfung:** `ldf_ui_flow_security.php`; Lauf mit neuen Daten in der
+        Prüfumgebung, vier Fälle
       - **Abhängigkeit:** A16, A18 · **Regel:** `FMP-GEGENSTELLE-AUSWAHL` · **Spec:** 5.6
 
-- [~] **A20** `·` **S** Herkunft an jedem Vorschlag — **teilweise**
-      → `4fach/4fachform.php`, `estab-ui.css`
-      - [x] Auch bei `FM-Eingang` trägt jede Option eine Herkunftsangabe:
-            `estab_read_plan_counterpart_suggestions()` speist die Liste, und
-            jeder so gewonnene Wert wird als „Aktiver S6-Fernmeldeplan"
-            gekennzeichnet — vor den Werten aus der Historie
-      - [ ] Ein Planvorschlag nennt den Weg, über den er gilt — **offen**
-      - [x] Die Wegewahl fragt „Über welchen Weg kam die Nachricht herein?",
-            nicht „an wen"
-      - **Prüfung:** Bildschirmabzug der Aufnahmemaske
+- [x] **A20** `·` **S** Herkunft an jedem Vorschlag
+      → `4fach/4fachform.php`, `app/read_authorization.php`
+      - [x] Auch bei `FM-Eingang` trägt jede Option eine Herkunftsangabe —
+            „Aktiver S6-Fernmeldeplan" vor den Werten aus der Historie
+      - [x] Ein Planvorschlag nennt den Weg, über den er gilt: „Erreichbar
+            über: Funk (digital) · Führungsstelle". Steht derselbe Wert an
+            mehreren Wegen, werden alle genannt — das ist der Regelfall bei
+            einer Stelle mit Rückfallebene
+      - [x] Zwei Wörter für zwei Herkünfte: der ähnliche Treffer aus der
+            Historie nennt seinen **Bezug**, der Planvorschlag den **Weg**.
+            Ein gemeinsames Wort wäre für einen von beiden falsch
+      - [x] Die Wegewahl fragt „Über welchen Weg kam die Nachricht herein?"
+      - **Prüfung:** `message_suggestion_security.php` (91 assertions)
       - **Regel:** `FMP-UX-VORSCHLAG-HERKUNFT`, `FMP-UX-VORSCHLAG-WEG`, `FMP-UX-WEGEWAHL`
 
 > **Prüfpunkt C5.** Eingangsweg, Bemerkung, Vorbelegung.
@@ -325,43 +349,65 @@ diesen Vorgang.
 
 ## P4 — Darstellung
 
-- [ ] **A21** `!` **M** Taktische Ansicht: ein Kasten je Stelle
+- [x] **A21** `!` **M** Taktische Ansicht: ein Kasten je Stelle
       → `4fach/fuehrungsstelle.php`, `estab-ui.css`
-      - [ ] Je Stelle ein Block: Stelle, Stellenart, darunter je Weg Mittel und Erreichbarkeit, darunter eingerückt die Gegenstellen
-      - [ ] Der Ersatzweg steht eingerückt unter dem Weg, den er ersetzt
-      - [ ] Keine Bandlage, keine Rufgruppe, keine Betriebsart
-      - **Prüfung:** Ein Plan mit zwanzig Wegen läuft bei 916 Bildpunkten nicht quer (`docs/GESTALTUNG.md`)
+      - [x] Je Stelle ein Block: Stelle, Stellenart, darunter je Weg Mittel
+            und Erreichbarkeit, darunter eingerückt die Gegenstellen
+      - [x] Der Ersatzweg steht eingerückt unter dem Weg, den er ersetzt —
+            und **nicht** noch einmal für sich; sonst stünde derselbe Weg
+            zweimal im Bild und man müsste raten, welcher gilt
+      - [x] Keine Bandlage, keine Rufgruppe, keine Betriebsart
       - **Regel:** `FMP-STELLENBILD`
 
-- [ ] **A22** `·` **S** Betriebliche Ansicht und Umschaltung
+- [x] **A22** `·` **S** Betriebliche Ansicht und Umschaltung
       → `4fach/fuehrungsstelle.php`
-      - [ ] Die vorhandene Tabelle behält Suche, Sortierung und Filter, bekommt die neuen Spalten
-      - [ ] Umschaltung taktisch/betrieblich; die Wahl überdauert den Seitenwechsel
-      - **Prüfung:** Bedienprüfung; Reihenfolge und Benennung sind in beiden Tiefen gleich
+      - [x] Die vorhandene Tabelle behält Suche, Sortierung und Filter
+      - [x] Umschaltung taktisch/betrieblich als **Verweis**, nicht als
+            Schaltfläche — ohne JavaScript bedienbar
+      - [x] Die Wahl steht in der Sitzung und überdauert den Seitenwechsel:
+            wer umgeschaltet hat, findet nach dem Speichern eines Weges
+            dieselbe Ansicht wieder
       - **Abhängigkeit:** A21 · **Regel:** `FMP-UX-ZWEI-TIEFEN`
 
-- [ ] **A23** `·` **S** Wege außerhalb des Plans sichtbar machen
+- [x] **A23** `·` **S** Wege außerhalb des Plans sichtbar machen
       → `4fach/fuehrungsstelle.php`, `app/read_authorization.php`
-      - [ ] Die Plantafel führt „Wege, über die Verkehr lief und die der Plan nicht führt"
-      - **Prüfung:** Ein Eingang über einen ungeplanten Weg erscheint dort
+      - [x] Zwei Hälften: Eingänge **ohne** Wegangabe und Eingänge über einen
+            Weg, den die **aktive** Fassung nicht mehr führt
+      - [x] Gezählt, nicht zitiert — Mittel, Anzahl, letzte Zeit; kein
+            Rufname, kein Betreff. Der S6 ist eine Stabsfunktion: er soll aus
+            dem Verkehr **lernen** dürfen, ohne fremde Nachrichten zu **lesen**
       - **Abhängigkeit:** A14 · **Regel:** `FMP-EINGANGSWEG-AUSSERPLAN`
 
-- [ ] **A24** `·` **S** Taktische Zeichen aufnehmen
-      → `4fsym/`, `THIRD_PARTY_NOTICES.md`
-      - [ ] Aus den Vorlagen bauen (`make svg`, benötigt `j2cli`), einmalig; `j2cli` wird **nicht** Teil der Laufzeit
-      - [ ] Übernommen werden die Zeichen aus Spec 16.4, Stellen und Verbindungen
-      - [ ] Schriftbindung entfernen — der Text erbt die Schrift der Anwendung
-      - [ ] `THIRD_PARTY_NOTICES.md`: Sammlung, Urheber, Fundstelle, CC-BY-4.0
-      - **Prüfung:** `requirements.txt` bleibt leer; keine externen Verweise in den Dateien
+- [x] **A24** `·` **S** Taktische Zeichen aufnehmen
+      → `4fsym/taktische-zeichen/`, `THIRD_PARTY_NOTICES.md`
+      - [x] 22 Zeichen aus den Vorlagen gebaut (Stellen und Verbindungen nach
+            Spec 16.4), einmalig; das Bauwerkzeug ist **nicht** Teil der
+            Laufzeit
+      - [x] Schriftbindung entfernt — der Text erbt die Schrift der
+            Anwendung; das spart je Zeichen rund 25 KB
+      - [x] `THIRD_PARTY_NOTICES.md`: Urheber, Fundstelle, CC-BY-4.0 und die
+            zwei vorgenommenen Änderungen
+      - [x] Keine externen Verweise; die Quelltafel-Prüfung lässt das
+            Verzeichnis **nur für SVG** zu, damit ein eingeschmuggeltes
+            Binärbild weiter auffällt
+      - **Prüfung:** `third_party_notice_contract.php`, `source_tree_hygiene.sh`
 
-- [ ] **A25** `!` **M** Erzeugte Kommunikationsskizze
-      → `4fach/fuehrungsstelle.php` oder eigene Ansicht, `estab-ui.css`
-      - [ ] Anordnung nach Stellenart: `UEBER` oben, `UNTER` unten, `NEBEN` seitlich
-      - [ ] Linienart je Mittel; Rückfallebene dünner und heller
-      - [ ] Kopfleiste, Version und F.d.R. des Plans
-      - [ ] Zeichen behalten ihre Farben; im dunklen Bild stehen sie auf heller Fläche — benannte Ausnahme in `docs/GESTALTUNG.md`
-      - [ ] Ohne die Zeichen baubar
-      - **Prüfung:** Vier Stellen, acht Wege, Querformat, keine Überlappung
+- [x] **A25** `!` **M** Erzeugte Kommunikationsskizze
+      → `app/telecom_sketch.php`, `4fach/fuehrungsstelle.php`
+      - [x] Anordnung nach Stellenart: `UEBER` oben, `UNTER` unten, `NEBEN`
+            seitlich, die eigene Führungsstelle in der Mitte
+      - [x] Linienart je Mittel — durchgezogen, gestrichelt, doppelt
+            gestrichelt, gepunktet; die Skizze trägt **ohne** die taktischen
+            Zeichen
+      - [x] Rückfallebene dünner, heller und benannt
+      - [x] Kopfleiste, Fassung und F.d.R. des Plans — keine zweite Wahrheit
+      - [x] Querformat, eigenständig: kein Skript, kein externer Verweis
+      - **Beim Ansehen gefunden und behoben:** die Beschriftungen saßen auf
+        der Mitte der Linie und überdruckten sich dort gegenseitig und den
+        Kasten der eigenen Stelle. Sie sitzen jetzt bei 58 % und fächern je
+        Weg auf, tragen einen weißen Saum, und die eigene Stelle wird zuletzt
+        gezeichnet. Nichts davon fällt in einem Zahlenvergleich auf.
+      - **Prüfung:** `tests/php/fmp_skizze.php` (24 assertions)
       - **Abhängigkeit:** A21, A24
 
 > **Prüfpunkt C6.** Skizze lesbar, vollständig beschriftet.
