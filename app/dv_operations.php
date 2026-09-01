@@ -148,6 +148,27 @@ const ESTAB_DV_TELECOM_STATION_KINDS = [
 ];
 
 /**
+ * Die Technik einer Nebenstelle der eigenen Führungsstelle.
+ *
+ * Fb Fü 77 druckt die Zeilen der Nebenstellentafel vor: C Wähl, Mobilfunk,
+ * zweimal ISDN S0, zweimal Analog a/b. eStab führt dieselben Arten, aber
+ * nicht in fester Zeilenzahl -- eine Führungsstelle hat so viele
+ * Nebenstellen, wie sie hat, und ein Vordruck mit sechs Zeilen ist eine
+ * Eigenschaft des Papiers, nicht der Sache.
+ *
+ * `IP` und `SONDER` stehen dazu, weil eine Führungsstelle von 2026 eine
+ * IP-Nebenstelle hat und Fb Fü 77 von 2003 sie nicht kennen konnte.
+ */
+const ESTAB_DV_TELECOM_EXTENSION_KINDS = [
+    'WAEHL' => 'C Wähl',
+    'MOBILFUNK' => 'Mobilfunk',
+    'ISDN' => 'ISDN S0',
+    'ANALOG' => 'Analog a/b',
+    'IP' => 'IP-Nebenstelle',
+    'SONDER' => 'Sonderanschluss',
+];
+
+/**
  * Die Richtungen, die eine GEGENSTELLE annehmen kann.
  *
  * Abgeleitet und nicht zweitgeschrieben: zwei Listen derselben Werte laufen
@@ -4824,6 +4845,19 @@ function estab_dv_telecom_plan_revision(array $plan): string
             'freigabe_dienststellung' =>
                 $plan['freigabe_dienststellung'] ?? null,
             'bemerkungen' => (string) ($plan['bemerkungen'] ?? ''),
+            // Auch die Nebenstellen gehoeren in den Stand: eine Nummer, die
+            // sich unbemerkt aendert, fuehrt beim naechsten Ruf ins Leere.
+            'nebenstellen' => array_map(
+                static fn (array $nebenstelle): array => [
+                    'technik' => (string) ($nebenstelle['technik'] ?? ''),
+                    'nummer' => (string) ($nebenstelle['nummer'] ?? ''),
+                    'teilnehmer' =>
+                        (string) ($nebenstelle['teilnehmer'] ?? ''),
+                    'bemerkungen' =>
+                        (string) ($nebenstelle['bemerkungen'] ?? ''),
+                ],
+                $plan['nebenstellen'] ?? []
+            ),
             'eintraege' => $entries,
         ],
         JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE
@@ -5302,6 +5336,36 @@ function estab_dv_start_telecom_plan_revision(
                     'Der Entwurf haette Wege ohne Kennung erhalten.'
                 );
             }
+            /*
+             * Die Nebenstellen ziehen mit. Sie haengen am Plan, also braucht
+             * die Kopie keine Paarung ueber die Sortierung -- ein schlichtes
+             * INSERT ... SELECT mit der neuen Plankennung genuegt.
+             */
+            $copyExtensions = $connection->prepare(
+                'INSERT INTO `nv_fernmeldeplan_nebenstellen`'
+                . ' (`fernmeldeplan_id`, `sortierung`, `technik`,'
+                . ' `nummer`, `teilnehmer`, `bemerkungen`)'
+                . ' SELECT ?, `sortierung`, `technik`, `nummer`,'
+                . ' `teilnehmer`, `bemerkungen`'
+                . ' FROM `nv_fernmeldeplan_nebenstellen`'
+                . ' WHERE `fernmeldeplan_id` = ? ORDER BY `sortierung`'
+            );
+            if (!$copyExtensions) {
+                throw new RuntimeException(
+                    'Nebenstellen konnten nicht zum Entwurf kopiert werden.'
+                );
+            }
+            try {
+                $copyExtensions->bind_param('ii', $planId, $sourcePlanId);
+                if (!$copyExtensions->execute()) {
+                    throw new RuntimeException(
+                        'Nebenstellen konnten nicht zum Entwurf kopiert '
+                        . 'werden.'
+                    );
+                }
+            } finally {
+                $copyExtensions->close();
+            }
             estab_dv_audit(
                 $connection,
                 $protocolTable,
@@ -5645,6 +5709,46 @@ function estab_dv_telecom_counterpart_values(array $input): array
 }
 
 /**
+ * Validate one extension of the own command post.
+ *
+ * Drei Angaben, weil der Vordruck drei druckt: Technik, Nummer, Teilnehmer.
+ * Die Nummer ist Text und wird NICHT auf eine Form geprüft -- eine
+ * Nebenstelle heißt "23", "0228 940-1523" oder "Apparat Lagedienst", und eine
+ * erfundene Form wiese zurück, was eine Führungsstelle tatsächlich benutzt.
+ *
+ * @return array{technik:string,nummer:string,teilnehmer:string,bemerkungen:string}
+ */
+function estab_dv_telecom_extension_values(array $input): array
+{
+    $technik = $input['technik'] ?? null;
+    $technik = is_string($technik) ? trim($technik) : '';
+    if (!isset(ESTAB_DV_TELECOM_EXTENSION_KINDS[$technik])) {
+        throw new EstabDvInputException(
+            'Die Technik der Nebenstelle ist ungültig.'
+        );
+    }
+    return [
+        'technik' => $technik,
+        'nummer' => estab_dv_text(
+            $input['nummer'] ?? null,
+            'Nummer der Nebenstelle',
+            40
+        ),
+        'teilnehmer' => estab_dv_text(
+            $input['teilnehmer'] ?? null,
+            'Teilnehmer',
+            255
+        ),
+        'bemerkungen' => estab_dv_text(
+            $input['bemerkungen'] ?? '',
+            'Bemerkungen',
+            10000,
+            true
+        ),
+    ];
+}
+
+/**
  * Refuse a fallback that points at itself or closes a ring.
  *
  * The database already guarantees that a fallback stays inside its own plan
@@ -5924,6 +6028,198 @@ function estab_dv_add_telecom_counterpart(
                 ]
             );
             return $counterpartId;
+        }
+    );
+}
+
+/**
+ * Add one extension of the own command post to an editable draft.
+ *
+ * Sie hängt am PLAN, nicht an einem Weg. Ein Weg ist ein Mittel mit einer
+ * Erreichbarkeit; eine Nebenstelle gehört der Vermittlung als Ganzem und
+ * müsste sonst willkürlich an einem der Wege hängen. Fb Fü 77 zeichnet die
+ * Tafel neben den Geräten, nicht unter einem davon.
+ */
+function estab_dv_add_telecom_extension(
+    mysqli $connection,
+    int $incidentId,
+    int $planId,
+    array $identity,
+    array $input,
+    string $expectedRevision,
+    string $protocolTable = 'nv_protokoll'
+): int {
+    $incidentId = estab_incident_positive_id($incidentId);
+    $planId = estab_dv_positive_id($planId, 'Fernmeldeplan');
+    $values = estab_dv_telecom_extension_values($input);
+    $expectedRevision = estab_dv_telecom_revision_token($expectedRevision);
+    return estab_incident_with_active_write(
+        $connection,
+        static function (array $incident) use (
+            $connection,
+            $incidentId,
+            $planId,
+            $identity,
+            $values,
+            $expectedRevision,
+            $protocolTable
+        ): int {
+            $selected = estab_dv_require_write_capability(
+                $connection,
+                $incidentId,
+                $identity,
+                'FERNMELDEPLANUNG'
+            );
+            $userCode = $selected['kuerzel'];
+            estab_dv_lock_telecom_draft($connection, $incidentId, $planId);
+            estab_dv_require_telecom_plan_revision(
+                $connection,
+                $incidentId,
+                $planId,
+                $expectedRevision
+            );
+            $next = $connection->prepare(
+                'SELECT COALESCE(MAX(`sortierung`), 0) + 1 AS `sortierung`'
+                . ' FROM `nv_fernmeldeplan_nebenstellen`'
+                . ' WHERE `fernmeldeplan_id` = ? FOR UPDATE'
+            );
+            if (!$next) {
+                throw new RuntimeException(
+                    'Nebenstelle konnte nicht vorbereitet werden.'
+                );
+            }
+            try {
+                $next->bind_param('i', $planId);
+                $next->execute();
+                $sort = (int) (
+                    $next->get_result()->fetch_assoc()['sortierung'] ?? 0
+                );
+            } finally {
+                $next->close();
+            }
+            $insert = $connection->prepare(
+                'INSERT INTO `nv_fernmeldeplan_nebenstellen`'
+                . ' (`fernmeldeplan_id`, `sortierung`, `technik`,'
+                . ' `nummer`, `teilnehmer`, `bemerkungen`)'
+                . ' VALUES (?, ?, ?, ?, ?, ?)'
+            );
+            if (!$insert) {
+                throw new RuntimeException(
+                    'Nebenstelle konnte nicht vorbereitet werden.'
+                );
+            }
+            try {
+                $insert->bind_param(
+                    'iissss',
+                    $planId,
+                    $sort,
+                    $values['technik'],
+                    $values['nummer'],
+                    $values['teilnehmer'],
+                    $values['bemerkungen']
+                );
+                if (!$insert->execute() || $insert->affected_rows !== 1) {
+                    throw new EstabDvConflictException(
+                        'Die Nebenstelle konnte nicht angelegt werden.'
+                    );
+                }
+                $extensionId = (int) $connection->insert_id;
+            } finally {
+                $insert->close();
+            }
+            estab_dv_audit(
+                $connection,
+                $protocolTable,
+                $incidentId,
+                'DV Fernmeldeplan',
+                [
+                    'action' => 'plan_extension_added',
+                    'plan_id' => $planId,
+                    'extension_id' => $extensionId,
+                    'technik' => $values['technik'],
+                    'nummer' => $values['nummer'],
+                    'actor' => $userCode,
+                    'actor_function' => (string) $selected['funktion'],
+                ]
+            );
+            return $extensionId;
+        }
+    );
+}
+
+/** Remove one extension of the own command post from an editable draft. */
+function estab_dv_remove_telecom_extension(
+    mysqli $connection,
+    int $incidentId,
+    int $planId,
+    int $extensionId,
+    array $identity,
+    string $expectedRevision,
+    string $protocolTable = 'nv_protokoll'
+): void {
+    $incidentId = estab_incident_positive_id($incidentId);
+    $planId = estab_dv_positive_id($planId, 'Fernmeldeplan');
+    $extensionId = estab_dv_positive_id($extensionId, 'Nebenstelle');
+    $expectedRevision = estab_dv_telecom_revision_token($expectedRevision);
+    estab_incident_with_active_write(
+        $connection,
+        static function (array $incident) use (
+            $connection,
+            $incidentId,
+            $planId,
+            $extensionId,
+            $identity,
+            $expectedRevision,
+            $protocolTable
+        ): bool {
+            $selected = estab_dv_require_write_capability(
+                $connection,
+                $incidentId,
+                $identity,
+                'FERNMELDEPLANUNG'
+            );
+            $userCode = $selected['kuerzel'];
+            estab_dv_lock_telecom_draft($connection, $incidentId, $planId);
+            estab_dv_require_telecom_plan_revision(
+                $connection,
+                $incidentId,
+                $planId,
+                $expectedRevision
+            );
+            $delete = $connection->prepare(
+                'DELETE FROM `nv_fernmeldeplan_nebenstellen`'
+                . ' WHERE `nebenstelle_id` = ? AND `fernmeldeplan_id` = ?'
+            );
+            if (!$delete) {
+                throw new RuntimeException(
+                    'Nebenstelle konnte nicht zum Entfernen vorbereitet '
+                    . 'werden.'
+                );
+            }
+            try {
+                $delete->bind_param('ii', $extensionId, $planId);
+                if (!$delete->execute() || $delete->affected_rows !== 1) {
+                    throw new EstabDvConflictException(
+                        'Die Nebenstelle wurde zwischenzeitlich geändert.'
+                    );
+                }
+            } finally {
+                $delete->close();
+            }
+            estab_dv_audit(
+                $connection,
+                $protocolTable,
+                $incidentId,
+                'DV Fernmeldeplan',
+                [
+                    'action' => 'plan_extension_removed',
+                    'plan_id' => $planId,
+                    'extension_id' => $extensionId,
+                    'actor' => $userCode,
+                    'actor_function' => (string) $selected['funktion'],
+                ]
+            );
+            return true;
         }
     );
 }
@@ -6751,6 +7047,7 @@ function estab_dv_telecom_plans(mysqli $connection, int $incidentId): array
                     'freigegeben_von' => $row['freigegeben_von'],
                     'freigabe_dienststellung' =>
                         $row['freigabe_dienststellung'],
+                    'nebenstellen' => [],
                     'eintraege' => [],
                 ];
             }
@@ -6851,6 +7148,51 @@ function estab_dv_telecom_plans(mysqli $connection, int $incidentId): array
                 unset($entryReference);
             }
             unset($planWithCounterparts);
+            /*
+             * Die Nebenstellen im dritten Zug -- aus demselben Grund wie die
+             * Gegenstellen: sie haengen am Plan, nicht am Weg, und ein
+             * Verbund in der Hauptabfrage vervielfachte jede Wegzeile.
+             */
+            $extensionStatement = $connection->prepare(
+                'SELECT n.`nebenstelle_id`, n.`fernmeldeplan_id`,'
+                . ' n.`sortierung`, n.`technik`, n.`nummer`,'
+                . ' n.`teilnehmer`, n.`bemerkungen`'
+                . ' FROM `nv_fernmeldeplan_nebenstellen` AS n'
+                . ' JOIN `nv_fernmeldeplaene` AS p'
+                . ' ON p.`fernmeldeplan_id` = n.`fernmeldeplan_id`'
+                . ' WHERE p.`einsatz_id` = ?'
+                . ' ORDER BY n.`fernmeldeplan_id`, n.`sortierung`'
+            );
+            if (!$extensionStatement) {
+                throw new RuntimeException(
+                    'Nebenstellen konnten nicht gelesen werden.'
+                );
+            }
+            try {
+                $extensionStatement->bind_param('i', $incidentId);
+                $extensionStatement->execute();
+                $extensionResult = $extensionStatement->get_result();
+                while (
+                    ($extensionRow = $extensionResult->fetch_assoc()) !== null
+                ) {
+                    $extensionPlan = (int) $extensionRow['fernmeldeplan_id'];
+                    if (!isset($plans[$extensionPlan])) {
+                        continue;
+                    }
+                    $plans[$extensionPlan]['nebenstellen'][] = [
+                        'nebenstelle_id' =>
+                            (int) $extensionRow['nebenstelle_id'],
+                        'sortierung' => (int) $extensionRow['sortierung'],
+                        'technik' => (string) $extensionRow['technik'],
+                        'nummer' => (string) $extensionRow['nummer'],
+                        'teilnehmer' => (string) $extensionRow['teilnehmer'],
+                        'bemerkungen' => $extensionRow['bemerkungen'],
+                    ];
+                }
+                $extensionResult->free();
+            } finally {
+                $extensionStatement->close();
+            }
         }
         foreach ($plans as &$plan) {
             $plan['revision'] = estab_dv_telecom_plan_revision($plan);

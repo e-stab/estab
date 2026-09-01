@@ -20,8 +20,9 @@ SELECT
          'nv_fernmeldeplaene', 'nv_fernmeldeplan_eintraege',
          'nv_melderauftraege', 'nv_selbstregistrierung',
          'nv_fernmeldewege', 'nv_fernmeldeweg_zuordnung',
-         'nv_fernmeldeplan_gegenstellen'
-       )) = 34) AS `base_tables_ok`,
+         'nv_fernmeldeplan_gegenstellen',
+         'nv_fernmeldeplan_nebenstellen'
+       )) = 35) AS `base_tables_ok`,
   ((SELECT COUNT(*)
       FROM information_schema.tables
      WHERE table_schema = DATABASE()
@@ -2018,7 +2019,7 @@ SELECT
        BINARY 'STRICT', BINARY 'LOOSE'
      )) = 0)
        AS `incident_permission_mode_ok`,
-  ((SELECT COUNT(*) FROM `estab_schema_migrations`) = 36
+  ((SELECT COUNT(*) FROM `estab_schema_migrations`) = 37
    AND
    (SELECT COUNT(*)
       FROM `estab_schema_migrations`
@@ -2058,10 +2059,11 @@ SELECT
        '127-eingangsweg.sql',
        '128-fernmeldeplan-kopfleiste.sql',
        '129-gegenstelle-stellenart.sql',
-       '130-komplan-abbau.sql'
+       '130-komplan-abbau.sql',
+       '131-fernmeldeplan-nebenstellen.sql'
      )
        AND `state` = 'applied'
-       AND `checksum` REGEXP BINARY '^[0-9a-f]{64}$') = 36)
+       AND `checksum` REGEXP BINARY '^[0-9a-f]{64}$') = 37)
        AS `schema_migrations_ok`;
 
 SELECT `table_name`, `engine`, `table_collation`

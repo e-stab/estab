@@ -315,6 +315,129 @@ foreach ([
     );
 }
 
+/* --- Die taktischen Zeichen und die Nebenstellentafel --- */
+
+/*
+ * Die Skizze traegt die Zeichen der Sammlung, wo es welche gibt, und sagt es
+ * mit Text, wo es keine gibt. Der Analogfunk hat kein `Bedingung_*`-Zeichen;
+ * Fb Fue 76 schreibt die Bandangabe dort als Text, und genau so wird sie
+ * gesetzt.
+ */
+$assert(
+    estab_telecom_sketch_symbol_name([
+        'medium' => 'Fu', 'funkart' => 'DIGITAL', 'betriebsart' => 'TMO',
+    ]) === 'Bedingung_TMO'
+        && estab_telecom_sketch_symbol_name([
+            'medium' => 'Fu', 'funkart' => 'DIGITAL', 'betriebsart' => 'DMO',
+        ]) === 'Bedingung_DMO'
+        && estab_telecom_sketch_symbol_name([
+            'medium' => 'Fe', 'anschlussart' => 'NST',
+        ]) === 'Bedingung_Nebenstelle'
+        && estab_telecom_sketch_symbol_name([
+            'medium' => 'Fe', 'anschlussart' => 'AMT',
+        ]) === 'Bedingung_Telefon'
+        && estab_telecom_sketch_symbol_name(['medium' => 'FAX'])
+            === 'Bedingung_Fax'
+        && estab_telecom_sketch_symbol_name(['medium' => '@'])
+            === 'Datenverbindung',
+    estab_dv_requirement(
+        'TKM-FERNMELDEPLAN',
+        'Eine Verbindung bekommt nicht das taktische Zeichen ihrer Technik.'
+    )
+);
+$assert(
+    estab_telecom_sketch_symbol_name([
+        'medium' => 'Fu', 'funkart' => 'ANALOG',
+    ]) === null
+        && estab_telecom_sketch_symbol_name(['medium' => 'Me']) === null,
+    'Für eine Technik ohne Zeichen wird eines erfunden.'
+);
+$assert(
+    estab_telecom_sketch_symbol('Bedingung_TMO') !== null
+        && str_contains(
+            (string) estab_telecom_sketch_symbol('Bedingung_TMO'),
+            'preserveAspectRatio'
+        )
+        && !str_contains(
+            (string) estab_telecom_sketch_symbol('Bedingung_TMO'),
+            '<svg version'
+        ),
+    'Das eingebettete Zeichen bringt seine eigene äußere Hülle mit.'
+);
+$assert(
+    estab_telecom_sketch_symbol('../../etc/passwd') === null
+        && estab_telecom_sketch_symbol('gibt_es_nicht') === null,
+    'Der Zeichenname wird nicht auf einen Pfad geprüft.'
+);
+// Fehlt ein Zeichen, bleibt die Skizze vollstaendig -- sie ist ohne die
+// Zeichen baubar, und das ist ausdruecklich so entschieden.
+$assert(
+    str_contains($svg, 'Bedingung_TMO') === false
+        && str_contains($svg, '<svg x=')
+        && str_contains($svg, 'preserveAspectRatio="none"'),
+    estab_dv_requirement(
+        'TKM-FERNMELDEPLAN',
+        'Die Zeichen werden nicht eingebettet, sondern nachgeladen.'
+    )
+);
+// Der Analogfunk sagt seinen Kanal im Text.
+$assert(
+    str_contains($svg, estab_telecom_sketch_html('Funk (analog)')),
+    estab_dv_requirement(
+        'TKM-FERNMELDEPLAN',
+        'Der Analogfunk nennt seine Technik nicht, obwohl es für ihn kein '
+            . 'Zeichen gibt.'
+    )
+);
+
+$mitNebenstellen = array_replace($plan, [
+    'nebenstellen' => [
+        [
+            'nebenstelle_id' => 1,
+            'sortierung' => 1,
+            'technik' => 'WAEHL',
+            'nummer' => '23',
+            'teilnehmer' => 'Lagedienst',
+            'bemerkungen' => null,
+        ],
+        [
+            'nebenstelle_id' => 2,
+            'sortierung' => 2,
+            'technik' => 'ISDN',
+            'nummer' => '0228 940-1523',
+            'teilnehmer' => 'S 6',
+            'bemerkungen' => null,
+        ],
+    ],
+]);
+$mitTafel = estab_telecom_sketch_svg(
+    $mitNebenstellen,
+    'Führungsstelle Übungsplatz'
+);
+foreach ([
+    'Technik' => 'die Spaltenüberschrift der Technik',
+    'NSt-Nr.' => 'die Spaltenüberschrift der Nummer',
+    'Teilnehmer' => 'die Spaltenüberschrift des Teilnehmers',
+    'C Wähl' => 'die Technik der ersten Nebenstelle',
+    'Lagedienst' => 'der Teilnehmer der ersten Nebenstelle',
+    'ISDN S0' => 'die Technik der zweiten Nebenstelle',
+] as $text => $was) {
+    $assert(
+        str_contains($mitTafel, estab_telecom_sketch_html($text)),
+        estab_dv_requirement(
+            'TKM-FERNMELDEPLAN',
+            'In der Nebenstellentafel der Skizze fehlt ' . $was . '. Sie '
+                . 'steht im Vordruck in der Mitte, unter der eigenen '
+                . 'Führungsstelle.'
+        )
+    );
+}
+// Ohne Nebenstellen keine leere Tafel.
+$assert(
+    !str_contains($svg, 'NSt-Nr.'),
+    'Die Nebenstellentafel steht auch dann im Bild, wenn keine gepflegt ist.'
+);
+
 /* --- Eigenstaendig und unversehrt --- */
 
 $assert(

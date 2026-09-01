@@ -135,6 +135,8 @@ function dv_operations_is_telecom_revision_action(mixed $action): bool
             'delete_plan_entry',
             'add_plan_counterpart',
             'delete_plan_counterpart',
+            'add_plan_extension',
+            'delete_plan_extension',
             'discard_plan',
             'activate_plan',
         ],
@@ -541,6 +543,51 @@ if ($requestMethod === 'POST') {
                 ['entry' => $entryId]
             );
         }
+        if ($action === 'add_plan_extension') {
+            $planId = estab_dv_positive_id(
+                $_POST['fernmeldeplan_id'] ?? null,
+                'Fernmeldeplan'
+            );
+            estab_dv_add_telecom_extension(
+                $connection,
+                $incidentId,
+                $planId,
+                $operationIdentity,
+                $_POST,
+                estab_dv_telecom_revision_token(
+                    $_POST['plan_revision'] ?? null
+                ),
+                $conf_4f_tbl['protokoll']
+            );
+            dv_operations_redirect(
+                'extension_added',
+                'fernmeldeplan-nebenstellen'
+            );
+        }
+        if ($action === 'delete_plan_extension') {
+            $planId = estab_dv_positive_id(
+                $_POST['fernmeldeplan_id'] ?? null,
+                'Fernmeldeplan'
+            );
+            estab_dv_remove_telecom_extension(
+                $connection,
+                $incidentId,
+                $planId,
+                estab_dv_positive_id(
+                    $_POST['nebenstelle_id'] ?? null,
+                    'Nebenstelle'
+                ),
+                $operationIdentity,
+                estab_dv_telecom_revision_token(
+                    $_POST['plan_revision'] ?? null
+                ),
+                $conf_4f_tbl['protokoll']
+            );
+            dv_operations_redirect(
+                'extension_removed',
+                'fernmeldeplan-nebenstellen'
+            );
+        }
         if ($action === 'delete_plan_counterpart') {
             $planId = estab_dv_positive_id(
                 $_POST['fernmeldeplan_id'] ?? null,
@@ -932,6 +979,9 @@ $flashMessages = [
         'Die Gegenstelle wurde am Weg erfasst. Sie steht dem Fernmelder und '
         . 'dem LdF künftig als Vorschlag zur Verfügung.',
     'counterpart_removed' => 'Die Gegenstelle wurde vom Weg entfernt.',
+    'extension_added' =>
+        'Die Nebenstelle wurde der Führungsstelle hinzugefügt.',
+    'extension_removed' => 'Die Nebenstelle wurde entfernt.',
     'plan_revision_started' => 'Der aktive Fernmeldeplan wurde vollständig '
         . 'in einen bearbeitbaren Entwurf kopiert.',
     'plan_updated' => 'Die Kopfdaten des Entwurfs wurden gespeichert.',
@@ -1944,6 +1994,115 @@ foreach ($plans as $plan) {
                 </button>
               </form>
             </details>
+
+            <?php
+              /*
+               * Die Nebenstellen der eigenen Führungsstelle.
+               *
+               * Fb Fü 77 zeichnet sie in der Mitte der Skizze, in der Tafel
+               * unter der Führungsstelle: Technik, NSt-Nr., Teilnehmer. Sie
+               * sind weder Weg noch Gegenstelle -- über sie wird niemand
+               * draußen erreicht. Sie sagen, wer im Haus hinter welchem
+               * Apparat sitzt, und das ist genau die Auskunft, die jemand
+               * vor der Skizze braucht, wenn der Lagedienst ans Telefon soll
+               * und nur der Raum bekannt ist.
+               */
+            ?>
+            <section id="fernmeldeplan-nebenstellen"
+              class="estab-telecom-extensions" aria-labelledby="<?=
+                'telecom-extensions-' . $planId
+              ?>">
+              <header class="estab-telecom-routes-heading">
+                <div>
+                  <h3 id="<?= 'telecom-extensions-' . $planId ?>">
+                    Nebenstellen der eigenen Führungsstelle
+                  </h3>
+                  <p>Die Tafel in der Mitte der Kommunikationsskizze: wer im
+                    Haus hinter welchem Apparat zu erreichen ist.</p>
+                </div>
+                <span><?= count($plan['nebenstellen'] ?? []) ?>
+                  Nebenstellen</span>
+              </header>
+              <?php if (($plan['nebenstellen'] ?? []) === []): ?>
+                <p class="estab-tool-notice">Für diesen Entwurf ist noch keine
+                  Nebenstelle erfasst.</p>
+              <?php else: ?>
+                <ul class="estab-telecom-counterpart-list">
+                  <?php foreach ($plan['nebenstellen'] as $nebenstelle): ?>
+                    <li>
+                      <span><strong><?= dv_operations_html(
+                          ESTAB_DV_TELECOM_EXTENSION_KINDS[
+                              $nebenstelle['technik']
+                          ] ?? (string) $nebenstelle['technik']
+                      ) ?></strong> ·
+                      <?= dv_operations_html($nebenstelle['nummer']) ?> ·
+                      <?= dv_operations_html($nebenstelle['teilnehmer'])
+                      ?><?= trim(
+                          (string) ($nebenstelle['bemerkungen'] ?? '')
+                      ) === ''
+                          ? ''
+                          : ' · ' . dv_operations_html(
+                              (string) $nebenstelle['bemerkungen']
+                          ) ?></span>
+                      <form method="post" action="fuehrungsstelle.php">
+                        <?= estab_csrf_field() ?>
+                        <input type="hidden" name="operation_action"
+                          value="delete_plan_extension">
+                        <input type="hidden" name="fernmeldeplan_id"
+                          value="<?= $planId ?>">
+                        <input type="hidden" name="nebenstelle_id"
+                          value="<?= (int) $nebenstelle['nebenstelle_id'] ?>">
+                        <input type="hidden" name="plan_revision"
+                          value="<?= dv_operations_html($revision) ?>">
+                        <button
+                          class="estab-button estab-button-danger-outline"
+                          type="submit">Entfernen</button>
+                      </form>
+                    </li>
+                  <?php endforeach; ?>
+                </ul>
+              <?php endif; ?>
+              <form class="estab-tool-form" method="post"
+                action="fuehrungsstelle.php" data-estab-dirty-guard>
+                <?= estab_csrf_field() ?>
+                <input type="hidden" name="operation_action"
+                  value="add_plan_extension">
+                <input type="hidden" name="fernmeldeplan_id"
+                  value="<?= $planId ?>">
+                <input type="hidden" name="plan_revision"
+                  value="<?= dv_operations_html($revision) ?>">
+                <div class="estab-tool-form-grid">
+                  <label>Technik
+                    <select name="technik" required>
+                      <?php foreach (
+                          ESTAB_DV_TELECOM_EXTENSION_KINDS
+                          as $technikWert => $technikText
+                      ): ?>
+                        <option value="<?= dv_operations_html($technikWert)
+                          ?>"><?= dv_operations_html($technikText) ?></option>
+                      <?php endforeach; ?>
+                    </select>
+                    <small>Die Zeilen der Nebenstellentafel des Vordrucks.</small>
+                  </label>
+                  <label>NSt-Nr.
+                    <input name="nummer" maxlength="40" required>
+                    <small>Wie sie im Haus gewählt wird — „23",
+                      „0228 940-1523" oder ein Apparatname.</small>
+                  </label>
+                  <label>Teilnehmer
+                    <input name="teilnehmer" maxlength="255" required>
+                    <small>Wer dort sitzt: Lagedienst, S 6, Meldekopf.</small>
+                  </label>
+                </div>
+                <label>Bemerkungen
+                  <textarea name="bemerkungen" maxlength="10000"></textarea>
+                  <small>Besetzungszeiten, Einschränkungen.</small>
+                </label>
+                <button class="estab-button" type="submit">
+                  Nebenstelle erfassen
+                </button>
+              </form>
+            </section>
 
             <section class="estab-telecom-routes" aria-labelledby="<?=
               'telecom-routes-' . $planId
