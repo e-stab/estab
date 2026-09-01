@@ -64,6 +64,9 @@ $incomingRouteMigration = $read(
 $planHeaderMigration = $read(
     $root . '/docker/db/migrations/128-fernmeldeplan-kopfleiste.sql'
 );
+$counterpartKindMigration = $read(
+    $root . '/docker/db/migrations/129-gegenstelle-stellenart.sql'
+);
 $attachmentIntegrityMigration = $read(
     $root . '/docker/db/migrations/95-attachment-ingest-integrity.sql'
 );
@@ -3013,6 +3016,37 @@ $assert(
     'Incoming route columns, their form boundary, or the deliberate absence '
         . 'of a counterpart foreign key is outside the gate'
 );
+/*
+ * Die Stellenart gehoert der GEGENSTELLE, nicht dem eigenen Weg.
+ *
+ * Der Plan fuehrt die EIGENEN Erreichbarkeiten; ueber- und untergeordnet sind
+ * Eigenschaften der anderen Seite. Die alte Spalte am Weg wird NICHT
+ * geloescht -- eine freigegebene Fassung muss weiter sagen koennen, was sie
+ * gesagt hat, und ein DROP fiele unter keinen Auslöser und aenderte still
+ * genau die Zeilen, die Migration 94 schuetzt.
+ */
+$assert(
+    str_contains(
+        $counterpartKindMigration,
+        "ALTER TABLE `nv_fernmeldeplan_gegenstellen`"
+    )
+        && str_contains(
+            $counterpartKindMigration,
+            "`stellenart` ENUM('UEBER','UNTER','NEBEN') NULL"
+        )
+        && !str_contains($counterpartKindMigration, 'EIGEN')
+        && !str_contains($counterpartKindMigration, 'DROP COLUMN')
+        && str_contains(
+            $counterpartKindMigration,
+            'a released version lost a value'
+        )
+        && str_contains(
+            $counterpartKindMigration,
+            "'128-fernmeldeplan-kopfleiste.sql'"
+        ),
+    'The counterpart station kind, or the deliberate preservation of the '
+        . 'released route column, is outside the gate'
+);
 // Die Kopfleiste des Fb Fue 76. Alle drei Spalten sind freiwillig und
 // tragen KEINE Vorbelegung: ein DEFAULT schriebe "NfD" in jede bereits
 // freigegebene Fassung -- eine Aussage, die sie nie getroffen hat. Die
@@ -3346,7 +3380,7 @@ $assert(
         && str_contains($verifySql, "index_name <> 'PRIMARY') = 0")
         && str_contains(
             $verifySql,
-            '(SELECT COUNT(*) FROM `estab_schema_migrations`) = 34'
+            '(SELECT COUNT(*) FROM `estab_schema_migrations`) = 35'
         )
         && str_contains($verifySql, "'96-etb-duty-function.sql'")
         && str_contains(
@@ -3414,7 +3448,11 @@ $assert(
             $verifySql,
             "'128-fernmeldeplan-kopfleiste.sql'"
         )
-        && str_contains($verifySql, ") = 34) AS `schema_migrations_ok`")
+        && str_contains(
+            $verifySql,
+            "'129-gegenstelle-stellenart.sql'"
+        )
+        && str_contains($verifySql, ") = 35) AS `schema_migrations_ok`")
         && str_contains(
             $verifySql,
             'Discarded telecommunications drafts are immutable evidence'
@@ -3441,7 +3479,7 @@ $assert(
         && str_contains($readinessSql, "index_name <> 'PRIMARY') = 0")
         && str_contains(
             $readinessSql,
-            '(SELECT COUNT(*) FROM estab_schema_migrations) = 34'
+            '(SELECT COUNT(*) FROM estab_schema_migrations) = 35'
         )
         && str_contains($readinessSql, "'96-etb-duty-function.sql'")
         && str_contains(
@@ -3493,7 +3531,7 @@ $assert(
         )
         && str_contains(
             $readinessSql,
-            "checksum REGEXP BINARY '^[0-9a-f]{64}$') = 34"
+            "checksum REGEXP BINARY '^[0-9a-f]{64}$') = 35"
         ),
     'Runtime readiness does not require the exact final ETB catalogue and ledger'
 );
@@ -3753,8 +3791,10 @@ $assert(
         && str_contains($readiness, "'127-eingangsweg.sql'")
         && str_contains($verify, "'128-fernmeldeplan-kopfleiste.sql'")
         && str_contains($readiness, "'128-fernmeldeplan-kopfleiste.sql'")
-        && str_contains($verify, 'estab_schema_migrations`) = 34')
-        && str_contains($readiness, 'estab_schema_migrations) = 34'),
+        && str_contains($verify, "'129-gegenstelle-stellenart.sql'")
+        && str_contains($readiness, "'129-gegenstelle-stellenart.sql'")
+        && str_contains($verify, 'estab_schema_migrations`) = 35')
+        && str_contains($readiness, 'estab_schema_migrations) = 35'),
     'Migration ledger/readiness does not require all release migrations'
 );
 $assert(

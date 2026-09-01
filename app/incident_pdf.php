@@ -2738,6 +2738,12 @@ final class EstabIncidentPdf extends vordruckaspdf
                             . (string) ($counterpart['erreichbarkeit'] ?? '')
                         )
                     );
+                    if (($counterpart['stellenart'] ?? null) !== null) {
+                        $this->definition(
+                            'Stellenart der Gegenstelle',
+                            (string) $counterpart['stellenart']
+                        );
+                    }
                     if (
                         trim((string) ($counterpart['bemerkungen'] ?? '')) !== ''
                     ) {

@@ -245,26 +245,23 @@ function dv_operations_render_telecom_entry_fields(array $values): void
       <label>Stelle
         <input name="betriebsstelle" maxlength="255" required
           value="<?= dv_operations_html($values['betriebsstelle'] ?? '') ?>">
-        <small>Stelle des eigenen Verbundes: Führungsstelle,
-          Fernmeldezentrale, Meldekopf, Einheit.</small>
+        <small><strong>Ihre eigene</strong> Betriebsstelle, die dieses
+          Mittel führt: Führungsstelle, Fernmeldezentrale, Meldekopf. Wen Sie
+          darüber erreichen, tragen Sie weiter unten als Gegenstelle ein.</small>
       </label>
-      <label>Stellenart
-        <select name="stellenart">
-          <option value="">ohne Angabe</option>
-          <?php foreach (
-              ESTAB_DV_TELECOM_STATION_KINDS as $artWert => $artText
-          ): ?>
-            <option value="<?= dv_operations_html($artWert) ?>"
-              <?= ($values['stellenart'] ?? null) === $artWert
-                  ? 'selected'
-                  : '' ?>>
-              <?= dv_operations_html($artText) ?>
-            </option>
-          <?php endforeach; ?>
-        </select>
-        <small>Zeigt die Verbindung nach oben, nach unten oder zur
-          Seite?</small>
-      </label>
+      <?php
+        /*
+         * Hier stand einmal die Stellenart. Sie ist an die Gegenstelle
+         * gewandert, und das war eine Berichtigung, keine Verschiebung:
+         *
+         * Der Plan legt die EIGENEN Erreichbarkeiten fest. Eine Zeile ist
+         * eines UNSERER Mittel, getragen von einer unserer eigenen
+         * Betriebsstellen -- ihr Verhältnis zu uns ist immer "eigen". Ober-
+         * und Unterstellung sind Eigenschaften der ANDEREN Seite, und dort
+         * werden sie jetzt auch gepflegt. Fb Fü 77 zeichnet es genauso: wir
+         * in der Mitte, übergeordnet links, nachgeordnet rechts.
+         */
+      ?>
       <?php
         /*
          * Die Rueckfallebene ist ein Verweis, kein Schalter mit Ziel: NULL
@@ -1407,16 +1404,7 @@ foreach ($plans as $plan) {
               }
               $stelle = (string) $entry['betriebsstelle'];
               if (!isset($stellen[$stelle])) {
-                  $stellen[$stelle] = [
-                      'stellenart' => $entry['stellenart'],
-                      'wege' => [],
-                  ];
-              }
-              if (
-                  $stellen[$stelle]['stellenart'] === null
-                  && $entry['stellenart'] !== null
-              ) {
-                  $stellen[$stelle]['stellenart'] = $entry['stellenart'];
+                  $stellen[$stelle] = ['wege' => []];
               }
               $stellen[$stelle]['wege'][] = $entry;
           }
@@ -1562,14 +1550,8 @@ foreach ($plans as $plan) {
               <li class="estab-telecom-station">
                 <h3 class="estab-telecom-station-name"><?=
                   dv_operations_html((string) $stelleName)
-                ?><?php if ($stelle['stellenart'] !== null): ?>
-                  <span class="estab-telecom-station-kind"><?=
-                    dv_operations_html(
-                      ESTAB_DV_TELECOM_STATION_KINDS[$stelle['stellenart']]
-                        ?? (string) $stelle['stellenart']
-                    )
-                  ?></span>
-                <?php endif; ?></h3>
+                ?><span class="estab-telecom-station-kind">eigene
+                  Betriebsstelle</span></h3>
                 <ul class="estab-telecom-station-routes">
                   <?php foreach ($stelle['wege'] as $weg): ?>
                     <li>
@@ -1581,7 +1563,17 @@ foreach ($plans as $plan) {
                             <li><?= dv_operations_html(
                               (string) $gegenstelle['name'] . ' · '
                               . (string) $gegenstelle['erreichbarkeit']
-                            ) ?></li>
+                            ) ?><?php if (
+                                ($gegenstelle['stellenart'] ?? null) !== null
+                            ): ?>
+                              <span class="estab-telecom-station-kind"><?=
+                                dv_operations_html(
+                                  ESTAB_DV_TELECOM_STATION_KINDS[
+                                      $gegenstelle['stellenart']
+                                  ] ?? (string) $gegenstelle['stellenart']
+                                )
+                              ?></span>
+                            <?php endif; ?></li>
                           <?php endforeach; ?>
                         </ul>
                       <?php endif; ?>
@@ -1627,9 +1619,10 @@ foreach ($plans as $plan) {
             <summary>Kommunikationsskizze nach Fb Fü 77</summary>
             <p class="estab-telecom-sketch-note">Erzeugt aus Version
               <?= (int) $activePlan['version'] ?> des Plans. Die Anordnung
-              folgt der Stellenart: übergeordnet oben, nachgeordnet unten,
-              benachbart seitlich. Die Linienart nennt das Mittel, auch ohne
-              Farbe.</p>
+              zeigt in der Mitte Ihre eigene Führungsstelle mit ihrem
+              Funkrufnamen und ihren Mitteln, links die übergeordneten und
+              rechts die nachgeordneten Gegenstellen. Die Linienart nennt das
+              Mittel, auch ohne Farbe.</p>
             <?= estab_telecom_sketch_svg(
                 $activePlan,
                 $fuehrungsstellenName === ''
@@ -2097,7 +2090,13 @@ foreach ($plans as $plan) {
                             ) ?></strong> ·
                             <?= dv_operations_html(
                                 $gegenstelle['erreichbarkeit']
-                            ) ?><?= trim(
+                            ) ?><?= ($gegenstelle['stellenart'] ?? null) === null
+                                ? ''
+                                : ' · ' . dv_operations_html(
+                                    ESTAB_DV_TELECOM_STATION_KINDS[
+                                        $gegenstelle['stellenart']
+                                    ] ?? (string) $gegenstelle['stellenart']
+                                ) ?><?= trim(
                                 (string) ($gegenstelle['bemerkungen'] ?? '')
                             ) === ''
                                 ? ''
@@ -2141,6 +2140,21 @@ foreach ($plans as $plan) {
                         <label>Name der Gegenstelle
                           <input name="name" maxlength="255" required>
                           <small>Klarbezeichnung der Stelle oder Einheit.</small>
+                        </label>
+                        <label>Stellenart
+                          <select name="stellenart">
+                            <option value="">ohne Angabe</option>
+                            <?php foreach (
+                                estab_dv_telecom_counterpart_kinds()
+                                as $artWert => $artText
+                            ): ?>
+                              <option value="<?= dv_operations_html($artWert)
+                                ?>"><?= dv_operations_html($artText) ?></option>
+                            <?php endforeach; ?>
+                          </select>
+                          <small>Steht diese Stelle über, unter oder neben
+                            Ihnen? Die Skizze setzt übergeordnete nach links
+                            und nachgeordnete nach rechts.</small>
                         </label>
                         <label><?= dv_operations_html(
                             'Erreichbar unter · '

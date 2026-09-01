@@ -394,20 +394,33 @@ diesen Vorgang.
 
 - [x] **A25** `!` **M** Erzeugte Kommunikationsskizze
       → `app/telecom_sketch.php`, `4fach/fuehrungsstelle.php`
-      - [x] Anordnung nach Stellenart: `UEBER` oben, `UNTER` unten, `NEBEN`
-            seitlich, die eigene Führungsstelle in der Mitte
-      - [x] Linienart je Mittel — durchgezogen, gestrichelt, doppelt
-            gestrichelt, gepunktet; die Skizze trägt **ohne** die taktischen
+      - [x] Anordnung **nach dem Vordruck Fb Fü 77**: in der Mitte die eigene
+            Führungsstelle mit Funkrufname und unseren Mitteln, links die
+            übergeordneten, rechts die nachgeordneten Gegenstellen
+      - [x] Eine Linie beginnt an der **Zeile ihres Mittels**, nicht an der
+            Kastenmitte — so ist ablesbar, worüber eine Stelle erreicht wird
+      - [x] Linienart je Mittel; die Skizze trägt **ohne** die taktischen
             Zeichen
       - [x] Rückfallebene dünner, heller und benannt
-      - [x] Kopfleiste, Fassung und F.d.R. des Plans — keine zweite Wahrheit
-      - [x] Querformat, eigenständig: kein Skript, kein externer Verweis
-      - **Beim Ansehen gefunden und behoben:** die Beschriftungen saßen auf
-        der Mitte der Linie und überdruckten sich dort gegenseitig und den
-        Kasten der eigenen Stelle. Sie sitzen jetzt bei 58 % und fächern je
-        Weg auf, tragen einen weißen Saum, und die eigene Stelle wird zuletzt
-        gezeichnet. Nichts davon fällt in einem Zahlenvergleich auf.
-      - **Prüfung:** `tests/php/fmp_skizze.php` (24 assertions)
+      - [x] Kopfleiste, Fassung und F.d.R. — keine zweite Wahrheit
+      - [x] Reicht der Platz nicht, wird abgeschnitten und **gesagt**, wie
+            viele fehlen; kleiner gesetzt wird nicht
+
+      **Berichtigung vom 01.09.2026 — die Anordnung war falsch.** Ich hatte
+      ein Kreuz gebaut: `EIGEN` in der Mitte, die anderen Stellen oben, unten
+      und seitlich, und die `stellenart` am **eigenen Weg**. Der Betreiber hat
+      die Vorlage Fb Fü 77 nachgereicht und die Sache klargestellt: Der Plan
+      erfasst die **eigenen** Kommunikationsmittel und Erreichbarkeiten. Eine
+      Planzeile ist eines **unserer** Mittel; über- und untergeordnet sind
+      Eigenschaften der **Gegenstelle**. Migration 129 zieht die Spalte um,
+      die Skizze ist neu gebaut, Spec 5.2 und 16.2 sind berichtigt.
+
+      **Drei weitere Mängel erst im Bild gefunden:** Beschriftungen auf der
+      Linienmitte überdruckten sich; die eigene Stelle wurde vor den Linien
+      gezeichnet und von ihnen überschrieben; zwei Stellen in einer Spalte
+      zogen über die ganze Blatthöhe auseinander. Nichts davon fällt in einem
+      Zahlenvergleich auf.
+      - **Prüfung:** `tests/php/fmp_skizze.php` (28 assertions)
       - **Abhängigkeit:** A21, A24
 
 > **Prüfpunkt C6.** Skizze lesbar, vollständig beschriftet.

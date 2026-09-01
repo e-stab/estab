@@ -530,6 +530,13 @@ function estab_readiness_schema_query(): string
         . "'estab_dv126_gegenstelle_insert',"
         . "'estab_dv126_gegenstelle_update',"
         . "'estab_dv126_gegenstelle_delete')) = 3) "
+        // Die Stellenart haengt an der Gegenstelle -- die andere Seite ist
+        // ueber- oder untergeordnet, nicht die eigene.
+        . "AND ((SELECT COUNT(*) FROM information_schema.columns "
+        . "WHERE table_schema = DATABASE() "
+        . "AND table_name = 'nv_fernmeldeplan_gegenstellen' "
+        . "AND column_name = 'stellenart' "
+        . "AND column_type = \"enum('UEBER','UNTER','NEBEN')\") = 1) "
         // Die dreigeteilte Kopfleiste des Fb Fue 76. Alle drei sind
         // freiwillig: eine freigegebene Fassung, die sie nie gefuehrt hat,
         // bekommt hier keine Aussage untergeschoben.
@@ -1463,7 +1470,7 @@ function estab_readiness_schema_query(): string
         . "WHERE estab_status = 'closed' AND (estab_closed_at IS NULL "
         . "OR estab_retain_until IS NULL OR estab_retain_until "
         . "< DATE_ADD(estab_closed_at, INTERVAL 10 YEAR))) = 0) "
-        . "AND ((SELECT COUNT(*) FROM estab_schema_migrations) = 34) "
+        . "AND ((SELECT COUNT(*) FROM estab_schema_migrations) = 35) "
         . "AND ((SELECT COUNT(*) FROM estab_schema_migrations "
         . "WHERE version IN ('20-nullable-dates.sql','30-runtime-schema.sql',"
         . "'40-recipient-matrix-standard.sql','45-global-incidents-prepare.sql',"
@@ -1491,7 +1498,8 @@ function estab_readiness_schema_query(): string
         . "'125-fernmeldeweg-rueckfallebene.sql',"
         . "'126-fernmeldeplan-gegenstellen.sql',"
         . "'127-eingangsweg.sql',"
-        . "'128-fernmeldeplan-kopfleiste.sql') "
+        . "'128-fernmeldeplan-kopfleiste.sql',"
+        . "'129-gegenstelle-stellenart.sql') "
         . "AND state = 'applied' "
-        . "AND checksum REGEXP BINARY '^[0-9a-f]{64}$') = 34)";
+        . "AND checksum REGEXP BINARY '^[0-9a-f]{64}$') = 35)";
 }

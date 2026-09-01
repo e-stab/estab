@@ -1410,7 +1410,8 @@ function estab_incident_export_load(
             $connection,
             'SELECT g.`gegenstelle_id`, g.`fernmeldeplan_eintrag_id`,'
                 . ' e.`fernmeldeplan_id`, p.`version` AS `plan_version`,'
-                . ' g.`sortierung`, g.`name`, g.`erreichbarkeit`,'
+                . ' g.`sortierung`, g.`name`, g.`stellenart`,'
+                . ' g.`erreichbarkeit`,'
                 . ' g.`bemerkungen`'
                 . ' FROM `nv_fernmeldeplan_gegenstellen` AS g'
                 . ' JOIN `nv_fernmeldeplan_eintraege` AS e'

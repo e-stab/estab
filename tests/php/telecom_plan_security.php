@@ -269,18 +269,48 @@ $assert(
  */
 $gegenstelle = estab_dv_telecom_counterpart_values([
     'name' => 'Kreisleitstelle',
+    'stellenart' => 'NEBEN',
     'erreichbarkeit' => 'Leitstelle Kreis',
     'bemerkungen' => 'rund um die Uhr besetzt',
 ]);
 $assert(
     $gegenstelle === [
         'name' => 'Kreisleitstelle',
+        'stellenart' => 'NEBEN',
         'erreichbarkeit' => 'Leitstelle Kreis',
         'bemerkungen' => 'rund um die Uhr besetzt',
     ]
         && !array_key_exists('medium', $gegenstelle)
         && !array_key_exists('funkart', $gegenstelle),
     'a counterpart carries a medium of its own'
+);
+/*
+ * Die Stellenart gehoert der GEGENSTELLE -- ueber, unter oder daneben ist
+ * eine Eigenschaft der anderen Seite. "EIGEN" waere hier ein Widerspruch:
+ * eine Gegenstelle ist per Begriff nicht wir selbst. Ein Wert, den nichts je
+ * annehmen darf, gehoert nicht in die Aufzaehlung -- er wuerde irgendwann
+ * doch gesetzt und dann ausgewertet.
+ */
+$assert(
+    estab_dv_telecom_counterpart_values([
+        'name' => 'Ohne Angabe',
+        'erreichbarkeit' => 'Heros 1',
+    ])['stellenart'] === null,
+    'a counterpart without a station kind is rejected instead of accepted'
+);
+$eigenAbgewiesen = false;
+try {
+    estab_dv_telecom_counterpart_values([
+        'name' => 'Wir selbst',
+        'stellenart' => 'EIGEN',
+        'erreichbarkeit' => 'Heros 1',
+    ]);
+} catch (EstabDvInputException) {
+    $eigenAbgewiesen = true;
+}
+$assert(
+    $eigenAbgewiesen,
+    'a counterpart may call itself the own command post'
 );
 foreach (['name', 'erreichbarkeit'] as $pflicht) {
     $eingabe = [

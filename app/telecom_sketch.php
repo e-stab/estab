@@ -12,19 +12,25 @@ declare(strict_types=1);
  * gepflegte Skizze ist nach der zweiten Planänderung falsch, und niemand
  * merkt es.
  *
- * Die Anordnung folgt der Stellenart, nicht einem Grafikalgorithmus. THW-DV
- * 1-101 Kapitel 6.1.2 gibt die Achsen vor -- vertikal von oben nach unten,
- * horizontal zur Seite:
+ * Der Aufbau folgt dem Vordruck, und der ist eindeutig:
  *
- *                        übergeordnet
- *                             |
- *          benachbart  ---  EIGEN  ---  benachbart
- *                             |
- *          nachgeordnet   nachgeordnet   nachgeordnet
+ *      übergeordnete Stellen   ┌──────────────────┐   nachgeordnete Stellen
+ *              ◄───────────────┤  FÜHRUNGSSTELLE  ├───────────────►
+ *                              │   Funkrufname    │
+ *                              │  ── unsere ──    │
+ *                              │     Mittel       │
+ *                              └──────────────────┘
  *
- * Damit ist die Skizze bei jeder Größe vorhersehbar. Ein Kräftespiel-Layout
- * wäre hübscher und bei jeder Neuberechnung anders; auf einer Lagekarte ist
- * "an derselben Stelle wie gestern" mehr wert als "schön".
+ * In der Mitte steht die EIGENE Führungsstelle mit ihrem Funkrufnamen und
+ * ihren Kommunikationsmitteln. Links, wen wir nach oben erreichen, rechts,
+ * wen wir nach unten erreichen. Das ist der ganze Sinn der Fernmeldeplanung:
+ * die EIGENEN Erreichbarkeiten festzulegen. Andere Stellen darzustellen ist
+ * nicht ihre Aufgabe -- sie erscheinen nur als das, was sie sind: die
+ * Gegenstellen, die über eines unserer Mittel erreichbar sind.
+ *
+ * Deshalb ist eine Planzeile eines UNSERER Mittel und die Stellenart eine
+ * Eigenschaft der GEGENSTELLE. Wer die Zeilen mit fremden Stellen füllt, baut
+ * ein Adressbuch und keinen Fernmeldeplan.
  *
  * Querformat, weil Fb Fü 76 es so verlangt: "Bewährt hat sich die Darstellung
  * im Querformat."
@@ -38,8 +44,10 @@ declare(strict_types=1);
 /** Die Zeichenfläche. A4 quer bei rund 100 Bildpunkten je Zoll. */
 const ESTAB_SKETCH_BREITE = 1190;
 const ESTAB_SKETCH_HOEHE = 842;
-const ESTAB_SKETCH_KASTEN_BREITE = 208;
-const ESTAB_SKETCH_KASTEN_HOEHE = 66;
+const ESTAB_SKETCH_KASTEN_BREITE = 250;
+const ESTAB_SKETCH_KASTEN_HOEHE = 62;
+/** Die Mitte: unsere Führungsstelle mit unseren Mitteln. */
+const ESTAB_SKETCH_MITTE_BREITE = 330;
 
 /**
  * Die Linienart je Mittel.
@@ -94,118 +102,131 @@ function estab_telecom_sketch_html(mixed $wert): string
 }
 
 /**
- * Die Stellen des Plans, nach Stellenart in Bänder sortiert.
+ * Unsere Mittel und die Gegenstellen, die über sie erreichbar sind.
  *
- * Eine Stelle ohne Stellenart bekommt kein eigenes Band, sondern steht bei
- * den benachbarten. Das ist keine Behauptung, sondern die schwächste
- * Einordnung, die es gibt: seitlich heißt "steht daneben", und mehr weiß der
- * Plan über sie nicht. Ein eigenes Band "unbekannt" hätte dieselbe Aussage
- * und zusätzlich eine leere Zeile, wenn alle Stellen eingeordnet sind.
+ * Zurück kommt beides getrennt: die Mittel für die Mitte, die Gegenstellen
+ * für die Seiten. Eine Gegenstelle ohne Stellenart steht rechts bei den
+ * nachgeordneten und trägt dort den Vermerk, dass ihre Art nicht gepflegt
+ * ist. Das ist keine Behauptung, sondern die sichtbare Aufforderung, sie
+ * nachzutragen -- eine stille Einordnung wäre eine Behauptung.
  *
- * @return array<string, array<string, array{stellenart:?string,wege:list<array<string,mixed>>}>>
+ * @return array{mittel:list<array<string,mixed>>,links:list<array<string,mixed>>,rechts:list<array<string,mixed>>}
  */
-function estab_telecom_sketch_bands(array $plan): array
+function estab_telecom_sketch_sides(array $plan): array
 {
-    $baender = ['UEBER' => [], 'EIGEN' => [], 'NEBEN' => [], 'UNTER' => []];
+    $mittel = [];
+    $links = [];
+    $rechts = [];
     foreach (($plan['eintraege'] ?? []) as $eintrag) {
         if (!is_array($eintrag)) {
             continue;
         }
-        $stelle = trim((string) ($eintrag['betriebsstelle'] ?? ''));
-        if ($stelle === '') {
-            continue;
-        }
-        $art = $eintrag['stellenart'] ?? null;
-        $band = match ($art) {
-            'UEBER' => 'UEBER',
-            'EIGEN' => 'EIGEN',
-            'UNTER' => 'UNTER',
-            default => 'NEBEN',
-        };
-        if (!isset($baender[$band][$stelle])) {
-            $baender[$band][$stelle] = [
-                'stellenart' => is_string($art) ? $art : null,
-                'wege' => [],
+        $mittel[] = $eintrag;
+        foreach (($eintrag['gegenstellen'] ?? []) as $gegenstelle) {
+            if (!is_array($gegenstelle)) {
+                continue;
+            }
+            $eintragung = [
+                'name' => trim((string) ($gegenstelle['name'] ?? '')),
+                'erreichbarkeit' => trim(
+                    (string) ($gegenstelle['erreichbarkeit'] ?? '')
+                ),
+                'stellenart' => $gegenstelle['stellenart'] ?? null,
+                'weg' => $eintrag,
             ];
+            if (($gegenstelle['stellenart'] ?? null) === 'UEBER') {
+                $links[] = $eintragung;
+                continue;
+            }
+            $rechts[] = $eintragung;
         }
-        $baender[$band][$stelle]['wege'][] = $eintrag;
     }
-    return $baender;
+    return ['mittel' => $mittel, 'links' => $links, 'rechts' => $rechts];
 }
 
 /**
- * Die Bildpunkte je Stelle.
+ * Die Bildpunkte je Gegenstelle.
  *
- * Übergeordnete oben in einer Reihe, nachgeordnete unten in einer Reihe,
- * benachbarte links und rechts abwechselnd, eigene in der Mitte unter dem
- * Mittelpunkt. Reihen werden gleichmäßig über die Breite verteilt; bei einer
- * einzigen Stelle steht sie mittig.
+ * Links und rechts je eine Spalte, senkrecht verteilt. Eine einzelne Stelle
+ * steht auf halber Höhe; viele rücken zusammen, bis der Platz ausgeht --
+ * danach wird nicht kleiner gesetzt, sondern abgeschnitten und gesagt, wie
+ * viele fehlen. Eine unlesbare Skizze ist schlechter als eine unvollständige,
+ * die ihre Unvollständigkeit nennt.
  *
- * @return array<string, array{x:float,y:float,band:string}>
+ * @return array{links:list<array{x:float,y:float}>,rechts:list<array{x:float,y:float}>,platz:int}
  */
-function estab_telecom_sketch_layout(array $baender): array
+function estab_telecom_sketch_layout(array $seiten): array
 {
-    $orte = [];
-    $reihe = static function (
-        array $namen,
-        float $y,
-        string $band
-    ) use (&$orte): void {
-        $anzahl = count($namen);
+    $oben = 150.0;
+    $unten = ESTAB_SKETCH_HOEHE - 80.0;
+    $platz = (int) floor(
+        ($unten - $oben) / (ESTAB_SKETCH_KASTEN_HOEHE + 14.0)
+    ) + 1;
+    $spalte = static function (
+        int $anzahl,
+        float $x
+    ) use ($oben, $unten, $platz): array {
+        $orte = [];
+        $anzahl = min($anzahl, $platz);
         if ($anzahl === 0) {
-            return;
+            return $orte;
         }
-        $rand = 90.0;
-        $spanne = ESTAB_SKETCH_BREITE - 2 * $rand;
-        $schritt = $anzahl === 1 ? 0.0 : $spanne / ($anzahl - 1);
-        $start = $anzahl === 1 ? ESTAB_SKETCH_BREITE / 2 : $rand;
-        $index = 0;
-        foreach ($namen as $name) {
-            $orte[$name] = [
-                'x' => $start + $schritt * $index,
-                'y' => $y,
-                'band' => $band,
-            ];
-            $index++;
+        if ($anzahl === 1) {
+            return [['x' => $x, 'y' => ($oben + $unten) / 2]];
         }
+        /*
+         * Zusammenruecken, nicht auseinanderziehen.
+         *
+         * Zwei Stellen ueber die ganze Blatthoehe verteilt sehen aus, als
+         * gehoerten sie nicht zusammen, und ihre Linien laufen unnoetig weit.
+         * Der Schritt ist deshalb hoechstens Kastenhoehe plus Luft; die
+         * Spalte steht mittig und waechst erst nach aussen, wenn viele
+         * Stellen es verlangen.
+         */
+        $schritt = min(
+            ($unten - $oben) / ($anzahl - 1),
+            ESTAB_SKETCH_KASTEN_HOEHE + 22.0
+        );
+        $hoehe = $schritt * ($anzahl - 1);
+        $start = ($oben + $unten) / 2 - $hoehe / 2;
+        for ($i = 0; $i < $anzahl; $i++) {
+            $orte[] = ['x' => $x, 'y' => $start + $schritt * $i];
+        }
+        return $orte;
     };
-    $reihe(array_keys($baender['UEBER']), 178.0, 'UEBER');
-    $reihe(array_keys($baender['UNTER']), 726.0, 'UNTER');
+    return [
+        'links' => $spalte(
+            count($seiten['links']),
+            ESTAB_SKETCH_KASTEN_BREITE / 2 + 24.0
+        ),
+        'rechts' => $spalte(
+            count($seiten['rechts']),
+            ESTAB_SKETCH_BREITE - ESTAB_SKETCH_KASTEN_BREITE / 2 - 24.0
+        ),
+        'platz' => $platz,
+    ];
+}
 
-    // Die eigenen Stellen stehen unter dem Mittelpunkt, gestapelt.
-    $eigene = array_keys($baender['EIGEN']);
-    $eigenY = 500.0;
-    foreach ($eigene as $name) {
-        $orte[$name] = [
-            'x' => ESTAB_SKETCH_BREITE / 2,
-            'y' => $eigenY,
-            'band' => 'EIGEN',
-        ];
-        $eigenY += ESTAB_SKETCH_KASTEN_HOEHE + 16.0;
-    }
-
-    // Benachbarte links und rechts, abwechselnd von der Mitte nach aussen.
-    $neben = array_keys($baender['NEBEN']);
-    $links = 0;
-    $rechts = 0;
-    foreach ($neben as $index => $name) {
-        if ($index % 2 === 0) {
-            $orte[$name] = [
-                'x' => 130.0,
-                'y' => 372.0 + $links * (ESTAB_SKETCH_KASTEN_HOEHE + 18.0),
-                'band' => 'NEBEN',
-            ];
-            $links++;
-            continue;
+/**
+ * Der Funkrufname der eigenen Führungsstelle.
+ *
+ * Er steht in der Mitte des Vordrucks, gleich unter dem Namen. Genommen wird
+ * die Erreichbarkeit des ersten Funkwegs -- das ist der Funkrufname, unter
+ * dem die Stelle im Netz gerufen wird. Gibt es keinen Funkweg, bleibt die
+ * Zeile leer, statt eine Telefonnummer als Funkrufnamen auszugeben.
+ */
+function estab_telecom_sketch_own_callsign(array $plan): string
+{
+    foreach (($plan['eintraege'] ?? []) as $eintrag) {
+        if (
+            is_array($eintrag)
+            && ($eintrag['medium'] ?? null) === 'Fu'
+            && trim((string) ($eintrag['erreichbarkeit'] ?? '')) !== ''
+        ) {
+            return trim((string) $eintrag['erreichbarkeit']);
         }
-        $orte[$name] = [
-            'x' => ESTAB_SKETCH_BREITE - 130.0,
-            'y' => 372.0 + $rechts * (ESTAB_SKETCH_KASTEN_HOEHE + 18.0),
-            'band' => 'NEBEN',
-        ];
-        $rechts++;
     }
-    return $orte;
+    return '';
 }
 
 /**
@@ -220,14 +241,18 @@ function estab_telecom_sketch_svg(
     string $fuehrungsstelle
 ): string {
     $h = 'estab_telecom_sketch_html';
-    $baender = estab_telecom_sketch_bands($plan);
-    $orte = estab_telecom_sketch_layout($baender);
+    $seiten = estab_telecom_sketch_sides($plan);
+    $orte = estab_telecom_sketch_layout($seiten);
     $mitteX = ESTAB_SKETCH_BREITE / 2;
-    $mitteY = 430.0;
 
-    $kopf = [];
-    $kopf[] = trim((string) ($plan['einsatzbezeichnung'] ?? ''));
-    $stand = 'Stand: ab ' . (string) ($plan['gueltig_ab'] ?? '');
+    /* --- Die Mitte wächst mit der Zahl unserer Mittel --- */
+    $mittelZeile = 26.0;
+    $mitteKopf = 66.0;
+    $mitteHoehe = $mitteKopf
+        + max(1, count($seiten['mittel'])) * $mittelZeile + 14.0;
+    $mitteY = max(140.0, (ESTAB_SKETCH_HOEHE - 40.0 - $mitteHoehe) / 2);
+
+    $stand = 'Stand: ' . (string) ($plan['gueltig_ab'] ?? '');
     if (($plan['gueltig_bis'] ?? null) !== null) {
         $stand .= ' bis ' . (string) $plan['gueltig_bis'];
     }
@@ -239,183 +264,205 @@ function estab_telecom_sketch_svg(
     $teile[] = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 '
         . ESTAB_SKETCH_BREITE . ' ' . ESTAB_SKETCH_HOEHE . '"'
         . ' width="100%" role="img"'
-        . ' aria-label="Kommunikationsskizze des aktiven Fernmeldeplans"'
+        . ' aria-label="Kommunikationsskizze der eigenen Führungsstelle"'
         . ' class="estab-telecom-sketch">';
     $teile[] = '<rect x="0" y="0" width="' . ESTAB_SKETCH_BREITE
         . '" height="' . ESTAB_SKETCH_HOEHE . '" fill="#ffffff"/>';
 
-    /* --- Kopfleiste, dreigeteilt wie im Vordruck --- */
+    /* --- Kopfleiste wie im Vordruck --- */
     $teile[] = '<g font-size="15" fill="#000000">';
-    $teile[] = '<rect x="24" y="24" width="' . (ESTAB_SKETCH_BREITE - 48)
-        . '" height="64" fill="none" stroke="#000000" stroke-width="2"/>';
-    $teile[] = '<line x1="' . ($mitteX - 200) . '" y1="24" x2="'
-        . ($mitteX - 200) . '" y2="88" stroke="#000000" stroke-width="2"/>';
-    $teile[] = '<line x1="' . ($mitteX + 200) . '" y1="24" x2="'
-        . ($mitteX + 200) . '" y2="88" stroke="#000000" stroke-width="2"/>';
-    $teile[] = '<text x="38" y="48" font-weight="bold">'
-        . $h(estab_telecom_sketch_kurz(
-            (string) ($plan['herkunft'] ?? ''),
-            34
-        )) . '</text>';
-    $teile[] = '<text x="38" y="72">'
-        . $h(estab_telecom_sketch_kurz(
-            (string) ($plan['verfasser_funktion'] ?? ''),
-            34
-        )) . '</text>';
-    $teile[] = '<text x="' . $mitteX . '" y="48" text-anchor="middle"'
+    $teile[] = '<rect x="24" y="20" width="' . (ESTAB_SKETCH_BREITE - 48)
+        . '" height="62" fill="none" stroke="#000000" stroke-width="2"/>';
+    $teile[] = '<line x1="330" y1="20" x2="330" y2="82"'
+        . ' stroke="#000000" stroke-width="2"/>';
+    $teile[] = '<line x1="880" y1="20" x2="880" y2="82"'
+        . ' stroke="#000000" stroke-width="2"/>';
+    $teile[] = '<text x="38" y="44" font-weight="bold">Führungsstelle</text>';
+    $teile[] = '<text x="38" y="68">'
+        . $h(estab_telecom_sketch_kurz($fuehrungsstelle, 32)) . '</text>';
+    $teile[] = '<text x="605" y="44" text-anchor="middle"'
         . ' font-weight="bold">Kommunikationsskizze</text>';
-    $teile[] = '<text x="' . $mitteX . '" y="72" text-anchor="middle">'
-        . $h(estab_telecom_sketch_kurz('für ' . $kopf[0], 46))
+    $teile[] = '<text x="605" y="68" text-anchor="middle">'
+        . $h(estab_telecom_sketch_kurz(
+            'für ' . (string) ($plan['einsatzbezeichnung'] ?? ''),
+            50
+        )) . '</text>';
+    $teile[] = '<text x="894" y="44">' . $h($stand) . '</text>';
+    $teile[] = '<text x="894" y="68">'
+        . $h('F.d.R.: ' . ($fdr === '' ? '—' : $fdr)
+            . ($fdrStellung === '' ? '' : ', ' . $fdrStellung))
         . '</text>';
     $teile[] = '<text x="' . (ESTAB_SKETCH_BREITE - 38)
-        . '" y="48" text-anchor="end">' . $h($stand) . '</text>';
-    $teile[] = '<text x="' . (ESTAB_SKETCH_BREITE - 38)
-        . '" y="72" text-anchor="end" font-weight="bold">'
-        . $h($vs === '' ? 'ohne VS-Vermerk' : $vs) . '</text>';
+        . '" y="44" text-anchor="end" font-weight="bold">'
+        . $h($vs) . '</text>';
     $teile[] = '</g>';
 
-    /* --- Eine Linie je Weg, von der Mitte zur Stelle --- */
-    foreach ($baender as $band => $stellen) {
-        foreach ($stellen as $name => $stelle) {
-            $ort = $orte[$name] ?? null;
+    /* --- Die Linien: von unserem Mittel zur Gegenstelle --- */
+    foreach (['links', 'rechts'] as $seite) {
+        foreach ($seiten[$seite] as $index => $gegenstelle) {
+            $ort = $orte[$seite][$index] ?? null;
             if ($ort === null) {
                 continue;
             }
-            $anzahl = count($stelle['wege']);
-            foreach ($stelle['wege'] as $index => $weg) {
-                $stil = estab_telecom_sketch_line_style(
-                    $weg['medium'] ?? null,
-                    $weg['funkart'] ?? null
-                );
-                $istErsatz = ($weg['rueckfallebene_fuer_weg'] ?? null) !== null;
-                // Mehrere Wege zwischen denselben Kaesten laufen faecherfoermig,
-                // sonst laege die zweite Linie auf der ersten.
-                $versatz = ($index - ($anzahl - 1) / 2) * 22.0;
-                $teile[] = '<line x1="' . ($mitteX + $versatz) . '" y1="'
-                    . $mitteY . '" x2="' . ($ort['x'] + $versatz) . '" y2="'
-                    . $ort['y'] . '"'
-                    . ' stroke="' . ($istErsatz ? '#7a7a7a' : '#000000') . '"'
-                    . ' stroke-width="'
-                    . ($istErsatz ? 1.0 : $stil['breite']) . '"'
-                    . ($stil['strich'] === ''
-                        ? ''
-                        : ' stroke-dasharray="' . $stil['strich'] . '"')
-                    . '/>';
-                /*
-                 * Die Beschriftung sitzt NICHT auf der Mitte der Linie.
-                 *
-                 * Am Bildschirm gesehen: dort ueberdeckte sie den Kasten der
-                 * eigenen Stelle, und zwei Wege zur selben Stelle druckten
-                 * ihre Beschriftungen uebereinander. Beides faellt in keinem
-                 * Zahlenvergleich auf und in der ersten Ansicht sofort.
-                 *
-                 * Sie rutscht deshalb auf die Stelle zu und je Weg um ein
-                 * Stueck weiter -- so hat jede Linie ihren eigenen Platz.
-                 */
-                $anteil = 0.58;
-                if ($anzahl > 1) {
-                    $anteil += ($index - ($anzahl - 1) / 2) * 0.13;
+            $weg = $gegenstelle['weg'];
+            $stil = estab_telecom_sketch_line_style(
+                $weg['medium'] ?? null,
+                $weg['funkart'] ?? null
+            );
+            $istErsatz = ($weg['rueckfallebene_fuer_weg'] ?? null) !== null;
+            /*
+             * Die Linie beginnt an der Zeile DIESES Mittels in der Mitte,
+             * nicht an der Kastenmitte. So ist ablesbar, worueber die Stelle
+             * erreicht wird, ohne die Linie bis zum Ende zu verfolgen -- und
+             * genau das ist die Frage, die eine Fuehrungskraft an das Bild
+             * stellt.
+             */
+            $zeile = 0;
+            foreach ($seiten['mittel'] as $nummer => $eigenes) {
+                if (
+                    (int) ($eigenes['fernmeldeplan_eintrag_id'] ?? 0)
+                    === (int) ($weg['fernmeldeplan_eintrag_id'] ?? -1)
+                ) {
+                    $zeile = $nummer;
                 }
-                $anteil = max(0.32, min(0.84, $anteil));
-                $beschriftungX = $mitteX + $versatz
-                    + ($ort['x'] - $mitteX) * $anteil;
-                $beschriftungY = $mitteY + ($ort['y'] - $mitteY) * $anteil;
-                $wort = estab_dv_telecom_route_label(
-                    $weg['medium'] ?? null,
-                    $weg['funkart'] ?? null
-                );
-                $erreichbar = trim((string) ($weg['erreichbarkeit'] ?? ''));
-                $text = $wort . ($erreichbar === '' ? '' : ' · ' . $erreichbar);
-                if ($istErsatz) {
-                    $text = 'Ersatzweg · ' . $text;
-                }
-                // Weisser Saum hinter der Schrift: die Beschriftung kreuzt
-                // fremde Linien, und eine Zahl auf einer Linie ist keine.
-                $teile[] = '<text x="' . $beschriftungX . '" y="'
-                    . $beschriftungY . '" text-anchor="middle" font-size="12"'
-                    . ' fill="' . ($istErsatz ? '#5a5a5a' : '#000000') . '"'
-                    . ' stroke="#ffffff" stroke-width="4"'
-                    . ' paint-order="stroke fill">'
-                    . '<tspan dy="-3">'
-                    . $h(estab_telecom_sketch_kurz($text, 34))
-                    . '</tspan></text>';
+            }
+            $startY = $mitteY + $mitteKopf + $zeile * $mittelZeile;
+            $startX = $seite === 'links'
+                ? $mitteX - ESTAB_SKETCH_MITTE_BREITE / 2
+                : $mitteX + ESTAB_SKETCH_MITTE_BREITE / 2;
+            $zielX = $seite === 'links'
+                ? $ort['x'] + ESTAB_SKETCH_KASTEN_BREITE / 2
+                : $ort['x'] - ESTAB_SKETCH_KASTEN_BREITE / 2;
+            $knick = ($startX + $zielX) / 2;
+            $teile[] = '<path d="M ' . $startX . ' ' . $startY
+                . ' L ' . $knick . ' ' . $startY
+                . ' L ' . $knick . ' ' . $ort['y']
+                . ' L ' . $zielX . ' ' . $ort['y'] . '" fill="none"'
+                . ' stroke="' . ($istErsatz ? '#7a7a7a' : '#000000') . '"'
+                . ' stroke-width="'
+                . ($istErsatz ? 1.0 : $stil['breite']) . '"'
+                . ($stil['strich'] === ''
+                    ? ''
+                    : ' stroke-dasharray="' . $stil['strich'] . '"')
+                . '/>';
+            if ($istErsatz) {
+                $teile[] = '<text x="' . $knick . '" y="'
+                    . ($ort['y'] - 6) . '" text-anchor="middle"'
+                    . ' font-size="11" fill="#5a5a5a" stroke="#ffffff"'
+                    . ' stroke-width="4" paint-order="stroke fill">'
+                    . 'Ersatzweg</text>';
             }
         }
     }
 
-    /*
-     * Die Mitte kommt NACH den Linien.
-     *
-     * Am Bildschirm gesehen: davor gezeichnet, liefen die Beschriftungen der
-     * kurzen seitlichen Wege in den Kasten der eigenen Stelle hinein und
-     * ueberdruckten ihren Namen. Wer zuletzt zeichnet, deckt -- und die
-     * eigene Stelle ist das, was zuerst gelesen wird.
-     */
-    $teile[] = '<g>';
-    $teile[] = '<ellipse cx="' . $mitteX . '" cy="' . $mitteY
-        . '" rx="120" ry="42" fill="#ffff00" stroke="#000000"'
-        . ' stroke-width="3"/>';
-    $teile[] = '<text x="' . $mitteX . '" y="' . ($mitteY + 6)
-        . '" text-anchor="middle" font-size="16" font-weight="bold">'
-        . $h(estab_telecom_sketch_kurz($fuehrungsstelle, 22)) . '</text>';
-    $teile[] = '</g>';
-
-    /* --- Die Kaesten der Stellen, ueber den Linien --- */
-    $bandwort = [
-        'UEBER' => 'übergeordnet',
-        'EIGEN' => 'eigene Stelle',
-        'UNTER' => 'nachgeordnet',
-        'NEBEN' => 'benachbart',
-    ];
-    foreach ($baender as $band => $stellen) {
-        foreach ($stellen as $name => $stelle) {
-            $ort = $orte[$name] ?? null;
+    /* --- Die Kaesten der Gegenstellen --- */
+    foreach ([
+        'links' => 'übergeordnet',
+        'rechts' => 'nachgeordnet',
+    ] as $seite => $richtung) {
+        foreach ($seiten[$seite] as $index => $gegenstelle) {
+            $ort = $orte[$seite][$index] ?? null;
             if ($ort === null) {
                 continue;
             }
             $x = $ort['x'] - ESTAB_SKETCH_KASTEN_BREITE / 2;
             $y = $ort['y'] - ESTAB_SKETCH_KASTEN_HOEHE / 2;
+            $art = $gegenstelle['stellenart'];
+            $wort = $art === null
+                ? 'Stellenart nicht angegeben'
+                : ($art === 'NEBEN' ? 'benachbart' : $richtung);
             $teile[] = '<g>';
             $teile[] = '<rect x="' . $x . '" y="' . $y . '" width="'
                 . ESTAB_SKETCH_KASTEN_BREITE . '" height="'
                 . ESTAB_SKETCH_KASTEN_HOEHE
                 . '" fill="#ffffff" stroke="#000000" stroke-width="2"/>';
-            $teile[] = '<text x="' . $ort['x'] . '" y="' . ($ort['y'] - 6)
+            $teile[] = '<text x="' . $ort['x'] . '" y="' . ($ort['y'] - 12)
                 . '" text-anchor="middle" font-size="14" font-weight="bold">'
-                . $h(estab_telecom_sketch_kurz($name, 24)) . '</text>';
-            $erreicht = [];
-            foreach ($stelle['wege'] as $weg) {
-                foreach (($weg['gegenstellen'] ?? []) as $gegenstelle) {
-                    $erreicht[] = trim(
-                        (string) ($gegenstelle['name'] ?? '')
-                    );
-                }
-            }
-            $erreicht = array_values(array_unique(array_filter($erreicht)));
-            $zweite = $erreicht === []
-                ? ($bandwort[$stelle['stellenart'] ?? ''] ?? $bandwort[$band])
-                : 'erreicht: ' . implode(', ', $erreicht);
-            $teile[] = '<text x="' . $ort['x'] . '" y="' . ($ort['y'] + 14)
-                . '" text-anchor="middle" font-size="11" fill="#333333">'
-                . $h(estab_telecom_sketch_kurz($zweite, 32)) . '</text>';
+                . $h(estab_telecom_sketch_kurz($gegenstelle['name'], 28))
+                . '</text>';
+            $teile[] = '<text x="' . $ort['x'] . '" y="' . ($ort['y'] + 6)
+                . '" text-anchor="middle" font-size="12">'
+                . $h(estab_telecom_sketch_kurz(
+                    $gegenstelle['erreichbarkeit'],
+                    32
+                )) . '</text>';
+            $teile[] = '<text x="' . $ort['x'] . '" y="' . ($ort['y'] + 22)
+                . '" text-anchor="middle" font-size="10" fill="#555555">'
+                . $h($wort) . '</text>';
             $teile[] = '</g>';
+        }
+        $fehlend = count($seiten[$seite]) - count($orte[$seite]);
+        if ($fehlend > 0) {
+            $x = $seite === 'links'
+                ? ESTAB_SKETCH_KASTEN_BREITE / 2 + 24.0
+                : ESTAB_SKETCH_BREITE - ESTAB_SKETCH_KASTEN_BREITE / 2 - 24.0;
+            $teile[] = '<text x="' . $x . '" y="'
+                . (ESTAB_SKETCH_HOEHE - 46) . '" text-anchor="middle"'
+                . ' font-size="12" fill="#7d1a14">'
+                . $h('… und ' . $fehlend . ' weitere, hier nicht dargestellt')
+                . '</text>';
         }
     }
 
-    /* --- Fusszeile: Stand, Fassung und F.d.R. --- */
+    /* --- Die Mitte: wir selbst, zuletzt gezeichnet --- */
+    $teile[] = '<g>';
+    $teile[] = '<rect x="' . ($mitteX - ESTAB_SKETCH_MITTE_BREITE / 2)
+        . '" y="' . $mitteY . '" width="' . ESTAB_SKETCH_MITTE_BREITE
+        . '" height="' . $mitteHoehe
+        . '" fill="#ffff00" stroke="#000000" stroke-width="3"/>';
+    $teile[] = '<text x="' . $mitteX . '" y="' . ($mitteY + 26)
+        . '" text-anchor="middle" font-size="16" font-weight="bold">'
+        . $h(estab_telecom_sketch_kurz($fuehrungsstelle, 26)) . '</text>';
+    $eigenerRufname = estab_telecom_sketch_own_callsign($plan);
+    $teile[] = '<text x="' . $mitteX . '" y="' . ($mitteY + 48)
+        . '" text-anchor="middle" font-size="13">'
+        . $h($eigenerRufname === ''
+            ? 'Funkrufname: —'
+            : 'Funkrufname: ' . estab_telecom_sketch_kurz(
+                $eigenerRufname,
+                24
+            ))
+        . '</text>';
+    $teile[] = '<line x1="' . ($mitteX - ESTAB_SKETCH_MITTE_BREITE / 2)
+        . '" y1="' . ($mitteY + $mitteKopf - 12) . '" x2="'
+        . ($mitteX + ESTAB_SKETCH_MITTE_BREITE / 2) . '" y2="'
+        . ($mitteY + $mitteKopf - 12)
+        . '" stroke="#000000" stroke-width="2"/>';
+    if ($seiten['mittel'] === []) {
+        $teile[] = '<text x="' . $mitteX . '" y="'
+            . ($mitteY + $mitteKopf + 8)
+            . '" text-anchor="middle" font-size="12" fill="#555555">'
+            . 'noch kein Mittel erfasst</text>';
+    }
+    foreach ($seiten['mittel'] as $zeile => $eigenes) {
+        $y = $mitteY + $mitteKopf + $zeile * $mittelZeile;
+        $wort = estab_dv_telecom_route_label(
+            $eigenes['medium'] ?? null,
+            $eigenes['funkart'] ?? null
+        );
+        $teile[] = '<text x="' . ($mitteX - ESTAB_SKETCH_MITTE_BREITE / 2 + 12)
+            . '" y="' . ($y + 4) . '" font-size="12" font-weight="bold">'
+            . $h(estab_telecom_sketch_kurz($wort, 18)) . '</text>';
+        $teile[] = '<text x="'
+            . ($mitteX + ESTAB_SKETCH_MITTE_BREITE / 2 - 12)
+            . '" y="' . ($y + 4) . '" text-anchor="end" font-size="12">'
+            . $h(estab_telecom_sketch_kurz(
+                (string) ($eigenes['erreichbarkeit'] ?? ''),
+                24
+            )) . '</text>';
+    }
+    $teile[] = '</g>';
+
+    /* --- Fusszeile --- */
     $fuss = 'Fernmeldeplan Version ' . (int) ($plan['version'] ?? 0)
         . ' · ' . (string) ($plan['status'] ?? '')
         . ' · Betriebsleitung ' . (string) ($plan['betriebsleitung'] ?? '');
-    $teile[] = '<text x="24" y="' . (ESTAB_SKETCH_HOEHE - 24)
+    $teile[] = '<text x="24" y="' . (ESTAB_SKETCH_HOEHE - 20)
         . '" font-size="13" fill="#000000">' . $h($fuss) . '</text>';
-    if ($fdr !== '') {
-        $teile[] = '<text x="' . (ESTAB_SKETCH_BREITE - 24) . '" y="'
-            . (ESTAB_SKETCH_HOEHE - 24)
-            . '" font-size="13" text-anchor="end" fill="#000000">'
-            . $h('F.d.R.: ' . $fdr
-                . ($fdrStellung === '' ? '' : ', ' . $fdrStellung))
-            . '</text>';
-    }
+    $teile[] = '<text x="' . (ESTAB_SKETCH_BREITE - 24) . '" y="'
+        . (ESTAB_SKETCH_HOEHE - 20)
+        . '" font-size="12" text-anchor="end" fill="#555555">'
+        . 'links übergeordnet · rechts nachgeordnet</text>';
     $teile[] = '</svg>';
     return implode("\n", $teile);
 }

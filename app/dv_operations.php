@@ -132,13 +132,36 @@ const ESTAB_DV_TELECOM_ROUTE_KINDS = [
     ],
 ];
 
-/** Which way a connection points -- Q4 Kapitel 6.1.2, vertikal und horizontal. */
+/**
+ * Which way a connection points -- Q4 Kapitel 6.1.2, vertikal und horizontal.
+ *
+ * `EIGEN` steht hier nur noch fuer den Altbestand: bis Migration 129 trug der
+ * eigene Weg eine Stellenart, und eine freigegebene Fassung muss weiter sagen
+ * koennen, was sie gesagt hat. Neu gepflegt wird die Angabe an der
+ * Gegenstelle, und dort ist `EIGEN` ausgeschlossen.
+ */
 const ESTAB_DV_TELECOM_STATION_KINDS = [
     'EIGEN' => 'eigene Führungsstelle',
     'UEBER' => 'übergeordnete Stelle',
     'UNTER' => 'nachgeordnete Stelle',
     'NEBEN' => 'benachbarte Stelle oder Partnerorganisation',
 ];
+
+/**
+ * Die Richtungen, die eine GEGENSTELLE annehmen kann.
+ *
+ * Abgeleitet und nicht zweitgeschrieben: zwei Listen derselben Werte laufen
+ * auseinander, sobald eine von beiden ergaenzt wird. Weggenommen wird genau
+ * eine -- die eigene Stelle ist keine Gegenstelle.
+ *
+ * @return array<string,string>
+ */
+function estab_dv_telecom_counterpart_kinds(): array
+{
+    $arten = ESTAB_DV_TELECOM_STATION_KINDS;
+    unset($arten['EIGEN']);
+    return $arten;
+}
 
 /** The closed value lists. Everything absent here is free text on purpose. */
 const ESTAB_DV_TELECOM_FIELD_CHOICES = [
@@ -4756,6 +4779,7 @@ function estab_dv_telecom_plan_revision(array $plan): string
             'gegenstellen' => array_map(
                 static fn (array $gegenstelle): array => [
                     'name' => (string) ($gegenstelle['name'] ?? ''),
+                    'stellenart' => $gegenstelle['stellenart'] ?? null,
                     'erreichbarkeit' =>
                         (string) ($gegenstelle['erreichbarkeit'] ?? ''),
                     'bemerkungen' =>
@@ -5192,9 +5216,10 @@ function estab_dv_start_telecom_plan_revision(
             $copyCounterparts = $connection->prepare(
                 'INSERT INTO `nv_fernmeldeplan_gegenstellen`'
                 . ' (`fernmeldeplan_eintrag_id`, `sortierung`, `name`,'
-                . ' `erreichbarkeit`, `bemerkungen`)'
+                . ' `stellenart`, `erreichbarkeit`, `bemerkungen`)'
                 . ' SELECT neu.`fernmeldeplan_eintrag_id`, g.`sortierung`,'
-                . ' g.`name`, g.`erreichbarkeit`, g.`bemerkungen`'
+                . ' g.`name`, g.`stellenart`, g.`erreichbarkeit`,'
+                . ' g.`bemerkungen`'
                 . ' FROM `nv_fernmeldeplan_eintraege` AS neu'
                 . ' JOIN `nv_fernmeldeplan_eintraege` AS alt'
                 . ' ON alt.`fernmeldeplan_id` = ?'
@@ -5527,12 +5552,34 @@ function estab_dv_add_telecom_entry(
  */
 function estab_dv_telecom_counterpart_values(array $input): array
 {
+    /*
+     * Die Stellenart gehoert der GEGENSTELLE.
+     *
+     * Sie sagt, in welcher Richtung die andere Seite steht -- ueber uns,
+     * unter uns oder daneben. Fb Fue 77 zeichnet genau das: die eigene
+     * Fuehrungsstelle in der Mitte, uebergeordnete links, nachgeordnete
+     * rechts. Am eigenen Weg waere die Angabe sinnlos; die eigene Stelle ist
+     * immer die eigene.
+     *
+     * "EIGEN" gibt es hier deshalb nicht. Eine Gegenstelle ist per Begriff
+     * die andere Seite.
+     */
+    $stellenart = $input['stellenart'] ?? null;
+    $stellenart = is_string($stellenart) ? trim($stellenart) : '';
+    if ($stellenart === '') {
+        $stellenart = null;
+    } elseif (!isset(estab_dv_telecom_counterpart_kinds()[$stellenart])) {
+        throw new EstabDvInputException(
+            'Die Stellenart der Gegenstelle ist ungültig.'
+        );
+    }
     return [
         'name' => estab_dv_text(
             $input['name'] ?? null,
             'Name der Gegenstelle',
             255
         ),
+        'stellenart' => $stellenart,
         'erreichbarkeit' => estab_dv_text(
             $input['erreichbarkeit'] ?? null,
             'Erreichbarkeit der Gegenstelle',
@@ -5779,8 +5826,8 @@ function estab_dv_add_telecom_counterpart(
             $insert = $connection->prepare(
                 'INSERT INTO `nv_fernmeldeplan_gegenstellen`'
                 . ' (`fernmeldeplan_eintrag_id`, `sortierung`, `name`,'
-                . ' `erreichbarkeit`, `bemerkungen`)'
-                . ' SELECT ?, ?, ?, ?, ?'
+                . ' `stellenart`, `erreichbarkeit`, `bemerkungen`)'
+                . ' SELECT ?, ?, ?, ?, ?, ?'
                 . ' FROM `nv_fernmeldeplan_eintraege`'
                 . ' WHERE `fernmeldeplan_eintrag_id` = ?'
                 . ' AND `fernmeldeplan_id` = ?'
@@ -5792,10 +5839,11 @@ function estab_dv_add_telecom_counterpart(
             }
             try {
                 $insert->bind_param(
-                    'iisssii',
+                    'iissssii',
                     $entryId,
                     $sort,
                     $values['name'],
+                    $values['stellenart'],
                     $values['erreichbarkeit'],
                     $values['bemerkungen'],
                     $entryId,
@@ -6699,7 +6747,8 @@ function estab_dv_telecom_plans(mysqli $connection, int $incidentId): array
         if ($plans !== []) {
             $counterpartStatement = $connection->prepare(
                 'SELECT g.`gegenstelle_id`, g.`fernmeldeplan_eintrag_id`,'
-                . ' g.`sortierung`, g.`name`, g.`erreichbarkeit`,'
+                . ' g.`sortierung`, g.`name`, g.`stellenart`,'
+                . ' g.`erreichbarkeit`,'
                 . ' g.`bemerkungen`'
                 . ' FROM `nv_fernmeldeplan_gegenstellen` AS g'
                 . ' JOIN `nv_fernmeldeplan_eintraege` AS e'
@@ -6731,6 +6780,7 @@ function estab_dv_telecom_plans(mysqli $connection, int $incidentId): array
                             (int) $counterpartRow['gegenstelle_id'],
                         'sortierung' => (int) $counterpartRow['sortierung'],
                         'name' => (string) $counterpartRow['name'],
+                        'stellenart' => $counterpartRow['stellenart'],
                         'erreichbarkeit' =>
                             (string) $counterpartRow['erreichbarkeit'],
                         'bemerkungen' => $counterpartRow['bemerkungen'],

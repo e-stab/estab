@@ -241,32 +241,63 @@ Nachricht*. Die wird im Vordruck geführt und nirgends sonst:
 Der Plan **liefert den Vorschlag** für diese Felder. Er ersetzt sie nicht, und
 er schreibt sie nicht fest.
 
-### 5.2 Die Stelle bekommt eine Art
+### 5.2 Die Stellenart gehört der Gegenstelle
 
-Q4 Kapitel 6.1.2 verlangt TK-Verbindungen „vertikal und horizontal"; Q6 setzt
-„FüSt"-Kästen neben „NSt"-Kästen. Ein neues Feld `stellenart` macht sichtbar,
-in welche Richtung eine Verbindung zeigt:
+> **Berichtigung vom 01.09.2026.** Dieser Abschnitt hat zunächst das Falsche
+> verlangt, und der Betreiber hat es an der erzeugten Skizze bemerkt: die
+> `stellenart` stand am **eigenen Weg**. Sie steht jetzt an der
+> **Gegenstelle**. Migration 129 zieht sie um; die alte Spalte bleibt lesbar,
+> damit freigegebene Fassungen weiter sagen können, was sie gesagt haben.
+
+Der Fernmeldeplan legt die **eigenen** Erreichbarkeiten fest. Eine Planzeile
+ist **eines unserer Mittel**, getragen von einer unserer eigenen
+Betriebsstellen — die Fernmeldezentrale mit ihrem Digitalfunk, ihrem
+Amtsanschluss, ihrem Fax; der Meldekopf mit seinem Melderdienst. Das
+Verhältnis dieser Stelle zu uns ist immer „eigen"; zu fragen, ob sie uns
+über- oder untergeordnet ist, hieße zu fragen, ob wir uns selbst
+übergeordnet sind.
+
+Über- und Unterstellung sind Eigenschaften der **anderen** Seite. Fb Fü 77
+zeichnet genau das:
+
+```
+   übergeordnete Stellen    ┌──────────────────┐    nachgeordnete Stellen
+           ◄────────────────┤  FÜHRUNGSSTELLE  ├────────────────►
+                            │   Funkrufname    │
+                            │  ── unsere ──    │
+                            │      Mittel      │
+                            └──────────────────┘
+```
+
+Deshalb trägt `nv_fernmeldeplan_gegenstellen` die Spalte:
 
 | Wert | Bedeutung |
 | --- | --- |
-| `EIGEN` | die eigene Führungsstelle |
-| `UEBER` | übergeordnete Stelle (vertikal nach oben) |
-| `UNTER` | nachgeordnete Stelle (vertikal nach unten) |
-| `NEBEN` | benachbarte Stelle, Partnerorganisation (horizontal) |
+| `UEBER` | übergeordnete Stelle — steht in der Skizze **links** |
+| `UNTER` | nachgeordnete Stelle — steht **rechts** |
+| `NEBEN` | benachbarte Stelle, Partnerorganisation |
+| *(leer)* | noch nicht eingeordnet; die Skizze setzt sie rechts und **sagt es** |
 
-Die Spalte „Betriebsstellen-Klarbezeichnung" heißt künftig **„Stelle"** mit der
-Ausfüllhilfe „Stelle des eigenen Verbundes: Führungsstelle, Fernmeldezentrale,
-Meldekopf, Einheit". Der Datenbankname `betriebsstelle` bleibt.
+**Kein `EIGEN`.** Eine Gegenstelle ist per Begriff die andere Seite. Ein
+Wert, den nichts je annehmen darf, gehört nicht in eine Aufzählung — er würde
+irgendwann doch gesetzt und dann ausgewertet.
+
+Die Spalte „Betriebsstellen-Klarbezeichnung" heißt künftig **„Stelle"** mit
+der Ausfüllhilfe „**Ihre eigene** Betriebsstelle, die dieses Mittel führt:
+Führungsstelle, Fernmeldezentrale, Meldekopf". Der Datenbankname
+`betriebsstelle` bleibt.
 
 ### 5.3 Gegenstellen am Weg
 
-Jeder Weg trägt eine geordnete Liste von Gegenstellen. Eine Gegenstelle hat
-**zwei** Angaben, weil der Vordruck zwei braucht:
+**Das ist die Tabelle je Kommunikationsmittel**, die der Betreiber verlangt
+hat: Zu jedem unserer Mittel steht, welche Stellen darüber erreichbar sind.
+Hier — und nur hier — werden fremde Stellen gepflegt.
 
 | Angabe | Was | Speist |
 | --- | --- | --- |
 | `name` | Klarbezeichnung der Stelle oder Einheit | **Feld 15** Absender (Eingang), Feld 10 Anschrift (Ausgang) |
 | `erreichbarkeit` | Rufname, Rufnummer, Adresse — je nach Medium des Wegs | Feld 6 bzw. Feld 11 |
+| `stellenart` | über-, nach- oder nebengeordnet (Abschnitt 5.2) | die Seite der Skizze |
 
 Die Bemerkung der Gegenstelle nimmt auch die **Betriebszeiten** auf (Q4
 Kapitel 6.6, „Regeln der Betriebszeiten"). Ein eigenes Feld bekommt sie nicht
@@ -1421,20 +1452,38 @@ das ist eine Zeichnung, kein Bericht (Lücke L3).
 
 ### 16.2 Anordnung
 
-Die Anordnung folgt der Stellenart aus Abschnitt 5.2, nicht einem
-Grafikalgorithmus. Q4 Kapitel 6.1.2 gibt die Achsen vor: vertikal von oben
-nach unten, horizontal zur Seite.
+> **Berichtigung vom 01.09.2026.** Hier stand ein Kreuz mit `EIGEN` in der
+> Mitte und den anderen Stellen darum herum. Der Betreiber hat die Vorlage
+> Fb Fü 77 nachgereicht; sie ordnet anders, und sie hat recht.
+
+Die Anordnung folgt dem Vordruck, nicht einem Grafikalgorithmus:
 
 ```
-                    UEBER
-                      |
-        NEBEN  ---  EIGEN  ---  NEBEN
-                      |
-        UNTER      UNTER      UNTER
+   übergeordnete Stellen    ┌──────────────────┐    nachgeordnete Stellen
+           ◄────────────────┤  FÜHRUNGSSTELLE  ├────────────────►
+                            │   Funkrufname    │
+                            │  ── unsere ──    │
+                            │      Mittel      │
+                            └──────────────────┘
 ```
 
-Damit ist die Skizze bei jeder Größe vorhersehbar und ohne Handarbeit lesbar.
-Verbindungen laufen von `EIGEN` zu jeder anderen Stelle, eine Linie je Weg.
+**In der Mitte stehen wir.** Der Name der eigenen Führungsstelle, darunter
+ihr Funkrufname, darunter jede Zeile des Plans: unser Mittel links, unsere
+Erreichbarkeit darunter rechts. Das ist der Gegenstand der Fernmeldeplanung —
+die eigenen Kommunikationsmittel und Erreichbarkeiten.
+
+**Außen stehen die Gegenstellen.** Links, wen wir nach oben erreichen; rechts,
+wen wir nach unten erreichen. Eine Verbindung beginnt an der **Zeile ihres
+Mittels**, nicht an der Kastenmitte — so ist ablesbar, worüber eine Stelle
+erreicht wird, ohne die Linie bis zum Ende zu verfolgen.
+
+Der Funkrufname der Mitte ist die Erreichbarkeit des ersten **Funk**wegs.
+Gibt es keinen, bleibt die Zeile leer; eine Telefonnummer als Funkrufname
+auszugeben wäre falsch und sähe richtig aus.
+
+Reicht der Platz einer Spalte nicht, wird **nicht** kleiner gesetzt, sondern
+abgeschnitten und gesagt, wie viele fehlen. Eine unlesbare Skizze ist
+schlechter als eine unvollständige, die ihre Unvollständigkeit nennt.
 
 ### 16.3 Linienart je Mittel — trägt auch ohne Zeichen
 
