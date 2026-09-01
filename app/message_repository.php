@@ -1016,6 +1016,131 @@ function estab_message_counter_repair_max(
  *
  * @return array{id: int, number: int}
  */
+/**
+ * Den vom Fernmelder benannten Eingangsweg und seine Gegenstelle aufloesen.
+ *
+ * Beides ist FREIWILLIG. Der Fernmelder weiss das Mittel immer -- den Weg
+ * meistens, die Gegenstelle manchmal. Ein Pflichtfeld erzwaenge dort eine
+ * Angabe, und eine erzwungene Angabe ist eine erfundene.
+ *
+ * Ist etwas angegeben, wird es geprueft, und zwar gegen den Plan, nicht gegen
+ * den Browser: der Weg muss zum AKTIVEN Plan dieses Einsatzes gehoeren und
+ * sein Mittel muss zu Feld 1 passen, die Gegenstelle muss an genau diesem Weg
+ * haengen. Die Anwendung LEITET Feld 1 nicht ab, sie PRUEFT es -- Feld 1 ist
+ * ein Vordruckfeld und wird im Vordruck angekreuzt, der Weg steht daneben.
+ *
+ * @return array{0:?int,1:?int}
+ */
+/**
+ * Die Bemerkung des Fernmelders zum Eingangsweg.
+ *
+ * Sie gehoert ihm allein. Geprueft wird nur die Form -- Laenge und keine
+ * Steuerzeichen ausser Umbruch und Tabulator; was darin steht, ist seine
+ * Aussage und nicht Sache der Anwendung.
+ */
+function estab_message_incoming_route_note(mixed $value): ?string
+{
+    if (!is_string($value)) {
+        return null;
+    }
+    $note = trim($value);
+    if ($note === '') {
+        return null;
+    }
+    $withoutAllowedWhitespace = str_replace(["\t", "\r", "\n"], '', $note);
+    $length = function_exists('mb_strlen')
+        ? mb_strlen($note, 'UTF-8')
+        : strlen($note);
+    if (
+        preg_match('//u', $note) !== 1
+        || $length > 2000
+        || preg_match('/\p{C}/u', $withoutAllowedWhitespace) === 1
+    ) {
+        throw new EstabDvInputException(
+            'Die Bemerkung zum Eingangsweg ist ungültig.'
+        );
+    }
+    return $note;
+}
+
+function estab_message_resolve_incoming_route(
+    mysqli $connection,
+    int $incidentId,
+    string $medium,
+    mixed $routeValue,
+    mixed $counterpartValue
+): array {
+    $route = is_int($routeValue)
+        ? $routeValue
+        : (is_string($routeValue) && $routeValue !== ''
+            ? (int) $routeValue
+            : null);
+    if ($route !== null && $route < 1) {
+        $route = null;
+    }
+    $counterpart = is_int($counterpartValue)
+        ? $counterpartValue
+        : (is_string($counterpartValue) && $counterpartValue !== ''
+            ? (int) $counterpartValue
+            : null);
+    if ($counterpart !== null && $counterpart < 1) {
+        $counterpart = null;
+    }
+    if ($route === null) {
+        // Ohne Weg gibt es keine Gegenstelle AUS DEM PLAN. Feld 6 bleibt
+        // davon unberuehrt: dort steht weiterhin freier Text.
+        return [null, null];
+    }
+    $statement = estab_message_execute(
+        $connection,
+        'SELECT e.`medium` FROM `nv_fernmeldeplan_eintraege` AS e'
+            . ' JOIN `nv_fernmeldeplaene` AS p'
+            . ' ON p.`fernmeldeplan_id` = e.`fernmeldeplan_id`'
+            . ' WHERE e.`fernmeldeplan_eintrag_id` = ?'
+            . ' AND p.`einsatz_id` = ?'
+            . " AND p.`status` = 'AKTIV'",
+        [$route, $incidentId]
+    );
+    try {
+        $row = $statement->get_result()->fetch_assoc();
+    } finally {
+        $statement->close();
+    }
+    if (!is_array($row)) {
+        throw new EstabDvInputException(
+            'Der erfasste Eingangsweg gehört nicht zum aktiven '
+            . 'S6-Fernmeldeplan.'
+        );
+    }
+    if (!hash_equals((string) $row['medium'], $medium)) {
+        throw new EstabDvInputException(
+            'Der Eingangsweg und das Übermittlungsmittel in Feld 1 '
+            . 'widersprechen einander.'
+        );
+    }
+    if ($counterpart === null) {
+        return [$route, null];
+    }
+    $counterpartStatement = estab_message_execute(
+        $connection,
+        'SELECT 1 FROM `nv_fernmeldeplan_gegenstellen`'
+            . ' WHERE `gegenstelle_id` = ?'
+            . ' AND `fernmeldeplan_eintrag_id` = ?',
+        [$counterpart, $route]
+    );
+    try {
+        $counterpartRow = $counterpartStatement->get_result()->fetch_row();
+    } finally {
+        $counterpartStatement->close();
+    }
+    if (!is_array($counterpartRow)) {
+        throw new EstabDvInputException(
+            'Die gewählte Gegenstelle gehört nicht zu diesem Eingangsweg.'
+        );
+    }
+    return [$route, $counterpart];
+}
+
 function estab_message_insert_numbered(
     mysqli $connection,
     string $databaseName,
@@ -1066,6 +1191,26 @@ function estab_message_insert_numbered(
                     $incident,
                     $expectedIncidentId
                 );
+                if ($direction === 'E') {
+                    // Der Fernmelder benennt den Weg beim Aufnehmen. Geprueft
+                    // wird er hier, in derselben Transaktion, in der die Zeile
+                    // entsteht -- sonst koennte der Plan zwischen Pruefung und
+                    // Einfuegen wechseln.
+                    [
+                        $fields['estab_fernmeldeplan_eintrag_id'],
+                        $fields['estab_gegenstelle_id'],
+                    ] = estab_message_resolve_incoming_route(
+                        $connection,
+                        $incidentId,
+                        (string) ($fields['01_medium'] ?? ''),
+                        $fields['estab_fernmeldeplan_eintrag_id'] ?? null,
+                        $fields['estab_gegenstelle_id'] ?? null
+                    );
+                    // Der Nachweis der Aufnahme wird hier NICHT erweitert.
+                    // Sein Umfang ist per SHA-256 festgeschrieben; den Weg
+                    // in die Beweiskette aufzunehmen ist ein eigener,
+                    // versionierter Schritt und keine Nebenwirkung.
+                }
                 if ($separateNumbering) {
                     $numberStatement = estab_message_execute(
                         $connection,

@@ -553,10 +553,17 @@ function estab_rehydrate_authoritative_message_form (
       "01_medium",
       "02_zeit",
       "13_abseinheit",
+      // Der LdF PRUEFT den Weg und darf ihn richtigstellen.
+      "fernmeldeplan_eintrag_id",
       "incoming_transport_confirmed",
       "incoming_transport_correction_reason",
       "estab_route_error",
     ),
+    // "estab_eingangsweg_bemerkung" steht mit Absicht NICHT in dieser Liste.
+    // Sie ist die Aussage des Fernmelders; koennte der Pruefer sie
+    // umschreiben, waere die Pruefung wertlos und der Nachweis koennte nicht
+    // mehr sagen, wer was behauptet hat. Der LdF traegt seine eigene
+    // Bemerkung in Feld 20 ein, wie bisher.
     "LdF-Ausgang" => array (
       "01_medium",
       "02_zeit",
@@ -760,6 +767,8 @@ function check_and_save ($data, $activeCommandPostName, $expectedIncidentId){
     "02_zeit", "02_zeichen", "03_datum", "03_zeichen",
     "05_gegenstelle", "06_befweg", "06_befwegausw",
     "fernmeldeplan_eintrag_id",
+    "estab_eingangsweg_bemerkung",
+    "estab_gegenstelle_id",
     "transportweg_bestaetigt",
     "transport_rueckgabegrund",
     "ldf_rueckgabegrund",
@@ -1089,6 +1098,16 @@ function check_and_save ($data, $activeCommandPostName, $expectedIncidentId){
           "01_datum" => konv_taktime_datetime ($data ["01_datum"]),
           "01_zeichen" => $data ["01_zeichen"],
           "05_gegenstelle" => $data ["05_gegenstelle"],
+          // Der Weg steht neben dem Vordruck, nicht darin. Geprueft wird er
+          // im Repository, in derselben Transaktion, in der die Zeile
+          // entsteht; hier wird nur weitergereicht, was der Browser sagt.
+          "estab_fernmeldeplan_eintrag_id" =>
+            trim ((string) $data ["fernmeldeplan_eintrag_id"]),
+          "estab_gegenstelle_id" =>
+            trim ((string) $data ["estab_gegenstelle_id"]),
+          "estab_eingangsweg_bemerkung" => estab_message_incoming_route_note (
+            $data ["estab_eingangsweg_bemerkung"]
+          ),
           "07_durchspruch" => $data ["07_durchspruch"],
           "09_vorrangstufe" => $data ["09_vorrangstufe"],
           "10_anschrift" => $data ["10_anschrift"],
@@ -1657,6 +1676,13 @@ function check_and_save ($data, $activeCommandPostName, $expectedIncidentId){
         $ldfFields ["01_medium"] = (string) $data ["01_medium"];
         $ldfFields ["13_abseinheit"] = trim (
           (string) $data ["13_abseinheit"]
+        );
+        // Der vom LdF bestaetigte oder richtiggestellte Weg. Das Repository
+        // loest ihn erneut gegen den aktiven Plan auf und weist ihn zurueck,
+        // wenn er nicht zum Mittel in Feld 1 passt. Die Bemerkung des
+        // Fernmelders wird hier NICHT uebernommen -- sie bleibt, wie sie war.
+        $ldfFields ["estab_fernmeldeplan_eintrag_id"] = trim (
+          (string) $data ["fernmeldeplan_eintrag_id"]
         );
         // Missing Si staffing never closes or bypasses the viewer queue.
         $ldfFields ["x00_status"] = 4;

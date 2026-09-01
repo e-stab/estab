@@ -1951,6 +1951,18 @@ function estab_workflow_route_allowed(array $identity, string $method, array $re
             return false;
         }
         if (
+            in_array($task, ['LdF-Eingang', 'LdF-Ausgang'], true)
+            && array_key_exists('estab_eingangsweg_bemerkung', $request)
+        ) {
+            // Der eine sagt aus, der andere prueft. Die Bemerkung zum
+            // Eingangsweg gehoert dem Fernmelder; der LdF sieht sie und
+            // traegt daneben seine eigene ein. Duerfte er die fremde
+            // umschreiben, koennte der Nachweis nicht mehr sagen, wer was
+            // behauptet hat. Die Maske bietet ihm kein Feld dafuer -- diese
+            // Regel gilt auch fuer den, der die Maske umgeht.
+            return false;
+        }
+        if (
             in_array($task, ['FM-Eingang', 'FM-Eingang_Anhang'], true)
         ) {
             foreach (array_keys($request) as $field) {

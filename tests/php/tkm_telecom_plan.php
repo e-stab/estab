@@ -59,6 +59,9 @@ final class TelecomPlanFormFixture
     /** @var list<array<string,mixed>> */
     public array $activeTelecomRoutes = [];
 
+    /** @var array{name:string,erreichbarkeit:string}|null */
+    public ?array $incomingCounterpart = null;
+
     public string $task = 'LdF-Ausgang';
 
     public function safe_message_value(string $field): string
@@ -345,6 +348,146 @@ $assert(
         'TKM-FERNMELDEPLAN',
         'In der Betriebsart „locker“ fehlt das Feld für den unmittelbar '
             . 'benannten Beförderungsweg.'
+    )
+);
+
+/* --- Auch der Eingang waehlt einen Weg, also sieht auch er den Plan --- */
+
+/*
+ * Der Weg des Eingangs ist FREIWILLIG.
+ *
+ * Der Fernmelder weiss das Mittel immer -- den Weg meistens, aber nicht
+ * zwingend. Ein Pflichtfeld erzwaenge dort eine Angabe, und eine erzwungene
+ * Angabe ist eine erfundene. Der Ausgang dagegen MUSS waehlen: dort
+ * disponiert der Leiter des Fernmeldebetriebes.
+ */
+$incomingFixture = new TelecomPlanFormFixture();
+$incomingFixture->task = 'FM-Eingang';
+$incomingFixture->activeTelecomRoutes = [
+    [
+        'fernmeldeplan_eintrag_id' => 41,
+        'plan_version' => 3,
+        'medium' => 'Fu',
+        'funkart' => 'DIGITAL',
+        'betriebsstelle' => 'Führungsstelle',
+        'erreichbarkeit' => 'Heros Heinsberg 10',
+        'rufgruppe' => 'THW_NRW_1',
+        'gegenstellen' => [
+            [
+                'gegenstelle_id' => 88,
+                'name' => 'Kreisleitstelle',
+                'erreichbarkeit' => 'Florian Heinsberg',
+            ],
+        ],
+    ],
+];
+$incoming = $render(static function () use ($incomingFixture): void {
+    $incomingFixture->official_message_workflow_controls();
+});
+
+foreach (
+    ['Heros Heinsberg 10', 'Führungsstelle', 'THW_NRW_1', 'Funk (digital)']
+    as $detail
+) {
+    $assert(
+        str_contains($incoming, estab_message_html($detail)),
+        estab_dv_requirement(
+            'TKM-FERNMELDEPLAN',
+            'Der Fernmelder waehlt einen Eingangsweg, ohne „' . $detail
+                . '“ zu sehen. Er verfuegt ueber etwas, das er nicht kennt.'
+        )
+    );
+}
+$assert(
+    str_contains($incoming, 'name="fernmeldeplan_eintrag_id"')
+        && !str_contains(
+            $incoming,
+            'name="fernmeldeplan_eintrag_id" required'
+        )
+        && str_contains($incoming, '— kein Weg angegeben —'),
+    estab_dv_requirement(
+        'TKM-FERNMELDEPLAN',
+        'Der Eingangsweg ist entweder gar nicht waehlbar oder Pflicht. '
+            . 'Beides ist falsch: der Fernmelder kennt ihn meistens, aber '
+            . 'nicht immer.'
+    )
+);
+$assert(
+    str_contains($incoming, 'name="estab_gegenstelle_id"')
+        && str_contains($incoming, 'Kreisleitstelle · Florian Heinsberg')
+        && str_contains($incoming, '<optgroup'),
+    estab_dv_requirement(
+        'TKM-FERNMELDEPLAN',
+        'Die Gegenstellen des gewaehlten Weges stehen dem Fernmelder nicht '
+            . 'zur Auswahl. Feld 15 liesse sich dann beim LdF nicht '
+            . 'vorbelegen.'
+    )
+);
+$assert(
+    str_contains($incoming, 'name="estab_eingangsweg_bemerkung"'),
+    estab_dv_requirement(
+        'TKM-FERNMELDEPLAN',
+        'Der Fernmelder kann zum Eingangsweg nichts anmerken.'
+    )
+);
+
+/*
+ * Der eine sagt aus, der andere prueft.
+ *
+ * Beim Leiter des Fernmeldebetriebes steht die Bemerkung des Fernmelders als
+ * Text, nicht als Eingabefeld. Koennte der Pruefer die Aussage umschreiben,
+ * waere die Pruefung wertlos.
+ */
+$leadFixture = new TelecomPlanFormFixture();
+$leadFixture->task = 'LdF-Eingang';
+$leadFixture->activeTelecomRoutes = $incomingFixture->activeTelecomRoutes;
+$leadFixture->formdata = [
+    'fernmeldeplan_eintrag_id' => '41',
+    'estab_eingangsweg_bemerkung' => 'Verbindung brach zweimal ab',
+    '01_medium' => 'Fu',
+];
+$leadFixture->incomingCounterpart = [
+    'name' => 'Kreisleitstelle',
+    'erreichbarkeit' => 'Florian Heinsberg',
+];
+$lead = $render(static function () use ($leadFixture): void {
+    $leadFixture->official_message_workflow_controls();
+});
+$assert(
+    str_contains($lead, 'Verbindung brach zweimal ab')
+        && !str_contains($lead, 'name="estab_eingangsweg_bemerkung"'),
+    estab_dv_requirement(
+        'TKM-FERNMELDEPLAN',
+        'Der Leiter des Fernmeldebetriebes sieht die Bemerkung des '
+            . 'Fernmelders nicht -- oder er kann sie umschreiben. Dann sagt '
+            . 'der Nachweis nicht mehr, wer was behauptet hat.'
+    )
+);
+$assert(
+    str_contains($lead, 'Vom Fernmelder benannter Weg')
+        && str_contains($lead, 'Funk (digital) · Führungsstelle')
+        && str_contains($lead, 'Gegenstelle laut Fernmeldeplan')
+        && str_contains($lead, 'Feld 15 ist daraus vorbelegt'),
+    estab_dv_requirement(
+        'TKM-FERNMELDEPLAN',
+        'Der Leiter des Fernmeldebetriebes erfaehrt nicht, welchen Weg und '
+            . 'welche Gegenstelle der Fernmelder benannt hat. Er kann dann '
+            . 'nichts pruefen.'
+    )
+);
+
+$workflow = file_get_contents($root . '/app/workflow.php');
+$assert(
+    is_string($workflow)
+        && str_contains(
+            $workflow,
+            "in_array(\$task, ['LdF-Eingang', 'LdF-Ausgang'], true)\n"
+            . "            && array_key_exists('estab_eingangsweg_bemerkung', \$request)"
+        ),
+    estab_dv_requirement(
+        'TKM-FERNMELDEPLAN',
+        'Die Bemerkung des Fernmelders ist nur in der Maske geschuetzt. Wer '
+            . 'die Maske umgeht, kann eine fremde Aussage umschreiben.'
     )
 );
 

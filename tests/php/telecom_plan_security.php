@@ -871,7 +871,12 @@ $assert(
     'telecommunications UI still exposes raw medium codes'
 );
 $assert(
-    str_contains($officialForm, 'estab_dv_telecom_medium_label(')
+    // Der Vordruck nennt inzwischen die WEGART statt nur des Mediums:
+    // „Funk (digital)“ trennt, was „Fu“ zusammenwarf. Die Zusage bleibt
+    // dieselbe -- estab_dv_telecom_route_label() faellt auf die
+    // Medienbeschriftung zurueck und gibt in keinem Fall einen Rohcode aus.
+    str_contains($officialForm, 'estab_dv_telecom_route_label(')
+        && !str_contains($officialForm, 'estab_dv_telecom_medium_label(')
         && str_contains($legacyForm, 'estab_dv_telecom_medium_label ('),
     'message route choices still expose raw telecommunications codes'
 );

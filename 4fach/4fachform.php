@@ -70,6 +70,7 @@ class nachrichten4fach {
         "12_betreff", "12_abfzeit", "12_anhang",
         "12_inhalt", "13_abseinheit", "14_funktion", "14_zeichen",
         "15_quitdatum", "15_quitzeichen", "16_empf", "17_vermerke",
+        "estab_eingangsweg_bemerkung", "estab_gegenstelle_id",
         "estab_route_error", "estab_attachment_error",
         "estab_attachment_notice", "estab_attachment_comment"
       ), "");
@@ -77,6 +78,21 @@ class nachrichten4fach {
         $formDefaults,
         is_array ($formulardaten) ? $formulardaten : array ()
       );
+      // Die Datenbankspalte traegt den Anwendungspraefix, das Formularfeld
+      // nicht -- so ist an jeder Stelle sichtbar, ob eine Angabe zum Vordruck
+      // gehoert oder zur Anwendung. Die Uebersetzung steht deshalb hier, an
+      // einer Stelle, und nicht in jedem Aufrufer.
+      if (
+        is_array ($formulardaten)
+        && !array_key_exists ("fernmeldeplan_eintrag_id", $formulardaten)
+        && ($formulardaten ["estab_fernmeldeplan_eintrag_id"] ?? null) !== null
+      ) {
+        // Geprueft wird auf ABWESENHEIT, nicht auf Leere: Hat der LdF den Weg
+        // bewusst herausgenommen, sendet er ein leeres Feld. Ein Abgleich auf
+        // "" machte diese Entscheidung nach einem Formularfehler rueckgaengig.
+        $this->formdata ["fernmeldeplan_eintrag_id"] =
+          (string) $formulardaten ["estab_fernmeldeplan_eintrag_id"];
+      }
       if (
         $this->task === "LdF-Eingang"
         && $this->formdata ["incoming_transport_original_medium"] === ""
@@ -159,9 +175,20 @@ class nachrichten4fach {
       if (debug){
         echo "<br><big>4fach data 087="; var_dump ($this->formdata); echo "</big><br>";
       }
-      if ($this->task === "LdF-Ausgang") {
+      if (in_array (
+        $this->task,
+        array (
+          "LdF-Ausgang", "FM-Eingang", "FM-Eingang_Anhang", "LdF-Eingang"
+        ),
+        true
+      )) {
+        // Der Ausgang WAEHLT einen Weg, der Eingang BENENNT den, ueber den
+        // die Nachricht hereinkam. Beide brauchen dieselbe Liste aus dem
+        // gueltigen S6-Plan; nur der Zwang unterscheidet sie: der Ausgang
+        // muss waehlen, der Eingang darf.
         $this->activeTelecomRoutes = $this->load_active_telecom_routes ();
       }
+      $this->load_incoming_counterpart ();
       $this->load_message_suggestions ();
       $this->load_attachment_previews ();
       $this->load_message_timeline ();
@@ -174,6 +201,7 @@ class nachrichten4fach {
     var $errorselect; // array, Felder die falsch eingegeben wurden.
     var $hasUnsavedValidationData = false;
     var $activeTelecomRoutes = array ();
+    var $incomingCounterpart = null;
     var $messageSuggestionField = "";
     var $messageSuggestions = array ();
     var $messageSuggestionMetadata = array ();
@@ -392,6 +420,48 @@ class nachrichten4fach {
       }
     }
 
+    /**
+     * Feld 15 aus der vom Fernmelder gewaehlten Gegenstelle vorbelegen.
+     *
+     * Der Fernmelder waehlt in Feld 6 eine Gegenstelle des Plans; gespeichert
+     * wird ihre KENNUNG, nicht ihr Text. Zwei Gegenstellen mit demselben
+     * Rufnamen auf verschiedenen Wegen waeren fuer einen Textvergleich
+     * mehrdeutig und sind es fuer einen Verweis nicht.
+     *
+     * Vorbelegt wird nur, was leer ist. Der LdF uebersetzt den Absender; die
+     * Vorbelegung nimmt ihm die Schreibarbeit ab, nicht die Entscheidung.
+     */
+    function load_incoming_counterpart () {
+      if ($this->task !== "LdF-Eingang") {
+        return;
+      }
+      $counterpartId = trim (
+        (string) ($this->formdata ["estab_gegenstelle_id"] ?? "")
+      );
+      if ($counterpartId === "" || $counterpartId === "0") {
+        return;
+      }
+      foreach ($this->activeTelecomRoutes as $route) {
+        foreach (($route ["gegenstellen"] ?? array ()) as $counterpart) {
+          if (
+            (string) ($counterpart ["gegenstelle_id"] ?? "") !== $counterpartId
+          ) {
+            continue;
+          }
+          $this->incomingCounterpart = array (
+            "name" => (string) ($counterpart ["name"] ?? ""),
+            "erreichbarkeit" =>
+              (string) ($counterpart ["erreichbarkeit"] ?? ""),
+          );
+          if (trim ((string) $this->formdata ["13_abseinheit"]) === "") {
+            $this->formdata ["13_abseinheit"] =
+              $this->incomingCounterpart ["name"];
+          }
+          return;
+        }
+      }
+    }
+
     function load_message_suggestions () {
       global $conf_4f_db, $conf_4f_tbl;
       $field = match ($this->task) {
@@ -462,6 +532,44 @@ class nachrichten4fach {
             $this->messageMappingContext =
               (string) ($mapping ["context"] ?? "");
           }
+        }
+        /*
+         * Der Plan steht vor der Historie.
+         *
+         * Beim Aufnehmen gibt es noch keine Nachricht, an der ein Paar
+         * haengen koennte -- die Zuordnung oben bleibt leer. Trotzdem weiss
+         * die Anwendung, wer ueber die eigenen Wege erreichbar ist: es steht
+         * im freigegebenen Fernmeldeplan. Diese Gegenstellen kommen deshalb
+         * vor den Werten, die aus frueheren Nachrichten stammen.
+         *
+         * Beides wird angezeigt und beides ist gekennzeichnet. Wer waehlt,
+         * soll sehen, ob ein Vorschlag geplant oder gewachsen ist.
+         */
+        try {
+          $planned = estab_read_plan_counterpart_suggestions (
+            $connection,
+            $identity,
+            $field,
+            30
+          );
+        } catch (Throwable $exception) {
+          $planned = array ();
+          error_log ("eStab plan counterparts are temporarily unavailable");
+        }
+        foreach ($planned as $value) {
+          $key = function_exists ("mb_strtolower")
+            ? mb_strtolower ($value, "UTF-8")
+            : strtolower ($value);
+          if (isset ($seen [$key])) {
+            continue;
+          }
+          $seen [$key] = true;
+          $this->messageSuggestions [] = $value;
+          $this->messageSuggestionMetadata [$value] = array (
+            "source" => "plan",
+            "match" => "exact",
+            "matched_context" => "",
+          );
         }
         foreach ($history as $value) {
           $key = function_exists ("mb_strtolower")

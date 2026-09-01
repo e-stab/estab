@@ -213,41 +213,49 @@ diesen Vorgang.
 
 ## P3 — Nutzung im Vordruck
 
-- [~] **A14** `!` **M** Eingangsweg: Schema und Laufweg — **teilweise**
-
-      **Fertig:** Migration 127 mit `estab_eingangsweg_bemerkung` und
-      `estab_gegenstelle_id`; die Prüfung des Wegs gegen Feld 1 im
-      Bestätigungszweig des LdF; die Freiwilligkeit des Wegs; der bewusst
-      fehlende Fremdschlüssel auf die Gegenstelle.
-
-      **Offen:** die Formularverdrahtung — Auswahlkasten beim `FM-Eingang`,
-      Anzeige und Berichtigung beim `LdF-Eingang`, die Bemerkung des
-      Fernmelders als nur lesbar. Dazu **A19**, die Vorbelegung von Feld 15
-      aus der ausgewählten Gegenstelle.
+- [x] **A14** `!` **M** Eingangsweg: Schema und Laufweg
 
       **Zwei Rücknahmen unterwegs, beide durch Wächter gefunden:**
       Die Felder gehörten nicht in `official_message_required_fields()` —
       das ist die **Pflicht**liste, meine Felder sind freiwillig. Und der
       Terminalnachweis darf nicht nebenbei erweitert werden: `V1` ist mit
       einer Prüfsumme festgenagelt, eine Erweiterung ist ein eigener,
-      versionierter Schritt.
+      versionierter Schritt. Aus demselben Grund trägt die Aufnahme den Weg
+      **nicht** in ihren Beweis ein.
 
-      → `docker/db/migrations/127-eingangsweg.sql`, `app/message_repository.php`, `app/workflow.php`
-      - [ ] `estab_eingangsweg_bemerkung`, `estab_gegenstelle_id` an `nv_nachrichten`
-      - [ ] Verriegelung `04_richtung = 'A'` fällt für den Wegbezug ([message_repository.php:1770](app/message_repository.php:1770))
-      - [ ] Der Weg ist **freiwillig**, das Mittel bleibt Pflicht (O17)
-      - [ ] `FM-Eingang` gibt Wegwahl, Wegbemerkung und Gegenstellenauswahl frei
-      - **Prüfung:** Eine eingehende Nachricht lässt sich mit und ohne Weg abschließen
+      → `docker/db/migrations/127-eingangsweg.sql`, `app/message_repository.php`,
+        `app/workflow.php`, `4fach/data_hndl.php`, `4fach/4fachform.php`,
+        `4fach/official_message_form.php`
+      - [x] `estab_eingangsweg_bemerkung`, `estab_gegenstelle_id` an `nv_nachrichten`
+      - [x] Verriegelung `04_richtung = 'A'` fällt für den Wegbezug
+      - [x] Der Weg ist **freiwillig**, das Mittel bleibt Pflicht (O17)
+      - [x] `FM-Eingang` gibt Wegwahl, Wegbemerkung und Gegenstellenauswahl frei
+      - [x] `estab_message_resolve_incoming_route()` prüft den Weg gegen den
+            **aktiven** Plan und die Gegenstelle gegen **diesen** Weg — in
+            derselben Transaktion, in der die Zeile entsteht
+      - [x] Die Betriebsangaben hängen nicht mehr an Feld 7: der Eingangsweg
+            wird erfasst, ob durchgesprochen wurde oder nicht
+      - **Prüfung:** `tkm_telecom_plan.php` (42 assertions) und der Lauf mit
+        neuen Daten in der Prüfumgebung
       - **Regel:** `FMP-EINGANGSWEG` · **Spec:** 10
 
-- [ ] **A15** `!` **S** Eingangsweg: Bestätigung und Unveränderlichkeit
-      → `app/message_repository.php`, `app/workflow.php`, `4fach/official_message_form.php`
-      - [ ] Die Bestätigung des LdF erstreckt sich auf den Weg ([message_repository.php:1588](app/message_repository.php:1588))
-      - [ ] Die Bemerkung des Fernmelders steht **nicht** in den schreibbaren Feldern von `LdF-Eingang`; ein abweichend gelieferter Wert wird verworfen
-      - [ ] Die Leiste „Eingangsweg" über dem Vordruck, Kasten wie bei der Disposition ([official_message_form.php:2545](4fach/official_message_form.php:2545))
-      - [ ] Feld 1 wird **geprüft**, nicht abgeleitet: Widerspruch zum Medium des Wegs wird zurückgewiesen
-      - **Prüfung:** Der LdF kann die Bemerkung nicht überschreiben; der Druck zeigt kein Wegfeld
-      - **Abhängigkeit:** A14 · **Regel:** `FMP-EINGANGSWEG-BEMERKUNG`, `FMP-WEG-AUSSERHALB-VORDRUCK`
+- [x] **A15** `!` **S** Eingangsweg: Bestätigung und Unveränderlichkeit
+      → `app/message_repository.php`, `app/workflow.php`, `4fach/data_hndl.php`,
+        `4fach/official_message_form.php`
+      - [x] Die Bestätigung des LdF erstreckt sich auf den Weg
+      - [x] Die Bemerkung des Fernmelders steht **nicht** in den schreibbaren
+            Feldern von `LdF-Eingang`; `estab_workflow_route_allowed()` weist
+            einen Aufruf, der sie mitliefert, vollständig ab — auch den, der
+            die Maske umgeht
+      - [x] Der LdF sieht Weg und Bemerkung als **Text**, nicht als Eingabefeld,
+            und kann den Weg über einen eigenen Kasten richtigstellen
+      - [x] Feld 1 wird **geprüft**, nicht abgeleitet
+      - [x] Ein leerer Weg des LdF wird nach einem Formularfehler nicht
+            stillschweigend aus der Zeile wiederhergestellt — geprüft wird auf
+            Abwesenheit des Feldes, nicht auf Leere
+      - **Prüfung:** `tkm_telecom_plan.php`; Lauf mit neuen Daten
+      - **Abhängigkeit:** A14 · **Regel:** `FMP-EINGANGSWEG-BEMERKUNG`,
+        `FMP-WEG-AUSSERHALB-VORDRUCK`
 
 - [x] **A16** `!!` **M** Der Plan-Zweig liest die Gegenstellen (F10)
       → `app/read_authorization.php`
@@ -283,22 +291,32 @@ diesen Vorgang.
 > **Prüfpunkt C4 — Sicherheit.** Der Stab bekommt an Feld 10 keinen einzigen
 > Vorschlag aus der Historie.
 
-- [ ] **A19** `!` **M** Vorbelegung von Feld 15 aus der Auswahl
+- [~] **A19** `!` **M** Vorbelegung von Feld 15 aus der Auswahl — **teilweise**
       → `app/message_repository.php`, `4fach/4fachform.php`, `4fach/official_message_form.php`
-      - [ ] Wählt A/W in Feld 6 eine Gegenstelle des Plans, wird der **Verweis** festgehalten
-      - [ ] Feld 15 ist beim LdF mit deren `name` vorbelegt und gekennzeichnet
-      - [ ] Ohne Auswahl bleibt Feld 15 leer; die Historie steht im Dropdown
-      - [ ] Keine Vorbelegung: bei mehreren Plantreffern, bei nur ähnlichem Treffer, in ein belegtes Feld, nach einer Rückgabe (`$redisposition`)
-      - [ ] Die Ereigniszeile hält fest: Herkunft, Planversion, unverändert übernommen oder überschrieben
-      - **Prüfung:** Vier Fälle je einmal; der Nachweis unterscheidet übernommen und selbst gewählt
+      - [x] Wählt A/W in Feld 6 eine Gegenstelle des Plans, wird der **Verweis**
+            festgehalten — `estab_gegenstelle_id`, nicht der Text
+      - [x] Feld 15 ist beim LdF mit deren `name` vorbelegt und gekennzeichnet
+            („Gegenstelle laut Fernmeldeplan … Feld 15 ist daraus vorbelegt")
+      - [x] Ohne Auswahl bleibt Feld 15 leer; die Historie steht im Dropdown
+      - [x] Keine Vorbelegung in ein belegtes Feld — vorbelegt wird nur, was
+            leer ist
+      - [ ] Die Ereigniszeile hält Herkunft und Planversion fest — **offen**,
+            und zwar bewusst: der Nachweis der Aufnahme ist mit einer Prüfsumme
+            festgenagelt, seine Erweiterung ist ein eigener versionierter
+            Schritt (siehe A14)
+      - **Prüfung:** Lauf mit neuen Daten in der Prüfumgebung
       - **Abhängigkeit:** A16, A18 · **Regel:** `FMP-GEGENSTELLE-AUSWAHL` · **Spec:** 5.6
 
-- [ ] **A20** `·` **S** Herkunft an jedem Vorschlag
+- [~] **A20** `·` **S** Herkunft an jedem Vorschlag — **teilweise**
       → `4fach/4fachform.php`, `estab-ui.css`
-      - [ ] Auch bei `FM-Eingang` trägt jede Option eine Herkunftsangabe
-      - [ ] Ein Planvorschlag nennt den Weg, über den er gilt
-      - [ ] Die Wegewahl fragt „über welchen Weg", nicht „an wen"
-      - **Prüfung:** Bedienprüfung mit Bildschirmabzug
+      - [x] Auch bei `FM-Eingang` trägt jede Option eine Herkunftsangabe:
+            `estab_read_plan_counterpart_suggestions()` speist die Liste, und
+            jeder so gewonnene Wert wird als „Aktiver S6-Fernmeldeplan"
+            gekennzeichnet — vor den Werten aus der Historie
+      - [ ] Ein Planvorschlag nennt den Weg, über den er gilt — **offen**
+      - [x] Die Wegewahl fragt „Über welchen Weg kam die Nachricht herein?",
+            nicht „an wen"
+      - **Prüfung:** Bildschirmabzug der Aufnahmemaske
       - **Regel:** `FMP-UX-VORSCHLAG-HERKUNFT`, `FMP-UX-VORSCHLAG-WEG`, `FMP-UX-WEGEWAHL`
 
 > **Prüfpunkt C5.** Eingangsweg, Bemerkung, Vorbelegung.

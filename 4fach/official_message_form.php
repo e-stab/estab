@@ -965,6 +965,71 @@ HTML;
     }
 
     /**
+     * Die Wege des gueltigen S6-Plans als Auswahlliste.
+     *
+     * Ausgang und Eingang brauchen dieselbe Liste. Sie unterscheiden sich
+     * allein im Zwang: der Ausgang muss einen Weg waehlen, der Eingang darf
+     * -- der Fernmelder kennt das Mittel immer, den Weg meistens. Deshalb
+     * traegt der leere Eintrag hier seine eigene Beschriftung.
+     */
+    function official_message_route_options(
+        string $selected,
+        string $emptyLabel
+    ): string {
+        $markup = '<option value="">'
+            . estab_message_html($emptyLabel) . '</option>';
+        foreach ($this->activeTelecomRoutes as $route) {
+            $parts = array_values(array_filter([
+                trim((string)($route['betriebsstelle'] ?? '')),
+                trim((string)($route['erreichbarkeit'] ?? '')),
+                trim((string)($route['kanal'] ?? '')),
+                trim((string)($route['bandlage'] ?? '')),
+                trim((string)($route['rufgruppe'] ?? '')),
+                trim((string)($route['verkehrsform'] ?? '')),
+            ], static fn(string $part): bool => $part !== ''));
+            $routeId = (string)$route['fernmeldeplan_eintrag_id'];
+            $routeLabel = 'Plan v' . (int)$route['plan_version']
+                . ' · ' . estab_dv_telecom_route_label(
+                    $route['medium'] ?? null,
+                    $route['funkart'] ?? null
+                )
+                . ' · ' . implode(' · ', $parts);
+            $markup .= '<option value="' . estab_message_html($routeId) . '"'
+                . ($selected === $routeId ? ' selected' : '') . '>'
+                . estab_message_html($routeLabel) . '</option>';
+        }
+        return $markup;
+    }
+
+    /**
+     * Der vom Fernmelder erfasste Eingangsweg, in Worten.
+     *
+     * Gelesen wird aus derselben Liste, aus der er gewaehlt wurde. Steht der
+     * Weg nicht mehr darin -- weil der S6 inzwischen eine neue Fassung
+     * freigegeben hat --, sagt die Ansicht das, statt zu schweigen.
+     */
+    function official_message_recorded_route_text(string $routeId): string
+    {
+        if ($routeId === '') {
+            return 'kein Weg angegeben';
+        }
+        foreach ($this->activeTelecomRoutes as $route) {
+            if ((string)$route['fernmeldeplan_eintrag_id'] !== $routeId) {
+                continue;
+            }
+            $parts = array_values(array_filter([
+                trim((string)($route['betriebsstelle'] ?? '')),
+                trim((string)($route['erreichbarkeit'] ?? '')),
+            ], static fn(string $part): bool => $part !== ''));
+            return estab_dv_telecom_route_label(
+                $route['medium'] ?? null,
+                $route['funkart'] ?? null
+            ) . ($parts === [] ? '' : ' · ' . implode(' · ', $parts));
+        }
+        return 'nicht mehr im gültigen Plan';
+    }
+
+    /**
      * Steht dieses gedruckte Feld dem laufenden Arbeitsschritt offen?
      *
      * Die Ansicht spricht die Zählung, die sie druckt. Welchen Zugriffsindex
@@ -2464,9 +2529,16 @@ HTML;
 
     function official_message_workflow_controls(): void
     {
+        // Der Eingang steht hier ausdruecklich mit drin. Frueher haing die
+        // Anzeige an Feld 7 -- das galt, solange die Betriebsangaben nur den
+        // Durchspruch betrafen. Der Eingangsweg haengt nicht daran: er wird
+        // erfasst, ob durchgesprochen wurde oder nicht.
         $hasTransport = in_array(
             $this->task,
-            ['Stab_gesprnoti', 'LdF-Eingang', 'LdF-Ausgang', 'FM-Ausgang'],
+            [
+                'Stab_gesprnoti', 'LdF-Eingang', 'LdF-Ausgang', 'FM-Ausgang',
+                'FM-Eingang', 'FM-Eingang_Anhang',
+            ],
             true
         ) || $this->official_message_field_access(7);
         if (!$hasTransport) {
@@ -2497,6 +2569,114 @@ HTML;
                 . 'führt den Beförderungsnachweis.</li>'
                 . '</ol></fieldset>';
         }
+        if (
+            $this->task === 'FM-Eingang'
+            || $this->task === 'FM-Eingang_Anhang'
+        ) {
+            /*
+             * Der Weg steht NEBEN dem Vordruck, nicht darin.
+             *
+             * Feld 1 traegt das Mittel und wird im Vordruck angekreuzt; der
+             * Weg ist eine Angabe der Anwendung und hat im amtlichen Raster
+             * keinen Platz. Die Doppelangabe ist Absicht: das Repository
+             * leitet Feld 1 nicht ab, es PRUEFT es gegen das Mittel des
+             * gewaehlten Weges.
+             */
+            $selectedRoute = (string)(
+                $this->formdata['fernmeldeplan_eintrag_id'] ?? ''
+            );
+            echo '<fieldset><legend>Eingangsweg</legend>';
+            if ($this->activeTelecomRoutes === []) {
+                echo '<p>Kein freigegebener S6-Fernmeldeplan verfügbar. '
+                    . 'Der Eingangsweg bleibt offen; das Übermittlungsmittel '
+                    . 'in Feld 1 wird davon nicht berührt.</p>';
+            } else {
+                echo '<label for="f_fernmeldeplan_eintrag_id">'
+                    . 'Über welchen Weg kam die Nachricht herein? '
+                    . '(freiwillig)</label>'
+                    . '<select id="f_fernmeldeplan_eintrag_id" '
+                    . 'name="fernmeldeplan_eintrag_id">'
+                    . $this->official_message_route_options(
+                        $selectedRoute,
+                        '— kein Weg angegeben —'
+                    )
+                    . '</select>';
+            }
+            if ($this->activeTelecomRoutes !== []) {
+                /*
+                 * Die Gegenstelle wird GEWAEHLT, nicht abgetippt.
+                 *
+                 * Gespeichert wird ihre Kennung. Nur deshalb kann der LdF
+                 * Feld 15 vorbelegt bekommen: ein Textvergleich waere bei
+                 * zwei gleichnamigen Rufnamen auf verschiedenen Wegen
+                 * mehrdeutig, ein Verweis ist es nicht. Feld 6 bleibt davon
+                 * unberuehrt und traegt weiter freien Text -- eine
+                 * Gegenstelle, die nicht im Plan steht, ruft trotzdem an.
+                 */
+                $selectedCounterpart = (string)(
+                    $this->formdata['estab_gegenstelle_id'] ?? ''
+                );
+                $counterpartMarkup = '';
+                foreach ($this->activeTelecomRoutes as $route) {
+                    $counterparts = $route['gegenstellen'] ?? [];
+                    if ($counterparts === []) {
+                        continue;
+                    }
+                    $counterpartMarkup .= '<optgroup label="'
+                        . estab_message_html(
+                            estab_dv_telecom_route_label(
+                                $route['medium'] ?? null,
+                                $route['funkart'] ?? null
+                            )
+                            . ' · '
+                            . trim((string)($route['betriebsstelle'] ?? ''))
+                        ) . '">';
+                    foreach ($counterparts as $counterpart) {
+                        $counterpartId =
+                            (string)($counterpart['gegenstelle_id'] ?? '');
+                        $counterpartMarkup .= '<option value="'
+                            . estab_message_html($counterpartId) . '"'
+                            . ($selectedCounterpart === $counterpartId
+                                ? ' selected'
+                                : '')
+                            . '>'
+                            . estab_message_html(
+                                trim((string)($counterpart['name'] ?? ''))
+                                . ' · '
+                                . trim((string)(
+                                    $counterpart['erreichbarkeit'] ?? ''
+                                ))
+                            ) . '</option>';
+                    }
+                    $counterpartMarkup .= '</optgroup>';
+                }
+                if ($counterpartMarkup !== '') {
+                    echo '<label for="f_estab_gegenstelle_id">'
+                        . 'Gegenstelle aus dem Fernmeldeplan (freiwillig)'
+                        . '</label>'
+                        . '<select id="f_estab_gegenstelle_id" '
+                        . 'name="estab_gegenstelle_id">'
+                        . '<option value="">— keine Gegenstelle des Plans '
+                        . '—</option>'
+                        . $counterpartMarkup
+                        . '</select>'
+                        . '<p class="estab-field-hint">Die Auswahl muss zum '
+                        . 'oben gewählten Weg gehören. Der LdF bekommt Feld 15 '
+                        . 'daraus vorbelegt.</p>';
+                }
+            }
+            echo '<label for="f_estab_eingangsweg_bemerkung">'
+                . 'Bemerkung des Fernmelders zum Eingangsweg</label>'
+                . '<textarea id="f_estab_eingangsweg_bemerkung" '
+                . 'name="estab_eingangsweg_bemerkung" maxlength="2000" '
+                . 'rows="2" '
+                . 'data-estab-incoming-route-note="fernmelder">'
+                . $this->safe_message_value('estab_eingangsweg_bemerkung')
+                . '</textarea>'
+                . '<p class="estab-field-hint">Diese Bemerkung gehört Ihnen. '
+                . 'Der LdF sieht sie, kann sie aber nicht ändern.</p>'
+                . '</fieldset>';
+        }
         if ($this->task === 'LdF-Eingang') {
             $original = (string)(
                 $this->formdata['incoming_transport_original_medium'] ?? ''
@@ -2522,7 +2702,57 @@ HTML;
                 . 'rows="2">'
                 . $this->safe_message_value(
                     'incoming_transport_correction_reason'
-                ) . '</textarea></fieldset>';
+                ) . '</textarea>';
+            /*
+             * Der eine sagt aus, der andere prueft.
+             *
+             * Die Bemerkung des Fernmelders steht hier als Text, nicht als
+             * Eingabefeld -- und zwar nicht aus Hoeflichkeit: koennte der
+             * Pruefer die Aussage umschreiben, waere die Pruefung wertlos
+             * und der Nachweis koennte nicht mehr sagen, wer was behauptet
+             * hat. Die Feldfreigabe erzwingt dasselbe noch einmal serverseitig.
+             */
+            $recordedRoute = (string)(
+                $this->formdata['fernmeldeplan_eintrag_id'] ?? ''
+            );
+            $recordedNote = trim((string)(
+                $this->formdata['estab_eingangsweg_bemerkung'] ?? ''
+            ));
+            echo '<p data-estab-incoming-route-recorded="'
+                . estab_message_html($recordedRoute)
+                . '">Vom Fernmelder benannter Weg: <strong>'
+                . estab_message_html(
+                    $this->official_message_recorded_route_text($recordedRoute)
+                )
+                . '</strong></p>';
+            if ($recordedNote !== '') {
+                echo '<p data-estab-incoming-route-note="fernmelder">'
+                    . 'Bemerkung des Fernmelders: <em>'
+                    . estab_message_html($recordedNote)
+                    . '</em></p>';
+            }
+            if (is_array($this->incomingCounterpart)) {
+                echo '<p data-estab-incoming-counterpart="fernmeldeplan">'
+                    . 'Gegenstelle laut Fernmeldeplan: <strong>'
+                    . estab_message_html(
+                        $this->incomingCounterpart['name']
+                        . ' · '
+                        . $this->incomingCounterpart['erreichbarkeit']
+                    )
+                    . '</strong> — Feld 15 ist daraus vorbelegt.</p>';
+            }
+            if ($this->activeTelecomRoutes !== []) {
+                echo '<label for="f_fernmeldeplan_eintrag_id">'
+                    . 'Weg bestätigen oder richtigstellen</label>'
+                    . '<select id="f_fernmeldeplan_eintrag_id" '
+                    . 'name="fernmeldeplan_eintrag_id">'
+                    . $this->official_message_route_options(
+                        $recordedRoute,
+                        '— kein Weg angegeben —'
+                    )
+                    . '</select>';
+            }
+            echo '</fieldset>';
         }
         if ($this->task === 'LdF-Ausgang') {
             echo '<fieldset><legend>Gültiger S6-Fernmeldeweg</legend>'
@@ -2532,29 +2762,13 @@ HTML;
                 . 'name="fernmeldeplan_eintrag_id"'
                 . ($this->activeTelecomRoutes === [] ? '' : ' required')
                 . '>'
-                . '<option value="">Bitte Fernmeldeweg auswählen</option>';
-            $selected = (string)(
-                $this->formdata['fernmeldeplan_eintrag_id'] ?? ''
-            );
-            foreach ($this->activeTelecomRoutes as $route) {
-                $parts = array_values(array_filter([
-                    trim((string)($route['betriebsstelle'] ?? '')),
-                    trim((string)($route['erreichbarkeit'] ?? '')),
-                    trim((string)($route['kanal'] ?? '')),
-                    trim((string)($route['bandlage'] ?? '')),
-                    trim((string)($route['verkehrsform'] ?? '')),
-                ], static fn(string $part): bool => $part !== ''));
-                $routeId = (string)$route['fernmeldeplan_eintrag_id'];
-                $routeLabel = 'Plan v' . (int)$route['plan_version']
-                    . ' · ' . estab_dv_telecom_medium_label(
-                        $route['medium'] ?? null
-                    )
-                    . ' · ' . implode(' · ', $parts);
-                echo '<option value="' . estab_message_html($routeId) . '"'
-                    . ($selected === $routeId ? ' selected' : '') . '>'
-                    . estab_message_html($routeLabel) . '</option>';
-            }
-            echo '</select>';
+                . $this->official_message_route_options(
+                    (string)(
+                        $this->formdata['fernmeldeplan_eintrag_id'] ?? ''
+                    ),
+                    'Bitte Fernmeldeweg auswählen'
+                )
+                . '</select>';
             if ($this->official_message_manual_disposition()) {
                 echo '<p class="estab-field-error">Kein aktuell gültiger, '
                     . 'freigegebener S6-Fernmeldeplan verfügbar.</p>'

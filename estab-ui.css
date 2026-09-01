@@ -4526,24 +4526,24 @@ form[data-estab-incident-disabled="true"]::before {
  * waeren fuenf eigene Knopfzeilen ein halber Bildschirm.
  */
 .estab-telecom-counterparts {
-  margin-block-start: 1rem;
-  padding-block-start: 0.75rem;
+  margin-block-start: var(--abstand-6);
+  padding-block-start: var(--abstand-5);
   border-block-start: 1px solid var(--linie);
 }
 
 .estab-telecom-counterpart-list {
   list-style: none;
-  margin: 0 0 0.75rem;
+  margin: 0 0 var(--abstand-5);
   padding: 0;
   display: grid;
-  gap: 0.35rem;
+  gap: var(--abstand-3);
 }
 
 .estab-telecom-counterpart-list li {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  gap: 0.75rem;
+  gap: var(--abstand-5);
   flex-wrap: wrap;
 }
 
