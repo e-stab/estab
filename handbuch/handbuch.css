@@ -1,21 +1,19 @@
-:root {
-    --handbook-ink: #172033;
-    --handbook-muted: #52647a;
-    --handbook-navy: #102641;
-    --handbook-blue: #1d4f7d;
-    --handbook-line: #c7d3df;
-    --handbook-panel: #ffffff;
-    --handbook-canvas: #edf2f7;
-    --handbook-yellow: #e5b247;
-    --handbook-danger: #a92722;
-    --handbook-success: #246b4a;
-}
+/* Das Handbuch sieht aus wie die Anwendung.
+ *
+ * Es trug eine eigene Farbwelt: eigene Grautoene, eigene Blautoene, eigene
+ * Schrift, ein Banner mit Farbverlauf. Wer aus dem Nachrichtenvordruck
+ * herueberkam, landete sichtbar in einem anderen Programm -- und musste sich
+ * neu zurechtfinden, um nachzulesen, wie das erste funktioniert.
+ *
+ * Deshalb steht hier keine einzige Farbe mehr. Die Seite traegt die Klassen
+ * der Anwendung -- estab-tool-page, estab-tool-main, estab-tool-hero,
+ * estab-tool-panel -- und bekommt von estab-ui.css Grund, Schrift, Abstaende
+ * und den Seitenkopf als eine Zeile. Was hier steht, ist nur, was ein
+ * Handbuch mehr braucht als eine Arbeitsseite: ein Inhaltsverzeichnis
+ * daneben, Kapitel, ein Glossar und eine saubere Papierausgabe.
+ */
 
 .estab-handbook-page {
-    background: var(--handbook-canvas);
-    color: var(--handbook-ink);
-    font-family: Arial, Helvetica, sans-serif;
-    margin: 0;
     min-width: 0;
 }
 
@@ -25,33 +23,24 @@
     box-sizing: border-box;
 }
 
-.estab-handbook-page a {
-    color: #145b96;
-    text-decoration-thickness: 0.09em;
-    text-underline-offset: 0.16em;
-}
-
-.estab-handbook-page a:hover {
-    color: #0b3c66;
-}
-
 .estab-handbook-page a:focus-visible,
 .estab-handbook-page button:focus-visible,
 .estab-handbook-page input:focus-visible,
 .estab-handbook-page summary:focus-visible,
 .estab-handbook-page [tabindex="0"]:focus-visible {
-    outline: 3px solid #1672c4;
+    outline: 3px solid var(--handlung-kante);
     outline-offset: 3px;
 }
 
+/* Der Sprungverweis ist fuer die Tastatur da und sonst unsichtbar. */
 .estab-handbook-skip {
-    background: #ffffff;
-    border: 3px solid #1672c4;
-    border-radius: 0 0 0.45rem 0;
-    color: var(--handbook-navy);
-    font-weight: 800;
+    background: var(--grund-tafel);
+    border: 2px solid var(--handlung-kante);
+    border-radius: 0 0 var(--radius-3) 0;
+    color: var(--handlung-dunkel);
+    font-weight: var(--stark-voll);
     left: 0;
-    padding: 0.8rem 1rem;
+    padding: var(--abstand-5) var(--abstand-6);
     position: fixed;
     top: 0;
     transform: translateY(-130%);
@@ -63,260 +52,91 @@
     transform: translateY(0);
 }
 
-/* Der Kopf ist eine Zeile, kein Banner.
-
-   Hier stand ein Farbverlauf mit einem dekorativen Kreis, einem Titel in bis
-   zu 4.8rem und einem Werbesatz darunter. Auf einem Bildschirm mit 768
-   Bildpunkten Hoehe -- dem ueblichen Laptop in einer Fuehrungsstelle -- nahm
-   das 528 Bildpunkte ein, 69 Prozent. Wer das Handbuch oeffnete, sah einen
-   Banner und musste scrollen, um den ersten Satz zu lesen.
-
-   GES-SEITENKOPF verlangt fuer jede Seite dasselbe: Bereichsmarke, Titel,
-   Unterlinie. Das Handbuch hatte sich davon ausgenommen, weil es eigene
-   Klassennamen traegt. */
+/* Der Kopf ist eine Zeile.
+ *
+ * Flaeche, Schatten, Titelgroesse und Unterlinie kommen aus der
+ * Kopfzeilenregel von estab-ui.css, die fuer .estab-tool-hero gilt. Hier
+ * steht nur, was das Handbuch zusaetzlich braucht: ein Rand nach aussen,
+ * weil der Kopf ausserhalb von .estab-tool-main sitzt. */
 .estab-handbook-hero {
-    background: none;
-    border-bottom: 1px solid var(--linie-kraeftig);
-    box-shadow: none;
-    color: var(--tinte);
-}
-
-.estab-handbook-hero-inner {
-    align-items: baseline;
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--abstand-4);
     margin: 0 auto;
-    max-width: 92rem;
-    padding: var(--abstand-3) var(--abstand-5);
-}
-
-.estab-handbook-eyebrow {
-    color: var(--tinte-neben);
-    font-size: var(--schrift-1);
-    font-weight: 800;
-    letter-spacing: 0.11em;
-    margin: 0 0 0.55rem;
-    text-transform: uppercase;
-}
-
-.estab-handbook-hero h1 {
-    font-size: var(--schrift-6);
-    line-height: 1.2;
-    margin: 0;
-}
-
-.estab-handbook-hero h1 span {
-    white-space: nowrap;
-}
-
-/* Der Satz bleibt im Markup -- er wird vorgelesen und beschreibt, was das
-   Handbuch ist. Sichtbar kostet er nur Hoehe: Wer die Seite geoeffnet hat,
-   weiss, dass er im Handbuch ist. */
-.estab-handbook-lead {
-    display: none;
-}
-
-.estab-handbook-meta {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--abstand-2);
-    margin: 0;
-}
-
-.estab-handbook-meta span {
-    color: var(--tinte-neben);
-    font-size: var(--schrift-1);
-    font-weight: 700;
-}
-
-.estab-handbook-hero-actions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--abstand-2);
-    margin: 0;
-    margin-left: auto;
-}
-
-.estab-handbook-hero-actions a {
-    align-items: center;
-    border: 1px solid var(--rand-bedienelement);
-    border-radius: var(--radius-2);
-    display: inline-flex;
-    font-size: var(--schrift-2);
-    font-weight: 700;
-    justify-content: center;
-    min-height: 1.75rem;
-    padding: 0 var(--abstand-3);
-    text-decoration: none;
-}
-
-.estab-handbook-primary-action {
-    background: var(--handlung);
-    border-color: var(--handlung) !important;
-    color: var(--tinte-spalte) !important;
-}
-
-.estab-handbook-secondary-action {
-    background: var(--grund-tafel);
-    color: var(--handlung-dunkel) !important;
-}
-
-.estab-handbook-hero-actions a:hover,
-.estab-handbook-hero-actions a:focus-visible {
-    background: var(--handlung-sanft);
+    max-width: 90rem;
+    padding: var(--abstand-6) var(--abstand-6) var(--abstand-3);
 }
 
 .estab-handbook-main {
-    margin: 0 auto;
-    max-width: 92rem;
-    padding: 2rem clamp(1rem, 3vw, 2rem) 4rem;
+    padding-top: var(--abstand-6);
 }
 
-.estab-handbook-search,
-.estab-handbook-role-entry {
-    background: var(--handbook-panel);
-    border: 1px solid var(--handbook-line);
-    border-radius: 0.8rem;
-    box-shadow: 0 0.45rem 1.5rem rgba(16, 38, 65, 0.08);
-    margin-bottom: 1.25rem;
-    padding: clamp(1.1rem, 3vw, 1.7rem);
-}
+/* --- Suche ------------------------------------------------------------ */
 
-.estab-handbook-search {
-    align-items: end;
-    display: grid;
-    gap: 1.4rem;
-    grid-template-columns: minmax(0, 0.8fr) minmax(18rem, 1.2fr);
-}
-
-.estab-handbook-search h2,
-.estab-handbook-role-entry h2 {
-    color: var(--handbook-navy);
-    font-size: clamp(1.35rem, 3vw, 1.8rem);
-    margin: 0;
-}
-
-.estab-handbook-search p,
-.estab-handbook-role-entry p {
-    color: var(--handbook-muted);
-    line-height: 1.5;
-    margin: 0.5rem 0 0;
+.estab-handbook-search h2 {
+    font-size: var(--schrift-5);
 }
 
 .estab-handbook-search-control label {
     display: block;
-    font-size: 0.88rem;
-    font-weight: 800;
-    margin-bottom: 0.35rem;
+    font-weight: var(--stark-halb);
+    margin-bottom: var(--abstand-3);
 }
 
 .estab-handbook-search-row {
-    display: grid;
-    gap: 0.55rem;
-    grid-template-columns: minmax(0, 1fr) auto;
-}
-
-.estab-handbook-search-row input,
-.estab-handbook-search-row button {
-    border: 2px solid #6c8299;
-    border-radius: 0.42rem;
-    font: inherit;
-    min-height: 3rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--abstand-4);
 }
 
 .estab-handbook-search-row input {
-    background: #ffffff;
-    color: var(--handbook-ink);
-    padding: 0.65rem 0.8rem;
-    width: 100%;
-}
-
-.estab-handbook-search-row input::placeholder {
-    color: #617184;
+    flex: 1 1 18rem;
+    min-width: 0;
 }
 
 .estab-handbook-search-row button {
-    background: #e7edf4;
-    color: var(--handbook-navy);
+    background: var(--grund-tafel);
+    border: 1px solid var(--rand-bedienelement);
+    border-radius: var(--radius-2);
+    color: var(--handlung-dunkel);
     cursor: pointer;
-    font-weight: 800;
-    padding: 0.55rem 0.85rem;
+    font: inherit;
+    padding: var(--abstand-3) var(--abstand-6);
 }
 
+.estab-handbook-search-row button:hover {
+    background: var(--handlung-sanft);
+}
+
+.estab-handbook-search-hint,
 .estab-handbook-search-status {
-    font-size: 0.84rem;
-    min-height: 1.25rem;
+    color: var(--tinte-neben);
+    font-size: var(--schrift-2);
+    margin: var(--abstand-4) 0 0;
 }
 
-.estab-handbook-role-entry header {
-    margin-bottom: 1rem;
-}
-
-.estab-handbook-role-grid {
-    display: grid;
-    gap: 0.7rem;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-
-.estab-handbook-role-grid a {
-    background: #f4f7fa;
-    border: 1px solid var(--handbook-line);
-    border-left: 5px solid var(--handbook-blue);
-    border-radius: 0.45rem;
-    color: var(--handbook-ink);
-    display: grid;
-    gap: 0.25rem;
-    min-height: 5.3rem;
-    padding: 0.85rem;
-    text-decoration: none;
-}
-
-.estab-handbook-role-grid a:hover,
-.estab-handbook-role-grid a:focus-visible {
-    background: #eaf3fb;
-    border-left-color: var(--handbook-yellow);
-}
-
-.estab-handbook-role-grid span {
-    color: var(--handbook-muted);
-    font-size: 0.86rem;
-    line-height: 1.35;
-}
+/* --- Aufteilung: Inhalt daneben, Kapitel daneben ---------------------- */
 
 .estab-handbook-layout {
-    align-items: start;
     display: grid;
-    gap: 1.4rem;
-    grid-template-columns: minmax(14rem, 17rem) minmax(0, 1fr);
-    margin-top: 1.6rem;
+    gap: var(--abstand-7);
+    grid-template-columns: 15rem minmax(0, 1fr);
+    align-items: start;
 }
 
 .estab-handbook-toc {
-    align-self: start;
+    background: var(--grund-tafel);
+    border: 1px solid var(--linie);
+    border-radius: var(--radius-3);
     position: sticky;
-    top: 7.2rem;
-}
-
-.estab-handbook-toc details {
-    background: var(--handbook-navy);
-    border: 1px solid #315270;
-    border-radius: 0.7rem;
-    color: #ffffff;
-    overflow: hidden;
+    top: var(--abstand-6);
 }
 
 .estab-handbook-toc summary {
     cursor: pointer;
-    font-size: 1rem;
-    font-weight: 800;
-    min-height: 2.9rem;
-    padding: 0.8rem 0.9rem;
+    font-weight: var(--stark-voll);
+    padding: var(--abstand-5) var(--abstand-6);
 }
 
 .estab-handbook-toc nav {
-    border-top: 1px solid #45627f;
-    padding: 0.35rem;
+    padding: 0 var(--abstand-6) var(--abstand-5);
 }
 
 .estab-handbook-toc ol {
@@ -325,444 +145,350 @@
     padding: 0;
 }
 
-.estab-handbook-toc li[hidden] {
-    display: none;
+.estab-handbook-toc li + li {
+    margin-top: var(--abstand-2);
 }
 
 .estab-handbook-toc a {
-    border-left: 4px solid transparent;
-    border-radius: 0.25rem;
-    color: #e7eef6;
     display: block;
-    font-size: 0.86rem;
-    font-weight: 700;
-    line-height: 1.25;
-    min-height: 2.25rem;
-    padding: 0.52rem 0.55rem;
-    text-decoration: none;
+    font-size: var(--schrift-3);
+    padding: var(--abstand-2) 0;
 }
 
-.estab-handbook-toc a:hover,
-.estab-handbook-toc a:focus-visible {
-    background: #294b70;
-    border-left-color: var(--handbook-yellow);
-    color: #ffffff;
+/* Die Gruppen sind die einzige Ordnung im Inhaltsverzeichnis. Ohne sie
+   stehen einundzwanzig Zeilen untereinander, und man liest sie alle. */
+.estab-handbook-toc-group {
+    border-top: 1px solid var(--linie);
+    color: var(--tinte-neben);
+    display: block;
+    font-size: var(--schrift-1);
+    font-weight: var(--stark-voll);
+    letter-spacing: 0.08em;
+    margin-top: var(--abstand-5);
+    padding-top: var(--abstand-4);
+    text-transform: uppercase;
+}
+
+.estab-handbook-toc li:first-child .estab-handbook-toc-group {
+    border-top: 0;
+    margin-top: 0;
+    padding-top: 0;
 }
 
 .estab-handbook-chapters {
     display: grid;
-    gap: 1.15rem;
-    min-width: 0;
+    gap: var(--abstand-6);
+    grid-template-columns: minmax(0, 1fr);
 }
 
-.estab-handbook-no-results {
-    background: #fff8e7;
-    border: 2px solid #c28b19;
-    border-radius: 0.6rem;
-    color: #4a350c;
-    font-weight: 700;
-    margin: 0;
-    padding: 1rem;
-}
+/* --- Kapitel ---------------------------------------------------------- */
 
 .estab-handbook-chapter {
-    background: var(--handbook-panel);
-    border: 1px solid var(--handbook-line);
-    border-radius: 0.75rem;
-    box-shadow: 0 0.35rem 1.2rem rgba(16, 38, 65, 0.06);
-    line-height: 1.6;
-    min-width: 0;
-    padding: clamp(1.15rem, 3vw, 2rem);
-    scroll-margin-top: 7.5rem;
+    background: var(--grund-tafel);
+    border: 1px solid var(--linie);
+    border-radius: var(--radius-3);
+    box-shadow: var(--schatten-tafel);
+    padding: var(--abstand-7);
 }
 
 .estab-handbook-chapter[hidden] {
     display: none;
 }
 
-/* Fliesstext auf 34rem. Eine Zeile ueber neunzig Zeichen verliert beim
-   Ruecksprung ihren Anfang -- man liest dieselbe Zeile zweimal und merkt es
-   erst am dritten Wort. Die Kapitel selbst bleiben so breit wie die Spalte,
-   damit Tabellen und Aufzaehlungen darin Platz haben. */
-.estab-handbook-chapter p {
-    max-width: 34rem;
-}
-
 .estab-handbook-chapter > header {
-    align-items: start;
-    border-bottom: 1px solid #d5dee7;
-    display: grid;
-    gap: 0.9rem;
-    grid-template-columns: auto 1fr;
-    margin-bottom: 1rem;
-    padding-bottom: 0.9rem;
+    align-items: baseline;
+    border-bottom: 1px solid var(--linie);
+    display: flex;
+    gap: var(--abstand-5);
+    margin-bottom: var(--abstand-6);
+    padding-bottom: var(--abstand-4);
 }
 
 .estab-handbook-chapter > header > span {
-    align-items: center;
-    background: var(--handbook-yellow);
-    border-radius: 0.35rem;
-    color: var(--handbook-navy);
-    display: inline-flex;
-    font-size: 0.9rem;
-    font-weight: 900;
-    height: 2.5rem;
-    justify-content: center;
-    width: 2.8rem;
-}
-
-.estab-handbook-chapter > header p {
-    color: var(--handbook-muted);
-    font-size: 0.78rem;
-    font-weight: 800;
-    letter-spacing: 0.05em;
-    margin: 0 0 0.2rem;
-    text-transform: uppercase;
+    color: var(--tinte-neben);
+    font-size: var(--schrift-5);
+    font-weight: var(--stark-voll);
+    min-width: 1.5rem;
 }
 
 .estab-handbook-chapter h2 {
-    color: var(--handbook-navy);
-    font-size: clamp(1.45rem, 3vw, 2rem);
-    line-height: 1.15;
+    color: var(--handlung-dunkel);
+    font-size: var(--schrift-6);
+    line-height: var(--zeile-6);
     margin: 0;
 }
 
 .estab-handbook-chapter h3 {
-    color: #173e66;
-    font-size: 1.18rem;
-    margin: 1.4rem 0 0.55rem;
+    font-size: var(--schrift-5);
+    margin: var(--abstand-7) 0 var(--abstand-4);
 }
 
-.estab-handbook-chapter p {
-    margin: 0.75rem 0;
+/* Eine Zeile ueber neunzig Zeichen verliert beim Ruecksprung ihren Anfang. */
+.estab-handbook-chapter p,
+.estab-handbook-chapter li {
+    max-width: 34rem;
+    overflow-wrap: anywhere;
 }
 
 .estab-handbook-chapter ul,
 .estab-handbook-chapter ol {
-    padding-left: 1.35rem;
+    margin: 0 0 var(--abstand-6);
+    padding-left: var(--abstand-7);
 }
 
-.estab-handbook-chapter li {
-    margin: 0.45rem 0;
-}
-
-.estab-handbook-callout {
-    background: #eef6fd;
-    border-left: 5px solid #2875ae;
-    border-radius: 0.35rem;
-    margin: 1rem 0;
-    padding: 0.85rem 1rem;
-}
-
-.estab-handbook-callout strong {
-    color: var(--handbook-navy);
-    display: block;
-    font-size: 1rem;
-}
-
-.estab-handbook-callout p {
-    margin: 0.3rem 0 0;
-}
-
-.estab-handbook-callout-important {
-    background: #fff8e7;
-    border-left-color: #c28b19;
-}
-
-.estab-handbook-callout-danger {
-    background: #fff0ef;
-    border-left-color: var(--handbook-danger);
+.estab-handbook-chapter li + li {
+    margin-top: var(--abstand-4);
 }
 
 .estab-handbook-steps {
-    counter-reset: handbook-step;
+    counter-reset: handbuch-schritt;
     list-style: none;
-    margin: 1rem 0;
-    padding: 0 !important;
+    padding-left: 0;
 }
 
-.estab-handbook-steps li {
-    border-left: 3px solid #adc2d5;
-    margin: 0 0 0.6rem;
-    min-height: 3rem;
-    padding: 0.35rem 0 0.65rem 3.25rem;
+.estab-handbook-steps > li {
+    counter-increment: handbuch-schritt;
+    padding-left: var(--abstand-7);
     position: relative;
 }
 
-.estab-handbook-steps li::before {
-    align-items: center;
-    background: var(--handbook-blue);
-    border-radius: 50%;
-    color: #ffffff;
-    content: counter(handbook-step);
-    counter-increment: handbook-step;
-    display: flex;
-    font-weight: 900;
-    height: 2.2rem;
-    justify-content: center;
-    left: 0.45rem;
+.estab-handbook-steps > li::before {
+    color: var(--handlung-dunkel);
+    content: counter(handbuch-schritt) ".";
+    font-weight: var(--stark-voll);
+    left: 0;
     position: absolute;
-    top: 0.1rem;
-    width: 2.2rem;
 }
 
-.estab-handbook-table-wrap {
-    border: 1px solid var(--handbook-line);
-    border-radius: 0.45rem;
-    margin: 1rem 0;
-    max-width: 100%;
+.estab-handbook-chapter code {
+    background: var(--grund-gedaempft);
+    border-radius: var(--radius-1);
+    font-size: 0.95em;
+    padding: 0 var(--abstand-2);
 }
 
-.estab-handbook-table-wrap table {
-    border-collapse: collapse;
-    table-layout: fixed;
-    width: 100%;
+.estab-handbook-chapter pre {
+    background: var(--grund-gedaempft);
+    border: 1px solid var(--linie);
+    border-radius: var(--radius-2);
+    margin: 0 0 var(--abstand-6);
+    overflow-x: auto;
+    padding: var(--abstand-5);
 }
 
-.estab-handbook-table-wrap th,
-.estab-handbook-table-wrap td {
-    border-bottom: 1px solid #d5dee7;
-    overflow-wrap: anywhere;
-    padding: 0.7rem;
-    text-align: left;
-    vertical-align: top;
+.estab-handbook-chapter pre code {
+    background: none;
+    padding: 0;
 }
 
-.estab-handbook-table-wrap th {
-    background: #dce7f1;
-    color: var(--handbook-navy);
+/* --- Kaesten ---------------------------------------------------------- */
+
+.estab-handbook-callout {
+    background: var(--hinweis-flaeche);
+    border-left: 4px solid var(--hinweis-kante);
+    border-radius: var(--radius-2);
+    color: var(--hinweis-tinte);
+    margin: 0 0 var(--abstand-6);
+    max-width: 40rem;
+    padding: var(--abstand-5) var(--abstand-6);
 }
 
-.estab-handbook-table-wrap tr:last-child td {
-    border-bottom: 0;
+.estab-handbook-callout strong {
+    display: block;
+    margin-bottom: var(--abstand-3);
 }
 
-.estab-handbook-table-wrap th:first-child,
-.estab-handbook-table-wrap td:first-child {
-    width: 29%;
+.estab-handbook-callout p {
+    color: var(--tinte);
+    margin: 0;
 }
 
-.estab-handbook-workflow {
-    background: #f6f8fb;
-    border: 1px solid #cfdae5;
-    border-radius: 0.55rem;
-    margin: 1rem 0;
-    padding: 0 1rem 0.7rem;
+.estab-handbook-callout-important {
+    background: var(--achtung-flaeche);
+    border-left-color: var(--achtung-kante);
+    color: var(--achtung-tinte);
 }
 
-.estab-handbook-workflow ol {
-    margin-bottom: 0.4rem;
+.estab-handbook-callout-danger {
+    background: var(--fehler-flaeche);
+    border-left-color: var(--fehler-kante);
+    color: var(--fehler-tinte);
 }
 
-.estab-handbook-flow-summary {
-    align-items: center;
-    background: var(--handbook-navy);
-    border-radius: 0.5rem;
-    color: #ffffff;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.45rem;
-    margin-top: 1rem;
-    padding: 0.85rem;
-}
-
-.estab-handbook-flow-summary span {
-    background: #294b70;
-    border-radius: 999px;
-    font-size: 0.82rem;
-    font-weight: 700;
-    padding: 0.35rem 0.6rem;
-}
-
-.estab-handbook-flow-summary b {
-    color: var(--handbook-yellow);
-}
-
-.estab-handbook-facts {
+.estab-handbook-facts,
+.estab-handbook-compare,
+.estab-handbook-admin-grid {
     display: grid;
-    gap: 0.7rem;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    margin: 1rem 0;
+    gap: var(--abstand-5);
+    grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+    margin: 0 0 var(--abstand-6);
 }
 
-.estab-handbook-facts > div {
-    background: #f5f8fb;
-    border: 1px solid #d2dde7;
-    border-radius: 0.4rem;
-    display: grid;
-    gap: 0.25rem;
-    padding: 0.8rem;
+.estab-handbook-facts > div,
+.estab-handbook-compare > section,
+.estab-handbook-admin-grid > a {
+    background: var(--grund-seite);
+    border: 1px solid var(--linie);
+    border-radius: var(--radius-2);
+    padding: var(--abstand-5);
 }
 
-.estab-handbook-facts strong {
-    color: var(--handbook-navy);
+.estab-handbook-facts strong,
+.estab-handbook-admin-grid strong {
+    display: block;
+    margin-bottom: var(--abstand-3);
 }
 
-.estab-handbook-facts span {
-    color: var(--handbook-muted);
-    font-size: 0.9rem;
+.estab-handbook-facts span,
+.estab-handbook-admin-grid span {
+    color: var(--tinte-neben);
+    display: block;
+    font-size: var(--schrift-3);
 }
 
-.estab-handbook-compare {
-    display: grid;
-    gap: 0.85rem;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    margin: 1rem 0;
+.estab-handbook-admin-grid > a {
+    display: block;
+    text-decoration: none;
 }
 
-.estab-handbook-compare section {
-    background: #f4f8fc;
-    border: 1px solid #cbd9e6;
-    border-radius: 0.55rem;
-    display: flex;
-    flex-direction: column;
-    padding: 1rem;
+.estab-handbook-admin-grid > a:hover {
+    background: var(--handlung-sanft);
+}
+
+.estab-handbook-admin-grid strong {
+    text-decoration: underline;
 }
 
 .estab-handbook-compare h3 {
     margin-top: 0;
 }
 
-.estab-handbook-compare a {
-    align-self: flex-start;
-    font-weight: 800;
-    margin-top: auto;
+.estab-handbook-flow-summary {
+    align-items: center;
+    background: var(--grund-seite);
+    border: 1px solid var(--linie);
+    border-radius: var(--radius-2);
+    display: flex;
+    flex-wrap: wrap;
+    font-size: var(--schrift-3);
+    gap: var(--abstand-3);
+    margin: 0 0 var(--abstand-6);
+    padding: var(--abstand-5);
 }
 
-.estab-handbook-admin-grid {
-    display: grid;
-    gap: 0.65rem;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    margin: 1rem 0;
+.estab-handbook-flow-summary b {
+    color: var(--tinte-neben);
 }
 
-.estab-handbook-admin-grid a {
-    background: #f6f8fb;
-    border: 1px solid #cbd7e2;
-    border-radius: 0.42rem;
-    color: var(--handbook-ink);
-    display: grid;
-    gap: 0.25rem;
-    min-height: 6.5rem;
-    padding: 0.8rem;
-    text-decoration: none;
+/* --- Tabelle, Glossar, Fehlerliste ------------------------------------ */
+
+.estab-handbook-table-wrap {
+    border: 1px solid var(--linie);
+    border-radius: var(--radius-2);
+    margin: 0 0 var(--abstand-6);
+    overflow-x: auto;
 }
 
-.estab-handbook-admin-grid a:hover,
-.estab-handbook-admin-grid a:focus-visible {
-    background: #eaf3fb;
-    border-color: #4d789e;
+/* Die Tabelle rollt in ihrem eigenen Kasten, nicht die Seite. 26rem ist die
+   Breite, unter der die zweite Spalte zu Wortsalat wird -- darueber passt
+   sie in die Kapitelspalte, ohne dass jemand schieben muss. */
+.estab-handbook-table-wrap table {
+    border-collapse: collapse;
+    min-width: 26rem;
+    width: 100%;
 }
 
-.estab-handbook-admin-grid span {
-    color: var(--handbook-muted);
-    font-size: 0.84rem;
+.estab-handbook-table-wrap th,
+.estab-handbook-table-wrap td {
+    border-bottom: 1px solid var(--linie);
+    padding: var(--abstand-4) var(--abstand-5);
+    text-align: left;
+    vertical-align: top;
 }
 
-.estab-handbook-chapter pre {
-    background: #0d1d30;
-    border-radius: 0.45rem;
-    color: #f2f7fb;
-    font-size: 0.86rem;
-    line-height: 1.55;
-    margin: 1rem 0;
-    overflow-wrap: anywhere;
-    padding: 1rem;
-    white-space: pre-wrap;
+.estab-handbook-table-wrap th {
+    background: var(--grund-gedaempft);
+    font-size: var(--schrift-2);
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
 }
 
-.estab-handbook-chapter :not(pre) > code {
-    background: #e9eef4;
-    border-radius: 0.2rem;
-    color: #172f4d;
-    overflow-wrap: anywhere;
-    padding: 0.1rem 0.24rem;
-}
-
-.estab-handbook-troubleshooting {
-    display: grid;
-    gap: 0.55rem;
-    margin: 1rem 0;
-}
-
-.estab-handbook-troubleshooting details {
-    background: #f7f9fb;
-    border: 1px solid #cbd7e2;
-    border-radius: 0.45rem;
-}
-
-.estab-handbook-troubleshooting summary {
-    color: var(--handbook-navy);
-    cursor: pointer;
-    font-weight: 800;
-    min-height: 3rem;
-    padding: 0.75rem 0.9rem;
-}
-
-.estab-handbook-troubleshooting details[open] summary {
-    border-bottom: 1px solid #d5dee7;
-}
-
-.estab-handbook-troubleshooting p {
-    margin: 0;
-    padding: 0.85rem 0.9rem;
+.estab-handbook-table-wrap tr:last-child td {
+    border-bottom: 0;
 }
 
 .estab-handbook-glossary {
     display: grid;
-    gap: 0;
-    margin: 1rem 0;
+    gap: var(--abstand-4);
+    margin: 0 0 var(--abstand-6);
 }
 
 .estab-handbook-glossary > div {
-    border-bottom: 1px solid #d6e0e9;
-    display: grid;
-    gap: 0.8rem;
-    grid-template-columns: minmax(7rem, 10rem) minmax(0, 1fr);
-    padding: 0.7rem 0;
+    border-left: 3px solid var(--linie-kraeftig);
+    padding-left: var(--abstand-5);
 }
 
 .estab-handbook-glossary dt {
-    color: var(--handbook-navy);
-    font-weight: 800;
+    font-weight: var(--stark-voll);
 }
 
 .estab-handbook-glossary dd {
+    color: var(--tinte-neben);
+    margin: var(--abstand-2) 0 0;
+    max-width: 34rem;
+}
+
+.estab-handbook-troubleshooting {
+    display: grid;
+    gap: var(--abstand-4);
+    margin-bottom: var(--abstand-6);
+}
+
+.estab-handbook-troubleshooting details {
+    background: var(--grund-seite);
+    border: 1px solid var(--linie);
+    border-radius: var(--radius-2);
+}
+
+.estab-handbook-troubleshooting summary {
+    cursor: pointer;
+    font-weight: var(--stark-halb);
+    padding: var(--abstand-4) var(--abstand-5);
+}
+
+.estab-handbook-troubleshooting details > * {
+    max-width: 40rem;
+}
+
+.estab-handbook-troubleshooting details > p {
     margin: 0;
+    padding: 0 var(--abstand-5) var(--abstand-5);
+}
+
+.estab-handbook-no-results {
+    background: var(--achtung-flaeche);
+    border: 1px solid var(--achtung-kante);
+    border-radius: var(--radius-2);
+    color: var(--achtung-tinte);
+    padding: var(--abstand-5) var(--abstand-6);
 }
 
 .estab-handbook-footer {
-    background: var(--handbook-navy);
-    border-top: 4px solid var(--handbook-yellow);
-    color: #dce8f4;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.8rem 2rem;
-    justify-content: space-between;
-    padding: 1.25rem max(1rem, calc((100vw - 88rem) / 2));
+    border-top: 1px solid var(--linie);
+    color: var(--tinte-neben);
+    font-size: var(--schrift-2);
+    margin: 0 auto;
+    max-width: 90rem;
+    padding: var(--abstand-6);
 }
 
 .estab-handbook-footer p {
-    margin: 0;
+    margin: 0 0 var(--abstand-2);
 }
 
-.estab-handbook-footer a {
-    color: #ffffff;
-}
+/* --- Schmale Bildschirme ---------------------------------------------- */
 
 @media (max-width: 64rem) {
-    .estab-handbook-role-grid,
-    .estab-handbook-admin-grid {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-
-    .estab-handbook-layout {
-        grid-template-columns: minmax(12.5rem, 14rem) minmax(0, 1fr);
-    }
-}
-
-@media (max-width: 48rem) {
-    .estab-handbook-search,
     .estab-handbook-layout {
         grid-template-columns: minmax(0, 1fr);
     }
@@ -771,79 +497,47 @@
         position: static;
     }
 
-    .estab-handbook-toc nav {
-        padding: 0.45rem;
-    }
-
+    /* Einundzwanzig Zeilen untereinander schoeben das erste Kapitel unter
+       den Rand. Nebeneinander bleibt das Verzeichnis eine Uebersicht. */
     .estab-handbook-toc ol {
-        display: grid;
-        gap: 0.15rem;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
+        columns: 2;
+        column-gap: var(--abstand-7);
     }
 
-    .estab-handbook-role-grid,
-    .estab-handbook-admin-grid,
-    .estab-handbook-facts,
-    .estab-handbook-compare {
-        grid-template-columns: minmax(0, 1fr);
+    .estab-handbook-toc li {
+        break-inside: avoid;
+    }
+}
+
+@media (max-width: 48rem) {
+    .estab-handbook-hero {
+        padding: var(--abstand-5) var(--abstand-5) var(--abstand-3);
     }
 
-    .estab-handbook-admin-grid a {
-        min-height: 0;
+    .estab-handbook-meta {
+        margin-left: 0;
+    }
+
+    .estab-handbook-chapter {
+        padding: var(--abstand-6);
     }
 }
 
 @media (max-width: 32rem) {
-    .estab-handbook-main {
-        padding-left: 0.7rem;
-        padding-right: 0.7rem;
+    .estab-handbook-toc ol {
+        columns: 1;
     }
 
-    .estab-handbook-search-row,
-    .estab-handbook-toc ol,
-    .estab-handbook-glossary > div {
-        grid-template-columns: minmax(0, 1fr);
+    .estab-handbook-chapter > header {
+        gap: var(--abstand-4);
+    }
+
+    .estab-handbook-chapter pre {
+        font-size: var(--schrift-2);
     }
 
     .estab-handbook-search-row button {
         width: 100%;
-    }
-
-    .estab-handbook-chapter {
-        border-radius: 0.55rem;
-        padding: 1rem;
-    }
-
-    .estab-handbook-chapter > header {
-        gap: 0.65rem;
-    }
-
-    .estab-handbook-table-wrap table,
-    .estab-handbook-table-wrap thead,
-    .estab-handbook-table-wrap tbody,
-    .estab-handbook-table-wrap tr,
-    .estab-handbook-table-wrap th,
-    .estab-handbook-table-wrap td {
-        display: block;
-        width: 100% !important;
-    }
-
-    .estab-handbook-table-wrap thead {
-        position: static;
-    }
-
-    .estab-handbook-table-wrap th,
-    .estab-handbook-table-wrap td {
-        border-bottom: 1px solid #d5dee7;
-    }
-
-    .estab-handbook-table-wrap th:not(:first-child) {
-        border-top: 1px solid #bdcbd8;
-    }
-
-    .estab-handbook-table-wrap tr + tr td:first-child {
-        background: #eef3f7;
-        font-weight: 800;
     }
 }
 
@@ -853,63 +547,33 @@
     }
 }
 
+/* --- Papier ------------------------------------------------------------ */
+
 @media print {
-    .estab-session-bar,
     .estab-handbook-skip,
     .estab-handbook-search,
-    .estab-handbook-role-entry,
     .estab-handbook-toc,
-    .estab-handbook-hero-actions,
-    .estab-handbook-footer {
+    .estab-session-bar,
+    .estab-navigation {
         display: none !important;
     }
 
-    .estab-handbook-page,
-    .estab-handbook-main {
-        background: #ffffff;
-        color: #000000;
-    }
-
-    .estab-handbook-hero {
-        background: #ffffff;
-        border-bottom: 2px solid #000000;
-        color: #000000;
-    }
-
-    .estab-handbook-hero-inner {
-        padding: 0 0 1rem;
-    }
-
-    .estab-handbook-lead,
-    .estab-handbook-meta span {
-        color: #000000;
-    }
-
-    .estab-handbook-meta span {
-        border-color: #666666;
-    }
-
-    .estab-handbook-main {
-        max-width: none;
-        padding: 1rem 0;
-    }
-
-    .estab-handbook-layout {
-        display: block;
+    .estab-handbook-page {
+        background: var(--grund-tafel);
     }
 
     .estab-handbook-chapter {
         border: 0;
         box-shadow: none;
         break-inside: avoid;
-        padding: 1rem 0;
+        padding: 0 0 var(--abstand-7);
     }
 
     .estab-handbook-troubleshooting details {
         break-inside: avoid;
     }
 
-    .estab-handbook-troubleshooting details > * {
+    .estab-handbook-troubleshooting details > p {
         display: block;
     }
 }

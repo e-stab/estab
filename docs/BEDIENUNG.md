@@ -133,7 +133,8 @@ Einsatz begrenzt.
 Je Einsatz existiert genau ein ETB und ein TTB.
 
 - ETB schreiben `ETB/Stab` oder `S2/Stab`.
-- TTB schreiben Fernmelder.
+- TTB schreibt der LdF. Er leitet den Fernmeldebetrieb, den das Buch
+  beschreibt.
 - Gespeicherte Zeilen werden nicht geändert oder gelöscht.
 - Eine Korrektur ist ein neuer Eintrag mit Bezug auf die ursprüngliche Zeile.
 - Nachrichteneingänge erscheinen im TTB bei der Aufnahme.
@@ -144,6 +145,12 @@ Je Einsatz existiert genau ein ETB und ein TTB.
 Eigener Bereich unter `/4fach/fuehrungsstelle.php`. Die Melderaufträge stehen
 daneben, nicht darunter: Der Plan ist eine Unterlage, die tagelang gilt; ein
 Melderauftrag ist ein einzelner Botengang.
+
+Der Plan hält die eigenen Kommunikationsmittel fest, nicht fremde Stellen.
+Er besteht aus Kopf, Wegen, Gegenstellen je Weg und den Nebenstellen der
+eigenen Führungsstelle. Aus denselben Daten zeichnet eStab die
+Kommunikationsskizze nach Fb Fü 77: eigene Führungsstelle in der Mitte,
+übergeordnete Stellen links, untergeordnete rechts.
 
 S6 legt einen Planentwurf mit Gültigkeitszeitraum und mindestens einem Weg an.
 Je nach Medium werden nur passende Felder angezeigt. Ein Entwurf wird

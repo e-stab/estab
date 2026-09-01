@@ -3,30 +3,31 @@
 declare(strict_types=1);
 
 /**
- * Das Handbuch bekommt die Hülle -- und behält jedes Wort.
+ * Das Handbuch traegt die Gestaltung der Anwendung -- und jedes Wort zaehlt.
  *
- * > „Das Handbuch ist immer noch eine Katastrophe."
+ * > „Das Handbuch ist echt fragwuerdig. Es soll kein Marketingmaterial sein.
+ * > Es soll sachlich in einfacher Sprache die Bedienung erklaeren."
  *
- * Der Befund ist messbar: Auf einem Bildschirm mit 768 Bildpunkten Höhe --
- * der übliche Laptop in einer Führungsstelle -- nahm der Kopf des Handbuchs
- * 528 davon ein, 69 Prozent. Wer es öffnete, sah einen Werbebanner mit einem
- * dekorativen Kreis und musste scrollen, um den ersten Satz zu lesen.
+ * Zwei Befunde standen dahinter. Der erste war messbar: Das Handbuch trug
+ * eine eigene Farbwelt, eine eigene Schrift und einen Banner mit Farbverlauf.
+ * Wer aus dem Nachrichtenvordruck herueberkam, landete sichtbar in einem
+ * anderen Programm. Der zweite war der Ton: „In 5 Minuten startklar",
+ * „Oeffentlich und offline verfuegbar", „Verantwortung statt blosser
+ * Menuefreigabe" -- neunzehn Kapitel mit je einem Werbesatz ueber der
+ * Ueberschrift.
  *
- * `GES-SEITENKOPF` verlangt für jede Seite dasselbe: eine Zeile mit
- * Bereichsmarke und Titel, keine Fläche, keinen Schatten, eine Unterlinie.
- * Das Handbuch hatte sich davon ausgenommen, weil es eigene Klassennamen
- * trägt und der Wächter sie nicht kennt.
+ * Jetzt traegt die Seite die Klassen der Anwendung, und der Text sagt in
+ * kurzen Saetzen, welchen Knopf man drueckt und was danach passiert.
  *
  * ## Warum die Wortzahl hier steht
  *
- * Ein Umbau der Gestaltung darf keinen Satz umschreiben. Der Text des
- * Handbuchs ist fachlich geprüft; ihn beim Aufräumen zu „straffen" wäre eine
- * inhaltliche Änderung im Gewand einer gestalterischen. Dieser Test zählt
- * deshalb die Wörter und bildet eine Prüfsumme über ihre Menge: Wer eine
- * Formulierung ändert, muss diese Zahl bewusst mitändern und den Grund in
- * den Commit schreiben.
+ * Der Text ist fachlich geprueft. Ihn beim naechsten Aufraeumen zu
+ * „straffen" waere eine inhaltliche Aenderung im Gewand einer
+ * gestalterischen. Dieser Test zaehlt deshalb die Woerter und bildet eine
+ * Pruefsumme ueber ihre Menge: Wer eine Formulierung aendert, muss diese
+ * Zahl bewusst mitaendern und den Grund in den Commit schreiben.
  *
- * Verglichen wird die *Menge* der Wörter, nicht ihre Reihenfolge -- Markup
+ * Verglichen wird die *Menge* der Woerter, nicht ihre Reihenfolge -- Markup
  * darf sich frei bewegen, der Text nicht verschwinden.
  */
 
@@ -43,18 +44,19 @@ $assert = static function (bool $condition, string $message) use (&$assertions):
 };
 
 /*
- * Der Stand vor dem Umbau. Wer ihn ändert, ändert den Text des Handbuchs.
+ * Der Stand nach dem Neuschreiben.
  *
- * Geändert am 01.09.2026 von 5614 auf 5612 Wörter: Die Seite
- * „Führungsstellenbetrieb" heißt jetzt „Fernmeldeplan", und die
- * Melderaufträge stehen daneben statt darunter. Das Handbuch nennt die
- * Bereiche beim Namen; ein Verweis auf einen Namen, den es nicht mehr gibt,
- * schickt den Lesenden ins Leere. Zwei Wörter weniger, weil aus „S6- und
- * Melderaufgaben" die „S6-Aufgaben" wurden -- die Melderaufgaben stehen
- * nicht mehr in diesem Bereich.
+ * Von 5612 auf 4567 Woerter am 01.09.2026. Es fehlt kein Sachverhalt: Was
+ * kuerzer wurde, waren Schachtelsaetze und die neunzehn Werbezeilen ueber
+ * den Kapitelueberschriften. Aus einem Kapitel „Nachrichtenlauf" wurden
+ * zwei, weil Ausgang und Eingang verschiedene Personen betreffen; die
+ * Kurzreferenz war eine zweite Fassung des Inhaltsverzeichnisses und ist
+ * entfallen. Neu dazugekommen sind der berichtigte Fernmeldeplan mit
+ * Gegenstellen, Nebenstellen und Skizze, die eigene Seite fuer die
+ * Melderauftraege und der LdF als Fuehrer des Technischen Betriebsbuchs.
  */
-const ESTAB_HANDBUCH_WOERTER = 5612;
-const ESTAB_HANDBUCH_PRUEFSUMME = '5827ae6a5447792b';
+const ESTAB_HANDBUCH_WOERTER = 4567;
+const ESTAB_HANDBUCH_PRUEFSUMME = 'eb87bad2d6d7e35e';
 
 $quelle = file_get_contents($root . '/handbuch/index.php');
 $assert(is_string($quelle), 'Das Handbuch ist nicht lesbar.');
@@ -83,11 +85,12 @@ $assert(
         . '. Ein Wort wurde gegen ein anderes getauscht.'
 );
 
-/* --- Der Kopf ist eine Zeile, kein Banner --- */
+/* --- Die Seite traegt die Gestaltung der Anwendung --- */
 
 $css = file_get_contents($root . '/handbuch/handbuch.css');
 $assert(is_string($css), 'Das Stylesheet des Handbuchs ist nicht lesbar.');
-$regeln = estab_test_css_regeln((string) $css);
+$css = (string) $css;
+$regeln = estab_test_css_regeln($css);
 
 $erklaerungen = static function (array $regeln, string $auswaehler): array {
     $gefunden = [];
@@ -102,64 +105,119 @@ $erklaerungen = static function (array $regeln, string $auswaehler): array {
     return $gefunden;
 };
 
+/*
+ * Der Kopf kommt aus der gemeinsamen Schale.
+ *
+ * Frueher baute das Handbuch ihn selbst -- und deshalb konnte er sich von
+ * jeder anderen Seite entfernen. Jetzt traegt er dieselben Klassen wie jede
+ * Arbeitsseite und bekommt Flaeche, Titelgroesse und Unterlinie aus der
+ * Kopfzeilenregel von estab-ui.css. Was hier geprueft wird, ist die
+ * Zugehoerigkeit, nicht die Wiederholung der Regel.
+ */
+$assert(
+    str_contains($quelle, 'class="estab-tool-page estab-handbook-page"')
+        && str_contains($quelle, 'class="estab-tool-hero estab-handbook-hero"')
+        && str_contains($quelle, 'class="estab-tool-eyebrow"')
+        && str_contains($quelle, 'estab-tool-main'),
+    estab_ux_requirement(
+        'GES-SEITENKOPF',
+        'Das Handbuch baut seinen Seitenkopf wieder selbst, statt die '
+            . 'Schale der Anwendung zu tragen. Dann kann er sich von jeder '
+            . 'anderen Seite entfernen, ohne dass es jemand merkt.'
+    )
+);
+
 $kopf = $erklaerungen($regeln, '.estab-handbook-hero');
 $assert(
-    ($kopf['background'] ?? '') === 'none' && ($kopf['box-shadow'] ?? '') === 'none',
+    !isset($kopf['background'])
+        && !isset($kopf['box-shadow'])
+        && !isset($kopf['border-radius'])
+        && !isset($kopf['color']),
     estab_ux_requirement(
         'GES-SEITENKOPF',
-        'Der Kopf des Handbuchs trägt wieder eine Fläche. Er ist eine Zeile, '
-            . 'kein Banner: Auf 768 Bildpunkten Höhe nahm der alte 528 davon '
-            . 'ein, 69 Prozent, und der erste Satz stand unter dem Rand.'
+        'Der Kopf des Handbuchs bekommt wieder eine eigene Flaeche: '
+            . implode(', ', array_keys($kopf))
     )
 );
 $assert(
-    str_contains($kopf['border-bottom'] ?? '', 'var(--linie'),
+    $erklaerungen($regeln, '.estab-handbook-hero h1') === []
+        && $erklaerungen($regeln, '.estab-handbook-hero-inner::after') === [],
     estab_ux_requirement(
         'GES-SEITENKOPF',
-        'Der Kopf des Handbuchs hat keine Unterlinie aus einer Marke: '
-            . ($kopf['border-bottom'] ?? 'gar keine')
-    )
-);
-
-$titel = $erklaerungen($regeln, '.estab-handbook-hero h1');
-$assert(
-    ($titel['font-size'] ?? '') === 'var(--schrift-6)',
-    estab_ux_requirement(
-        'GES-SEITENKOPF',
-        'Der Titel des Handbuchs trägt nicht die Titelstufe --schrift-6, '
-            . 'sondern: ' . ($titel['font-size'] ?? 'gar keine Angabe')
-    )
-);
-
-// Der dekorative Kreis und der Werbesatz kosten Höhe und sagen nichts.
-$assert(
-    $erklaerungen($regeln, '.estab-handbook-hero-inner::after') === [],
-    estab_ux_requirement(
-        'GES-SEITENKOPF',
-        'Der Kopf trägt wieder eine Zierform. Auf einem flachen Bildschirm '
+        'Das Handbuch setzt seinem Titel wieder eine eigene Groesse oder '
+            . 'stellt eine Zierform daneben. Auf einem flachen Bildschirm '
             . 'ist jede Zeile teuer, und ein Kreis ist keine Angabe.'
     )
 );
-$lead = $erklaerungen($regeln, '.estab-handbook-lead');
+
+/*
+ * Der Kopf traegt nur die Bereichsmarke und den Titel.
+ *
+ * Hier stand ein erklaerender Satz und daneben "Stand ... Fassung ...".
+ * Beides war unsichtbar, ohne dass es jemand merkte: Die Kopfzeilenregel der
+ * Anwendung blendet in einem Seitenkopf jeden Absatz aus, der nicht die
+ * Bereichsmarke ist. Ein Satz, der im Markup steht und nirgends erscheint,
+ * ist schlimmer als keiner -- man haelt ihn fuer gesagt. Der Stand steht
+ * jetzt im Fuss, wo er gelesen werden kann.
+ */
+$kopfAbsaetze = preg_match_all(
+    '~<header class="estab-tool-hero estab-handbook-hero">(.*?)</header>~s',
+    $quelle,
+    $kopfTreffer
+) === 1 ? $kopfTreffer[1][0] : '';
 $assert(
-    ($lead['display'] ?? '') === 'none',
+    $kopfAbsaetze !== ''
+        && substr_count($kopfAbsaetze, '<p') === 1
+        && str_contains($kopfAbsaetze, 'class="estab-tool-eyebrow"')
+        && substr_count($kopfAbsaetze, '<h1>') === 1,
     estab_ux_requirement(
         'GES-SEITENKOPF',
-        'Der erklärende Satz im Kopf bekommt wieder Höhe. Er steht im '
-            . 'Markup und wird vorgelesen; sichtbar kostet er nur Platz.'
+        'Der Kopf des Handbuchs traegt wieder mehr als Bereichsmarke und '
+            . 'Titel. Was dort sonst steht, blendet die Kopfzeilenregel aus '
+            . '-- es steht dann im Markup und nirgends auf dem Bildschirm.'
+    )
+);
+$assert(
+    !str_contains($quelle, 'estab-handbook-lead')
+        && str_contains($quelle, 'Stand <?= estab_auth_html($handbookUpdated)'),
+    estab_ux_requirement(
+        'GES-SEITENKOPF',
+        'Der Stand des Handbuchs steht nicht mehr im Fuss oder der '
+            . 'erklaerende Satz ist in den Kopf zurueckgekehrt.'
     )
 );
 
-/* --- Der Fließtext bleibt lesbar breit --- */
+/*
+ * Keine eigene Farbe.
+ *
+ * Das Handbuch trug elf eigene Farbwerte -- eigenes Grau, eigenes Blau,
+ * eigenes Rot. Neben der Anwendung sah das aus wie ein anderes Programm.
+ * Eine Farbe, die hier faellt, faellt nur hier; deshalb steht hier gar
+ * keine mehr, sondern nur noch Marken aus estab-ui.css.
+ */
+$assert(
+    preg_match('/#[0-9a-fA-F]{3,8}\b/', $css) !== 1,
+    estab_ux_requirement(
+        'GES-SEITENKOPF',
+        'Das Handbuch traegt wieder eine eigene Farbe. Es soll die Marken '
+            . 'der Anwendung verwenden, damit es nicht als anderes Programm '
+            . 'gelesen wird.'
+    )
+);
 
-$absatz = $erklaerungen($regeln, '.estab-handbook-chapter p');
+/* --- Der Fliesstext bleibt lesbar breit --- */
+
+$absatz = $erklaerungen(
+    $regeln,
+    '.estab-handbook-chapter p, .estab-handbook-chapter li'
+);
 $assert(
     ($absatz['max-width'] ?? '') === '34rem',
     estab_ux_requirement(
         'GES-SEITENKOPF',
-        'Der Fließtext des Handbuchs ist nicht auf 34rem begrenzt, sondern: '
-            . ($absatz['max-width'] ?? 'gar nicht'). '. Eine Zeile über '
-            . 'neunzig Zeichen verliert beim Rücksprung ihren Anfang.'
+        'Der Fliesstext des Handbuchs ist nicht auf 34rem begrenzt, sondern: '
+            . ($absatz['max-width'] ?? 'gar nicht') . '. Eine Zeile ueber '
+            . 'neunzig Zeichen verliert beim Ruecksprung ihren Anfang.'
     )
 );
 
