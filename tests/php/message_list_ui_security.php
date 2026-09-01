@@ -441,7 +441,10 @@ foreach ([
         $surface . ' result table lacks semantic or responsive labels'
     );
     $assert(
-        str_contains($table, '>Zeit und Verweildauer</th>')
+        // Siehe message_list_dwell_security: Der Kopf traegt ein weiches
+        // Trennzeichen, damit "Verweildauer" brechen kann statt abgeschnitten
+        // zu werden.
+        str_contains($table, ">Zeit und Verweil\u{00AD}dauer</th>")
             && str_contains($table, '>Kenntnis</th>')
             && substr_count($table, 'data-estab-message-dwell="') === 3
             && substr_count(

@@ -721,6 +721,23 @@ SELECT lfd FROM `nv_masterkatego` WHERE `kategorie` = "2m"));
     } else {
       estab_message_list_render_table (
         $result,
+        /*
+         * Der Knopf sagt kurz, was er tut, und nennt sich lang.
+         *
+         * Sichtbar stand hier der ganze Satz "Vordruck Ausgang – TBB-Nachweis
+         * mit der Befoerderung oeffnen" -- in einer Spalte von 117
+         * Bildpunkten. Er brach ueber sieben Zeilen und mitten durch das Wort
+         * ("Befoerderun / g"), 48 Wortbrueche allein auf der ersten Seite,
+         * und wiederholte dabei nur, was die erste Spalte derselben Zeile
+         * schon sagt.
+         *
+         * Der lange Text hatte trotzdem seinen Grund: Zwanzig gleichlautende
+         * Verweise "Vordruck oeffnen" untereinander sind fuer ein
+         * Vorleseprogramm nicht unterscheidbar. Er steht deshalb weiter da,
+         * nur als zugaengliche Bezeichnung -- gehoert wird er, gesehen wird
+         * die kurze Beschriftung. Dieselbe Beschriftung wie in den Listen
+         * des Nachrichtenteils.
+         */
         static function (array $row): void {
           $recordId = estab_message_positive_id ($row ["00_lfd"] ?? null);
           $label = "Vordruck ".
@@ -731,7 +748,8 @@ SELECT lfd FROM `nv_masterkatego` WHERE `kategorie` = "2m"));
             estab_message_html (estab_overview_url (array (
               "ueb_fm" => "ueb",
               "00_lfd" => $recordId,
-            )))."\">".estab_message_html ($label)."</a>";
+            )))."\" aria-label=\"".estab_message_html ($label)."\">".
+            "Vordruck öffnen</a>";
         },
         $uebersichtFelder,
         array (

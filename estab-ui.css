@@ -5516,13 +5516,28 @@ body.estab-message-form-body {
     width: 100%;
 }
 
+/* Ein Spaltenkopf darf umbrechen, aber nicht abgeschnitten werden.
+
+   Die Zellen darunter tragen seit jeher `overflow-wrap`; der Kopf trug
+   nichts. Ein einzelnes langes Wort -- und in Grossbuchstaben mit Sperrung
+   ist "Bearbeitungsstand" 154 Bildpunkte breit -- lief deshalb still aus
+   seiner Spalte heraus und wurde am Rand abgeschnitten: Auf dem Schirm stand
+   "BEARBEITUNGS", und niemand konnte sehen, dass dort mehr stand.
+
+   Getrennt wird bevorzugt an den weichen Trennzeichen, die die Spalten in
+   ihren Namen mitbringen; `hyphens: auto` bittet den Browser zusaetzlich um
+   deutsche Silbentrennung. Beides kann fehlschlagen, `overflow-wrap` faengt
+   den Rest -- ein harter Bruch ist haesslich, ein abgeschnittener Kopf ist
+   falsch. */
 .estab-tabelle-blatt thead th {
     background: var(--grund-gedaempft);
     border-bottom: 2px solid var(--linie-kraeftig);
     color: var(--tinte);
     font-size: var(--schrift-1);
     font-weight: 700;
+    hyphens: auto;
     letter-spacing: 0.045em;
+    overflow-wrap: break-word;
     padding: var(--abstand-2) var(--abstand-4);
     position: sticky;
     text-align: left;
@@ -5567,6 +5582,11 @@ body.estab-message-form-body {
     border-bottom: 1px solid var(--linie);
     font-weight: inherit;
     font-size: var(--schrift-3);
+    /* Deutsche Fachwoerter sind lang und die Spalten schmal. Wo der Browser
+       trennen kann, bekommt "Trinkwasserhochbehaelter" einen Trennstrich
+       statt eines harten Bruchs mitten im Wort; wo er es nicht kann, bricht
+       `overflow-wrap` weiterhin. Dieselbe Paarung wie in .estab-list-table. */
+    hyphens: auto;
     overflow-wrap: break-word;
     padding: var(--abstand-2) var(--abstand-4);
     text-align: left;
@@ -6455,12 +6475,17 @@ section.estab-message-timeline[data-estab-message-timeline] * {
     text-transform: uppercase;
 }
 
+/* Der Kasten steht in der schmalen Spalte neben dem Vordruck. "Nachrichten-
+   vordruck" passt dort in keine Zeile und brach hart durch: "Nachrichtenvor-
+   druc / k". Mit Silbentrennung bekommt es einen Trennstrich, ohne sie
+   bricht `overflow-wrap` weiterhin -- lieber hart gebrochen als ueberlaufend. */
 .estab-message-timeline__notice {
     background: var(--handlung-sanft);
     border: 1px solid var(--linie-kraeftig);
     border-left: 4px solid var(--handlung-kante);
     border-radius: var(--radius-3);
     color: var(--handlung-dunkel);
+    hyphens: auto;
     line-height: 1.45;
     margin: var(--abstand-5) 0 0;
     overflow-wrap: break-word;
@@ -9527,17 +9552,28 @@ a.estab-message-list-chip:hover {
 }
 
 .estab-message-list-priority,
+/* Eine Marke ist ein Kasten mit Text, kein Flex-Behaelter.
+
+   `inline-flex` machte aus dem blossen Text ein anonymes Flex-Kind, und ein
+   solches schrumpft nicht unter seine Wortbreite: Die Marke "Abgeschlossen"
+   war 16 Bildpunkte breiter als ihre Zelle, "Verweildauer nicht
+   nachgewiesen" 36 -- beide schoben sich ueber die Nachbarspalte, 64 Faelle
+   allein in der Meldungsuebersicht. Ein `min-width: 0` half nicht: Ein
+   anonymes Flex-Kind laesst sich nicht ansprechen.
+
+   Als `inline-block` ist der Text gewoehnlicher Zeileninhalt. Er bricht an
+   den Wortgrenzen, nimmt die Silbentrennung der Zelle an und bleibt in
+   seinem Kasten. Die Zeichen, die vorher `flex` ausrichtete, stehen jetzt
+   als `inline-block` mittig auf der Grundlinie. */
 .estab-message-list-status {
-    align-items: center;
     border: 1px solid transparent;
     border-radius: var(--radius-pille);
     box-sizing: border-box;
-    display: inline-flex;
+    display: inline-block;
     font-size: var(--schrift-1);
     font-weight: var(--stark-voll);
     line-height: 1.2;
     max-width: 100%;
-    min-height: 1.8rem;
     padding: var(--abstand-2) var(--abstand-4);
     white-space: normal;
 }
@@ -9636,13 +9672,12 @@ a.estab-message-list-chip:hover {
 }
 
 .estab-message-list-dwell {
-    align-items: center;
     background: var(--handlung-sanft);
     border: 1px solid var(--linie-kraeftig);
     border-radius: var(--radius-pille);
     box-sizing: border-box;
     color: var(--tinte-neben);
-    display: inline-flex;
+    display: inline-block;
     font-size: var(--schrift-1);
     font-variant-numeric: tabular-nums;
     font-weight: var(--stark-voll);
@@ -9669,10 +9704,11 @@ a.estab-message-list-chip:hover {
 .estab-message-list-dwell--overdue::before {
     background: currentColor;
     content: "";
-    flex: 0 0 auto;
+    display: inline-block;
     height: 0.5rem;
     margin-right: var(--abstand-3);
     transform: rotate(45deg);
+    vertical-align: middle;
     width: 0.5rem;
 }
 
@@ -9693,13 +9729,12 @@ a.estab-message-list-chip:hover {
 }
 
 .estab-message-list-awareness {
-    align-items: center;
     background: var(--handlung-sanft);
     border: 1px solid var(--linie-kraeftig);
     border-radius: var(--radius-pille);
     box-sizing: border-box;
     color: var(--tinte-neben);
-    display: inline-flex;
+    display: inline-block;
     font-size: var(--schrift-1);
     font-weight: var(--stark-voll);
     line-height: 1.2;
@@ -9718,9 +9753,10 @@ a.estab-message-list-chip:hover {
     background: currentColor;
     border-radius: var(--radius-pille);
     content: "";
-    flex: 0 0 auto;
+    display: inline-block;
     height: 0.45rem;
     margin-right: var(--abstand-3);
+    vertical-align: middle;
     width: 0.45rem;
 }
 

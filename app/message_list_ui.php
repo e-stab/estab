@@ -892,15 +892,37 @@ function estab_message_list_render_table(
             'class="estab-message-list-row'
                 . ($z['vorrang'] !== '' ? ' estab-message-list-row--priority' : '')
                 . '" data-message-id="' . estab_auth_html($z['id']) . '"',
+        /*
+         * Die Spaltenbreiten sind gemessen, nicht geschaetzt.
+         *
+         * Der Kopf steht in Grossbuchstaben mit Sperrung; "BEARBEITUNGS-
+         * STAND" braucht dadurch 154 Bildpunkte, bekam aber 99 bis 114 und
+         * wurde in jeder Fensterbreite abgeschnitten -- auf dem Schirm stand
+         * "BEARBEITUNGS". Die Marke "Abgeschlossen" in derselben Spalte lief
+         * um 16 Bildpunkte ueber ihre Zelle hinaus.
+         *
+         * Die Tabelle ist nie schmaler als 56rem (896 Bildpunkte), darunter
+         * wird sie zu Karten. Ein Hundertstel ist also mindestens 9
+         * Bildpunkte wert; die Spalte "Bearbeitungsstand" braucht 14. Den
+         * Platz gibt die Aktionsspalte her, deren Knopf jetzt kurz
+         * beschriftet ist, und die Spalte "Von und An", die ohnehin
+         * umbricht. Die Inhaltsspalte bleibt unangetastet: Sie traegt den
+         * Meldungstext.
+         *
+         * Weiches Trennzeichen im Kopf: Ein einzelnes langes Wort kann sonst
+         * nirgends brechen. Es ist die einzige Trennung, die in jedem
+         * Browser und auch im Druck sicher wirkt -- "hyphens: auto" ist eine
+         * Bitte, kein Versprechen.
+         */
         'spalten' => [
             $spalte('TBB-Nachweis', 11, 'z_nachweis'),
-            $spalte('Zeit und Verweildauer', 11, 'z_zeit'),
+            $spalte("Zeit und Verweil\u{00AD}dauer", 11, 'z_zeit'),
             $spalte('Von und An', 13, 'z_beteiligte'),
             $spalte('Überschrift und Inhalt', 22, 'z_inhalt'),
-            $spalte('Bearbeitungsstand', 11, 'z_stand'),
+            $spalte("Bearbeitungs\u{00AD}stand", 13, 'z_stand'),
             $spalte('Kenntnis', 9, 'z_kenntnis'),
-            $spalte('Verteilung', 10, 'z_verteilung'),
-            $spalte('Aktion', 13, 'z_aktion'),
+            $spalte("Ver\u{00AD}teilung", 10, 'z_verteilung'),
+            $spalte('Aktion', 11, 'z_aktion'),
         ],
         'zeilen' => $zeilen,
         'leer' => 'Keine Meldung entspricht den gesetzten Filtern.',

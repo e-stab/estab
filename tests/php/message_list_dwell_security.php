@@ -366,7 +366,11 @@ $table = $render(static function () use ($rows): void {
 });
 $assert(
     substr_count($table, '<th scope="col"') === 8
-        && str_contains($table, '>Zeit und Verweildauer</th>')
+        // Weiches Trennzeichen im Spaltenkopf: "Verweildauer" ist als
+        // einzelnes Wort breiter als seine Spalte und wurde ohne diese
+        // Trennstelle abgeschnitten. Der Test prueft deshalb den Kopf so,
+        // wie er ausgeliefert wird -- sichtbar bleibt derselbe Text.
+        && str_contains($table, ">Zeit und Verweil\u{00AD}dauer</th>")
         && str_contains($table, '>Kenntnis</th>'),
     'The list has no dwell or reading-state column'
 );

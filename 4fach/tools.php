@@ -113,7 +113,15 @@ require_once __DIR__ . "/../app/session_ui.php";
     include ("../4fcfg/config.inc.php");
     estab_rueckmeldung_einsetzen ();
     echo "<!DOCTYPE html PUBLIC \"-//W3C//DTD HTML 4.01 Transitional//EN\">\n";
-    echo "<html>\n";
+    // Die Sprache gehoert an das Dokument, nicht in die Annahme des Browsers.
+    //
+    // Ohne sie trennt kein Browser deutsche Woerter -- "hyphens: auto" bleibt
+    // wirkungslos, und lange Fachwoerter brechen hart mitten durch ("Befoerde
+    // run / g"). Ein Vorleseprogramm raet ausserdem die Sprache und spricht
+    // deutsche Namen englisch aus. Die uebrigen Seitenrahmen der Anwendung
+    // (app_shell.php, session_ui.php) setzen sie seit jeher; nur dieser
+    // Bestandsrahmen tat es nicht.
+    echo "<html lang=\"de\">\n";
     echo "<head><meta http-equiv=\"content-type\" content=\"text/html; charset=UTF-8\" />\n";
     echo "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n";
 
