@@ -196,32 +196,39 @@ function estab_read_with_locked_operational_scope(
 /**
  * Return the fixed message-field policy for incident-scoped suggestions.
  *
- * Callsigns are operational input for A/W and LdF. Translated senders are an
- * LdF-only incoming-message responsibility; outgoing local organisations
- * must never pollute that suggestion set.
+ * Two axes, not one. The first says which FIELD a duty function may be
+ * suggested for; the second says from which SOURCES.
  *
- * @return array{direction:?string}
+ * The second axis exists because the two sources differ in who may see them.
+ * The history carries values out of other people's messages in the same
+ * incident: whoever is offered them learns something about proceedings that
+ * are none of their business. The released plan does not have that problem --
+ * it is an operating document the whole command post may read.
+ *
+ * Without the second axis, opening Feld 10 for the staff would have been a
+ * rollback of that protection. With it, it is not: the staff sees the plan and
+ * nothing else. The default stays refusal; every source is named explicitly.
+ *
+ * @return array{direction:?string,sources:list<string>}
  */
 function estab_read_message_suggestion_policy(
     array $identity,
     string $field
 ): array {
+    $isOperator = estab_auth_identity_has_function(
+        $identity,
+        'A/W',
+        'Fernmelder'
+    ) || estab_auth_identity_has_function(
+        $identity,
+        'LdF',
+        'Fernmelder'
+    );
     if (
-        $field === '05_gegenstelle'
-        && (
-            estab_auth_identity_has_function(
-                $identity,
-                'A/W',
-                'Fernmelder'
-            )
-            || estab_auth_identity_has_function(
-                $identity,
-                'LdF',
-                'Fernmelder'
-            )
-        )
+        in_array($field, ['05_gegenstelle', '11_rufnummer'], true)
+        && $isOperator
     ) {
-        return ['direction' => null];
+        return ['direction' => null, 'sources' => ['message', 'plan']];
     }
     if (
         $field === '13_abseinheit'
@@ -231,7 +238,14 @@ function estab_read_message_suggestion_policy(
             'Fernmelder'
         )
     ) {
-        return ['direction' => 'E'];
+        return ['direction' => 'E', 'sources' => ['message', 'plan']];
+    }
+    /*
+     * Der Stab adressiert Stellen, die im Plan stehen -- aber er darf die
+     * Historie fremder Nachrichten nicht sehen. Deshalb hier nur der Plan.
+     */
+    if ($field === '10_anschrift') {
+        return ['direction' => null, 'sources' => ['plan']];
     }
     throw new EstabReadPermissionException(
         'Diese Dienstfunktion darf keine Vorschläge für dieses Feld lesen.'
@@ -273,12 +287,12 @@ function estab_read_ldf_mapping_policy(
             'message_context' => '`05_gegenstelle`',
             'message_target' => '`13_abseinheit`',
             'plan_context' => '`erreichbarkeit`',
-            'plan_target' => '`betriebsstelle`',
+            'plan_target' => '`name`',
         ],
         'A' => [
             'message_context' => '`10_anschrift`',
             'message_target' => '`05_gegenstelle`',
-            'plan_context' => '`betriebsstelle`',
+            'plan_context' => '`name`',
             'plan_target' => '`erreichbarkeit`',
         ],
         default => throw new InvalidArgumentException(
@@ -441,7 +455,7 @@ function estab_read_mapping_normalized_sql(string $expression): string
             'candidate.`05_gegenstelle`',
             'candidate.`10_anschrift`',
             'plan_entry.`erreichbarkeit`',
-            'plan_entry.`betriebsstelle`',
+            'plan_entry.`name`',
             'scope.`context_value`',
         ],
         true
@@ -636,7 +650,7 @@ function estab_read_ldf_mapping_suggestions(
         . ' FROM ('
         . ' SELECT MAX(TRIM(candidate.' . $messageTarget
         . ')) AS `suggestion`,'
-        . " 'message' AS `source_kind`, 0 AS `source_priority`,"
+        . " 'message' AS `source_kind`, 1 AS `source_priority`,"
         . ' MIN(CASE WHEN ' . $messageExact
         . ' THEN 0 ELSE 1 END) AS `match_priority`,'
         . ' MAX(CASE WHEN ' . $messageExact
@@ -663,7 +677,7 @@ function estab_read_ldf_mapping_suggestions(
         . ' UNION ALL'
         . ' SELECT MAX(TRIM(plan_entry.' . $planTarget
         . ')) AS `suggestion`,'
-        . " 'plan' AS `source_kind`, 1 AS `source_priority`,"
+        . " 'plan' AS `source_kind`, 0 AS `source_priority`,"
         . ' MIN(CASE WHEN ' . $planExact
         . ' THEN 0 ELSE 1 END) AS `match_priority`,'
         . ' MAX(CASE WHEN ' . $planExact
@@ -673,7 +687,7 @@ function estab_read_ldf_mapping_suggestions(
         . ') THEN TRIM(plan_entry.' . $planContext
         . ') ELSE NULL END) AS `related_context`,'
         . ' COUNT(*) AS `frequency`,'
-        . ' MAX(plan_entry.`fernmeldeplan_eintrag_id`) AS `recency`,'
+        . ' MAX(plan_entry.`gegenstelle_id`) AS `recency`,'
         . ' MAX(scope.`context_value`) AS `context_value`'
         . ' FROM (' . $scopeSql . ') AS scope'
         . ' JOIN `nv_fernmeldeplaene` AS telecom_plan'
@@ -682,9 +696,17 @@ function estab_read_ldf_mapping_suggestions(
         . ' AND telecom_plan.`gueltig_ab` <= NOW()'
         . ' AND (telecom_plan.`gueltig_bis` IS NULL'
         . ' OR telecom_plan.`gueltig_bis` >= NOW())'
-        . ' JOIN `nv_fernmeldeplan_eintraege` AS plan_entry'
-        . ' ON plan_entry.`fernmeldeplan_id`'
+        . ' JOIN `nv_fernmeldeplan_eintraege` AS plan_route'
+        . ' ON plan_route.`fernmeldeplan_id`'
         . ' = telecom_plan.`fernmeldeplan_id`'
+        /*
+         * Der Vorschlag kommt aus der GEGENSTELLE des Wegs, nicht aus dem Weg
+         * selbst. Der Weg traegt die eigene Erreichbarkeit; wer ihn hier las,
+         * schlug dem LdF den eigenen Rufnamen als Gegenstelle vor.
+         */
+        . ' JOIN `nv_fernmeldeplan_gegenstellen` AS plan_entry'
+        . ' ON plan_entry.`fernmeldeplan_eintrag_id`'
+        . ' = plan_route.`fernmeldeplan_eintrag_id`'
         . ' WHERE plan_entry.' . $planContext . ' IS NOT NULL'
         . ' AND plan_entry.' . $planTarget . ' IS NOT NULL'
         . ' AND CHAR_LENGTH(TRIM(plan_entry.' . $planContext . ')) > 0'
@@ -772,6 +794,98 @@ function estab_read_ldf_mapping_suggestions(
  *
  * @return list<string>
  */
+/**
+ * Suggestions that come from the released plan alone.
+ *
+ * This path exists because of who may use it. The staff addresses stations
+ * that stand in the plan, but it may not see the message history -- that
+ * carries values out of other people's messages. So the plan gets its own
+ * reader: it requires an operational scope and nothing more, because the
+ * released plan is an operating document the whole command post may read
+ * (TKM-FERNMELDEPLAN).
+ *
+ * It reads counterparts, never routes. A route carries the OWN reachability;
+ * offering it as a counterpart was the defect this rework set out to fix.
+ *
+ * @return list<string>
+ */
+function estab_read_plan_counterpart_suggestions(
+    mysqli $connection,
+    array $identity,
+    string $field,
+    int $limit = 20
+): array {
+    if ($limit < 1 || $limit > 50) {
+        throw new InvalidArgumentException(
+            'Die Anzahl der Planvorschläge ist ungültig.'
+        );
+    }
+    $policy = estab_read_message_suggestion_policy($identity, $field);
+    if (!in_array('plan', $policy['sources'], true)) {
+        throw new EstabReadPermissionException(
+            'Diese Dienstfunktion darf keine Planvorschläge lesen.'
+        );
+    }
+    $scope = estab_read_require_operational_scope($connection, $identity);
+    $incidentId = (int) $scope['incident']['active_einsatz_id'];
+    $column = match ($field) {
+        '05_gegenstelle', '11_rufnummer' => 'g.`erreichbarkeit`',
+        '10_anschrift', '13_abseinheit' => 'g.`name`',
+        default => throw new InvalidArgumentException(
+            'Das Vorschlagsfeld ist ungültig.'
+        ),
+    };
+    $statement = estab_message_execute(
+        $connection,
+        'SELECT DISTINCT ' . $column . ' AS `suggestion`'
+        . ' FROM `nv_fernmeldeplan_gegenstellen` AS g'
+        . ' JOIN `nv_fernmeldeplan_eintraege` AS e'
+        . ' ON e.`fernmeldeplan_eintrag_id` = g.`fernmeldeplan_eintrag_id`'
+        . ' JOIN `nv_fernmeldeplaene` AS p'
+        . ' ON p.`fernmeldeplan_id` = e.`fernmeldeplan_id`'
+        . ' JOIN `nv_einsatz_status` AS active'
+        . ' ON active.`singleton_id` = 1'
+        . ' AND active.`active_einsatz_id` = p.`einsatz_id`'
+        . " WHERE p.`status` = 'AKTIV'"
+        . ' AND p.`gueltig_ab` <= NOW()'
+        . ' AND (p.`gueltig_bis` IS NULL OR p.`gueltig_bis` >= NOW())'
+        . ' AND p.`einsatz_id` = ?'
+        . ' AND CHAR_LENGTH(TRIM(' . $column . ')) > 0'
+        . ' ORDER BY `suggestion`',
+        [$incidentId]
+    );
+    try {
+        $stored = null;
+        if (!$statement->bind_result($stored)) {
+            throw new RuntimeException(
+                'Planvorschläge konnten nicht gelesen werden.'
+            );
+        }
+        $suggestions = [];
+        $seen = [];
+        while ($statement->fetch()) {
+            $value = estab_read_normalize_message_suggestion($stored);
+            if ($value === null) {
+                continue;
+            }
+            $key = function_exists('mb_strtolower')
+                ? mb_strtolower($value, 'UTF-8')
+                : strtolower($value);
+            if (isset($seen[$key])) {
+                continue;
+            }
+            $seen[$key] = true;
+            $suggestions[] = $value;
+            if (count($suggestions) >= $limit) {
+                break;
+            }
+        }
+        return $suggestions;
+    } finally {
+        $statement->close();
+    }
+}
+
 function estab_read_message_suggestions(
     mysqli $connection,
     string $messageTable,
@@ -789,6 +903,14 @@ function estab_read_message_suggestions(
         $scope['identity'],
         $field
     );
+    if (!in_array('message', $policy['sources'], true)) {
+        // Der Standard bleibt Zurueckweisung: Wer die Historie nicht sehen
+        // darf, bekommt daraus auch keinen Vorschlag.
+        throw new EstabReadPermissionException(
+            'Diese Dienstfunktion darf die Nachrichtenhistorie nicht als '
+            . 'Vorschlag lesen.'
+        );
+    }
     $incidentId = (int) $scope['incident']['active_einsatz_id'];
     $selected = null;
     $capability = null;
@@ -821,6 +943,7 @@ function estab_read_message_suggestions(
     $table = estab_message_table($messageTable);
     $column = match ($field) {
         '05_gegenstelle' => '`05_gegenstelle`',
+        '11_rufnummer' => '`11_rufnummer`',
         '13_abseinheit' => '`13_abseinheit`',
         default => throw new InvalidArgumentException(
             'Das Vorschlagsfeld ist ungültig.'

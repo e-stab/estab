@@ -231,26 +231,33 @@ diesen Vorgang.
       - **Prüfung:** Der LdF kann die Bemerkung nicht überschreiben; der Druck zeigt kein Wegfeld
       - **Abhängigkeit:** A14 · **Regel:** `FMP-EINGANGSWEG-BEMERKUNG`, `FMP-WEG-AUSSERHALB-VORDRUCK`
 
-- [ ] **A16** `!!` **M** Der Plan-Zweig liest die Gegenstellen (F10)
+- [x] **A16** `!!` **M** Der Plan-Zweig liest die Gegenstellen (F10)
       → `app/read_authorization.php`
-      - [ ] `estab_read_ldf_mapping_policy()` paart `name` ↔ `erreichbarkeit` aus `nv_fernmeldeplan_gegenstellen` statt `betriebsstelle` ↔ `rufname`
-      - [ ] Abfrageform bleibt; nur die Tabelle wechselt
+      - [x] `estab_read_ldf_mapping_policy()` paart `name` ↔ `erreichbarkeit` aus
+            `nv_fernmeldeplan_gegenstellen`
+      - [x] Abfrageform bleibt; der Planzweig verbindet über den Weg auf die
+            Gegenstelle, `recency` zählt Gegenstellen
       - **Prüfung:** Kein Vorschlag stammt mehr aus `betriebsstelle` oder `erreichbarkeit` eines Wegs. Zwischenzustand ist beabsichtigt: bis zur ersten Freigabe liefert der Zweig nichts
       - **Risiko `!!`:** Berührt eine Abfrage mit Berechtigungsprädikaten in beiden Zweigen der UNION
       - **Abhängigkeit:** A09 · **Spec:** 5.4
 
-- [ ] **A17** `·` **XS** Rangfolge: Güte hinter Herkunft, Plan zuerst (F11)
+- [x] **A17** `·` **XS** Rangfolge: Güte hinter Herkunft, Plan zuerst (F11)
       → `app/read_authorization.php`
-      - [ ] `source_priority` getauscht: `plan` = 0, `message` = 1
+      - [x] `source_priority` getauscht: `plan` = 0, `message` = 1
       - **Prüfung:** Ein Plantreffer steht über jedem Historientreffer; beide sichtbar
       - **Abhängigkeit:** A16 · **Regel:** `FMP-BETRIEBSUNTERLAGE-AKTUELL`
 
-- [ ] **A18** `!!` **S** Quellenachse der Vorschlagspolitik
+- [x] **A18** `!!` **M** Quellenachse der Vorschlagspolitik
       → `app/read_authorization.php`
-      - [ ] `estab_read_message_suggestion_policy()` nennt je Rolle und Feld die zulässigen **Quellen**
-      - [ ] Stab an Feld 10: `['plan']`. A/W und LdF: `['message', 'plan']`
-      - [ ] Feld 11 wird vorschlagsfähig
-      - [ ] Der Standard bleibt **Zurückweisung** — jede Quelle ist einzeln zu nennen
+      - [x] `estab_read_message_suggestion_policy()` nennt je Rolle und Feld die
+            zulässigen **Quellen**
+      - [x] Stab an Feld 10: `['plan']`. A/W und LdF: `['message', 'plan']`
+      - [x] **Eigener Leser** `estab_read_plan_counterpart_suggestions()` mit
+            schwächerer Voraussetzung — der Stab hat keine Fernmelde-Fähigkeit
+            und wäre sonst schon an der Berechtigungsprüfung gescheitert
+      - [x] Feld 11 wird vorschlagsfähig
+      - [x] Der Standard bleibt **Zurückweisung**; die Historienfunktion **wirft**,
+            wenn eine Rolle sie nicht lesen darf, statt leer zu liefern
       - **Prüfung:** `tests/integration/message_suggestions.php`; die bestehenden Leserechtsprüfungen bleiben grün
       - **Risiko `!!`:** einzige Änderung an einer Sicherheitsentscheidung in diesem Plan
       - **Regel:** `FMP-VORSCHLAG-QUELLENSCHRANKE`

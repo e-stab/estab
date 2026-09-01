@@ -60,40 +60,65 @@ $s2WithTelecommunicationsGrant = $s2 + [
     ],
 ];
 
+/*
+ * Zwei Achsen: welches FELD, und aus welchen QUELLEN.
+ *
+ * Die zweite Achse gibt es, weil die Quellen sich darin unterscheiden, wer
+ * sie sehen darf. Die Historie traegt Werte aus fremden Nachrichten desselben
+ * Einsatzes; der freigegebene Plan ist eine Betriebsunterlage, die die ganze
+ * Besetzung liest.
+ */
 $assert(
-    estab_read_message_suggestion_policy(
-        $aw,
-        '05_gegenstelle'
-    ) === ['direction' => null],
+    estab_read_message_suggestion_policy($aw, '05_gegenstelle')
+        === ['direction' => null, 'sources' => ['message', 'plan']],
     'A/W lost incident callsign suggestions'
 );
 $assert(
-    estab_read_message_suggestion_policy(
-        $ldf,
-        '05_gegenstelle'
-    ) === ['direction' => null],
+    estab_read_message_suggestion_policy($ldf, '05_gegenstelle')
+        === ['direction' => null, 'sources' => ['message', 'plan']],
     'LdF lost incident callsign suggestions'
+);
+$assert(
+    estab_read_message_suggestion_policy($aw, '11_rufnummer')
+        === ['direction' => null, 'sources' => ['message', 'plan']],
+    'the counterpart number stayed unsuggestable'
 );
 $assert(
     estab_read_message_suggestion_policy(
         $s2WithTelecommunicationsGrant,
         '05_gegenstelle'
-    ) === ['direction' => null],
+    ) === ['direction' => null, 'sources' => ['message', 'plan']],
     'LOOSE explicit A/W additional function lost incident callsign suggestions'
 );
 $assert(
-    estab_read_message_suggestion_policy(
-        $ldf,
-        '13_abseinheit'
-    ) === ['direction' => 'E'],
+    estab_read_message_suggestion_policy($ldf, '13_abseinheit')
+        === ['direction' => 'E', 'sources' => ['message', 'plan']],
     'LdF sender suggestions are not limited to incoming messages'
 );
+/*
+ * Der Stab adressiert Stellen, die im Plan stehen -- und bekommt genau die.
+ * Keine einzige aus der Historie: Die traegt fremde Vorgaenge.
+ */
+$assert(
+    estab_read_message_suggestion_policy($s2, '10_anschrift')
+        === ['direction' => null, 'sources' => ['plan']],
+    'the staff lost its plan-only suggestions for the address field'
+);
+$assert(
+    estab_read_message_suggestion_policy($aw, '10_anschrift')['sources']
+        === ['plan'],
+    'the address field gained a history source'
+);
+/*
+ * Die Zuordnung paart die GEGENSTELLE des Wegs, nicht den Weg selbst. Wer den
+ * Weg las, schlug dem LdF die eigene Erreichbarkeit als Gegenstelle vor.
+ */
 $assert(
     estab_read_ldf_mapping_policy($ldf, 'E') === [
         'message_context' => '`05_gegenstelle`',
         'message_target' => '`13_abseinheit`',
         'plan_context' => '`erreichbarkeit`',
-        'plan_target' => '`betriebsstelle`',
+        'plan_target' => '`name`',
     ],
     'incoming LdF callsign-to-sender mapping changed'
 );
@@ -101,7 +126,7 @@ $assert(
     estab_read_ldf_mapping_policy($ldf, 'A') === [
         'message_context' => '`10_anschrift`',
         'message_target' => '`05_gegenstelle`',
-        'plan_context' => '`betriebsstelle`',
+        'plan_context' => '`name`',
         'plan_target' => '`erreichbarkeit`',
     ],
     'outgoing LdF destination-to-callsign mapping changed'
