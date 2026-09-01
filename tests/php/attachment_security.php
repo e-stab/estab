@@ -2979,7 +2979,7 @@ $assert(
         )
         && str_contains(
             $controllerSource,
-            'estab_workflow_is_telecommunications ($attachmentPageIdentity)'
+            'estab_workflow_may_act_for_telecommunications ($attachmentPageIdentity)'
         )
         && str_contains(
             $controllerSource,

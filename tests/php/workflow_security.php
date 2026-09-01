@@ -988,13 +988,26 @@ foreach ($incomingTelecommunicationsTasks as $incomingTask) {
             $incomingTask . ' accepts browser-controlled distribution data'
         );
     }
+    /*
+     * Der LdF vertritt den A/W, der Vordruck steht ihm deshalb offen --
+     * sonst fuehrte sein eigener Knopf in eine Sackgasse. Gebunden bleibt
+     * er trotzdem: Er handelt als LdF und nicht als zweiter A/W, und den
+     * Rufnamen in einen Absender zu uebersetzen bleibt ihm auch hier
+     * verwehrt. Das gehoert in den Schritt LdF-Eingang.
+     */
     $assert(
-        !estab_workflow_route_allowed(
+        estab_workflow_route_allowed(
             $telecommunicationsLead,
             'POST',
             ['task' => $incomingTask]
-        ),
-        $incomingTask . ' is reachable through the LdF role'
+        )
+            && !estab_workflow_route_allowed(
+                $telecommunicationsLead,
+                'POST',
+                ['task' => $incomingTask, '13_abseinheit' => 'Leitstelle Nord']
+            )
+            && !estab_workflow_is_telecommunications($telecommunicationsLead),
+        $incomingTask . ' does not carry the LdF stand-in for the A/W'
     );
 }
 $removedSelfReviewTasks = [

@@ -26,6 +26,7 @@ declare(strict_types=1);
 $root = dirname(__DIR__, 2);
 require_once $root . '/app/auth.php';
 require_once $root . '/app/workflow.php';
+require_once $root . '/app/attachment.php';
 
 $assertions = 0;
 $assert = static function (bool $condition, string $message) use (&$assertions): void {
@@ -90,6 +91,71 @@ foreach (['fm_eingang_x', 'fm_ausgang_x', 'fm_admin_x', 'fm_anhang_x'] as $schri
     $assert(
         !estab_workflow_route_allowed($s2, 'POST', [$schritt => '1']),
         'Das Tor laesst S2 den Fernmelderschritt ' . $schritt . ' zu.'
+    );
+}
+
+/*
+ * Ein Arbeitsschritt ist erst dann offen, wenn auch der Vordruck dahinter
+ * ihn annimmt. Sonst fuehrt der Knopf auf eine Maske, die jede Eingabe mit
+ * "Aktion nicht erlaubt" abweist -- und deren Anlagenfeld sich gar nicht
+ * erst binden laesst. Geprueft wird deshalb nicht nur das Tor zur Seite,
+ * sondern auch das Tor zum Formular.
+ */
+foreach (['FM-Eingang', 'FM-Eingang_Anhang', 'FM-Ausgang'] as $vordruck) {
+    $assert(
+        estab_workflow_route_allowed($ldf, 'POST', ['task' => $vordruck]),
+        'Der Vordruck ' . $vordruck . ' weist den LdF ab. Der Weg dorthin '
+            . 'steht ihm offen -- der Schritt endet dann in einer Sackgasse.'
+    );
+    $assert(
+        estab_workflow_route_allowed($aw, 'POST', ['task' => $vordruck]),
+        'Der Vordruck ' . $vordruck . ' weist den A/W ab.'
+    );
+    $assert(
+        !estab_workflow_route_allowed($s2, 'POST', ['task' => $vordruck]),
+        'Der Vordruck ' . $vordruck . ' nimmt S2 an.'
+    );
+}
+
+/*
+ * Eine Liste, die sich nicht filtern laesst, ist keine Ansicht. Der Filter
+ * gehoert zum Arbeitsschritt, nicht zur Funktion A/W.
+ */
+$assert(
+    estab_workflow_route_allowed(
+        $ldf,
+        'POST',
+        ['fm_admin_x' => '1', 'ml_apply' => '1', 'ml_q' => 'Lage']
+    ),
+    'Der LdF darf die Nachrichtenliste des A/W nicht filtern.'
+);
+$assert(
+    !estab_workflow_route_allowed(
+        $s2,
+        'POST',
+        ['fm_admin_x' => '1', 'ml_apply' => '1', 'ml_q' => 'Lage']
+    ),
+    'S2 darf die Nachrichtenliste des A/W filtern.'
+);
+
+/*
+ * Die Anlage gehoert zum Vordruck: Wer ihn ausfuellen darf, haengt auch an.
+ * Ohne diesen Vorgang meldet die Maske, der direkte Upload lasse sich nicht
+ * sicher vorbereiten -- ein Satz ueber die Sicherheit, wo in Wahrheit die
+ * Vertretung fehlt.
+ */
+foreach (['FM-Eingang', 'FM-Eingang_Anhang'] as $vordruck) {
+    $assert(
+        estab_attachment_origin_role_allowed($ldf, $vordruck),
+        'Der LdF bekommt fuer ' . $vordruck . ' keinen Anhangvorgang.'
+    );
+    $assert(
+        estab_attachment_origin_role_allowed($aw, $vordruck),
+        'Der A/W bekommt fuer ' . $vordruck . ' keinen Anhangvorgang.'
+    );
+    $assert(
+        !estab_attachment_origin_role_allowed($s2, $vordruck),
+        'S2 bekommt fuer ' . $vordruck . ' einen Anhangvorgang.'
     );
 }
 

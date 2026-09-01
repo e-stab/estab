@@ -654,7 +654,7 @@ try {
   );
   $attachmentArchiveRoleAllowed =
     estab_workflow_is_staff_writer ($attachmentPageIdentity)
-    || estab_workflow_is_telecommunications ($attachmentPageIdentity);
+    || estab_workflow_may_act_for_telecommunications ($attachmentPageIdentity);
   if (!$attachmentArchiveRoleAllowed) {
     throw new EstabReadPermissionException (
       "Keine Ihrer aktuell wirksamen Funktionen darf das Anhangarchiv öffnen."

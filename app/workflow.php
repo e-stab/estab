@@ -1778,9 +1778,6 @@ function estab_workflow_route_allowed(array $identity, string $method, array $re
         return false;
     }
 
-    $isTelecommunications = estab_workflow_is_telecommunications($identity);
-    $isTelecommunicationsLead =
-        estab_workflow_is_telecommunications_lead($identity);
     $isViewer = estab_workflow_is_viewer($identity);
     $isStaffWriter = estab_workflow_is_staff_writer($identity);
     $mayWriteTelecommunications =
@@ -1833,7 +1830,7 @@ function estab_workflow_route_allowed(array $identity, string $method, array $re
         && (
             $method !== 'POST'
             || !(
-                ($isTelecommunications && isset($request['fm_admin_x']))
+                ($mayActForTelecommunications && isset($request['fm_admin_x']))
                 || ($isViewer && isset($request['si_admin_x']))
             )
         )
@@ -1887,8 +1884,10 @@ function estab_workflow_route_allowed(array $identity, string $method, array $re
             'Stab_lesen' => $isStaffWriter,
             'Stab_sichten' => $mayWriteViewer,
             'LdF-Eingang', 'LdF-Ausgang' => $mayWriteTelecommunicationsLead,
+            // Die Vertretung endet nicht am Knopf: Wer die Seite des A/W
+            // oeffnen darf, muss ihren Vordruck auch abschicken koennen.
             'FM-Ausgang',
-            'FM-Eingang', 'FM-Eingang_Anhang' => $mayWriteTelecommunications,
+            'FM-Eingang', 'FM-Eingang_Anhang' => $mayWriteForTelecommunications,
             default => false,
         };
         if (!$allowed) {
