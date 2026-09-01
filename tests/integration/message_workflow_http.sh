@@ -2749,6 +2749,42 @@ assert_status 200 'reset S2 message overview filters' \
 assert_no_runtime_error 'reset S2 message overview filters'
 assert_body "$incoming_marker" 'reset S2 message overview result'
 
+# Open a message FROM the overview -- the second half of the same request
+# boundary. Bisher endete die Deckung an der Liste: Die Detailadresse
+# (ueb_fm=ueb) stand in keinem einzigen Aufruf, nur als Zeichenkette in einer
+# Quelltextpruefung. Der Vordruck kam deshalb monatelang ungepflegt davon.
+#
+# Geprueft werden beide Seiten der Ablage: Ein Stabskonto besitzt einen
+# eigenen Kategorienraum und sieht den Kasten, eine Fernmeldefunktion besitzt
+# keinen und sieht ihn nicht. Entscheidend ist in beiden Faellen, dass der
+# Vordruck selbst vollstaendig ankommt -- der Abbruch lag im Zwischenspeicher
+# des Formulars und lieferte eine Seite mit Kopfzeile und ohne ein Feld.
+assert_status 200 'open S2 message form from the overview' \
+    --cookie "$s2_cookies" --cookie-jar "$s2_cookies" \
+    --get \
+    --data-urlencode 'ueb_fm=ueb' \
+    --data-urlencode "00_lfd=$incoming_id" \
+    "$base_url/4fueltg/ue_ltg.php"
+assert_no_runtime_error 'S2 message form from the overview'
+assert_body 'data-estab-official-message-form' 'S2 official message grid'
+assert_body 'id="f_12_inhalt"' 'S2 message content field'
+assert_body '<details class="estab-message-categories">' \
+    'S2 filing block with an own category workspace'
+
+assert_status 200 'open LdF message form from the overview' \
+    --cookie "$ldf_cookies" --cookie-jar "$ldf_cookies" \
+    --get \
+    --data-urlencode 'ueb_fm=ueb' \
+    --data-urlencode "00_lfd=$incoming_id" \
+    "$base_url/4fueltg/ue_ltg.php"
+assert_no_runtime_error 'LdF message form from the overview'
+assert_body 'data-estab-official-message-form' 'LdF official message grid'
+assert_body 'id="f_12_inhalt"' 'LdF message content field'
+assert_body_absent '<details class="estab-message-categories">' \
+    'LdF filing block without an own category workspace'
+assert_body_absent 'Kategorien und Ablage stehen derzeit nicht' \
+    'LdF filing block asked before it read'
+
 load_sidebar "$aw_cookies" 'A/W navigation before second review'
 assert_body 'name="fm_admin_x"' 'rendered A/W second-review action'
 admin_csrf=$(csrf_from_body)
