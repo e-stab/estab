@@ -5379,7 +5379,7 @@ function estab_dv_add_telecom_entry(
                 . ' `medium`, `funkart`, `band`, `kanal`, `bandlage`, `verkehrsform`, `relaisstelle`, `betriebsart`, `rufgruppe`, `anschlussart`, `datenart`,'
                 . ' `besondere_vermerke`, `bemerkungen`)'
                 . ' VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,'
-                . ' ?, ?)'
+                . ' ?, ?, ?)'
             );
             if (!$insert) {
                 throw new RuntimeException('Planposition konnte nicht vorbereitet werden.');
@@ -5659,7 +5659,15 @@ function estab_dv_add_telecom_counterpart(
             $expectedRevision,
             $protocolTable
         ): int {
-            estab_dv_require_strict_incident_snapshot($incident, $incidentId);
+            /*
+             * KEINE Pruefung auf den strengen Berechtigungsmodus.
+             *
+             * Die stand hier zuerst, aus der falschen Vorlage uebernommen:
+             * Sie gehoert zu den foermlichen Dienstschichten, nicht zur
+             * Fernmeldeplanung. Eine Gegenstelle muss dort bearbeitbar sein,
+             * wo ihr Weg es ist -- alles andere waere eine Sperre, die den
+             * Entwurf halb bedienbar macht.
+             */
             $selected = estab_dv_require_write_capability(
                 $connection,
                 $incidentId,
@@ -5776,7 +5784,15 @@ function estab_dv_remove_telecom_counterpart(
             $expectedRevision,
             $protocolTable
         ): bool {
-            estab_dv_require_strict_incident_snapshot($incident, $incidentId);
+            /*
+             * KEINE Pruefung auf den strengen Berechtigungsmodus.
+             *
+             * Die stand hier zuerst, aus der falschen Vorlage uebernommen:
+             * Sie gehoert zu den foermlichen Dienstschichten, nicht zur
+             * Fernmeldeplanung. Eine Gegenstelle muss dort bearbeitbar sein,
+             * wo ihr Weg es ist -- alles andere waere eine Sperre, die den
+             * Entwurf halb bedienbar macht.
+             */
             $selected = estab_dv_require_write_capability(
                 $connection,
                 $incidentId,

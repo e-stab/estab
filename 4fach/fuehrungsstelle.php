@@ -1787,11 +1787,11 @@ foreach ($plans as $plan) {
                           <small>Klarbezeichnung der Stelle oder Einheit.</small>
                         </label>
                         <label><?= dv_operations_html(
-                            'Erreichbar unter ('
+                            'Erreichbar unter · '
                             . estab_dv_telecom_route_label(
                                 $entry['medium'],
                                 $entry['funkart'] ?? null
-                            ) . ')'
+                            )
                         ) ?>
                           <input name="erreichbarkeit" maxlength="255" required>
                           <small>Das Mittel ist das dieses Wegs.</small>
