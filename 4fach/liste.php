@@ -1797,7 +1797,12 @@ class Listen extends kategorien {
                 false,
                 true
               );
-            }
+            },
+            // Die Korrekturliste siebt nicht: Das Band des Bauteils schickte
+            // ein GET ohne Token und ohne Ansichtsauswahl, und der
+            // Steuerlauf wies es ab -- ein Suchfeld, das nur "Aktion nicht
+            // erlaubt" fand.
+            eigeneBedienung: true
           );
         }
         echo "</section>";
@@ -1986,7 +1991,12 @@ class Listen extends kategorien {
                 false,
                 true
               );
-            }
+            },
+            // Suchband, Ergebnisleiste und Blaetterer stehen oben und unten
+            // als POST-Formulare mit Token und Ansichtsauswahl. Das Band des
+            // Bauteils daneben sprach GET -- und jede Suche darin endete mit
+            // "Aktion nicht erlaubt".
+            eigeneBedienung: true
           );
         }
         estab_message_list_render_pager (

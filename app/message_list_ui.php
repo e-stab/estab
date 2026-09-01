@@ -690,7 +690,8 @@ function estab_message_list_render_table(
     array $rows,
     callable $openControl,
     string $zusatzbaender = '',
-    ?array $fremd = null
+    ?array $fremd = null,
+    bool $eigeneBedienung = false
 ): void {
     /*
      * Die Meldungsuebersicht kommt aus dem Tabellenbauteil (app/tabelle.php)
@@ -851,6 +852,23 @@ function estab_message_list_render_table(
          * Sprache, und die Liste sieht aus wie jede andere.
          */
         'zusatzbaender' => $zusatzbaender,
+        /*
+         * Wer seine Bedienung selbst stellt, bekommt keine zweite dazu.
+         *
+         * Das Band des Bauteils spricht GET: Sein Suchknopf schickt ein
+         * GET-Formular, sein Blaetterer sind Verweise. Die Uebersicht der
+         * Uebungsleitung ist genauso gebaut -- dort ist das richtig.
+         *
+         * Die zweite Sichtung im Nachrichtenteil ist es nicht: Sie bringt
+         * Suchband, Ergebnisleiste und Blaetterer als POST-Formulare mit
+         * Token mit, weil ihr Steuerlauf jede Nachrichtenanfrage an POST und
+         * an die gewaehlte Ansicht bindet. Neben dieser Bedienung stand
+         * bisher die des Bauteils -- und jede Suche darin endete mit
+         * "Aktion nicht erlaubt", weil ihr GET weder Token noch
+         * Ansichtsauswahl trug. Die Korrekturliste zeigte dasselbe Band,
+         * ohne ueberhaupt danach zu sieben.
+         */
+        'baender' => !$eigeneBedienung,
         'felder' => [
             'suche' => 'ml_q',
             'groesse' => 'ml_page_size',

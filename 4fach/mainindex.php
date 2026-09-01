@@ -167,7 +167,22 @@ if (
     || isset ($returnValue ["action"])
     || isset ($returnValue ["reset_record"])
     || isset ($returnValue ["m2_abmelden_x"])
-    || isset ($returnValue ["stab_korrekturen_x"])
+    /*
+     * Die Korrekturliste stand hier einmal mit -- und war damit nicht
+     * erreichbar.
+     *
+     * Sie ist eine Ansichtsauswahl wie "Lesen" oder "2. Sichtung": Der
+     * Knopf der Seitenleiste schickt einen POST mit Token, und der
+     * Steuerlauf leitet ihn nach dem Muster Post/Redirect/Get auf
+     * "?stab_korrekturen_x=1" um. Was danach ankommt, ist ein GET -- ohne
+     * POST und ohne Token. Diese Zeile wies genau diesen GET ab, und der
+     * Einstieg in die Korrekturschleife endete jedes Mal mit "Aktion nicht
+     * erlaubt".
+     *
+     * Was zu schuetzen ist, steht weiter unten und bleibt: Die Uebernahme
+     * einer zurueckgewiesenen Meldung faehrt als "stab=korrektur" und
+     * verlangt POST samt Token. Die Liste selbst zeigt nur an.
+     */
     || in_array (($returnValue ["stab"] ?? ""), array (
       "meldung", "korrektur",
     ), true)

@@ -605,12 +605,27 @@ $correctionController = $slice(
     'if (estab_workflow_should_render_primary_view (',
     '/**********************************************************************\\'
 );
+/*
+ * Geschuetzt wird die Uebernahme, nicht das Hinsehen.
+ *
+ * Hier stand einmal, dass auch "stab_korrekturen_x" durch das CSRF-Tor
+ * muss. Das war nicht haltbar: Der Knopf der Seitenleiste schickt einen
+ * POST mit Token, den der Steuerlauf auf "?stab_korrekturen_x=1"
+ * umleitet -- und der GET danach hat weder POST noch Token. Die
+ * Forderung machte den Einstieg in die Korrekturschleife unerreichbar.
+ *
+ * Was bleibt, ist der Punkt, um den es ging: Wer eine zurueckgewiesene
+ * Meldung uebernimmt, faehrt als "stab=korrektur" durch dasselbe Tor --
+ * mit POST und Token --, und die Uebernahme traegt den neuen Verfasser,
+ * nicht den alten.
+ */
 $assert(
     $csrfGate !== ''
-        && str_contains(
+        && !str_contains(
             $csrfGate,
             'isset ($returnValue ["stab_korrekturen_x"])'
         )
+        && str_contains($csrfGate, '"meldung", "korrektur",')
         && str_contains(
             $csrfGate,
             'estab_csrf_require_post ($_SERVER, $_POST);'
@@ -631,7 +646,7 @@ $assert(
             $correctionController,
             '$formdata ["13_abseinheit"] = $activeCommandPostName;'
         ),
-    'correction queue lacks CSRF protection or keeps the previous author in takeover form fields'
+    'correction takeover lacks CSRF protection or keeps the previous author in takeover form fields'
 );
 
 $modeUpdate = $slice(

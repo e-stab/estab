@@ -955,6 +955,45 @@ $assert(
     'Second-sighting result branch retains image buttons or auto-refresh'
 );
 
+/*
+ * Eine Bedienung, nicht zwei.
+ *
+ * Die zweite Sichtung und die Korrekturliste stehen im Nachrichtenteil.
+ * Dessen Steuerlauf bindet jede Anfrage mit Listenfeldern an POST, an ein
+ * Token und an die gewaehlte Ansicht -- deshalb bringen beide ihre
+ * Bedienung als POST-Formulare mit. Das Band des Tabellenbauteils spricht
+ * GET; stand es daneben, endete jede Suche darin mit "Aktion nicht
+ * erlaubt", und der Bediener sah nur eine abgewiesene Anfrage.
+ *
+ * Die Uebersicht der Uebungsleitung ist der andere Fall: Sie ist ganz auf
+ * GET gebaut und laesst die Baender des Bauteils stehen. Deshalb steht der
+ * Schalter am Aufruf und nicht im Bauteil.
+ */
+$listUiSource = (string) file_get_contents($root . '/app/message_list_ui.php');
+$korrekturStart = strrpos($listExecutableSource, 'case "KORREKTUR"');
+$korrekturEnde = $korrekturStart === false
+    ? false
+    : strpos($listExecutableSource, 'break;', $korrekturStart);
+$korrekturZweig = (
+    is_int($korrekturStart)
+    && is_int($korrekturEnde)
+    && $korrekturEnde > $korrekturStart
+) ? substr(
+    $listExecutableSource,
+    $korrekturStart,
+    $korrekturEnde - $korrekturStart
+) : '';
+$assert(
+    str_contains($secondCase, 'eigeneBedienung: true')
+        && $korrekturZweig !== ''
+        && str_contains($korrekturZweig, 'estab_message_list_render_table')
+        && str_contains($korrekturZweig, 'eigeneBedienung: true')
+        && str_contains($listUiSource, '\'baender\' => !$eigeneBedienung,'),
+    'Zweite Sichtung oder Korrekturliste zeichnet wieder das GET-Band des '
+        . 'Tabellenbauteils neben ihre eigene Bedienung; dessen Suche endet '
+        . 'im Nachrichtenteil mit "Aktion nicht erlaubt".'
+);
+
 $secondShellStart = strpos($mainSource, '2. SICHTUNG');
 $secondShellEnd = $secondShellStart === false
     ? false
