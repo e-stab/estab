@@ -429,15 +429,28 @@ diesen Vorgang.
 
 ## P5 — Aufräumen
 
-- [ ] **A26** `!` **S** Abbau der Alttabelle `nv_komplan`
-      → `docker/db/migrations/128-komplan-abbau.sql`, `app/readiness.php`, `app/incident.php`, `4fcfg/dbcfg.inc.php`, `docker/db/init/10-schema.sql`, `docker/db/verify.sql`
-      - [ ] Die Migration **bricht ab**, wenn die Tabelle nicht leer ist, und fordert zum Sichern auf
-      - [ ] Erst dann: Tabelle, Fremdschlüssel `fk_komplan_einsatz`, Auslöser `estab_komplan_b{i,u,d}_einsatz`
-      - [ ] Sechs Fundstellen in `readiness.php`, darunter die Anzahlprüfung `= 10` → `= 9`
-      - [ ] `EXISTS`-Zweig in [incident.php:781](app/incident.php:781), Konfigurationszeile in [dbcfg.inc.php:20](4fcfg/dbcfg.inc.php:20)
-      - [ ] `tests/fixtures/legacy-runtime-schema.sql` **behält** die Tabelle — sie bildet den früheren Stand ab
-      - **Prüfung:** Migration gegen eine nicht leere Tabelle muss abbrechen
-      - **Abhängigkeit:** keine · **Spec:** 15
+- [x] **A26** `!` **S** Abbau der Alttabelle `nv_komplan`
+      → `docker/db/migrations/130-komplan-abbau.sql`, `app/readiness.php`,
+        `app/incident.php`, `4fcfg/dbcfg.inc.php`, `docker/db/verify.sql`,
+        `docker/db/migrate.sh`
+      - [x] Die Migration **bricht ab**, wenn die Tabelle nicht leer ist, und
+            sagt, was zu tun ist
+      - [x] Tabelle, Fremdschlüssel und die drei Auslöser
+      - [x] Sechs Fundstellen in `readiness.php`, sechs in `verify.sql`, der
+            `EXISTS`-Zweig in `incident.php` samt Platzhalterzahl, die
+            Konfigurationszeile in `dbcfg.inc.php`
+      - [x] `docker/db/init/10-schema.sql` **behält** die Tabelle — die
+            Grundfassung ist in `estab_schema_baselines` prüfsummengebunden;
+            sie zu ändern ließe jede bestehende Installation mit „Checksum
+            mismatch for fresh schema baseline" scheitern. Die Aufgabenliste
+            hatte hier zunächst das Gegenteil verlangt
+
+      **Beim Einspielen gefunden, nicht statisch:** `docker/db/migrate.sh`
+      zählt bei **jedem** Start die vierzehn Tabellen der Grundfassung nach —
+      also auch lange nach dem Abbau. Es zählt jetzt die dreizehn, die noch
+      gelten; sonst fährt nach dem Abbau keine Installation mehr hoch.
+      - **Prüfung:** Migration gegen die gefüllte Datenbank eingespielt,
+        42 Nachprüfungen bestanden, Anwendung wieder erreichbar
 
 - [ ] **A27** `·` **S** Handbuch und Bedienung nachführen
       → `docs/BEDIENUNG.md`, `handbuch/`

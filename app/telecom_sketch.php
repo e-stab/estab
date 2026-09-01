@@ -44,10 +44,17 @@ declare(strict_types=1);
 /** Die Zeichenfläche. A4 quer bei rund 100 Bildpunkten je Zoll. */
 const ESTAB_SKETCH_BREITE = 1190;
 const ESTAB_SKETCH_HOEHE = 842;
-const ESTAB_SKETCH_KASTEN_BREITE = 250;
+const ESTAB_SKETCH_KASTEN_BREITE = 230;
 const ESTAB_SKETCH_KASTEN_HOEHE = 62;
-/** Die Mitte: unsere Führungsstelle mit unseren Mitteln. */
-const ESTAB_SKETCH_MITTE_BREITE = 330;
+/**
+ * Die Mitte: unsere Führungsstelle mit unseren Mitteln.
+ *
+ * Breiter als zuerst gedacht. Eine Zeile trägt Mittel, Erreichbarkeit UND
+ * das Kennzeichen des Wegs -- ohne das sind zwei Digitalfunkwege derselben
+ * Stelle nicht zu unterscheiden --, und bei 330 Bildpunkten wurde davon zu
+ * viel abgeschnitten.
+ */
+const ESTAB_SKETCH_MITTE_BREITE = 420;
 
 /**
  * Die Linienart je Mittel.
@@ -267,11 +274,11 @@ function estab_telecom_sketch_layout(array $seiten): array
     return [
         'links' => $spalte(
             count($seiten['links']),
-            ESTAB_SKETCH_KASTEN_BREITE / 2 + 24.0
+            ESTAB_SKETCH_KASTEN_BREITE / 2 + 25.0
         ),
         'rechts' => $spalte(
             count($seiten['rechts']),
-            ESTAB_SKETCH_BREITE - ESTAB_SKETCH_KASTEN_BREITE / 2 - 24.0
+            ESTAB_SKETCH_BREITE - ESTAB_SKETCH_KASTEN_BREITE / 2 - 25.0
         ),
         'platz' => $platz,
     ];
@@ -466,11 +473,20 @@ function estab_telecom_sketch_svg(
                 if ($band !== '' || $kanal !== '') {
                     $wort .= ' · Kanal ' . trim($kanal . ' ' . $band);
                 }
+                /*
+                 * Die Beschriftung wird auf das Band beschnitten, nicht auf
+                 * eine feste Zeichenzahl. Sonst laeuft sie bei einem langen
+                 * Kanalnamen in den Kasten der Gegenstelle -- am Bildschirm
+                 * gesehen, in keiner Zahl sichtbar.
+                 */
                 $teile[] = '<text x="' . (($knick + $zielX) / 2) . '" y="'
                     . ($ort['y'] - 7) . '" text-anchor="middle"'
                     . ' font-size="11" fill="#000000" stroke="#ffffff"'
                     . ' stroke-width="4" paint-order="stroke fill">'
-                    . $h(estab_telecom_sketch_kurz($wort, 26)) . '</text>';
+                    . $h(estab_telecom_sketch_kurz(
+                        $wort,
+                        max(6, (int) floor($bandBreite / 5.6))
+                    )) . '</text>';
             }
             if ($istErsatz) {
                 $teile[] = '<text x="' . (($knick + $zielX) / 2) . '" y="'
@@ -552,7 +568,7 @@ function estab_telecom_sketch_svg(
     }
     $teile[] = '<text x="' . ($linkeKante + 76) . '" y="' . ($mitteY + 30)
         . '" font-size="15" font-weight="bold">'
-        . $h(estab_telecom_sketch_kurz($fuehrungsstelle, 24)) . '</text>';
+        . $h(estab_telecom_sketch_kurz($fuehrungsstelle, 32)) . '</text>';
     $eigenerRufname = estab_telecom_sketch_own_callsign($plan);
     $teile[] = '<text x="' . ($linkeKante + 76) . '" y="' . ($mitteY + 52)
         . '" font-size="12">'
@@ -591,12 +607,12 @@ function estab_telecom_sketch_svg(
         $kennzeichen = estab_dv_telecom_route_key($eigenes);
         $adresse = estab_telecom_sketch_kurz(
             (string) ($eigenes['erreichbarkeit'] ?? ''),
-            24
+            30
         );
         if ($kennzeichen !== '') {
             $adresse .= '  ·  ' . estab_telecom_sketch_kurz(
                 $kennzeichen,
-                22
+                30
             );
         }
         $teile[] = '<text x="' . ($rechteKante - 12)
@@ -614,8 +630,8 @@ function estab_telecom_sketch_svg(
             . '" x2="' . $rechteKante . '" y2="' . $tafelY
             . '" stroke="#000000" stroke-width="2"/>';
         $spalteTechnik = $linkeKante + 12;
-        $spalteNummer = $linkeKante + 118;
-        $spalteTeilnehmer = $linkeKante + 190;
+        $spalteNummer = $linkeKante + 120;
+        $spalteTeilnehmer = $linkeKante + 240;
         $teile[] = '<text x="' . $spalteTechnik . '" y="'
             . ($tafelY + 16) . '" font-size="10" font-weight="bold">'
             . 'Technik</text>';
@@ -638,13 +654,13 @@ function estab_telecom_sketch_svg(
                 . '" font-size="11">'
                 . $h(estab_telecom_sketch_kurz(
                     (string) ($nebenstelle['nummer'] ?? ''),
-                    10
+                    16
                 )) . '</text>';
             $teile[] = '<text x="' . $spalteTeilnehmer . '" y="' . $y
                 . '" font-size="11">'
                 . $h(estab_telecom_sketch_kurz(
                     (string) ($nebenstelle['teilnehmer'] ?? ''),
-                    18
+                    24
                 )) . '</text>';
         }
     }
