@@ -818,10 +818,14 @@ foreach ($officialLabels as $label) {
     );
     $previousOffset = $offset;
 }
+// Die Ueberschriften stehen einmal, im gemeinsamen Verteilermodul: Der
+// PDF-Abzug druckt dieselben drei Bloecke wie die Ansicht.
+$distributionHeadings = estab_nv_verteiler_ueberschriften();
 $assert(
-    str_contains($view, "'lead' => 'TEL/EL/EAL/UEAL'")
-        && str_contains($view, "'adviser' => 'Fachberater'")
-        && str_contains($view, "'liaison' => 'Verb.stellen'"),
+    ($distributionHeadings['lead'] ?? '') === 'TEL/EL/EAL/UEAL'
+        && ($distributionHeadings['adviser'] ?? '') === 'Fachberater'
+        && ($distributionHeadings['liaison'] ?? '') === 'Verb.stellen'
+        && str_contains($view, 'estab_nv_verteiler_ueberschriften()'),
     'Official distribution headings are incomplete'
 );
 $assert(
@@ -921,10 +925,13 @@ $assert(
             < strpos($renderView, 'name="kate_todo"'),
     'The form does not submit a server-derived recipient-matrix revision value'
 );
+$leadPositions = estab_nv_verteiler_fuehrung();
 $assert(
     str_contains($view, 'estab-official-lead-director')
         && str_contains($view, 'estab-official-lead-sections')
-        && str_contains($view, "5 => ['display' => 'S5'")
+        && count($leadPositions) === 7
+        && ($leadPositions[0]['display'] ?? '') === 'Leiter'
+        && ($leadPositions[5]['display'] ?? '') === 'S5'
         && str_contains($css, 'grid-template-rows: repeat(6,'),
     'The official Leiter/S1-S6 distributor geometry can collapse'
 );

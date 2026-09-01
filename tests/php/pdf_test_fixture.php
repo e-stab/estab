@@ -50,7 +50,15 @@ function estab_pdf_test_message_fixture(): array
     ]);
 }
 
-/** @return array<int,array<int,array{fkt:string}>> */
+/**
+ * Die Empfaengermatrix der Pruefung.
+ *
+ * Die Rolle steht mit im Datensatz, weil Feld 19 die Zellen nach ihr auf die
+ * drei gedruckten Bloecke verteilt: Fachberater in ihren eigenen, alles
+ * andere in die Fuehrungsspalte.
+ *
+ * @return array<int,array<int,array{fkt:string,rolle:string}>>
+ */
 function estab_pdf_test_recipient_matrix(): array
 {
     $functions = [
@@ -60,12 +68,15 @@ function estab_pdf_test_recipient_matrix(): array
         '', '', '', '',
         '', '', '', '',
     ];
+    $roles = ['POL' => 'FB', 'THW' => 'FB', 'SAN' => 'FB'];
     $matrix = [];
     $functionIndex = 0;
     for ($row = 1; $row <= 5; $row++) {
         for ($column = 1; $column <= 4; $column++) {
+            $function = $functions[$functionIndex++];
             $matrix[$row][$column] = [
-                'fkt' => $functions[$functionIndex++],
+                'fkt' => $function,
+                'rolle' => $roles[$function] ?? ($function === '' ? 'leer' : 'Stab'),
             ];
         }
     }

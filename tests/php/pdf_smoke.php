@@ -3,6 +3,8 @@
 $repositoryRoot = dirname(__DIR__, 2);
 require_once $repositoryRoot . '/app/bootstrap.php';
 require_once __DIR__ . '/pdf_test_fixture.php';
+require_once $repositoryRoot . '/app/nv_raster.php';
+require_once $repositoryRoot . '/app/nv_field_numbers.php';
 
 $_SERVER['DOCUMENT_ROOT'] = $repositoryRoot;
 $originalDirectory = getcwd();
@@ -19,7 +21,7 @@ $pdf = new vordruckaspdf($fixture, $recipientMatrix);
 $pdf->SetCompression(false);
 $pdf->SetTitle('eStab PDF smoke test');
 $pdf->SetFont('helvetica');
-$pdf->SetAutoPageBreak(true, $pdf->bottom - $pdf->point[38][1]);
+$pdf->SetAutoPageBreak(true, $pdf->message_form_break_margin());
 $pdf->AddPage();
 $pdf->writedata_inhalt();
 $document = $pdf->Output('', 'S');
@@ -47,12 +49,24 @@ if (!str_ends_with($document, "%%EOF\n")) {
 if (strlen($document) < 5000) {
     throw new RuntimeException('Generated PDF is unexpectedly small');
 }
+$raster = estab_nv_raster();
+
+// Der Abzug traegt dasselbe Raster wie die Bildschirmansicht: die drei Zonen,
+// die Bearbeitungsvermerke und die Bloecke des Verteilers.
 foreach (
     [
-        'EINGANG',
-        'AUSGANG',
-        'Nachweis-Nr.',
-        'Fm-Betriebsstelle',
+        'Fm-Zentrale',
+        'Sichter',
+        'Aufnahmevermerk',
+        'Annahmevermerk',
+        'Technisches',
+        'Betriebsbuch',
+        'Rufname der Gegenstelle',
+        'Abfassungszeit:',
+        'Quittung:',
+        'Vermerke:',
+        'TEL/EL/EAL/UEAL',
+        'Verb.stellen',
         'Blitz',
         'Ruf Nr.',
         '0711 123456',
@@ -64,6 +78,25 @@ foreach (
         throw new RuntimeException('Message form marker is missing: ' . $marker);
     }
 }
+
+// Das Raster des Altbestandes ist fort. Wer es wieder einbaut, druckt einen
+// anderen Vordruck als die Oberflaeche.
+foreach (['Fm-Betriebsstelle', 'Nachweis-Nr.'] as $legacy) {
+    if (str_contains($document, $legacy)) {
+        throw new RuntimeException('Legacy message form raster is back: ' . $legacy);
+    }
+}
+
+// Die Feldnummern der Ausfuellanleitung stehen auf dem Blatt. Wer "13" liest,
+// schlaegt Anweisung 13 nach.
+foreach (array_keys(estab_nv_field_map()) as $printedNumber) {
+    if (!str_contains($document, '(' . $printedNumber . ') Tj')) {
+        throw new RuntimeException(
+            'Printed field number is missing: ' . $printedNumber
+        );
+    }
+}
+
 if (str_contains($document, 'bbb')) {
     throw new RuntimeException('Message form exposes a raw priority code');
 }
@@ -81,51 +114,84 @@ if (str_contains($document, '/Subtype /Image')) {
     throw new RuntimeException('Message form contains an unexpected image');
 }
 
-// The Nachrichtenform/Vorrang band has exactly the official 61/39 divider.
-// Keep this vector-level proof in addition to the rendered pixel comparison:
-// it catches a visually easy-to-miss legacy divider inside Nachrichtenform.
-if (!str_contains($document, '357.17 683.15 m 357.17 646.30 l S')) {
-    throw new RuntimeException('Official 61/39 priority divider is missing');
+// Der Ausdruck darf kein Ankreuzfeld vortaeuschen, das der Vordruck nicht
+// hat (SPEC, NV-09-VORRANGSTUFE). Staatsnot wird benannt, nicht gekreuzt.
+if (!str_contains($document, 'Vorrangstufe: Staatsnot')) {
+    throw new RuntimeException('Priority beyond Blitz is not named');
 }
-if (str_contains($document, '184.25 683.15 m 184.25 646.30 l S')) {
-    throw new RuntimeException('Legacy divider still splits Nachrichtenform');
+if (str_contains($document, '(Staatsnot) Tj')) {
+    throw new RuntimeException('Staatsnot is printed as a checkbox label');
 }
 
-// Prove that the selected Staatsnot X is fully contained in its square. The
-// line half-width is included so a visually protruding stroke fails as well.
-$checkboxMatched = preg_match(
-    '/\(Staatsnot\) Tj ET Q\s+'
-        . '(?:[0-9.]+ w\s+[0-9.]+ G\s+)'
-        . '([0-9.]+) ([0-9.]+) ([0-9.]+) -([0-9.]+) re S\s+'
-        . '([0-9.]+) w\s+[0-9.]+ [0-9.]+ [0-9.]+ RG\s+'
-        . '([0-9.]+) ([0-9.]+) m ([0-9.]+) ([0-9.]+) l S\s+'
-        . '([0-9.]+) w\s+[0-9.]+ [0-9.]+ [0-9.]+ RG\s+'
-        . '([0-9.]+) ([0-9.]+) m ([0-9.]+) ([0-9.]+) l S/',
-    $document,
-    $checkbox
+// Nachrichtenform und Vorrang teilen sich eine Zeile. Die Trennung steht
+// dort, wo das Raster sie fuehrt -- gerechnet, nicht abgeschrieben, damit
+// eine Rastermessung den Beweis nicht stillschweigend ueberholt.
+$sheetLeft = (210.0 - (float) $raster['breite']) / 2.0;
+$sheetTop = 9.0;
+$scale = 72.0 / 25.4;
+$dividerX = ($sheetLeft + (float) $raster['x']['zeichen']) * $scale;
+$divider = sprintf(
+    '%.2F %.2F m %.2F %.2F l S',
+    $dividerX,
+    (297.0 - ($sheetTop + (float) $raster['y']['weg_ende'])) * $scale,
+    $dividerX,
+    (297.0 - ($sheetTop + (float) $raster['y']['art_ende'])) * $scale
 );
-if ($checkboxMatched !== 1) {
-    throw new RuntimeException('Selected Staatsnot checkbox geometry missing');
+if (!str_contains($document, $divider)) {
+    throw new RuntimeException('Official priority divider is missing');
 }
-$left = (float) $checkbox[1];
-$top = (float) $checkbox[2];
-$right = $left + (float) $checkbox[3];
-$bottom = $top - (float) $checkbox[4];
-$halfStroke = max((float) $checkbox[5], (float) $checkbox[10]) / 2;
-$coordinates = [
-    [(float) $checkbox[6], (float) $checkbox[7]],
-    [(float) $checkbox[8], (float) $checkbox[9]],
-    [(float) $checkbox[11], (float) $checkbox[12]],
-    [(float) $checkbox[13], (float) $checkbox[14]],
-];
-foreach ($coordinates as [$x, $y]) {
+
+// Jede gesetzte Marke bleibt in ihrem Kaestchen. FPDF zeichnet das Kaestchen
+// als "re B" und die Marke unmittelbar danach als "re f"; genau diese Paare
+// werden geprueft.
+$rectangles = [];
+preg_match_all(
+    '/([0-9.]+) ([0-9.]+) ([0-9.]+) -([0-9.]+) re (B|f)\b/',
+    $document,
+    $matches,
+    PREG_SET_ORDER
+);
+foreach ($matches as $match) {
+    $rectangles[] = [
+        'left' => (float) $match[1],
+        'top' => (float) $match[2],
+        'width' => (float) $match[3],
+        'height' => (float) $match[4],
+        'operator' => $match[5],
+    ];
+}
+$markedBoxes = 0;
+foreach ($rectangles as $index => $rectangle) {
+    if ($rectangle['operator'] !== 'f' || $index === 0) {
+        continue;
+    }
+    $box = $rectangles[$index - 1];
+    if ($box['operator'] !== 'B') {
+        continue;
+    }
+    $markedBoxes++;
     if (
-        $x - $halfStroke < $left
-        || $x + $halfStroke > $right
-        || $y - $halfStroke < $bottom
-        || $y + $halfStroke > $top
+        $rectangle['left'] < $box['left']
+        || $rectangle['top'] > $box['top']
+        || $rectangle['left'] + $rectangle['width']
+            > $box['left'] + $box['width']
+        || $rectangle['top'] - $rectangle['height']
+            < $box['top'] - $box['height']
     ) {
-        throw new RuntimeException('Staatsnot X protrudes from its checkbox');
+        throw new RuntimeException('A checkbox mark protrudes from its box');
+    }
+}
+if ($markedBoxes < 1) {
+    throw new RuntimeException('No checkbox of the fixture is marked');
+}
+
+// Feld 19 verteilt die Matrix auf die drei Bloecke des Vordrucks. Die
+// Fachberater stehen in ihrem eigenen, nicht in der Fuehrungsspalte.
+foreach (['POL', 'THW', 'SAN', 'Leiter', 'S6'] as $recipient) {
+    if (!str_contains($document, '(' . $recipient . ') Tj')) {
+        throw new RuntimeException(
+            'Distribution block entry is missing: ' . $recipient
+        );
     }
 }
 

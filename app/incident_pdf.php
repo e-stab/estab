@@ -665,11 +665,15 @@ final class EstabIncidentPdf extends vordruckaspdf
     private function configureMessageFormLayout(): void
     {
         $this->nextPageLayout = self::LAYOUT_MESSAGE_FORM;
-        $this->SetMargins(10, 10, 10);
-        $this->SetAutoPageBreak(
-            true,
-            $this->bottom - $this->point[38][1]
+        // Der Vordruck bringt seinen eigenen Rand mit: das Blatt liegt
+        // mittig auf der Seite, und die Zeichenbefehle rechnen von seiner
+        // linken oberen Ecke aus.
+        $this->SetMargins(
+            $this->border['left'],
+            $this->border['top'],
+            $this->border['right']
         );
+        $this->SetAutoPageBreak(true, $this->message_form_break_margin());
     }
 
     private function configureEtbFormLayout(string $pageDate): void
@@ -1132,7 +1136,10 @@ final class EstabIncidentPdf extends vordruckaspdf
         if (!$this->isMessageFormPage()) {
             return $this->AutoPageBreak;
         }
-        if ($this->GetY() >= $this->point[38][1] - 10) {
+        if (
+            $this->GetY() >= $this->message_form_text_bottom()
+                - $this->raster['zeilenhoehe']
+        ) {
             $this->configureMessageFormLayout();
             $this->AddPage();
             $this->set_message_content_continuation_position();

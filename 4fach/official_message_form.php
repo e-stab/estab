@@ -8,6 +8,7 @@
  * controller continues to receive the field names it already authorises.
  */
 require_once __DIR__ . '/../app/nv_field_numbers.php';
+require_once __DIR__ . '/../app/nv_verteiler.php';
 require_once __DIR__ . '/../app/ui_elements.php';
 
 trait EstabOfficialMessageFormView
@@ -1831,34 +1832,9 @@ HTML;
      */
     function official_message_stored_recipients(): array
     {
-        $distribution = (string)($this->formdata['16_empf'] ?? '');
-        $recipients = [];
-        foreach (explode(',', $distribution) as $token) {
-            $token = trim($token);
-            if (
-                preg_match(
-                    '/\A(.+)_(bl|gn|rt|ge|gb)\z/Di',
-                    $token,
-                    $parts
-                ) !== 1
-            ) {
-                continue;
-            }
-            $function = trim($parts[1]);
-            $colour = strtolower($parts[2]);
-            if ($function === '') {
-                continue;
-            }
-            $key = strtoupper($function);
-            $recipients[$key] ??= [
-                'function' => $function,
-                'copies' => [],
-            ];
-            if (!in_array($colour, $recipients[$key]['copies'], true)) {
-                $recipients[$key]['copies'][] = $colour;
-            }
-        }
-        return $recipients;
+        return estab_nv_gespeicherte_empfaenger(
+            (string)($this->formdata['16_empf'] ?? '')
+        );
     }
 
     /** @return list<string> */
@@ -1882,126 +1858,10 @@ HTML;
      */
     function official_message_distribution_model(): array
     {
-        $groups = ['lead' => [], 'adviser' => [], 'liaison' => []];
-        $extras = [];
-        $all = [];
-        $storedRecipients = $this->official_message_stored_recipients();
-        $representedFunctions = [];
-        $leadDefinitions = [
-            0 => ['display' => 'Leiter', 'keys' => ['LS', 'LEITER']],
-            1 => ['display' => 'S1', 'keys' => ['S1']],
-            2 => ['display' => 'S2', 'keys' => ['S2']],
-            3 => ['display' => 'S3', 'keys' => ['S3']],
-            4 => ['display' => 'S4', 'keys' => ['S4']],
-            5 => ['display' => 'S5', 'keys' => ['S5']],
-            6 => ['display' => 'S6', 'keys' => ['S6']],
-        ];
-        $leadSlots = array_fill(0, count($leadDefinitions), null);
-        for ($row = 1; $row <= 5; $row++) {
-            for ($column = 1; $column <= 4; $column++) {
-                $cell = $this->empfarray[$row][$column] ?? [];
-                $function = trim((string)($cell['fkt'] ?? ''));
-                if ($function === '') {
-                    continue;
-                }
-                $entry = [
-                    'row' => $row,
-                    'column' => $column,
-                    'function' => $function,
-                    'role' => (string)($cell['rolle'] ?? ''),
-                    'copies' => $this->official_message_recipient_copies(
-                        $function
-                    ),
-                ];
-                $representedFunctions[strtoupper($function)] = true;
-                $all[] = $entry;
-                if ($entry['role'] === 'FB') {
-                    $groups['adviser'][] = $entry;
-                } elseif (
-                    str_starts_with(strtoupper($function), 'VB')
-                    || str_starts_with(strtoupper($function), 'VERB')
-                ) {
-                    $groups['liaison'][] = $entry;
-                } else {
-                    $leadKey = strtoupper(
-                        preg_replace('/\s+/u', '', $function) ?? $function
-                    );
-                    $leadPosition = null;
-                    foreach ($leadDefinitions as $position => $definition) {
-                        if (in_array($leadKey, $definition['keys'], true)) {
-                            $leadPosition = $position;
-                            break;
-                        }
-                    }
-                    if (
-                        $leadPosition !== null
-                        && $leadSlots[$leadPosition] === null
-                    ) {
-                        $entry['display'] =
-                            $leadDefinitions[$leadPosition]['display'];
-                        $leadSlots[$leadPosition] = $entry;
-                    } else {
-                        $entry['display'] = $function;
-                        $extras[] = $entry;
-                    }
-                }
-            }
-        }
-        foreach ($leadDefinitions as $position => $definition) {
-            if ($leadSlots[$position] !== null) {
-                $groups['lead'][] = $leadSlots[$position];
-                continue;
-            }
-            $storedLead = null;
-            foreach ($definition['keys'] as $leadKey) {
-                if (isset($storedRecipients[$leadKey])) {
-                    $storedLead = $storedRecipients[$leadKey];
-                    $representedFunctions[$leadKey] = true;
-                    break;
-                }
-            }
-            $groups['lead'][] = [
-                'display' => $definition['display'],
-                'function' => (string)(
-                    $storedLead['function'] ?? $definition['display']
-                ),
-                'copies' => is_array($storedLead['copies'] ?? null)
-                    ? $storedLead['copies']
-                    : [],
-                'unavailable' => true,
-            ];
-        }
-        foreach (['adviser', 'liaison'] as $group) {
-            if (count($groups[$group]) > 6) {
-                $extras = array_merge(
-                    $extras,
-                    array_slice($groups[$group], 6)
-                );
-                $groups[$group] = array_slice($groups[$group], 0, 6);
-            }
-            while (count($groups[$group]) < 6) {
-                $groups[$group][] = [
-                    'display' => '',
-                    'function' => '',
-                    'copies' => [],
-                    'unavailable' => true,
-                ];
-            }
-        }
-        foreach ($storedRecipients as $key => $storedRecipient) {
-            if (isset($representedFunctions[$key])) {
-                continue;
-            }
-            $extras[] = [
-                'display' => $storedRecipient['function'],
-                'function' => $storedRecipient['function'],
-                'copies' => $storedRecipient['copies'],
-                'historical' => true,
-                'unavailable' => true,
-            ];
-            $representedFunctions[$key] = true;
-        }
-        return ['groups' => $groups, 'extras' => $extras, 'all' => $all];
+        return estab_nv_verteiler_modell(
+            is_array($this->empfarray) ? $this->empfarray : [],
+            $this->official_message_stored_recipients()
+        );
     }
 
     /** @param array<string,mixed> $entry */
@@ -2069,11 +1929,7 @@ HTML;
     {
         $readonly = $this->official_message_distribution_readonly();
         $model = $this->official_message_distribution_model();
-        $headings = [
-            'lead' => 'TEL/EL/EAL/UEAL',
-            'adviser' => 'Fachberater',
-            'liaison' => 'Verb.stellen',
-        ];
+        $headings = estab_nv_verteiler_ueberschriften();
         echo '<div class="estab-official-distribution-grid">';
         foreach ($headings as $group => $heading) {
             echo '<section data-estab-recipient-group="' . $group . '">'
@@ -2403,10 +2259,51 @@ HTML;
             . '</button>';
     }
 
+    /**
+     * Ob die handelnde Dienstfunktion einen eigenen Kategorienraum besitzt.
+     *
+     * Die Ablagetabellen einer Dienstfunktion entstehen nur fuer Stab und
+     * Fachberatung; estab_dynamic_schema_hat_requires_tables() entscheidet
+     * das beim Anlegen eines Kontos. Gefragt hat danach bisher allein die
+     * Seite, die sie ANLEGT. Die Seite, die sie LIEST, fragte nicht -- und
+     * eine Fernmeldefunktion (A/W, LdF) lief gegen eine Tabelle, die es fuer
+     * sie nie gab. Der Fernmeldebetrieb konnte damit keine einzige Meldung
+     * der Meldungsuebersicht oeffnen.
+     *
+     * Dieselbe Frage, dieselbe Antwort, an beiden Enden.
+     */
+    function official_message_has_category_workspace(): bool
+    {
+        require_once __DIR__ . '/../app/dynamic_schema.php';
+        $identity = estab_auth_session_identity($_SESSION);
+        if (!is_array($identity)) {
+            return false;
+        }
+        try {
+            $identity = estab_category_route_identity(
+                $identity,
+                $GLOBALS['workflowSelectedIdentity'] ?? null
+            );
+        } catch (Throwable $exception) {
+            error_log('eStab category identity is unavailable');
+            return false;
+        }
+        return estab_dynamic_schema_hat_requires_tables(
+            (string) ($identity['funktion'] ?? ''),
+            (string) ($identity['rolle'] ?? '')
+        );
+    }
+
     function official_message_categories(): void
     {
         include_once __DIR__ . '/katego.php';
         include __DIR__ . '/../4fcfg/fkt_rolle.inc.php';
+        // Ohne eigenen Kategorienraum gibt es hier nichts zu tun: kein
+        // Ablagefach, keine Auswahl, kein Knopf. Der Kasten bleibt fort,
+        // statt leer dazustehen.
+        if (!$this->official_message_has_category_workspace()) {
+            return;
+        }
         $recordId = (string)($this->formdata['00_lfd'] ?? '');
         $definitions = [
             'master' => [
@@ -2422,14 +2319,44 @@ HTML;
                 'manager' => 'Persönliche Kategorien verwalten',
             ],
         ];
+        /*
+         * Erst lesen, dann zeichnen.
+         *
+         * Gelesen wurde bisher mitten im Zeichnen. Schlug ein Lesevorgang
+         * fehl, stand der Kasten schon halb auf der Seite -- und weil der
+         * Vordruck an dieser Stelle im Zwischenspeicher gebaut wird, ging
+         * mit dem Abbruch der ganze Vordruck verloren: Der Bearbeiter sah
+         * Kopfzeile und Knopfleiste und kein einziges Feld, ohne Hinweis,
+         * woran es liegt.
+         *
+         * Getrennt kann die Ablage ausfallen, ohne die Meldung
+         * mitzunehmen -- so, wie es der Bearbeitungsweg und die Anlagen
+         * schon halten.
+         */
+        $scopes = [];
+        try {
+            foreach (array_keys($definitions) as $type) {
+                $categories = new kategorien($type);
+                $scopes[$type] = [
+                    'categories' => $categories,
+                    'selected' => $categories->db_get_kategobymsg($recordId),
+                ];
+            }
+        } catch (Throwable $exception) {
+            error_log('eStab message categories are unavailable');
+            echo '<p class="estab-tool-notice" role="status">'
+                . 'Kategorien und Ablage stehen derzeit nicht zur Verfügung. '
+                . 'Der Nachrichtenvordruck bleibt vollständig lesbar.</p>';
+            return;
+        }
         echo '<details class="estab-message-categories">'
             . '<summary>Kategorien und Ablage</summary>'
             . '<div class="estab-message-category-grid">';
         $actingFunction = '';
         foreach ($definitions as $type => $definition) {
-            $categories = new kategorien($type);
+            $categories = $scopes[$type]['categories'];
             $actingFunction = (string) $categories->stab_fkt;
-            $selected = $categories->db_get_kategobymsg($recordId);
+            $selected = $scopes[$type]['selected'];
             $managerUrl = 'katgoedt.php?' . http_build_query(
                 [
                     'dbtyp' => $type,

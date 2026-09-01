@@ -80,7 +80,7 @@ set_time_limit ( 0 );
           $vordruckpdf->SetFont ('helvetica');
           $vordruckpdf->SetAutoPageBreak (
             true,
-            $vordruckpdf->bottom - $vordruckpdf->point [38][1]
+            $vordruckpdf->message_form_break_margin ()
           );
           $vordruckpdf->main ();
           estab_generated_form_mark_published (

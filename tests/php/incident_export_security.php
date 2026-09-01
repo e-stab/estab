@@ -626,7 +626,9 @@ $assert(
             '$this->db_dataset ["12_betreff"]'
         )
         && str_contains($messageTemplate, '"Ruf Nr."')
-        && str_contains($messageTemplate, 'function draw_fitted_textfield'),
+        // Einzeilige Werte werden gekuerzt statt in das Nachbarfeld zu
+        // laufen; das leistet nv_wert().
+        && str_contains($messageTemplate, 'function nv_wert ('),
     'Message-form PDF omits the official phone or subject fields'
 );
 $assert(

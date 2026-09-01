@@ -742,8 +742,10 @@ try {
             'DV dossier marker is missing: ' . $marker
         );
     }
+    // Die Nachrichtenseiten des Dossiers tragen dasselbe Raster wie die
+    // Bildschirmansicht und der Einzelabzug.
     foreach (
-        ['EINGANG', 'AUSGANG', 'Nachweis-Nr.', 'Fm-Betriebsstelle']
+        ['Fm-Zentrale', 'Sichter', 'Aufnahmevermerk', 'Annahmevermerk']
         as $marker
     ) {
         $assert(
@@ -751,6 +753,11 @@ try {
             'incident PDF message form marker is missing: ' . $marker
         );
     }
+    $assert(
+        !str_contains($document, 'Fm-Betriebsstelle')
+            && !str_contains($document, 'Nachweis-Nr.'),
+        'incident PDF still carries the legacy message form raster'
+    );
     $assert(
         str_contains($document, 'Fernmelder')
             && !str_contains($document, 'A/W'),
@@ -1318,7 +1325,7 @@ try {
     $assert(
         $longMessagePdf->PageNo() > 1
             && str_contains($longDocument, 'ENDE-MEHRSEITIGER-VORDRUCK')
-            && substr_count($longDocument, 'EINGANG')
+            && substr_count($longDocument, 'Fm-Zentrale')
                 === $longMessagePdf->PageNo(),
         'long message did not continue across complete form-template pages'
     );

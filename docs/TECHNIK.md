@@ -97,6 +97,16 @@ Das PDF-Einsatzdossier verwendet denselben Nachrichtenrenderer wie der
 Einzelvordruck. Darstellbare Anlagen werden zusätzlich sichtbar gerendert;
 Originale werden als eingebettete Dateien mitgeführt.
 
+Das Raster des Nachrichtenvordrucks steht in `app/nv_raster.php` — in
+Millimetern, gemessen am gedruckten Blatt der Bildschirmansicht. Damit zeigen
+Oberfläche, Browserdruck und PDF dasselbe Blatt (`UX-PAPIERBILD`). Wer
+nachmisst: die Oberfläche stellt den Vordruck im Druckmedium mit `zoom: 0.78`.
+Kastenmaße liefert der Browser fertig skaliert, `font-size` dagegen
+unskaliert — wer die Schriftgröße ungerechnet übernimmt, setzt jede
+Beschriftung um ein Viertel zu groß, und die Felder laufen ineinander. Die
+Zuordnung der Empfängermatrix zu den drei gedruckten Blöcken von Feld 19
+teilen sich Bildschirm und PDF über `app/nv_verteiler.php`.
+
 Die aktive PDF-Bibliothek ist derzeit als FPDF 1.6 im Quellbaum eingebettet.
 Vor einer öffentlichen Weiterverteilung muss sie auf eine gepflegte Version
 aktualisiert und der gesamte PDF-Testpfad erneut ausgeführt werden. Weil diese
