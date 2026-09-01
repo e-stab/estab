@@ -938,6 +938,7 @@ assert_status 403 "$base_url/4fach/counter.php"
 assert_status 403 "$base_url/4fach/status.php"
 for protected_route in \
     '4fach/fuehrungsstelle.php|command-post|index.php' \
+    '4fach/melderauftraege.php|messenger-jobs|index.php' \
     '4fach/vordrucke.php|forms|index.php' \
     '4fueltg/ue_ltg.php|message-overview|index.php' \
     'stabetb/etb.php|incident-log|index.php' \
@@ -1218,6 +1219,15 @@ assert_body 'Berechtigungsmodus'
 assert_body 'Locker'
 assert_body_absent 'name="dienstbesetzung_id"'
 assert_body_absent 'value="select_hat"'
+
+# Die Melderauftraege stehen seit der Trennung auf einer eigenen Seite: Der
+# Plan ist eine Unterlage, ein Melderauftrag ein einzelner Botengang.
+assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+    "$base_url/4fach/melderauftraege.php"
+assert_session_bar "$test_name" "$test_code" "$test_function" "$test_role"
+assert_body 'Melderauftr'
+assert_body 'Berechtigungsmodus'
+assert_body_absent 'value="save_telecom_entry"'
 
 # Disabled public registration must neither log in an existing code nor
 # replace its password hash.

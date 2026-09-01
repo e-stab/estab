@@ -7035,6 +7035,53 @@ function estab_dv_activate_telecom_plan(
     );
 }
 
+/**
+ * Ausgangsnachrichten, die auf einen Melder warten.
+ *
+ * Disponiert auf das Mittel „Melder", vom LdF freigegeben, noch nicht
+ * befördert und noch ohne laufenden Auftrag. Ein abgebrochener Auftrag zählt
+ * nicht -- die Nachricht wartet dann wieder.
+ *
+ * @return list<array<string,mixed>>
+ */
+function estab_dv_messenger_eligible_messages(
+    mysqli $connection,
+    int $incidentId,
+    string $messageTable = 'nv_nachrichten'
+): array {
+    $statement = $connection->prepare(
+        'SELECT n.`00_lfd`, n.`04_nummer`, n.`10_anschrift`,'
+        . ' n.`12_inhalt` FROM ' . estab_message_table($messageTable) . ' AS n'
+        . ' WHERE n.`einsatz_id` = ?'
+        . " AND n.`04_richtung` = 'A'"
+        . " AND n.`01_medium` = 'Me'"
+        . ' AND n.`x00_status` = 2'
+        . " AND n.`x01_abschluss` = 'f'"
+        . ' AND NOT EXISTS ('
+        . '   SELECT 1 FROM `nv_melderauftraege` AS m'
+        . '   WHERE m.`einsatz_id` = n.`einsatz_id`'
+        . '     AND m.`nachricht_id` = n.`00_lfd`'
+        . "     AND m.`status` <> 'ABGEBROCHEN'"
+        . ' )'
+        . ' ORDER BY n.`04_nummer`, n.`00_lfd`'
+    );
+    if (!$statement) {
+        throw new RuntimeException(
+            'Melderfähige Nachrichten konnten nicht vorbereitet werden.'
+        );
+    }
+    try {
+        $statement->bind_param('i', $incidentId);
+        $statement->execute();
+        $result = $statement->get_result();
+        $rows = $result->fetch_all(MYSQLI_ASSOC);
+        $result->free();
+        return $rows;
+    } finally {
+        $statement->close();
+    }
+}
+
 /** Return plan headers with their immutable structured routes. */
 function estab_dv_telecom_plans(mysqli $connection, int $incidentId): array
 {

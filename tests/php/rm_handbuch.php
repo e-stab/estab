@@ -44,9 +44,17 @@ $assert = static function (bool $condition, string $message) use (&$assertions):
 
 /*
  * Der Stand vor dem Umbau. Wer ihn ändert, ändert den Text des Handbuchs.
+ *
+ * Geändert am 01.09.2026 von 5614 auf 5612 Wörter: Die Seite
+ * „Führungsstellenbetrieb" heißt jetzt „Fernmeldeplan", und die
+ * Melderaufträge stehen daneben statt darunter. Das Handbuch nennt die
+ * Bereiche beim Namen; ein Verweis auf einen Namen, den es nicht mehr gibt,
+ * schickt den Lesenden ins Leere. Zwei Wörter weniger, weil aus „S6- und
+ * Melderaufgaben" die „S6-Aufgaben" wurden -- die Melderaufgaben stehen
+ * nicht mehr in diesem Bereich.
  */
-const ESTAB_HANDBUCH_WOERTER = 5614;
-const ESTAB_HANDBUCH_PRUEFSUMME = '4cf3345e3941b734';
+const ESTAB_HANDBUCH_WOERTER = 5612;
+const ESTAB_HANDBUCH_PRUEFSUMME = '5827ae6a5447792b';
 
 $quelle = file_get_contents($root . '/handbuch/index.php');
 $assert(is_string($quelle), 'Das Handbuch ist nicht lesbar.');

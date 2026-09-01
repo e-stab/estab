@@ -272,6 +272,7 @@ $integrationCoverage = $httpSurface . $httpSmoke . $logbookHttp;
 foreach ([
     './4fach/index.php' => '/4fach/index.php',
     './4fach/fuehrungsstelle.php' => '/4fach/fuehrungsstelle.php',
+    './4fach/melderauftraege.php' => '/4fach/melderauftraege.php',
     './4fach/vordrucke.php' => '/4fach/vordrucke.php',
     './4fueltg/ue_ltg.php' => '/4fueltg/ue_ltg.php',
     './stabinfo/index.php' => '/stabinfo/index.php',

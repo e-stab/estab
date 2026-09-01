@@ -747,7 +747,7 @@ $handbookUpdated = '3. August 2026';
           data-handbook-keywords="S6 Fernmeldeplan Version Entwurf Weg freigeben disponieren Kanal Funk Telefon E-Mail gültig">
           <header><span>12</span><div><p>Verbindliche Wege statt Freitext</p><h2>S6-Fernmeldeplan</h2></div></header>
           <p>Im Modus „Streng“ erstellt S6 im
-            <a href="<?= $href('command_post') ?>">Führungsstellenbetrieb</a>
+            <a href="<?= $href('command_post') ?>">Fernmeldeplan</a>
             einmalig den ersten Plan, beschreibt die vorgesehenen Wege und gibt
             ihn bewusst frei. Bei jeder späteren Änderung kopiert
             „Bearbeitung starten“ die vollständigen Kopfdaten und alle Wege der
@@ -1055,7 +1055,7 @@ curl --fail http://127.0.0.1:8080/health.php</code></pre>
               <thead><tr><th>Bereich</th><th>Wer nutzt ihn?</th><th>Zweck</th></tr></thead>
               <tbody>
                 <tr><td><a href="<?= $href('messages') ?>">Nachrichtenvordruck</a></td><td>Konto mit passender wirksamer Funktion</td><td>Funktionsabhängiger Nachrichtenlauf</td></tr>
-                <tr><td><a href="<?= $href('command_post') ?>">Führungsstellenbetrieb</a></td><td>Konto mit passender wirksamer Funktion</td><td>S6- und Melderaufgaben gemäß Einsatzmodus</td></tr>
+                <tr><td><a href="<?= $href('command_post') ?>">Fernmeldeplan</a></td><td>Konto mit passender wirksamer Funktion</td><td>S6-Aufgaben gemäß Einsatzmodus</td></tr>
                 <tr><td><a href="<?= $href('message_overview') ?>">Meldungsübersicht</a></td><td>S2/Stab</td><td>Einsatzweite Suche und Lageübersicht</td></tr>
                 <tr><td><a href="<?= $href('tracking') ?>">Nachweisung</a></td><td>LdF oder Fernmelder</td><td>Aufnahme und tatsächliche Beförderung</td></tr>
                 <tr><td><a href="<?= $href('etb') ?>">ETB</a> / <a href="<?= $href('ttb') ?>">TBB</a></td><td>ETB: ETB/S2; TTB: Fernmelder</td><td>Append-only Einsatz- und Betriebsbücher</td></tr>

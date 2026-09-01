@@ -415,6 +415,9 @@ $sources = [
     'command-post' => (string) file_get_contents(
         $root . '/4fach/fuehrungsstelle.php'
     ),
+    'messenger-jobs' => (string) file_get_contents(
+        $root . '/4fach/melderauftraege.php'
+    ),
     'etb' => (string) file_get_contents(
         $root . '/stabetb/etb.php'
     ),
@@ -746,10 +749,6 @@ $telecomRead = strpos(
     $sources['command-post'],
     '$plans = estab_dv_telecom_plans('
 );
-$messengerRead = strpos(
-    $sources['command-post'],
-    '$jobs = estab_dv_messenger_jobs('
-);
 $assert(
     str_contains(
             $sources['command-post'],
@@ -768,10 +767,43 @@ $assert(
         )
         && is_int($commandPostScope)
         && is_int($telecomRead)
-        && is_int($messengerRead)
-        && $commandPostScope < $telecomRead
-        && $commandPostScope < $messengerRead,
+        && $commandPostScope < $telecomRead,
     'command-post bootstrap exposes data before STRICT selection or applies it to LOOSE'
+);
+/*
+ * Die Melderauftraege sind seit der Trennung eine eigene Seite -- und sie
+ * traegt dieselbe Beweislast: erst die Funktion feststellen, dann Auftraege
+ * lesen. Zwei Seiten, zwei Pruefungen; das Versprechen bleibt eines.
+ */
+$messengerScope = strpos(
+    $sources['messenger-jobs'],
+    '$readScope = estab_read_require_operational_scope('
+);
+$messengerRead = strpos(
+    $sources['messenger-jobs'],
+    '$jobs = estab_dv_messenger_jobs('
+);
+$assert(
+    str_contains(
+            $sources['messenger-jobs'],
+            'estab_read_require_operational_scope('
+        )
+        && str_contains(
+            $sources['messenger-jobs'],
+            'estab_dv_has_write_capability('
+        )
+        && str_contains(
+            $sources['messenger-jobs'],
+            'estab_navigation_require_selected_duty('
+        )
+        && str_contains(
+            $sources['messenger-jobs'],
+            '$strictMode = estab_incident_duty_shift_required($status)'
+        )
+        && is_int($messengerScope)
+        && is_int($messengerRead)
+        && $messengerScope < $messengerRead,
+    'messenger page exposes jobs before STRICT selection or applies it to LOOSE'
 );
 foreach (['ETB' => $sources['etb'], 'TBB' => $sources['tbb']] as $name => $source) {
     $gate = strpos($source, 'estab_read_require_operational_scope (');

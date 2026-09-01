@@ -507,6 +507,7 @@ $assert(
 
 $domain = $read('app/dv_operations.php');
 $controller = $read('4fach/fuehrungsstelle.php');
+$messengerController = $read('4fach/melderauftraege.php');
 $officialForm = $read('4fach/official_message_form.php');
 $legacyForm = $read('4fach/4fachform.php');
 $sessionUi = $read('app/session_ui.php');
@@ -909,7 +910,7 @@ $historyStart = strpos($controller, 'data-estab-telecom-history>');
 $historyEnd = is_int($historyStart)
     ? strpos(
         $controller,
-        '<section class="estab-tool-panel" id="melderauftraege">',
+        '<footer class="estab-tool-footer">',
         $historyStart
     )
     : false;
@@ -955,8 +956,19 @@ $assert(
         // die Zeilen benennen die Technik mit, nicht nur das Medium.
         && str_contains($controller, "dv_operations_html(\$art['label'])")
         && str_contains($controller, 'estab_dv_telecom_route_label(')
-        && str_contains($controller, 'Ausgangsnachricht mit Weg „Melder“')
-        && !str_contains($controller, 'Ausgangsnachricht mit Weg „Me“'),
+        /*
+         * Der Melderweg steht seit der Trennung auf der eigenen Seite --
+         * das Versprechen bleibt dasselbe: Auf dem Bildschirm steht kein
+         * Datenbankkuerzel, sondern das Mittel, das jemand kennt.
+         */
+        && str_contains(
+            $messengerController,
+            'Ausgangsnachricht mit Weg „Melder“'
+        )
+        && !str_contains(
+            $messengerController,
+            'Ausgangsnachricht mit Weg „Me“'
+        ),
     'telecommunications UI still exposes raw medium codes'
 );
 $assert(

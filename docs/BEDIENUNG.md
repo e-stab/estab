@@ -141,6 +141,10 @@ Je Einsatz existiert genau ein ETB und ein TTB.
 
 ## Fernmeldeplan
 
+Eigener Bereich unter `/4fach/fuehrungsstelle.php`. Die Melderaufträge stehen
+daneben, nicht darunter: Der Plan ist eine Unterlage, die tagelang gilt; ein
+Melderauftrag ist ein einzelner Botengang.
+
 S6 legt einen Planentwurf mit Gültigkeitszeitraum und mindestens einem Weg an.
 Je nach Medium werden nur passende Felder angezeigt. Ein Entwurf wird
 veröffentlicht oder verworfen; die bisherige Version bleibt bis zur
@@ -150,6 +154,8 @@ LdF kann für einen Nachrichtenausgang nur einen aktuell gültigen,
 veröffentlichten Beförderungsweg auswählen.
 
 ## Melderauftrag
+
+Eigener Bereich unter `/4fach/melderauftraege.php`.
 
 ```text
 LdF beauftragt → Melder übernimmt → Zustellung →

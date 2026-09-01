@@ -1063,6 +1063,7 @@ class BrowserAcceptance:
         "overview",
         "messages",
         "command-post",
+        "messenger-jobs",
         "message-overview",
         "forms",
         "incident-log",
@@ -1073,6 +1074,7 @@ class BrowserAcceptance:
     protected_card_keys = (
         "messages",
         "command-post",
+        "messenger-jobs",
         "message-overview",
         "forms",
         "incident-log",
@@ -1087,6 +1089,11 @@ class BrowserAcceptance:
     )
     protected_redirects = (
         ("4fach/fuehrungsstelle.php", "command-post", "4fach/index.php"),
+        (
+            "4fach/melderauftraege.php",
+            "messenger-jobs",
+            "4fach/index.php",
+        ),
         ("4fach/vordrucke.php", "forms", "4fach/index.php"),
         ("4fueltg/ue_ltg.php", "message-overview", "4fach/index.php"),
         ("stabetb/etb.php", "incident-log", "4fach/index.php"),
@@ -3091,7 +3098,7 @@ class BrowserAcceptance:
         self.cdp.call("Runtime.enable")
         self.cdp.call("Network.enable")
         self.cdp.navigate(
-            self.config.base_url + "/4fach/index.php?next=command-post"
+            self.config.base_url + "/4fach/index.php?next=messenger-jobs"
         )
         self._wait_for_frame("mainframe")
         self.cdp.wait_for(
@@ -3159,7 +3166,9 @@ class BrowserAcceptance:
             "LdF-Bestandskonto absenden",
         )
 
-        operations_path = "/4fach/fuehrungsstelle.php"
+        # Die Melderauftraege stehen seit der Trennung auf einer eigenen
+        # Seite; der Fernmeldeplan fuehrt sie nicht mehr mit.
+        operations_path = "/4fach/melderauftraege.php"
         inactive_literal = json.dumps(inactive_code)
         online_literal = json.dumps(online_code)
         marker_literal = json.dumps(message_marker)
@@ -4369,18 +4378,44 @@ class BrowserAcceptance:
                 Boolean(document.querySelector("[data-estab-dv-operations]")) &&
                 Boolean(document.querySelector("aside[data-estab-session-bar]"))
                 """,
-                "Führungsstellenbetrieb wurde nicht vollständig geladen",
+                "Fernmeldeplan wurde nicht vollständig geladen",
             )
             self._assert_session_bar(
                 None,
-                f"Führungsstellenbetrieb bei {width}×{height} px",
+                f"Fernmeldeplan bei {width}×{height} px",
                 "command-post",
             )
             self._assert_tool_page_layout(
-                f"Führungsstellenbetrieb bei {width}×{height} px",
+                f"Fernmeldeplan bei {width}×{height} px",
                 "[data-estab-dv-operations]",
                 mobile=width <= 390,
                 require_responsive_table=True,
+            )
+
+            # Die Melderauftraege stehen daneben, nicht darunter -- und
+            # muessen dieselbe Breite aushalten wie der Plan.
+            self.cdp.navigate(
+                self.config.base_url + "/4fach/melderauftraege.php"
+            )
+            self.cdp.wait_for(
+                """
+                document.readyState === "complete" &&
+                Boolean(document.querySelector(
+                    "[data-estab-messenger-jobs]"
+                )) &&
+                Boolean(document.querySelector("aside[data-estab-session-bar]"))
+                """,
+                "Melderaufträge wurden nicht vollständig geladen",
+            )
+            self._assert_session_bar(
+                None,
+                f"Melderaufträge bei {width}×{height} px",
+                "messenger-jobs",
+            )
+            self._assert_tool_page_layout(
+                f"Melderaufträge bei {width}×{height} px",
+                "[data-estab-messenger-jobs]",
+                mobile=width <= 390,
             )
 
         self.cdp.call(

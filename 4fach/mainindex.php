@@ -242,7 +242,7 @@ function estab_workflow_render_read_gate (
   echo "<p>".estab_auth_html ($message)."</p>";
   echo "<p><a class=\"estab-button estab-button-primary\" href=\"".
        estab_auth_html ($commandPostUrl).
-       "\" target=\"_top\">Führungsstellenbetrieb öffnen</a></p>";
+       "\" target=\"_top\">Fernmeldeplan öffnen</a></p>";
   echo "</section></main></body></html>";
   exit;
 }

@@ -140,7 +140,8 @@ $assert(
             'data-estab-navigation-mode="sidebar"'
         )
         && str_contains($sidebarMarkup, '<h2>Bereiche</h2>')
-        && str_contains($sidebarMarkup, '>Führungsstelle</span>')
+        && str_contains($sidebarMarkup, '>Fernmeldeplan</span>')
+        && str_contains($sidebarMarkup, '>Melder</span>')
         /*
          * Ohne angenommene Dienstfunktion bleibt der Nachrichtenbereich
          * sichtbar und anklickbar -- das Menue steht still und erklaert
@@ -286,7 +287,7 @@ $assert(
         && substr_count(
             $publicSidebarMarkup,
             'data-estab-navigation-locked'
-        ) === 7
+        ) === 8
         && !str_contains($publicSidebarMarkup, '<details')
         && !str_contains($publicSidebarMarkup, '<summary')
         && !str_contains($publicSidebarMarkup, 'data-estab-session-bar')

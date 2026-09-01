@@ -119,7 +119,8 @@ assert_png() {
 assert_status 200 "$base_url/"
 for label in \
     'Nachrichtenvordruck' \
-    'Führungsstellenbetrieb' \
+    'Fernmeldeplan' \
+    'Melderaufträge' \
     'Meldungsübersicht' \
     'Vordrucke' \
     'BOS-Info' \

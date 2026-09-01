@@ -184,6 +184,7 @@ $menuConfig = (string) file_get_contents(
 $expectedOperationalCards = [
     'messages',
     'command-post',
+    'messenger-jobs',
     'message-overview',
     'forms',
     'incident-log',

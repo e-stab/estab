@@ -34,13 +34,13 @@ $assert = static function (bool $condition, string $message) use (&$assertions):
     }
 };
 
-$page = file_get_contents($root . '/4fach/fuehrungsstelle.php');
+$page = file_get_contents($root . '/4fach/melderauftraege.php');
 $rules = file_get_contents(
     $root . '/docker/db/migrations/94-dv-organisational-controls.sql'
 );
 $operations = file_get_contents($root . '/app/dv_operations.php');
 if (!is_string($page) || !is_string($rules) || !is_string($operations)) {
-    throw new RuntimeException('Führungsstelle, Migration oder Betrieb nicht lesbar.');
+    throw new RuntimeException('Melderaufträge, Migration oder Betrieb nicht lesbar.');
 }
 
 /* --- Der Unterschied steht dort, wo jemand losgeschickt wird --- */

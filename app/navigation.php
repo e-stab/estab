@@ -42,11 +42,28 @@ function estab_navigation_areas(): array
         ],
         [
             'key' => 'command-post',
-            'label' => 'Führungsstellenbetrieb',
-            'short_label' => 'Führungsstelle',
+            'label' => 'Fernmeldeplan',
+            'short_label' => 'Fernmeldeplan',
             'path' => '4fach/fuehrungsstelle.php',
             'access' => 'protected',
-            'hint' => 'S6 · Fernmeldeplan · Melder',
+            'hint' => 'S6 · Fb Fü 76 · Fb Fü 77',
+        ],
+        /*
+         * Melderaufträge stehen neben dem Plan, nicht unter ihm.
+         *
+         * Der Plan ist eine Unterlage, die tagelang gilt; ein Melderauftrag
+         * ist ein einzelner Botengang, der in einer Stunde erledigt ist. Wer
+         * einen Melder losschicken will, soll dafür keine Planseite
+         * durchblättern -- und wer den Plan liest, keine fremden Formulare
+         * darunter finden.
+         */
+        [
+            'key' => 'messenger-jobs',
+            'label' => 'Melderaufträge',
+            'short_label' => 'Melder',
+            'path' => '4fach/melderauftraege.php',
+            'access' => 'protected',
+            'hint' => 'LdF · Kurier/Melder',
         ],
         [
             'key' => 'message-overview',
@@ -563,7 +580,7 @@ function estab_navigation_duty_access_reason(
     if (estab_navigation_strict_duty_selection_required($identity)) {
         return $item['key'] === 'command-post'
             ? ''
-            : 'Erst im Führungsstellenbetrieb eine Funktion annehmen; '
+            : 'Erst am Fernmeldeplan eine Funktion annehmen; '
                 . 'in der Betriebsart „streng“ arbeitet nur, wer im '
                 . 'Dienst steht.';
     }
@@ -672,7 +689,7 @@ function estab_navigation_relative_request_path(mixed $candidate): ?string
 /**
  * Resolve a repository-relative request path to one navigation key.
  *
- * The two specialist 4fach controllers deliberately precede the general
+ * The specialist 4fach controllers deliberately precede the general
  * 4fach module match. Directory-boundary comparisons prevent partial-name
  * false positives such as /4fachish or /stabetb-old.
  */
@@ -690,6 +707,9 @@ function estab_navigation_key_for_path(string $relativePath): ?string
     }
     if ($relativePath === '4fach/fuehrungsstelle.php') {
         return 'command-post';
+    }
+    if ($relativePath === '4fach/melderauftraege.php') {
+        return 'messenger-jobs';
     }
     if ($relativePath === '4fach/resetpic.php') {
         return 'administration';

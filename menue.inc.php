@@ -29,6 +29,7 @@ include ("./4fcfg/config.inc.php");
     	3		4		
     	5		6
 		7		8
+		9
 		z1		z2
 		  	
    $menue[1]["text"] = Menütext
@@ -49,29 +50,37 @@ include ("./4fcfg/config.inc.php");
    $menue[1]["access"] = "application";
 	$menue[1]["visible"] = true ;  
 
-	$menue[2]["text"] = "Führungsstellenbetrieb";
-	$menue[2]["info"] = "S6-Fernmeldepläne und Melderläufe für den aktiven Einsatz; Rechte folgen dem dort festgelegten Berechtigungsmodus.";
+	$menue[2]["text"] = "Fernmeldeplan";
+	$menue[2]["info"] = "Fb Fü 76 und Fb Fü 77 für den aktiven Einsatz: eigene Kommunikationsmittel, Erreichbarkeiten, Gegenstellen und Nebenstellen. Der S6 führt ihn; Rechte folgen dem festgelegten Berechtigungsmodus.";
    $menue[2]["pic"]  = $conf_menue ["symbole"]."iuk_hs80.png";
    $menue[2]["link"] = "./4fach/fuehrungsstelle.php";
    $menue[2]["navigation_key"] = "command-post";
    $menue[2]["access"] = "application";
    $menue[2]["visible"] = true ;
 
-	$menue[3]["text"] = "Meldungsübersicht";
-	$menue[3]["info"] = "Für S2 als Lage- und Dokumentationsfunktion: Meldungen des aktiven Einsatzes sicher suchen, filtern und öffnen.";
-   $menue[3]["pic"]  = $conf_menue ["symbole"]."all_msg.png";
-   $menue[3]["link"] = "./4fueltg/ue_ltg.php";
-   $menue[3]["navigation_key"] = "message-overview";
+	$menue[3]["text"] = "Melderaufträge";
+	$menue[3]["info"] = "Kurier- und Melderläufe des aktiven Einsatzes: beauftragen, übernehmen, Übergabe und Rückkehr nachweisen. Der LdF beauftragt, der Fernmelder weist nach.";
+   $menue[3]["pic"]  = $conf_menue ["symbole"]."taktische-zeichen/Melder.svg";
+   $menue[3]["link"] = "./4fach/melderauftraege.php";
+   $menue[3]["navigation_key"] = "messenger-jobs";
    $menue[3]["access"] = "application";
    $menue[3]["visible"] = true ;
 
-	$menue[4]["text"] = "Vordrucke";
-	$menue[4]["info"] = "Gesch&uuml;tzte Liste der im laufenden Einsatz erzeugten PDF-Vordrucke. Eine Anmeldung am Nachrichtenvordruck ist erforderlich.";
-   $menue[4]["pic"]  = "./4fach/design/mr/folder_global.gif";
-   $menue[4]["link"] = "./4fach/vordrucke.php";
-   $menue[4]["navigation_key"] = "forms";
+	$menue[4]["text"] = "Meldungsübersicht";
+	$menue[4]["info"] = "Für S2 als Lage- und Dokumentationsfunktion: Meldungen des aktiven Einsatzes sicher suchen, filtern und öffnen.";
+   $menue[4]["pic"]  = $conf_menue ["symbole"]."all_msg.png";
+   $menue[4]["link"] = "./4fueltg/ue_ltg.php";
+   $menue[4]["navigation_key"] = "message-overview";
    $menue[4]["access"] = "application";
    $menue[4]["visible"] = true ;
+
+	$menue[5]["text"] = "Vordrucke";
+	$menue[5]["info"] = "Gesch&uuml;tzte Liste der im laufenden Einsatz erzeugten PDF-Vordrucke. Eine Anmeldung am Nachrichtenvordruck ist erforderlich.";
+   $menue[5]["pic"]  = "./4fach/design/mr/folder_global.gif";
+   $menue[5]["link"] = "./4fach/vordrucke.php";
+   $menue[5]["navigation_key"] = "forms";
+   $menue[5]["access"] = "application";
+   $menue[5]["visible"] = true ;
 
    $zusatz_menue[1]["text"] = "Administration";
 	$zusatz_menue[1]["info"] = "Separater technischer Zugang für Einstellungen, Datenbankstatus und Empfängermatrix.";
@@ -81,37 +90,37 @@ include ("./4fcfg/config.inc.php");
    $zusatz_menue[1]["access"] = "administration";
    $zusatz_menue[1]["visible"] = true ;
 
-   $menue[5]["text"] = "Einsatztagebuch<BR>(ETB)";
-	$menue[5]["info"] = "ETB-Einträge dürfen wirksame Funktionen S2 oder ETB schreiben. Andere berechtigte Funktionen können lesen.";
-   $menue[5]["pic"]  = $conf_menue ["symbole"]."etb_aktiv.png";
-   $menue[5]["link"] = "./stabetb/etb.php";
-   $menue[5]["navigation_key"] = "incident-log";
-   $menue[5]["access"] = "application";
-   $menue[5]["visible"] = true ;
-
-   $menue[6]["text"] = "Technisches Betriebsbuch<BR>(TBB)";
-	$menue[6]["info"] = "Eintragungen sind für Fernmelder möglich. Andere Funktionen können lesen.";
-   $menue[6]["pic"]  = $conf_menue ["symbole"]."tbb_aktiv.png";
-   $menue[6]["link"] = "./fmtbb/tbb.php";
-   $menue[6]["navigation_key"] = "technical-log";
+   $menue[6]["text"] = "Einsatztagebuch<BR>(ETB)";
+	$menue[6]["info"] = "ETB-Einträge dürfen wirksame Funktionen S2 oder ETB schreiben. Andere berechtigte Funktionen können lesen.";
+   $menue[6]["pic"]  = $conf_menue ["symbole"]."etb_aktiv.png";
+   $menue[6]["link"] = "./stabetb/etb.php";
+   $menue[6]["navigation_key"] = "incident-log";
    $menue[6]["access"] = "application";
    $menue[6]["visible"] = true ;
 
-   $menue[7]["text"] = "Nachweisung";
-	$menue[7]["info"] = "Klassische Nachweisung.";
-   $menue[7]["pic"]  = $conf_menue ["symbole"]."nw.png";
-   $menue[7]["link"] = "./4fach/nachwea.php?nwalle";
-   $menue[7]["navigation_key"] = "tracking";
+   $menue[7]["text"] = "Technisches Betriebsbuch<BR>(TBB)";
+	$menue[7]["info"] = "Eintragungen sind für Fernmelder möglich. Andere Funktionen können lesen.";
+   $menue[7]["pic"]  = $conf_menue ["symbole"]."tbb_aktiv.png";
+   $menue[7]["link"] = "./fmtbb/tbb.php";
+   $menue[7]["navigation_key"] = "technical-log";
    $menue[7]["access"] = "application";
    $menue[7]["visible"] = true ;
 
-   $menue[8]["text"] = "BOS-Info";
-	$menue[8]["info"] = "Informationen rund um die Stabsarbeit.";
-   $menue[8]["pic"]  = $conf_menue ["symbole"]."merke32.gif";
-   $menue[8]["link"] = "./stabinfo/index.php";
-   $menue[8]["navigation_key"] = "bos-info";
-   $menue[8]["access"] = "public";
+   $menue[8]["text"] = "Nachweisung";
+	$menue[8]["info"] = "Klassische Nachweisung.";
+   $menue[8]["pic"]  = $conf_menue ["symbole"]."nw.png";
+   $menue[8]["link"] = "./4fach/nachwea.php?nwalle";
+   $menue[8]["navigation_key"] = "tracking";
+   $menue[8]["access"] = "application";
    $menue[8]["visible"] = true ;
+
+   $menue[9]["text"] = "BOS-Info";
+	$menue[9]["info"] = "Informationen rund um die Stabsarbeit.";
+   $menue[9]["pic"]  = $conf_menue ["symbole"]."merke32.gif";
+   $menue[9]["link"] = "./stabinfo/index.php";
+   $menue[9]["navigation_key"] = "bos-info";
+   $menue[9]["access"] = "public";
+   $menue[9]["visible"] = true ;
 
    $zusatz_menue[2]["text"] = "Handbuch";
 	$zusatz_menue[2]["info"] = "Aktuelles, durchsuchbares Web-Handbuch für Bedienung, Rollen, Einsatzablauf und Administration.";

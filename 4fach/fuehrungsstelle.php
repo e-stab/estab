@@ -702,55 +702,6 @@ if ($requestMethod === 'POST') {
             );
             dv_operations_redirect('plan_activated');
         }
-        if ($action === 'assign_messenger') {
-            $assignmentDetails = null;
-            estab_dv_assign_messenger(
-                $connection,
-                $incidentId,
-                estab_dv_positive_id(
-                    $_POST['nachricht_id'] ?? null,
-                    'Nachricht'
-                ),
-                $_POST['melder_kuerzel'] ?? null,
-                $_POST['ziel'] ?? null,
-                $operationIdentity,
-                $conf_4f_tbl['protokoll'],
-                $assignmentDetails
-            );
-            $requiresNotification = !is_array($assignmentDetails)
-                || ($assignmentDetails['requires_separate_notification']
-                    ?? true) === true;
-            $presenceState = is_array($assignmentDetails)
-                && is_string($assignmentDetails['presence_state'] ?? null)
-                    ? $assignmentDetails['presence_state']
-                    : 'unknown';
-            dv_operations_redirect(
-                $requiresNotification
-                    ? 'messenger_assigned_notification_required'
-                    : 'messenger_assigned',
-                'melderauftraege',
-                ['presence' => $presenceState]
-            );
-        }
-        if ($action === 'messenger_transition') {
-            $transition = $_POST['transition'] ?? null;
-            if (!is_string($transition)) {
-                throw new EstabDvInputException('Unbekannter Melderstatus.');
-            }
-            estab_dv_transition_messenger(
-                $connection,
-                $incidentId,
-                estab_dv_positive_id(
-                    $_POST['melderauftrag_id'] ?? null,
-                    'Melderauftrag'
-                ),
-                $transition,
-                $operationIdentity,
-                $_POST,
-                $conf_4f_tbl['protokoll']
-            );
-            dv_operations_redirect('messenger_updated');
-        }
         throw new EstabDvInputException('Unbekannte Führungsstellenaktion.');
     } catch (EstabCsrfException) {
         http_response_code(403);
@@ -772,7 +723,7 @@ if ($requestMethod === 'POST') {
         http_response_code(409);
         $error = $exception->getMessage();
     } catch (Throwable $exception) {
-        error_log('eStab Führungsstellenbetrieb: ' . $exception->getMessage());
+        error_log('eStab Fernmeldeplan: ' . $exception->getMessage());
         http_response_code(500);
         $error = 'Die Aktion konnte nicht vollständig gespeichert werden.';
     } finally {
@@ -788,12 +739,7 @@ if ($requestMethod === 'POST') {
 
 $status = null;
 $plans = [];
-$jobs = [];
-$users = [];
-$eligibleMessages = [];
 $isS6 = false;
-$isLdf = false;
-$isAw = false;
 $selectedIdentity = null;
 $plansLoaded = false;
 $strictMode = true;
@@ -863,20 +809,6 @@ try {
                 'FERNMELDEPLANUNG',
                 false
             );
-            $isLdf = estab_dv_has_write_capability(
-                $connection,
-                $incidentId,
-                $selectedIdentity,
-                'FERNMELDEBETRIEB',
-                false
-            );
-            $isAw = estab_dv_has_write_capability(
-                $connection,
-                $incidentId,
-                $selectedIdentity,
-                'BEFOERDERUNG',
-                false
-            );
             $plans = estab_dv_telecom_plans($connection, $incidentId);
             $plansLoaded = true;
             $fuehrungsstellenName = estab_incident_command_post_name($status);
@@ -898,48 +830,6 @@ try {
                     'eStab unplanned incoming routes are temporarily '
                     . 'unavailable'
                 );
-            }
-            $jobs = estab_dv_messenger_jobs(
-                $connection,
-                $incidentId,
-                ($isLdf || $isAw) ? null : $code
-            );
-            if ($isLdf) {
-                $users = estab_dv_messenger_candidates(
-                    $connection,
-                    $incidentId
-                );
-                $messageStatement = $connection->prepare(
-                    'SELECT n.`00_lfd`, n.`04_nummer`, n.`10_anschrift`,'
-                    . ' n.`12_inhalt` FROM `nv_nachrichten` AS n'
-                    . ' WHERE n.`einsatz_id` = ?'
-                    . " AND n.`04_richtung` = 'A'"
-                    . " AND n.`01_medium` = 'Me'"
-                    . ' AND n.`x00_status` = 2'
-                    . " AND n.`x01_abschluss` = 'f'"
-                    . ' AND NOT EXISTS ('
-                    . '   SELECT 1 FROM `nv_melderauftraege` AS m'
-                    . '   WHERE m.`einsatz_id` = n.`einsatz_id`'
-                    . '     AND m.`nachricht_id` = n.`00_lfd`'
-                    . "     AND m.`status` <> 'ABGEBROCHEN'"
-                    . ' )'
-                    . ' ORDER BY n.`04_nummer`, n.`00_lfd`'
-                );
-                if (!$messageStatement) {
-                    throw new RuntimeException(
-                        'Melderfähige Nachrichten konnten nicht vorbereitet '
-                        . 'werden.'
-                    );
-                }
-                try {
-                    $messageStatement->bind_param('i', $incidentId);
-                    $messageStatement->execute();
-                    $messageResult = $messageStatement->get_result();
-                    $eligibleMessages = $messageResult->fetch_all(MYSQLI_ASSOC);
-                    $messageResult->free();
-                } finally {
-                    $messageStatement->close();
-                }
             }
         }
     }
@@ -992,22 +882,9 @@ $flashMessages = [
         . 'in die Versionshistorie übernommen. Sie können jetzt eine neue '
         . 'Bearbeitung auf Basis des aktiven Plans starten.',
     'plan_activated' => 'Der Fernmeldeplan wurde freigegeben und versioniert.',
-    'messenger_assigned' => 'Der Melderauftrag wurde verbindlich erteilt.',
-    'messenger_assigned_notification_required' =>
-        'Der Melderauftrag wurde verbindlich erteilt.',
-    'messenger_updated' => 'Der Melderstatus wurde nachgewiesen.',
 ];
 $result = $_GET['result'] ?? null;
 $flash = is_string($result) ? ($flashMessages[$result] ?? null) : null;
-$flashWarning = null;
-if ($result === 'messenger_assigned_notification_required') {
-    $presenceResult = $_GET['presence'] ?? null;
-    $presenceLabel = estab_dv_messenger_presence_label(
-        is_string($presenceResult) ? $presenceResult : null
-    );
-    $flashWarning = 'Status des Fernmelders: ' . $presenceLabel . '. '
-        . 'Der LdF muss ihn separat über den Auftrag informieren.';
-}
 $highlightEntryId = null;
 $entryResult = $_GET['entry'] ?? null;
 if (is_string($entryResult)) {
@@ -1038,18 +915,14 @@ foreach ($plans as $plan) {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>eStab Führungsstellenbetrieb</title>
+  <title>eStab Fernmeldeplan</title>
   <?= estab_session_ui_stylesheet() ?>
 </head>
 <body class="estab-tool-page">
 <main class="estab-tool-main" data-estab-dv-operations>
   <header class="estab-tool-hero">
     <p class="estab-tool-eyebrow">Einsatzführung · DV 1-101</p>
-    <h1>Führungsstellenbetrieb</h1>
-    <p>Den Fernmeldeplan als S6 führen und Melderaufträge lückenlos
-      nachweisen. Fachliche Schreibaktionen folgen dem am Einsatz
-      festgelegten Berechtigungsmodus; Anmeldung, Einsatzbezug,
-      Melder-Eignung und Nachweise bleiben verbindlich.</p>
+    <h1>Fernmeldeplan</h1>
   </header>
 
   <section class="estab-tool-status estab-tool-status-active
@@ -1115,11 +988,6 @@ foreach ($plans as $plan) {
   <?php if ($flash !== null): ?>
     <p class="estab-tool-feedback estab-tool-feedback-success" role="status">
       <?= dv_operations_html($flash) ?>
-    </p>
-  <?php endif; ?>
-  <?php if ($flashWarning !== null): ?>
-    <p class="estab-tool-feedback estab-tool-feedback-warning" role="status">
-      <?= dv_operations_html($flashWarning) ?>
     </p>
   <?php endif; ?>
 
@@ -2602,188 +2470,11 @@ foreach ($plans as $plan) {
         </div>
       </section>
     <?php endif; ?>
-
-    <section class="estab-tool-panel" id="melderauftraege">
-      <header class="estab-tool-panel-heading">
-        <h2>Melderaufträge</h2>
-        <p>Übernahme, tatsächlicher Empfänger, Rücknachricht, Rückkehr und
-          Abschlussmeldung werden als eigene unveränderbare Ereignisse
-          protokolliert.</p>
-      </header>
-      <?php if ($isLdf): ?>
-        <form class="estab-tool-form" method="post"
-          action="fuehrungsstelle.php" data-estab-messenger-assignment>
-          <?= estab_csrf_field() ?>
-          <input type="hidden" name="operation_action"
-            value="assign_messenger">
-          <p class="estab-tool-notice" data-estab-messenger-role-note>
-            <strong>Melder oder Kurier?</strong>
-            Ein <em>Melder</em> kennt den Inhalt der Nachricht und kann
-            Rückfragen der Gegenstelle beantworten. Ein <em>Kurier</em> kennt
-            ihn nicht; er überbringt einen verschlossenen Umschlag und kann
-            zum Inhalt nichts sagen. Wer mit Rückfragen rechnet, schickt
-            einen Melder und weist ihn ein. Der Vordruck unterscheidet die
-            beiden nicht — das Kästchen in Feld 1 heißt „Kurier/Melder“;
-            die Entscheidung treffen Sie hier.
-          </p>
-          <label>Ausgangsnachricht mit Weg „Melder“
-            <select name="nachricht_id" required>
-              <?php foreach ($eligibleMessages as $message): ?>
-                <option value="<?= (int) $message['00_lfd'] ?>">
-                  A<?= (int) $message['04_nummer'] ?> ·
-                  <?= dv_operations_html($message['10_anschrift']) ?>
-                </option>
-              <?php endforeach; ?>
-            </select>
-          </label>
-          <label>Melder
-            <select name="melder_kuerzel" required
-              data-estab-messenger-select>
-              <?php if ($users === []): ?>
-                <option value="">Kein fachlich berechtigter Fernmelder verfügbar</option>
-              <?php else: ?>
-                <option value="" selected>Bitte Fernmelder auswählen</option>
-              <?php endif; ?>
-              <?php foreach ($users as $user): ?>
-                <option value="<?= dv_operations_html($user['kuerzel']) ?>"
-                  data-estab-presence-state="<?= dv_operations_html(
-                      $user['presence_state']
-                  ) ?>" data-estab-presence-label="<?= dv_operations_html(
-                      $user['presence_label']
-                  ) ?>" data-estab-notification-required="<?=
-                      ($user['requires_separate_notification'] ?? true)
-                          ? '1'
-                          : '0' ?>">
-                  <?= dv_operations_html(
-                      $user['benutzer'] . ' (' . $user['kuerzel'] . ')'
-                          . ' · ' . $user['presence_label']
-                  ) ?>
-                </option>
-              <?php endforeach; ?>
-            </select>
-          </label>
-          <p class="estab-tool-notice estab-tool-notice-warning" role="status"
-            aria-live="polite" hidden data-estab-messenger-presence-warning>
-            <strong>Separat informieren:</strong>
-            Der gewählte Fernmelder ist aktuell
-            <span data-estab-messenger-presence-label>nicht aktiv</span>.
-            Der LdF muss ihn separat über den Auftrag informieren.
-          </p>
-          <label>Ziel
-            <input name="ziel" maxlength="255" required>
-          </label>
-          <button class="estab-button estab-button-primary" type="submit"
-            <?= $eligibleMessages === [] || $users === []
-                ? 'disabled'
-                : '' ?>>
-            Melder verbindlich beauftragen
-          </button>
-        </form>
-      <?php endif; ?>
-
-      <?php if ($jobs === []): ?>
-        <p class="estab-tool-empty">Keine sichtbaren Melderaufträge.</p>
-      <?php else: ?>
-        <?php foreach ($jobs as $job): ?>
-          <article class="estab-tool-panel">
-            <h3>Auftrag #<?= (int) $job['melderauftrag_id'] ?> ·
-              A<?= (int) $job['04_nummer'] ?> ·
-              <?= dv_operations_html($job['status']) ?></h3>
-            <p><strong>Melder:</strong>
-              <?= dv_operations_html(
-                  $job['melder_name'] . ' (' . $job['melder_kuerzel'] . ')'
-              ) ?><br>
-              <strong>Ziel:</strong> <?= dv_operations_html($job['ziel']) ?>
-            </p>
-            <?php
-              $isOwnJob = hash_equals(
-                  (string) $job['melder_kuerzel'],
-                  (string) $identity['kuerzel']
-              );
-              $transition = null;
-              $button = '';
-              if ($isOwnJob) {
-                  [$transition, $button] = match ($job['status']) {
-                      'BEAUFTRAGT' => ['accept', 'Auftrag übernehmen'],
-                      'UEBERNOMMEN' => ['deliver', 'Übergabe nachweisen'],
-                      'UEBERGEBEN' => ['return_path', 'Rückweg antreten'],
-                      'RUECKWEG' => ['returned', 'Rückkehr melden'],
-                      default => [null, ''],
-                  };
-              } elseif ($isLdf && $job['status'] === 'ZURUECK') {
-                  $transition = 'report';
-                  $button = 'Abschluss an FmZt bestätigen';
-              }
-            ?>
-            <?php if ($transition !== null): ?>
-              <form class="estab-tool-form" method="post"
-                action="fuehrungsstelle.php">
-                <?= estab_csrf_field() ?>
-                <input type="hidden" name="operation_action"
-                  value="messenger_transition">
-                <input type="hidden" name="melderauftrag_id"
-                  value="<?= (int) $job['melderauftrag_id'] ?>">
-                <input type="hidden" name="transition"
-                  value="<?= dv_operations_html($transition) ?>">
-                <?php if ($transition === 'deliver'): ?>
-                  <label>Tatsächlicher Empfänger
-                    <input name="tatsaechlicher_empfaenger" maxlength="255"
-                      required>
-                  </label>
-                <?php elseif ($transition === 'return_path'): ?>
-                  <fieldset>
-                    <legend>Liegt eine Rücknachricht vor?</legend>
-                    <label>
-                      <input type="radio"
-                        name="ruecknachricht_vorhanden" value="ja" required>
-                      Ja, Rücknachricht nachfolgend erfassen
-                    </label>
-                    <label>
-                      <input type="radio"
-                        name="ruecknachricht_vorhanden" value="nein" required>
-                      Nein, ausdrücklich keine Rücknachricht
-                    </label>
-                  </fieldset>
-                  <label>Rücknachricht (nur bei „Ja“)
-                    <textarea name="ruecknachricht"
-                      maxlength="10000"></textarea>
-                  </label>
-                <?php elseif ($transition === 'report'): ?>
-                  <label>Abschlussvermerk
-                    <textarea name="abschlussvermerk" maxlength="10000"
-                      required></textarea>
-                  </label>
-                <?php endif; ?>
-                <button class="estab-button estab-button-primary" type="submit">
-                  <?= dv_operations_html($button) ?>
-                </button>
-              </form>
-            <?php endif; ?>
-            <?php if ($isLdf && $job['status'] === 'BEAUFTRAGT'): ?>
-              <form class="estab-tool-form" method="post"
-                action="fuehrungsstelle.php">
-                <?= estab_csrf_field() ?>
-                <input type="hidden" name="operation_action"
-                  value="messenger_transition">
-                <input type="hidden" name="melderauftrag_id"
-                  value="<?= (int) $job['melderauftrag_id'] ?>">
-                <input type="hidden" name="transition" value="cancel">
-                <label>Abbruchgrund
-                  <textarea name="abbruchgrund" maxlength="10000"
-                    required></textarea>
-                </label>
-                <button class="estab-button estab-button-danger-outline"
-                  type="submit">Auftrag begründet abbrechen</button>
-              </form>
-            <?php endif; ?>
-          </article>
-        <?php endforeach; ?>
-      <?php endif; ?>
-    </section>
     <?php endif; ?>
   <?php endif; ?>
 
   <footer class="estab-tool-footer">
+    <a href="melderauftraege.php">Zu den Melderaufträgen</a>
     <a href="mainindex.php">Zurück zu Nachrichten</a>
     <span>Alle Änderungen sind einsatzgebunden und hashverkettet.</span>
   </footer>
@@ -2837,31 +2528,6 @@ foreach ($plans as $plan) {
       if (select) select.addEventListener('change', function () {
         update(form);
       });
-    });
-  document.querySelectorAll('[data-estab-messenger-assignment]')
-    .forEach(function (form) {
-      var select = form.querySelector('[data-estab-messenger-select]');
-      var warning = form.querySelector(
-        '[data-estab-messenger-presence-warning]'
-      );
-      var label = warning && warning.querySelector(
-        '[data-estab-messenger-presence-label]'
-      );
-      function updateMessengerPresence() {
-        if (!select || !warning) return;
-        var option = select.options[select.selectedIndex] || null;
-        var required = option
-          && option.dataset.estabNotificationRequired === '1';
-        warning.hidden = !required;
-        if (label && option) {
-          label.textContent = option.dataset.estabPresenceLabel
-            || 'nicht aktiv';
-        }
-      }
-      updateMessengerPresence();
-      if (select) {
-        select.addEventListener('change', updateMessengerPresence);
-      }
     });
   function changed(form) {
     if (form.hasAttribute('data-estab-dirty-initial')) return true;

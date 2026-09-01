@@ -67,6 +67,7 @@ foreach (
         '/4fach/vordrucke.php' => 'forms',
         '/4fach/liste.php' => 'messages',
         '/4fach/fuehrungsstelle.php' => 'command-post',
+        '/4fach/melderauftraege.php' => 'messenger-jobs',
     ] as $script => $expectedKey
 ) {
     $markup = estab_navigation_markup(
@@ -209,7 +210,7 @@ $active = estab_incident_ui_markup([
  * Spalte, die dauerhaft offensteht, und alles darin wird bei jedem Blick
  * mitgelesen. Für die Frage „für welchen Einsatz arbeite ich gerade" genügt
  * der Name der Führungsstelle; er wird je Einsatz vergeben. Wer Kennung und
- * Namen braucht, findet sie im Führungsstellenbetrieb.
+ * Namen braucht, findet sie am Fernmeldeplan.
  */
 $activeText = $visibleText($active);
 $assert(
