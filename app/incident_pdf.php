@@ -2582,8 +2582,33 @@ final class EstabIncidentPdf extends vordruckaspdf
      * @param list<array<string,mixed>> $plans
      * @param list<array<string,mixed>> $entries
      */
-    public function addS6Plans(array $plans, array $entries): void
-    {
+    /**
+     * @param list<array<string,mixed>> $plans
+     * @param list<array<string,mixed>> $entries
+     * @param list<array<string,mixed>> $counterparts
+     */
+    public function addS6Plans(
+        array $plans,
+        array $entries,
+        array $counterparts = []
+    ): void {
+        $counterpartsByEntry = [];
+        foreach ($counterparts as $counterpart) {
+            if (!is_array($counterpart)) {
+                throw new EstabIncidentPdfInputException(
+                    'S6 plan counterparts must be arrays.'
+                );
+            }
+            $entryId = (int) (
+                $counterpart['fernmeldeplan_eintrag_id'] ?? 0
+            );
+            if ($entryId < 1) {
+                throw new EstabIncidentPdfInputException(
+                    'S6 plan counterparts require a plan entry ID.'
+                );
+            }
+            $counterpartsByEntry[$entryId][] = $counterpart;
+        }
         $entriesByPlan = [];
         foreach ($entries as $entry) {
             if (!is_array($entry)) {
@@ -2675,6 +2700,11 @@ final class EstabIncidentPdf extends vordruckaspdf
                     'Fernmeldeplan-ID' => 'fernmeldeplan_id',
                     'Planversion' => 'plan_version',
                     'Sortierung' => 'sortierung',
+                    // Die dauerhafte Kennung des Weges. Sie ueberlebt den
+                    // Versionswechsel und ist damit das Einzige, worueber
+                    // sich zwei Fassungen desselben Weges verbinden lassen.
+                    'Weg' => 'weg_nummer',
+                    'Rückfallebene für Weg' => 'rueckfallebene_fuer_weg',
                     'Stelle' => 'betriebsstelle',
                     'Stellenart' => 'stellenart',
                     'Erreichbar unter' => 'erreichbarkeit',
@@ -2694,6 +2724,30 @@ final class EstabIncidentPdf extends vordruckaspdf
                 ] as $label => $field) {
                     $this->definition($label, $entry[$field] ?? '');
                 }
+                $entryId = (int) (
+                    $entry['fernmeldeplan_eintrag_id'] ?? 0
+                );
+                foreach (
+                    $counterpartsByEntry[$entryId] ?? [] as $counterpart
+                ) {
+                    $this->definition(
+                        'Erreicht',
+                        trim(
+                            (string) ($counterpart['name'] ?? '')
+                            . ' · '
+                            . (string) ($counterpart['erreichbarkeit'] ?? '')
+                        )
+                    );
+                    if (
+                        trim((string) ($counterpart['bemerkungen'] ?? '')) !== ''
+                    ) {
+                        $this->definition(
+                            'Vermerk zur Gegenstelle',
+                            (string) $counterpart['bemerkungen']
+                        );
+                    }
+                }
+                unset($counterpartsByEntry[$entryId]);
                 $this->Ln(2);
             }
             unset($entriesByPlan[$planId]);
@@ -2702,6 +2756,11 @@ final class EstabIncidentPdf extends vordruckaspdf
         if ($entriesByPlan !== []) {
             throw new EstabIncidentPdfInputException(
                 'S6 plan entries refer to a missing incident plan.'
+            );
+        }
+        if ($counterpartsByEntry !== []) {
+            throw new EstabIncidentPdfInputException(
+                'S6 plan counterparts refer to a missing plan entry.'
             );
         }
     }

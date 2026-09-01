@@ -168,3 +168,29 @@ ANY CLAIM, DAMAGES OR OTHER LIABILITY, INCLUDING ANY GENERAL, SPECIAL,
 INDIRECT, INCIDENTAL, OR CONSEQUENTIAL DAMAGES, WHETHER IN AN ACTION OF
 CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF THE USE OR INABILITY TO USE
 THE FONT SOFTWARE OR FROM OTHER DEALINGS IN THE FONT SOFTWARE.
+
+## Taktische Zeichen (Sammlung Jonas Köritz)
+
+- Autor: Jonas Köritz
+- Upstream: <https://github.com/jonas-koeritz/Taktische-Zeichen>
+- Lizenz: CC-BY-4.0
+- Ausgeliefert in: `4fsym/taktische-zeichen/*.svg` (22 Zeichen)
+- Verwendung: Stellen- und Verbindungszeichen der Kommunikationsskizze
+  nach Fb Fü 77
+
+Die Zeichen sind aus den Jinja2-Vorlagen der Sammlung erzeugt und für die
+Auslieferung in zwei Punkten geändert:
+
+1. Der `<defs>`-Block mit der eingebetteten Schrift „Roboto Slab" ist
+   entfernt, ebenso die Schriftbindung an den Textknoten. Der Text erbt damit
+   die Schrift der Anwendung; das ist eine Gestaltungsentscheidung von eStab
+   (`docs/GESTALTUNG.md`) und spart je Zeichen rund 25 KB.
+2. Sonst ist nichts geändert. Farben, Maße und Formen sind die des Urhebers.
+
+Die Vorlagen selbst und das Bauwerkzeug (`j2cli`) werden **nicht**
+ausgeliefert und sind nicht Teil der Laufzeit. Der Bauschritt ist einmalig und
+in `tasks/fernmeldeplanung-todo.md` unter A24 beschrieben.
+
+> Diese Zeichen stehen unter der Creative-Commons-Namensnennung-4.0-Lizenz.
+> Der vollständige Lizenztext steht unter
+> <https://creativecommons.org/licenses/by/4.0/legalcode.de>.

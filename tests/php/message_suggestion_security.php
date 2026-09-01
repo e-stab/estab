@@ -443,7 +443,13 @@ foreach (
         'Bestätigtes Nachrichtenpaar',
         'Aktiver S6-Fernmeldeplan',
         'Ähnlich',
-        'Bezug:',
+        // Zwei Woerter fuer zwei Herkuenfte: der aehnliche Treffer aus der
+        // Historie nennt seinen Bezugswert, der Planvorschlag den Weg,
+        // ueber den er gilt. Ein gemeinsames Wort waere fuer einen von
+        // beiden falsch.
+        '"Bezug"',
+        '"Erreichbar über"',
+        '$contextLabel.": "',
         'input.removeAttribute("list")',
         'event.key === "ArrowDown"',
         'event.key === "Escape"',

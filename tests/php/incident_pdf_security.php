@@ -546,6 +546,21 @@ try {
             'verkehrsform' => 'Sternverkehr',
             'besondere_vermerke' => 'Vorrang',
             'bemerkungen' => 'Stündliche Funkprobe',
+            'weg_nummer' => 12,
+            'rueckfallebene_fuer_weg' => null,
+        ]],
+        // Die Gegenstellen des Weges. Sie kommen als eigene Liste und werden
+        // ueber die Eintragskennung zugeordnet -- eine Ausleitung fuehrt jede
+        // Tabelle so, wie sie in der Datenbank steht.
+        [[
+            'gegenstelle_id' => 91,
+            'fernmeldeplan_eintrag_id' => 61,
+            'fernmeldeplan_id' => 51,
+            'plan_version' => 2,
+            'sortierung' => 1,
+            'name' => 'Kreisleitstelle',
+            'erreichbarkeit' => 'Florian Kreis',
+            'bemerkungen' => 'Rund um die Uhr besetzt',
         ]]
     );
     $pdf->addCourierOrders([[

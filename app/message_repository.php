@@ -1769,7 +1769,8 @@ function estab_message_update_locked_operator_stage(
                 // browser-supplied "previous" medium.
                 $previousMediumStatement = estab_message_execute(
                     $connection,
-                    'SELECT `01_medium`, `13_abseinheit`, `05_gegenstelle` FROM '
+                    'SELECT `01_medium`, `13_abseinheit`, `05_gegenstelle`,'
+                        . ' `estab_gegenstelle_id` FROM '
                         . estab_message_table($table)
                         . ' WHERE `00_lfd` = ? AND `einsatz_id` = ?'
                         . $stageSql
@@ -1920,6 +1921,69 @@ function estab_message_update_locked_operator_stage(
                     $event['snapshot']['incoming_route_entry_id'] = null;
                 }
                 $fields['01_medium'] = $requestedMedium;
+                /*
+                 * Woher der Absender kommt, gehoert in den Nachweis.
+                 *
+                 * Feld 15 wird dem Leiter des Fernmeldebetriebes aus der vom
+                 * Fernmelder gewaehlten Gegenstelle vorbelegt. Ob er die
+                 * Vorbelegung uebernommen oder ueberschrieben hat, ist der
+                 * eigentliche Vorgang an dieser Station -- und ohne
+                 * Aufzeichnung waere hinterher nicht zu sagen, ob der
+                 * Absender aus dem Plan stammt oder aus seinem Urteil.
+                 *
+                 * Die Planfassung steht dabei, weil eine Gegenstelle nur
+                 * innerhalb ihrer Fassung eindeutig ist: eine spaetere
+                 * Version fuehrt dieselbe Stelle unter einer neuen Kennung.
+                 */
+                $namedCounterpart = $previousMediumRow['estab_gegenstelle_id']
+                    ?? null;
+                $namedCounterpart = $namedCounterpart === null
+                    ? null
+                    : (int) $namedCounterpart;
+                $event['snapshot']['incoming_counterpart_id'] =
+                    $namedCounterpart;
+                $event['snapshot']['incoming_counterpart_source'] = 'none';
+                $event['snapshot']['incoming_plan_version'] = null;
+                if ($namedCounterpart !== null && $namedCounterpart > 0) {
+                    $counterpartStatement = estab_message_execute(
+                        $connection,
+                        'SELECT g.`name`, p.`version`'
+                            . ' FROM `nv_fernmeldeplan_gegenstellen` AS g'
+                            . ' JOIN `nv_fernmeldeplan_eintraege` AS e'
+                            . ' ON e.`fernmeldeplan_eintrag_id`'
+                            . ' = g.`fernmeldeplan_eintrag_id`'
+                            . ' JOIN `nv_fernmeldeplaene` AS p'
+                            . ' ON p.`fernmeldeplan_id`'
+                            . ' = e.`fernmeldeplan_id`'
+                            . ' WHERE g.`gegenstelle_id` = ?'
+                            . ' AND p.`einsatz_id` = ?',
+                        [$namedCounterpart, $incidentId]
+                    );
+                    try {
+                        $counterpartRow = $counterpartStatement
+                            ->get_result()
+                            ->fetch_assoc();
+                    } finally {
+                        $counterpartStatement->close();
+                    }
+                    if (is_array($counterpartRow)) {
+                        $event['snapshot']['incoming_plan_version'] =
+                            (int) $counterpartRow['version'];
+                        $event['snapshot']['incoming_counterpart_source'] =
+                            hash_equals(
+                                (string) $counterpartRow['name'],
+                                (string) ($fields['13_abseinheit'] ?? '')
+                            )
+                                ? 'plan_unchanged'
+                                : 'plan_overridden';
+                    } else {
+                        // Die Gegenstelle stand damals im Plan und steht
+                        // heute nicht mehr darin. Das ist kein Fehler --
+                        // der Nachweis sagt es, statt zu schweigen.
+                        $event['snapshot']['incoming_counterpart_source'] =
+                            'plan_withdrawn';
+                    }
+                }
                 unset(
                     $event['snapshot'][
                         'requested_transport_correction_reason'

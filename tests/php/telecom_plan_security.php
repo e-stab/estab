@@ -403,12 +403,18 @@ $headerSnapshot = estab_dv_telecom_plan_header_audit_state([
     'session_id' => 'darf-ebenfalls-nicht-in-die-evidenz',
 ]);
 $assert(
+    // Die dreigeteilte Kopfleiste des Fb Fue 76 ist jetzt vollstaendig im
+    // Nachweis. Die Zusage bleibt dieselbe: NUR betriebliche Kopfdaten --
+    // die Liste ist abgeschlossen, jeder weitere Schluessel faellt auf.
     array_keys($headerSnapshot) === [
         'einsatzbezeichnung',
         'herkunft',
         'gueltig_ab',
         'gueltig_bis',
+        'verfasser_funktion',
+        'vs_vermerk',
         'betriebsleitung',
+        'freigabe_dienststellung',
         'bemerkungen',
     ]
         && !array_key_exists('password', $headerSnapshot)

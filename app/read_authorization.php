@@ -16,6 +16,9 @@ declare(strict_types=1);
 require_once __DIR__ . '/attachment.php';
 require_once __DIR__ . '/file_access.php';
 require_once __DIR__ . '/message_repository.php';
+// Der Planvorschlag nennt seine Wegart mit; ihre Beschriftung wohnt
+// bei der Fernmeldeplanung, nicht hier.
+require_once __DIR__ . '/dv_operations.php';
 
 final class EstabReadPermissionException extends RuntimeException
 {
@@ -815,6 +818,38 @@ function estab_read_plan_counterpart_suggestions(
     string $field,
     int $limit = 20
 ): array {
+    return array_map(
+        static fn (array $row): string => $row['value'],
+        estab_read_plan_counterpart_suggestion_details(
+            $connection,
+            $identity,
+            $field,
+            $limit
+        )
+    );
+}
+
+/**
+ * Dieselben Vorschlaege, aber mit dem Weg, ueber den sie gelten.
+ *
+ * Ein Rufname allein sagt nicht, worueber man ihn erreicht. Der Plan weiss
+ * es -- eine Gegenstelle haengt an genau einem Weg --, und wer waehlt, soll
+ * es sehen: "Heros Braunschweig" ueber Digitalfunk ist etwas anderes als
+ * derselbe Rufname ueber den Ersatzfax.
+ *
+ * Steht derselbe Wert an mehreren Wegen, werden sie alle genannt. Das ist
+ * kein Sonderfall, sondern der Regelfall bei einer Stelle, die auf zwei
+ * Wegen erreichbar ist -- und genau die Auskunft, die eine Rueckfallebene
+ * ueberhaupt erst benutzbar macht.
+ *
+ * @return list<array{value:string,routes:list<string>,context:string}>
+ */
+function estab_read_plan_counterpart_suggestion_details(
+    mysqli $connection,
+    array $identity,
+    string $field,
+    int $limit = 20
+): array {
     if ($limit < 1 || $limit > 50) {
         throw new InvalidArgumentException(
             'Die Anzahl der Planvorschläge ist ungültig.'
@@ -837,7 +872,8 @@ function estab_read_plan_counterpart_suggestions(
     };
     $statement = estab_message_execute(
         $connection,
-        'SELECT DISTINCT ' . $column . ' AS `suggestion`'
+        'SELECT DISTINCT ' . $column . ' AS `suggestion`,'
+        . ' e.`medium`, e.`funkart`, e.`betriebsstelle`'
         . ' FROM `nv_fernmeldeplan_gegenstellen` AS g'
         . ' JOIN `nv_fernmeldeplan_eintraege` AS e'
         . ' ON e.`fernmeldeplan_eintrag_id` = g.`fernmeldeplan_eintrag_id`'
@@ -851,18 +887,21 @@ function estab_read_plan_counterpart_suggestions(
         . ' AND (p.`gueltig_bis` IS NULL OR p.`gueltig_bis` >= NOW())'
         . ' AND p.`einsatz_id` = ?'
         . ' AND CHAR_LENGTH(TRIM(' . $column . ')) > 0'
-        . ' ORDER BY `suggestion`',
+        . ' ORDER BY `suggestion`, e.`betriebsstelle`',
         [$incidentId]
     );
     try {
         $stored = null;
-        if (!$statement->bind_result($stored)) {
+        $medium = null;
+        $radioKind = null;
+        $station = null;
+        if (!$statement->bind_result($stored, $medium, $radioKind, $station)) {
             throw new RuntimeException(
                 'Planvorschläge konnten nicht gelesen werden.'
             );
         }
         $suggestions = [];
-        $seen = [];
+        $index = [];
         while ($statement->fetch()) {
             $value = estab_read_normalize_message_suggestion($stored);
             if ($value === null) {
@@ -871,16 +910,39 @@ function estab_read_plan_counterpart_suggestions(
             $key = function_exists('mb_strtolower')
                 ? mb_strtolower($value, 'UTF-8')
                 : strtolower($value);
-            if (isset($seen[$key])) {
+            $route = estab_dv_telecom_route_label($medium, $radioKind);
+            $stationName = trim((string) $station);
+            if ($stationName !== '') {
+                $route .= ' · ' . $stationName;
+            }
+            if (isset($index[$key])) {
+                // Derselbe Wert an einem weiteren Weg. Er bekommt keinen
+                // zweiten Listenplatz, aber der Weg wird mitgenannt.
+                $position = $index[$key];
+                if (
+                    !in_array(
+                        $route,
+                        $suggestions[$position]['routes'],
+                        true
+                    )
+                ) {
+                    $suggestions[$position]['routes'][] = $route;
+                }
                 continue;
             }
-            $seen[$key] = true;
-            $suggestions[] = $value;
             if (count($suggestions) >= $limit) {
-                break;
+                continue;
             }
+            $index[$key] = count($suggestions);
+            $suggestions[] = ['value' => $value, 'routes' => [$route]];
         }
-        return $suggestions;
+        return array_map(
+            static function (array $row): array {
+                $row['context'] = implode(' · ', $row['routes']);
+                return $row;
+            },
+            $suggestions
+        );
     } finally {
         $statement->close();
     }

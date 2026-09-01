@@ -139,12 +139,33 @@ $assert(
     )
         && str_contains(
             $incomingRepository,
-            "'SELECT `01_medium`, `13_abseinheit`, `05_gegenstelle` FROM '"
+            "'SELECT `01_medium`, `13_abseinheit`, `05_gegenstelle`,'"
+        )
+        // Die vom Fernmelder benannte Gegenstelle wird unter derselben
+        // Sperre gelesen wie das Mittel. Ein Nachweis, der sie aus dem
+        // Browser naehme, koennte nicht sagen, was der Fernmelder erklaert
+        // hat -- sondern nur, was der Pruefer behauptet.
+        && str_contains(
+            $incomingRepository,
+            "' `estab_gegenstelle_id` FROM '"
         )
         && str_contains(
             $incomingRepository,
             ". ' FOR UPDATE'"
         )
+        // Woher Feld 15 kommt, gehoert in den Nachweis: die Gegenstelle,
+        // die Planfassung, und ob die Vorbelegung stehen blieb.
+        && str_contains(
+            $incomingRepository,
+            "'incoming_counterpart_id'"
+        )
+        && str_contains(
+            $incomingRepository,
+            "'incoming_plan_version'"
+        )
+        && str_contains($incomingRepository, "'plan_unchanged'")
+        && str_contains($incomingRepository, "'plan_overridden'")
+        && str_contains($incomingRepository, "'plan_withdrawn'")
         && str_contains(
             $repository,
             "'previous_incoming_transport_medium'"

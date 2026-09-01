@@ -1251,11 +1251,22 @@ foreach ($plans as $plan) {
         <dl class="estab-telecom-plan-meta">
           <div><dt>Status</dt><dd>Aktiv · Version
             <?= (int) $activePlan['version'] ?></dd></div>
-          <div><dt>Herkunft</dt><dd data-estab-telecom-header-origin><?=
+          <div><dt>Herausgebende Dienststelle</dt><dd
+            data-estab-telecom-header-origin><?=
             dv_operations_html(
               $activePlan['herkunft']
+          ) ?><?= trim((string) ($activePlan['verfasser_funktion'] ?? '')) === ''
+              ? ''
+              : ' · ' . dv_operations_html(
+                  (string) $activePlan['verfasser_funktion']
+              )
+          ?></dd></div>
+          <div><dt>Verwendungsbereich</dt><dd
+            data-estab-telecom-header-scope>Kommunikationsplan für <?=
+            dv_operations_html(
+              $activePlan['einsatzbezeichnung']
           ) ?></dd></div>
-          <div><dt>Gültigkeit</dt><dd data-estab-telecom-header-validity
+          <div><dt>Stand</dt><dd data-estab-telecom-header-validity
             data-estab-valid-from="<?= dv_operations_html(
                 dv_operations_datetime_input($activePlan['gueltig_ab'])
             ) ?>" data-estab-valid-until="<?= dv_operations_html(
@@ -1266,10 +1277,41 @@ foreach ($plans as $plan) {
               ? ''
               : ' bis ' . dv_operations_html($activePlan['gueltig_bis'])
           ?></dd></div>
+          <div><dt>Verschlusssachenvermerk</dt><dd
+            data-estab-telecom-header-classification><?=
+            trim((string) ($activePlan['vs_vermerk'] ?? '')) === ''
+              ? 'nicht angegeben'
+              : dv_operations_html((string) $activePlan['vs_vermerk'])
+          ?></dd></div>
           <div><dt>Betriebsleitung</dt><dd
             data-estab-telecom-header-lead><?= dv_operations_html(
               $activePlan['betriebsleitung']
           ) ?></dd></div>
+          <?php
+            /*
+             * F.d.R. -- "Für die Richtigkeit".
+             *
+             * Q6 verlangt Unterschrift mit Dienststellung. Am Bildschirm gibt
+             * es keine Unterschrift; an ihre Stelle tritt, wer freigegeben hat
+             * und in welcher Dienststellung. Fehlt die Dienststellung, steht
+             * trotzdem der Name da -- eine halbe Angabe ist mehr als keine,
+             * und dass sie halb ist, sieht man.
+             */
+            $freigabeZeichen = trim(
+                (string) ($activePlan['freigegeben_von'] ?? '')
+            );
+            $freigabeStellung = trim(
+                (string) ($activePlan['freigabe_dienststellung'] ?? '')
+            );
+          ?>
+          <?php if ($freigabeZeichen !== ''): ?>
+            <div><dt>F.d.R.</dt><dd data-estab-telecom-header-attestation><?=
+              dv_operations_html($freigabeZeichen)
+            ?><?= $freigabeStellung === ''
+                ? ''
+                : ', ' . dv_operations_html($freigabeStellung)
+            ?></dd></div>
+          <?php endif; ?>
         </dl>
         <?php if (trim((string) $activePlan['bemerkungen']) !== ''): ?>
           <p class="estab-telecom-plan-note">
@@ -1420,7 +1462,7 @@ foreach ($plans as $plan) {
             <?= estab_csrf_field() ?>
             <input type="hidden" name="operation_action" value="create_plan">
             <div class="estab-tool-form-grid">
-              <label>Herkunft
+              <label>Herausgebende Dienststelle
                 <input name="herkunft" maxlength="255" required value="<?=
                   dv_operations_html(dv_operations_post_value(
                       'create_plan',
@@ -1428,6 +1470,17 @@ foreach ($plans as $plan) {
                       ''
                   ))
                 ?>">
+                <small>Linkes Kopffeld nach Fb Fü 76.</small>
+              </label>
+              <label>Funktion des Verfassers
+                <input name="verfasser_funktion" maxlength="120" value="<?=
+                  dv_operations_html(dv_operations_post_value(
+                      'create_plan',
+                      'verfasser_funktion',
+                      ''
+                  ))
+                ?>">
+                <small>Freiwillig, etwa „S 6" oder „Fm-Zugführer".</small>
               </label>
               <label>Gültig ab
                 <input type="datetime-local" name="gueltig_ab" required
@@ -1446,6 +1499,17 @@ foreach ($plans as $plan) {
                   ))
                 ?>">
               </label>
+              <label>Verschlusssachenvermerk
+                <input name="vs_vermerk" maxlength="40" value="<?=
+                  dv_operations_html(dv_operations_post_value(
+                      'create_plan',
+                      'vs_vermerk',
+                      'NfD'
+                  ))
+                ?>">
+                <small>Rechtes Kopffeld. Vorgeschlagen ist „NfD"; die
+                  Vorbelegung ist ein Vorschlag, keine Setzung.</small>
+              </label>
               <label>Betriebsleitung
                 <input name="betriebsleitung" maxlength="255" required
                   value="<?= dv_operations_html(dv_operations_post_value(
@@ -1453,6 +1517,15 @@ foreach ($plans as $plan) {
                       'betriebsleitung',
                       ''
                   )) ?>">
+              </label>
+              <label>Dienststellung für die Freigabe
+                <input name="freigabe_dienststellung" maxlength="120"
+                  value="<?= dv_operations_html(dv_operations_post_value(
+                      'create_plan',
+                      'freigabe_dienststellung',
+                      ''
+                  )) ?>">
+                <small>Erscheint bei der Freigabe als „F.d.R.".</small>
               </label>
             </div>
             <label>Bemerkungen
@@ -1533,13 +1606,24 @@ foreach ($plans as $plan) {
                 <input type="hidden" name="plan_revision"
                   value="<?= dv_operations_html($revision) ?>">
                 <div class="estab-tool-form-grid">
-                  <label>Herkunft
+                  <label>Herausgebende Dienststelle
                     <input name="herkunft" maxlength="255" required
                       value="<?= dv_operations_html(
                           dv_operations_post_value(
                               'update_plan',
                               'herkunft',
                               $plan['herkunft'],
+                              $planId
+                          )
+                      ) ?>">
+                  </label>
+                  <label>Funktion des Verfassers
+                    <input name="verfasser_funktion" maxlength="120"
+                      value="<?= dv_operations_html(
+                          dv_operations_post_value(
+                              'update_plan',
+                              'verfasser_funktion',
+                              (string) ($plan['verfasser_funktion'] ?? ''),
                               $planId
                           )
                       ) ?>">
@@ -1568,6 +1652,17 @@ foreach ($plans as $plan) {
                           )
                       ) ?>">
                   </label>
+                  <label>Verschlusssachenvermerk
+                    <input name="vs_vermerk" maxlength="40"
+                      value="<?= dv_operations_html(
+                          dv_operations_post_value(
+                              'update_plan',
+                              'vs_vermerk',
+                              (string) ($plan['vs_vermerk'] ?? 'NfD'),
+                              $planId
+                          )
+                      ) ?>">
+                  </label>
                   <label>Betriebsleitung
                     <input name="betriebsleitung" maxlength="255" required
                       value="<?= dv_operations_html(
@@ -1575,6 +1670,19 @@ foreach ($plans as $plan) {
                               'update_plan',
                               'betriebsleitung',
                               $plan['betriebsleitung'],
+                              $planId
+                          )
+                      ) ?>">
+                  </label>
+                  <label>Dienststellung für die Freigabe
+                    <input name="freigabe_dienststellung" maxlength="120"
+                      value="<?= dv_operations_html(
+                          dv_operations_post_value(
+                              'update_plan',
+                              'freigabe_dienststellung',
+                              (string) (
+                                  $plan['freigabe_dienststellung'] ?? ''
+                              ),
                               $planId
                           )
                       ) ?>">

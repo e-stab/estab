@@ -10961,3 +10961,119 @@ a.estab-message-list-chip:hover {
         margin-bottom: var(--abstand-2);
     }
 }
+
+/*
+ * Die taktische Ansicht des Fernmeldeplans.
+ *
+ * Fb Fü 76 zeichnet je Stelle einen Kasten und haengt die Verbindungen daran.
+ * Am Bildschirm ist der Kasten eine Liste: Stelle, darunter die Wege, darunter
+ * eingerueckt, wen man ueber sie erreicht. Die Einrueckung traegt die Aussage
+ * -- deshalb steht sie in Abstaenden der Skala und nicht in Blaesse.
+ */
+.estab-telecom-depth {
+  align-items: baseline;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--abstand-4);
+  margin-block: var(--abstand-6) var(--abstand-5);
+}
+
+.estab-telecom-depth-current {
+  background: var(--handlung-sanft);
+  border: 1px solid var(--handlung-kante);
+  border-radius: var(--radius-2);
+  color: var(--handlung-dunkel);
+  padding: var(--abstand-2) var(--abstand-4);
+}
+
+.estab-telecom-depth-link {
+  border: 1px solid var(--linie-kraeftig);
+  border-radius: var(--radius-2);
+  color: var(--handlung-dunkel);
+  padding: var(--abstand-2) var(--abstand-4);
+  text-decoration: none;
+}
+
+.estab-telecom-depth-link:hover,
+.estab-telecom-depth-link:focus-visible {
+  background: var(--handlung-sanft);
+  border-color: var(--handlung-kante);
+}
+
+.estab-telecom-depth-hint {
+  color: var(--tinte-neben);
+  font-size: var(--schrift-2);
+}
+
+.estab-telecom-stations {
+  display: grid;
+  gap: var(--abstand-5);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.estab-telecom-station {
+  background: var(--grund-tafel);
+  border: 1px solid var(--linie);
+  border-radius: var(--radius-3);
+  padding: var(--abstand-5);
+}
+
+.estab-telecom-station-name {
+  align-items: baseline;
+  display: flex;
+  flex-wrap: wrap;
+  font-size: var(--schrift-4);
+  gap: var(--abstand-4);
+  margin: 0 0 var(--abstand-4);
+}
+
+.estab-telecom-station-kind {
+  background: var(--grund-gedaempft);
+  border-radius: var(--radius-pille);
+  color: var(--tinte-neben);
+  font-size: var(--schrift-1);
+  font-weight: var(--stark-normal);
+  padding: var(--abstand-1) var(--abstand-4);
+}
+
+.estab-telecom-station-routes {
+  display: grid;
+  gap: var(--abstand-4);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.estab-telecom-station-medium {
+  font-weight: var(--stark-halb);
+}
+
+.estab-telecom-station-address {
+  color: var(--tinte);
+}
+
+.estab-telecom-station-route,
+.estab-telecom-station-elsewhere {
+  color: var(--tinte-neben);
+  font-size: var(--schrift-1);
+}
+
+.estab-telecom-station-counterparts,
+.estab-telecom-station-fallbacks {
+  border-left: 2px solid var(--linie-kraeftig);
+  display: grid;
+  gap: var(--abstand-1);
+  list-style: none;
+  margin: var(--abstand-2) 0 0 var(--abstand-4);
+  padding: 0 0 0 var(--abstand-4);
+}
+
+.estab-telecom-station-fallback-mark {
+  background: var(--achtung-flaeche);
+  border-radius: var(--radius-2);
+  color: var(--achtung-tinte);
+  font-size: var(--schrift-1);
+  padding: 0 var(--abstand-2);
+}

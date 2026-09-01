@@ -61,6 +61,9 @@ $counterpartMigration = $read(
 $incomingRouteMigration = $read(
     $root . '/docker/db/migrations/127-eingangsweg.sql'
 );
+$planHeaderMigration = $read(
+    $root . '/docker/db/migrations/128-fernmeldeplan-kopfleiste.sql'
+);
 $attachmentIntegrityMigration = $read(
     $root . '/docker/db/migrations/95-attachment-ingest-integrity.sql'
 );
@@ -3010,6 +3013,44 @@ $assert(
     'Incoming route columns, their form boundary, or the deliberate absence '
         . 'of a counterpart foreign key is outside the gate'
 );
+// Die Kopfleiste des Fb Fue 76. Alle drei Spalten sind freiwillig und
+// tragen KEINE Vorbelegung: ein DEFAULT schriebe "NfD" in jede bereits
+// freigegebene Fassung -- eine Aussage, die sie nie getroffen hat. Die
+// Nachpruefung der Migration besteht genau darauf.
+$assert(
+    str_contains(
+        $planHeaderMigration,
+        '`verfasser_funktion` VARCHAR(120) NULL'
+    )
+        && str_contains($planHeaderMigration, '`vs_vermerk` VARCHAR(40) NULL')
+        && str_contains(
+            $planHeaderMigration,
+            '`freigabe_dienststellung` VARCHAR(120) NULL'
+        )
+        /*
+         * Keine Spalte ist Pflicht, also braucht keine eine Vorbelegung.
+         * Geprueft werden die ADD-COLUMN-Zeilen selbst -- "NOT NULL" und
+         * "DEFAULT" stehen sonst auch in der Nachpruefung ("IS NOT NULL",
+         * "DECLARE ... DEFAULT 0") und die Probe schluege dort an, ohne dass
+         * eine Spalte etwas erzwaenge.
+         */
+        && preg_match(
+            '/ADD COLUMN[^;]*?(NOT NULL|DEFAULT)/i',
+            $planHeaderMigration
+        ) !== 1
+        && preg_match('/`kennwort`/i', $planHeaderMigration) !== 1
+        && str_contains($planHeaderMigration, "'127-eingangsweg.sql'")
+        && str_contains(
+            $planHeaderMigration,
+            'an existing plan version was given a value'
+        )
+        && str_contains(
+            $readiness,
+            "'128-fernmeldeplan-kopfleiste.sql'"
+        ),
+    'Plan header columns, their absent defaults, or the deliberate absence '
+        . 'of a PDV-800 password field is outside the gate'
+);
 $etbMigrationFragments = [
     "table_name = 'nv_funktionsfaehigkeiten' AND table_type = 'BASE TABLE' "
         . "AND engine = 'InnoDB' AND table_collation = "
@@ -3305,7 +3346,7 @@ $assert(
         && str_contains($verifySql, "index_name <> 'PRIMARY') = 0")
         && str_contains(
             $verifySql,
-            '(SELECT COUNT(*) FROM `estab_schema_migrations`) = 33'
+            '(SELECT COUNT(*) FROM `estab_schema_migrations`) = 34'
         )
         && str_contains($verifySql, "'96-etb-duty-function.sql'")
         && str_contains(
@@ -3369,7 +3410,11 @@ $assert(
             "'126-fernmeldeplan-gegenstellen.sql'"
         )
         && str_contains($verifySql, "'127-eingangsweg.sql'")
-        && str_contains($verifySql, ") = 33) AS `schema_migrations_ok`")
+        && str_contains(
+            $verifySql,
+            "'128-fernmeldeplan-kopfleiste.sql'"
+        )
+        && str_contains($verifySql, ") = 34) AS `schema_migrations_ok`")
         && str_contains(
             $verifySql,
             'Discarded telecommunications drafts are immutable evidence'
@@ -3396,7 +3441,7 @@ $assert(
         && str_contains($readinessSql, "index_name <> 'PRIMARY') = 0")
         && str_contains(
             $readinessSql,
-            '(SELECT COUNT(*) FROM estab_schema_migrations) = 33'
+            '(SELECT COUNT(*) FROM estab_schema_migrations) = 34'
         )
         && str_contains($readinessSql, "'96-etb-duty-function.sql'")
         && str_contains(
@@ -3448,7 +3493,7 @@ $assert(
         )
         && str_contains(
             $readinessSql,
-            "checksum REGEXP BINARY '^[0-9a-f]{64}$') = 33"
+            "checksum REGEXP BINARY '^[0-9a-f]{64}$') = 34"
         ),
     'Runtime readiness does not require the exact final ETB catalogue and ledger'
 );
@@ -3706,8 +3751,10 @@ $assert(
         && str_contains($readiness, "'126-fernmeldeplan-gegenstellen.sql'")
         && str_contains($verify, "'127-eingangsweg.sql'")
         && str_contains($readiness, "'127-eingangsweg.sql'")
-        && str_contains($verify, 'estab_schema_migrations`) = 33')
-        && str_contains($readiness, 'estab_schema_migrations) = 33'),
+        && str_contains($verify, "'128-fernmeldeplan-kopfleiste.sql'")
+        && str_contains($readiness, "'128-fernmeldeplan-kopfleiste.sql'")
+        && str_contains($verify, 'estab_schema_migrations`) = 34')
+        && str_contains($readiness, 'estab_schema_migrations) = 34'),
     'Migration ledger/readiness does not require all release migrations'
 );
 $assert(

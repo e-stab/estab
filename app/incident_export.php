@@ -891,6 +891,7 @@ function estab_incident_export_operations_evidence_status(
  *   duty_handovers:list<array<string,mixed>>,
  *   s6_plans:list<array<string,mixed>>,
  *   s6_plan_entries:list<array<string,mixed>>,
+ *   s6_plan_counterparts:list<array<string,mixed>>,
  *   courier_orders:list<array<string,mixed>>,
  *   operations_events:list<array<string,mixed>>,
  *   operations_evidence_heads:list<array<string,mixed>>,
@@ -1353,6 +1354,7 @@ function estab_incident_export_load(
 
     $s6Plans = [];
     $s6PlanEntries = [];
+    $s6PlanCounterparts = [];
     if (in_array('s6_plans', $sections, true)) {
         $s6Plans = estab_incident_export_rows(
             $connection,
@@ -1370,6 +1372,8 @@ function estab_incident_export_load(
             $connection,
             'SELECT e.`fernmeldeplan_eintrag_id`, e.`fernmeldeplan_id`,'
                 . ' p.`version` AS `plan_version`, e.`sortierung`,'
+                . ' w.`weg_nummer`, zu.`weg_id`,'
+                . ' e.`rueckfallebene_fuer_weg`,'
                 . ' e.`betriebsstelle`, e.`stellenart`, e.`erreichbarkeit`,'
                 . ' e.`medium`, e.`funkart`, e.`band`, e.`relaisstelle`,'
                 . ' e.`betriebsart`, e.`rufgruppe`, e.`anschlussart`,'
@@ -1379,11 +1383,47 @@ function estab_incident_export_load(
                 . ' FROM `nv_fernmeldeplan_eintraege` AS e'
                 . ' JOIN `nv_fernmeldeplaene` AS p'
                 . ' ON p.`fernmeldeplan_id` = e.`fernmeldeplan_id`'
+                // Die dauerhafte Wegkennung haengt an der Zuordnung, nicht am
+                // Eintrag -- der geschuetzte Bestand wird gelesen, nie
+                // angefasst. LEFT JOIN, weil ein Eintrag ohne Kennung ein
+                // Befund ist und keine fehlende Zeile.
+                . ' LEFT JOIN `nv_fernmeldeweg_zuordnung` AS zu'
+                . ' ON zu.`fernmeldeplan_eintrag_id`'
+                . ' = e.`fernmeldeplan_eintrag_id`'
+                . ' LEFT JOIN `nv_fernmeldewege` AS w'
+                . ' ON w.`weg_id` = zu.`weg_id`'
                 . ' WHERE p.`einsatz_id` = ?'
                 . ' ORDER BY p.`version`, e.`sortierung`,'
                 . ' e.`fernmeldeplan_eintrag_id`',
             $incidentId,
             'Die S6-Fernmeldeplaneinträge konnten nicht gelesen werden.'
+        );
+        /*
+         * Die Gegenstellen kommen als eigene Liste, nicht eingebettet.
+         *
+         * Eine Ausleitung ist ein Nachweis, kein Bildschirm: sie fuehrt jede
+         * Tabelle so, wie sie in der Datenbank steht, damit sich jede Zeile
+         * zurueckverfolgen laesst. Verschachtelt waere die Zuordnung nur noch
+         * aus der Verschachtelung ablesbar und nicht mehr aus einem Schluessel.
+         */
+        $s6PlanCounterparts = estab_incident_export_rows(
+            $connection,
+            'SELECT g.`gegenstelle_id`, g.`fernmeldeplan_eintrag_id`,'
+                . ' e.`fernmeldeplan_id`, p.`version` AS `plan_version`,'
+                . ' g.`sortierung`, g.`name`, g.`erreichbarkeit`,'
+                . ' g.`bemerkungen`'
+                . ' FROM `nv_fernmeldeplan_gegenstellen` AS g'
+                . ' JOIN `nv_fernmeldeplan_eintraege` AS e'
+                . ' ON e.`fernmeldeplan_eintrag_id`'
+                . ' = g.`fernmeldeplan_eintrag_id`'
+                . ' JOIN `nv_fernmeldeplaene` AS p'
+                . ' ON p.`fernmeldeplan_id` = e.`fernmeldeplan_id`'
+                . ' WHERE p.`einsatz_id` = ?'
+                . ' ORDER BY p.`version`, e.`sortierung`, g.`sortierung`,'
+                . ' g.`gegenstelle_id`',
+            $incidentId,
+            'Die Gegenstellen des S6-Fernmeldeplans konnten nicht gelesen '
+                . 'werden.'
         );
     }
 
@@ -1451,6 +1491,7 @@ function estab_incident_export_load(
         'duty_handover_requests' => $dutyHandoverRequests,
         's6_plans' => $s6Plans,
         's6_plan_entries' => $s6PlanEntries,
+        's6_plan_counterparts' => $s6PlanCounterparts,
         'courier_orders' => $courierOrders,
         'operations_events' => $operationsEvents,
         'operations_evidence_heads' => $operationsEvidenceHeads,
@@ -1490,6 +1531,7 @@ function estab_incident_export_load(
             'access_shift_memberships' => count($accessShiftMemberships),
             's6_plans' => count($s6Plans),
             's6_plan_entries' => count($s6PlanEntries),
+            's6_plan_counterparts' => count($s6PlanCounterparts),
             'courier' => count($courierOrders),
             'operations_evidence' => count($operationsEvents),
         ],
@@ -1690,6 +1732,9 @@ function estab_incident_export_pdf(
                 : [],
             is_array($bundle['s6_plan_entries'] ?? null)
                 ? $bundle['s6_plan_entries']
+                : [],
+            is_array($bundle['s6_plan_counterparts'] ?? null)
+                ? $bundle['s6_plan_counterparts']
                 : []
         );
     }

@@ -2020,7 +2020,7 @@ SELECT
        BINARY 'STRICT', BINARY 'LOOSE'
      )) = 0)
        AS `incident_permission_mode_ok`,
-  ((SELECT COUNT(*) FROM `estab_schema_migrations`) = 33
+  ((SELECT COUNT(*) FROM `estab_schema_migrations`) = 34
    AND
    (SELECT COUNT(*)
       FROM `estab_schema_migrations`
@@ -2057,10 +2057,11 @@ SELECT
        '124-fernmeldeweg-erreichbarkeit.sql',
        '125-fernmeldeweg-rueckfallebene.sql',
        '126-fernmeldeplan-gegenstellen.sql',
-       '127-eingangsweg.sql'
+       '127-eingangsweg.sql',
+       '128-fernmeldeplan-kopfleiste.sql'
      )
        AND `state` = 'applied'
-       AND `checksum` REGEXP BINARY '^[0-9a-f]{64}$') = 33)
+       AND `checksum` REGEXP BINARY '^[0-9a-f]{64}$') = 34)
        AS `schema_migrations_ok`;
 
 SELECT `table_name`, `engine`, `table_collation`

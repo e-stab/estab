@@ -4440,15 +4440,42 @@ function estab_dv_telecom_plan_header_values(array $input): array
     return [
         'herkunft' => estab_dv_text(
             $input['herkunft'] ?? null,
-            'Herkunft',
+            'Herausgebende Dienststelle',
             255
+        ),
+        /*
+         * Die drei Angaben der Kopfleiste nach Fb Fü 76.
+         *
+         * Alle drei sind freiwillig, und zwar nicht aus Bequemlichkeit: ein
+         * Pflichtfeld zwänge jeden Entwurf zu einer Angabe, auch dort, wo der
+         * Vordruck sie leer lässt. Der Verschlusssachenvermerk wird in der
+         * Maske mit "NfD" vorbelegt -- das ist ein Vorschlag an den S6, keine
+         * Setzung der Anwendung.
+         */
+        'verfasser_funktion' => estab_dv_text(
+            $input['verfasser_funktion'] ?? '',
+            'Funktion des Verfassers',
+            120,
+            true
         ),
         'gueltig_ab' => $validFrom,
         'gueltig_bis' => $validUntil,
+        'vs_vermerk' => estab_dv_text(
+            $input['vs_vermerk'] ?? '',
+            'Verschlusssachenvermerk',
+            40,
+            true
+        ),
         'betriebsleitung' => estab_dv_text(
             $input['betriebsleitung'] ?? null,
             'Betriebsleitung',
             255
+        ),
+        'freigabe_dienststellung' => estab_dv_text(
+            $input['freigabe_dienststellung'] ?? '',
+            'Dienststellung für die Freigabe',
+            120,
+            true
         ),
         'bemerkungen' => estab_dv_text(
             $input['bemerkungen'] ?? '',
@@ -4478,7 +4505,17 @@ function estab_dv_telecom_plan_header_audit_state(array $plan): array
         'gueltig_bis' => ($plan['gueltig_bis'] ?? null) === null
             ? null
             : (string) $plan['gueltig_bis'],
+        'verfasser_funktion' => ($plan['verfasser_funktion'] ?? null) === null
+            ? null
+            : (string) $plan['verfasser_funktion'],
+        'vs_vermerk' => ($plan['vs_vermerk'] ?? null) === null
+            ? null
+            : (string) $plan['vs_vermerk'],
         'betriebsleitung' => (string) ($plan['betriebsleitung'] ?? ''),
+        'freigabe_dienststellung' =>
+            ($plan['freigabe_dienststellung'] ?? null) === null
+                ? null
+                : (string) $plan['freigabe_dienststellung'],
         'bemerkungen' => ($plan['bemerkungen'] ?? null) === null
             ? null
             : (string) $plan['bemerkungen'],
@@ -4617,8 +4654,9 @@ function estab_dv_lock_telecom_draft(
 ): array {
     $statement = $connection->prepare(
         'SELECT `status`, `version`, `einsatzbezeichnung`, `herkunft`,'
-        . ' `gueltig_ab`, `gueltig_bis`, `betriebsleitung`, `bemerkungen`'
-        . ' FROM `nv_fernmeldeplaene`'
+        . ' `verfasser_funktion`, `gueltig_ab`, `gueltig_bis`,'
+        . ' `vs_vermerk`, `betriebsleitung`, `freigabe_dienststellung`,'
+        . ' `bemerkungen` FROM `nv_fernmeldeplaene`'
         . ' WHERE `fernmeldeplan_id` = ? AND `einsatz_id` = ? FOR UPDATE'
     );
     if (!$statement) {
@@ -4641,11 +4679,20 @@ function estab_dv_lock_telecom_draft(
         'version' => (int) $row['version'],
         'einsatzbezeichnung' => (string) $row['einsatzbezeichnung'],
         'herkunft' => (string) $row['herkunft'],
+        'verfasser_funktion' => $row['verfasser_funktion'] === null
+            ? null
+            : (string) $row['verfasser_funktion'],
         'gueltig_ab' => (string) $row['gueltig_ab'],
         'gueltig_bis' => $row['gueltig_bis'] === null
             ? null
             : (string) $row['gueltig_bis'],
+        'vs_vermerk' => $row['vs_vermerk'] === null
+            ? null
+            : (string) $row['vs_vermerk'],
         'betriebsleitung' => (string) $row['betriebsleitung'],
+        'freigabe_dienststellung' => $row['freigabe_dienststellung'] === null
+            ? null
+            : (string) $row['freigabe_dienststellung'],
         'bemerkungen' => $row['bemerkungen'] === null
             ? null
             : (string) $row['bemerkungen'],
@@ -4741,10 +4788,17 @@ function estab_dv_telecom_plan_revision(array $plan): string
             'einsatzbezeichnung' =>
                 (string) ($plan['einsatzbezeichnung'] ?? ''),
             'herkunft' => (string) ($plan['herkunft'] ?? ''),
+            // Auch die Kopfleiste gehoert in den Stand. Ein Plan, dessen
+            // Verschlusssachenvermerk sich unbemerkt aendert, ist genauso
+            // gefaehrlich wie einer mit unbemerkt geaendertem Kanal.
+            'verfasser_funktion' => $plan['verfasser_funktion'] ?? null,
             'gueltig_ab' => (string) ($plan['gueltig_ab'] ?? ''),
             'gueltig_bis' => $plan['gueltig_bis'] ?? null,
+            'vs_vermerk' => $plan['vs_vermerk'] ?? null,
             'betriebsleitung' =>
                 (string) ($plan['betriebsleitung'] ?? ''),
+            'freigabe_dienststellung' =>
+                $plan['freigabe_dienststellung'] ?? null,
             'bemerkungen' => (string) ($plan['bemerkungen'] ?? ''),
             'eintraege' => $entries,
         ],
@@ -4846,23 +4900,28 @@ function estab_dv_create_telecom_plan(
             $insert = $connection->prepare(
                 'INSERT INTO `nv_fernmeldeplaene`'
                 . ' (`einsatz_id`, `version`, `einsatzbezeichnung`, `herkunft`,'
-                . ' `gueltig_ab`, `gueltig_bis`, `betriebsleitung`,'
+                . ' `verfasser_funktion`, `gueltig_ab`, `gueltig_bis`,'
+                . ' `vs_vermerk`, `betriebsleitung`,'
+                . ' `freigabe_dienststellung`,'
                 . ' `bemerkungen`, `erstellt_von`)'
-                . ' VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+                . ' VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
             );
             if (!$insert) {
                 throw new RuntimeException('Fernmeldeplan konnte nicht vorbereitet werden.');
             }
             try {
                 $insert->bind_param(
-                    'iisssssss',
+                    'iissssssssss',
                     $incidentId,
                     $version,
                     $incidentLabel,
                     $header['herkunft'],
+                    $header['verfasser_funktion'],
                     $header['gueltig_ab'],
                     $header['gueltig_bis'],
+                    $header['vs_vermerk'],
                     $header['betriebsleitung'],
+                    $header['freigabe_dienststellung'],
                     $header['bemerkungen'],
                     $userCode
                 );
@@ -4944,7 +5003,9 @@ function estab_dv_start_telecom_plan_revision(
             estab_dv_require_no_telecom_draft($connection, $incidentId);
             $sourceStatement = $connection->prepare(
                 'SELECT `version`, `einsatzbezeichnung`, `herkunft`,'
-                . ' `gueltig_ab`, `gueltig_bis`, `betriebsleitung`,'
+                . ' `verfasser_funktion`, `gueltig_ab`, `gueltig_bis`,'
+                . ' `vs_vermerk`, `betriebsleitung`,'
+                . ' `freigabe_dienststellung`,'
                 . ' `bemerkungen` FROM `nv_fernmeldeplaene`'
                 . ' WHERE `fernmeldeplan_id` = ? AND `einsatz_id` = ?'
                 . " AND `status` = 'AKTIV' FOR UPDATE"
@@ -4986,9 +5047,11 @@ function estab_dv_start_telecom_plan_revision(
             $insertPlan = $connection->prepare(
                 'INSERT INTO `nv_fernmeldeplaene`'
                 . ' (`einsatz_id`, `version`, `einsatzbezeichnung`, `herkunft`,'
-                . ' `gueltig_ab`, `gueltig_bis`, `betriebsleitung`,'
+                . ' `verfasser_funktion`, `gueltig_ab`, `gueltig_bis`,'
+                . ' `vs_vermerk`, `betriebsleitung`,'
+                . ' `freigabe_dienststellung`,'
                 . ' `bemerkungen`, `erstellt_von`)'
-                . ' VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+                . ' VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
             );
             if (!$insertPlan) {
                 throw new RuntimeException(
@@ -4998,14 +5061,17 @@ function estab_dv_start_telecom_plan_revision(
             $userCode = (string) $selected['kuerzel'];
             try {
                 $insertPlan->bind_param(
-                    'iisssssss',
+                    'iissssssssss',
                     $incidentId,
                     $version,
                     $source['einsatzbezeichnung'],
                     $source['herkunft'],
+                    $source['verfasser_funktion'],
                     $source['gueltig_ab'],
                     $source['gueltig_bis'],
+                    $source['vs_vermerk'],
                     $source['betriebsleitung'],
+                    $source['freigabe_dienststellung'],
                     $source['bemerkungen'],
                     $userCode
                 );
@@ -5237,8 +5303,10 @@ function estab_dv_update_telecom_plan_draft(
             );
             $update = $connection->prepare(
                 'UPDATE `nv_fernmeldeplaene` SET `herkunft` = ?,'
-                . ' `gueltig_ab` = ?, `gueltig_bis` = ?,'
-                . ' `betriebsleitung` = ?, `bemerkungen` = ?'
+                . ' `verfasser_funktion` = ?,'
+                . ' `gueltig_ab` = ?, `gueltig_bis` = ?, `vs_vermerk` = ?,'
+                . ' `betriebsleitung` = ?, `freigabe_dienststellung` = ?,'
+                . ' `bemerkungen` = ?'
                 . ' WHERE `fernmeldeplan_id` = ? AND `einsatz_id` = ?'
                 . " AND `status` = 'ENTWURF'"
             );
@@ -5249,11 +5317,14 @@ function estab_dv_update_telecom_plan_draft(
             }
             try {
                 $update->bind_param(
-                    'sssssii',
+                    'ssssssssii',
                     $header['herkunft'],
+                    $header['verfasser_funktion'],
                     $header['gueltig_ab'],
                     $header['gueltig_bis'],
+                    $header['vs_vermerk'],
                     $header['betriebsleitung'],
+                    $header['freigabe_dienststellung'],
                     $header['bemerkungen'],
                     $planId,
                     $incidentId
@@ -6568,8 +6639,10 @@ function estab_dv_telecom_plans(mysqli $connection, int $incidentId): array
                     'status' => (string) $row['status'],
                     'einsatzbezeichnung' => (string) $row['einsatzbezeichnung'],
                     'herkunft' => (string) $row['herkunft'],
+                    'verfasser_funktion' => $row['verfasser_funktion'],
                     'gueltig_ab' => (string) $row['gueltig_ab'],
                     'gueltig_bis' => $row['gueltig_bis'],
+                    'vs_vermerk' => $row['vs_vermerk'],
                     'betriebsleitung' => (string) $row['betriebsleitung'],
                     'bemerkungen' => $row['bemerkungen'],
                     'erstellt_am' => (string) $row['erstellt_am'],
@@ -6578,6 +6651,8 @@ function estab_dv_telecom_plans(mysqli $connection, int $incidentId): array
                         ? null
                         : (string) $row['freigegeben_am'],
                     'freigegeben_von' => $row['freigegeben_von'],
+                    'freigabe_dienststellung' =>
+                        $row['freigabe_dienststellung'],
                     'eintraege' => [],
                 ];
             }

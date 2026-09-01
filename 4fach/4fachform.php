@@ -546,7 +546,7 @@ class nachrichten4fach {
          * soll sehen, ob ein Vorschlag geplant oder gewachsen ist.
          */
         try {
-          $planned = estab_read_plan_counterpart_suggestions (
+          $planned = estab_read_plan_counterpart_suggestion_details (
             $connection,
             $identity,
             $field,
@@ -556,7 +556,8 @@ class nachrichten4fach {
           $planned = array ();
           error_log ("eStab plan counterparts are temporarily unavailable");
         }
-        foreach ($planned as $value) {
+        foreach ($planned as $eintrag) {
+          $value = (string) $eintrag ["value"];
           $key = function_exists ("mb_strtolower")
             ? mb_strtolower ($value, "UTF-8")
             : strtolower ($value);
@@ -568,7 +569,9 @@ class nachrichten4fach {
           $this->messageSuggestionMetadata [$value] = array (
             "source" => "plan",
             "match" => "exact",
-            "matched_context" => "",
+            // Der Weg, ueber den dieser Vorschlag gilt. Ein Rufname allein
+            // sagt nicht, worueber man ihn erreicht.
+            "matched_context" => (string) $eintrag ["context"],
           );
         }
         foreach ($history as $value) {
@@ -636,6 +639,7 @@ class nachrichten4fach {
           "quality" => "",
           "label" => "",
           "matched_context" => "",
+          "context_label" => "",
         );
       }
       $source = (string) ($metadata ["source"] ?? "");
@@ -656,9 +660,16 @@ class nachrichten4fach {
           "quality" => "",
           "label" => "",
           "matched_context" => "",
+          "context_label" => "",
         );
       }
-      $matchedContext = $match === "related"
+      /*
+       * Der Zusatz stand frueher nur an aehnlichen Treffern -- dort erklaert
+       * er, WORUEBER der Bezug lief. Ein Planvorschlag ist exakt und traegt
+       * trotzdem einen: den Weg, ueber den er gilt. Beides ist dieselbe
+       * Frage ("woher kommt das?") und bekommt denselben Platz.
+       */
+      $matchedContext = ($match === "related" || $source === "plan")
         ? (string) ($metadata ["matched_context"] ?? "")
         : "";
       return array (
@@ -668,6 +679,15 @@ class nachrichten4fach {
           ? $sourceLabel
           : $matchLabel." · ".$sourceLabel,
         "matched_context" => $matchedContext,
+        /*
+         * "Bezug" fuer einen aehnlichen Treffer aus der Historie -- dort ist
+         * der Zusatz der Wert, ueber den die Aehnlichkeit lief. "Erreichbar
+         * ueber" fuer den Plan: dort ist er der Weg. Dasselbe Feld, zwei
+         * Saetze; ein gemeinsames Wort waere fuer beide falsch.
+         */
+        "context_label" => $source === "plan"
+          ? "Erreichbar über"
+          : "Bezug",
       );
     }
 
@@ -685,8 +705,9 @@ class nachrichten4fach {
         $sourceLabel = (string) $presentation ["label"];
         $matchedContext = (string) $presentation ["matched_context"];
         $nativeLabel = $sourceLabel;
+        $contextLabel = (string) $presentation ["context_label"];
         if ($nativeLabel !== "" && $matchedContext !== "") {
-          $nativeLabel .= " · Bezug: ".$matchedContext;
+          $nativeLabel .= " · ".$contextLabel.": ".$matchedContext;
         }
         echo "<option value=\"".estab_auth_html ($suggestion)."\"".
           ($nativeLabel === ""
@@ -705,6 +726,7 @@ class nachrichten4fach {
         $quality = (string) $presentation ["quality"];
         $sourceLabel = (string) $presentation ["label"];
         $matchedContext = (string) $presentation ["matched_context"];
+        $contextLabel = (string) $presentation ["context_label"];
         echo "<div id=\"".$id."-option-".$index."\" ".
           "class=\"estab-message-suggestion-option".
           ($sourceLabel === "" ? "" : " estab-message-mapping-option").
@@ -727,7 +749,8 @@ class nachrichten4fach {
                 ? ""
                 : "<br><span ".
                   "class=\"estab-message-suggestion-match-context\">".
-                  "Bezug: „".estab_auth_html ($matchedContext)."“</span>").
+                  estab_auth_html ($contextLabel).": „".
+                  estab_auth_html ($matchedContext)."“</span>").
               "</small>").
           "</div>\n";
       }
