@@ -1583,13 +1583,28 @@ audio[data-estab-sidebar-audio] {
     padding: 0 var(--abstand-4) var(--abstand-3);
 }
 
-/* Zwei Ziele je Zeile, sobald die Spalte breit genug dafuer ist. Bei 13 rem
-   ist sie das nicht: dort braeche "Fuehrungsstelle" mitten durch, und ein
-   zerrissener Name kostet mehr als die gesparte Zeile wert ist. */
+/* Zwei Ziele je Zeile, sobald die Spalte breit genug dafuer ist -- und die
+   Schwelle ist am laengsten Namen gemessen, nicht am mittleren.
+
+   Mit 6.2rem war sie zu niedrig. Bei 1600 Bildpunkten ist die Menuespalte
+   240 breit, die Liste darin 206; auto-fill machte daraus zwei Kacheln von
+   101. "Administration" und "Fernmeldeplan" brauchen als Wort 104 -- sie
+   passten nicht und wurden auch nicht umgebrochen, weil ein Flex-Kind nicht
+   unter seine Wortbreite schrumpft. Sie frassen stattdessen ihr eigenes
+   Polster: Der letzte Buchstabe stand hart auf der Kachelkante, waehrend
+   jede andere Kachel rechts Luft hatte.
+
+   Was eine Kachel wirklich braucht: 104 fuer das Wort, 12 fuer das Polster,
+   4 fuer die Raender -- 120 Bildpunkte, also 7.5rem. Zwei davon nebeneinander
+   verlangen eine Liste von 244; die heutige Menuespalte gibt 206 her. Also
+   eine Kachel je Zeile, und zwei erst, wenn die Spalte es wirklich traegt.
+   Den Namen zu brechen waere die Umkehrung: Firefox trennt "Administration"
+   zu "Administrati-on", und ein so zerrissener Name kostet mehr als die
+   gesparte Zeile wert ist. */
 .estab-navigation-sidebar .estab-navigation-list {
     display: grid;
     gap: var(--abstand-2);
-    grid-template-columns: repeat(auto-fill, minmax(6.2rem, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(7.5rem, 1fr));
     margin: 0;
     padding: 0;
     /* Ohne feste Breite bleibt die Breite der Liste unbestimmt, und
