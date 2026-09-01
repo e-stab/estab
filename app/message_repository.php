@@ -29,6 +29,8 @@ function estab_message_columns(): array
             '04_richtung', '04_nummer',
             '05_gegenstelle', '06_befweg', '06_befwegausw',
             'estab_fernmeldeplan_eintrag_id',
+            'estab_eingangsweg_bemerkung',
+            'estab_gegenstelle_id',
             '07_durchspruch', '08_befhinweis', '08_befhinwausw',
             '09_vorrangstufe', '10_anschrift',
             '11_rufnummer', '11_gesprnotiz',
@@ -486,6 +488,10 @@ function estab_message_followup_new_record(array $draft): array
     $draft['11_gesprnotiz'] = 'f';
     $draft['estab_fernmeldeplan_eintrag_id'] = null;
     $draft['fernmeldeplan_eintrag_id'] = '';
+    // Auch der Eingangsweg und die dazu ausgewaehlte Gegenstelle sind
+    // Nachweis der Quellnachricht und gehen nie in eine Antwort ueber.
+    $draft['estab_eingangsweg_bemerkung'] = null;
+    $draft['estab_gegenstelle_id'] = null;
     // A reply/forward is not linked to a TBB row until its own transport is
     // documented. Never carry the source message's visible evidence number.
     unset($draft['msglfd'], $draft['estab_ttb_lfd']);
@@ -1706,6 +1712,67 @@ function estab_message_update_locked_operator_stage(
                         'Für die Korrektur des Eingangswegs ist eine '
                             . 'Begründung erforderlich.'
                     );
+                }
+                /*
+                 * Der Weg des Eingangs ist FREIWILLIG -- das Mittel bleibt
+                 * Pflicht. Der Fernmelder weiss das Mittel immer; den Weg
+                 * meistens, aber nicht zwingend. Ein Pflichtfeld erzwaenge
+                 * dort eine Angabe, und eine erzwungene Angabe ist eine
+                 * erfundene.
+                 *
+                 * Ist ein Weg angegeben, muss sein Mittel zu Feld 1 passen.
+                 * Die Anwendung LEITET Feld 1 nicht ab, sie PRUEFT es: Feld 1
+                 * ist ein Vordruckfeld und wird im Vordruck eingetragen, der
+                 * Weg steht daneben. Die Doppelangabe wird damit zur Probe.
+                 */
+                $incomingRoute = $fields['estab_fernmeldeplan_eintrag_id']
+                    ?? null;
+                $incomingRoute = is_string($incomingRoute)
+                        && $incomingRoute !== ''
+                    ? (int) $incomingRoute
+                    : (is_int($incomingRoute) ? $incomingRoute : null);
+                if ($incomingRoute !== null && $incomingRoute > 0) {
+                    $routeCheck = estab_message_execute(
+                        $connection,
+                        'SELECT e.`medium` FROM'
+                            . ' `nv_fernmeldeplan_eintraege` AS e'
+                            . ' JOIN `nv_fernmeldeplaene` AS p'
+                            . ' ON p.`fernmeldeplan_id`'
+                            . ' = e.`fernmeldeplan_id`'
+                            . ' WHERE e.`fernmeldeplan_eintrag_id` = ?'
+                            . ' AND p.`einsatz_id` = ?'
+                            . " AND p.`status` = 'AKTIV'",
+                        [$incomingRoute, $incidentId]
+                    );
+                    try {
+                        $routeRow = $routeCheck->get_result()->fetch_assoc();
+                    } finally {
+                        $routeCheck->close();
+                    }
+                    if (!is_array($routeRow)) {
+                        throw new EstabDvInputException(
+                            'Der bestätigte Eingangsweg gehört nicht zum '
+                            . 'aktiven S6-Fernmeldeplan.'
+                        );
+                    }
+                    if (
+                        !hash_equals(
+                            (string) $routeRow['medium'],
+                            $requestedMedium
+                        )
+                    ) {
+                        throw new EstabDvInputException(
+                            'Der Eingangsweg und das Übermittlungsmittel in '
+                            . 'Feld 1 widersprechen einander.'
+                        );
+                    }
+                    $fields['estab_fernmeldeplan_eintrag_id'] =
+                        $incomingRoute;
+                    $event['snapshot']['incoming_route_entry_id'] =
+                        $incomingRoute;
+                } else {
+                    $fields['estab_fernmeldeplan_eintrag_id'] = null;
+                    $event['snapshot']['incoming_route_entry_id'] = null;
                 }
                 $fields['01_medium'] = $requestedMedium;
                 unset(

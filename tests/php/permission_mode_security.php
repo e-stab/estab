@@ -842,8 +842,10 @@ $assert(
         && str_contains($readiness, "'125-fernmeldeweg-rueckfallebene.sql'")
         && str_contains($verify, "'126-fernmeldeplan-gegenstellen.sql'")
         && str_contains($readiness, "'126-fernmeldeplan-gegenstellen.sql'")
-        && str_contains($verify, 'estab_schema_migrations`) = 32')
-        && str_contains($readiness, 'estab_schema_migrations) = 32')
+        && str_contains($verify, "'127-eingangsweg.sql'")
+        && str_contains($readiness, "'127-eingangsweg.sql'")
+        && str_contains($verify, 'estab_schema_migrations`) = 33')
+        && str_contains($readiness, 'estab_schema_migrations) = 33')
         && str_contains($verify, 'inactive_messenger_target_allowed')
         && str_contains($readiness, 'inactive_messenger_target_allowed')
         && str_contains($readiness, 'nv_zugangsschicht_mitglieder')
@@ -880,7 +882,7 @@ $assert(
             $readiness,
             "'%messenger_account.`aktiv` = 1%'"
         ),
-    'Migrations 115-126 and exact ledger are outside verify/readiness gates'
+    'Migrations 115-127 and exact ledger are outside verify/readiness gates'
 );
 $assert(
     str_contains($permissionSource, 'Missing context fails closed')

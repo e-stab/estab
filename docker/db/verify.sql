@@ -481,6 +481,16 @@ SELECT
          'estab_dv126_gegenstelle_delete'
        )) = 3
    AND
+   (SELECT COUNT(*)
+      FROM information_schema.columns
+     WHERE table_schema = DATABASE()
+       AND table_name = 'nv_nachrichten'
+       AND column_name IN (
+         'estab_eingangsweg_bemerkung',
+         'estab_gegenstelle_id'
+       )
+       AND is_nullable = 'YES') = 2
+   AND
    (SELECT COUNT(*) FROM `nv_einsaetze`
      WHERE `fuehrungsstellenname_gesperrt` NOT IN (0, 1)
         OR (
@@ -2010,7 +2020,7 @@ SELECT
        BINARY 'STRICT', BINARY 'LOOSE'
      )) = 0)
        AS `incident_permission_mode_ok`,
-  ((SELECT COUNT(*) FROM `estab_schema_migrations`) = 32
+  ((SELECT COUNT(*) FROM `estab_schema_migrations`) = 33
    AND
    (SELECT COUNT(*)
       FROM `estab_schema_migrations`
@@ -2046,10 +2056,11 @@ SELECT
        '123-fernmeldeweg-funkart.sql',
        '124-fernmeldeweg-erreichbarkeit.sql',
        '125-fernmeldeweg-rueckfallebene.sql',
-       '126-fernmeldeplan-gegenstellen.sql'
+       '126-fernmeldeplan-gegenstellen.sql',
+       '127-eingangsweg.sql'
      )
        AND `state` = 'applied'
-       AND `checksum` REGEXP BINARY '^[0-9a-f]{64}$') = 32)
+       AND `checksum` REGEXP BINARY '^[0-9a-f]{64}$') = 33)
        AS `schema_migrations_ok`;
 
 SELECT `table_name`, `engine`, `table_collation`

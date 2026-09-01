@@ -213,7 +213,25 @@ diesen Vorgang.
 
 ## P3 — Nutzung im Vordruck
 
-- [ ] **A14** `!` **M** Eingangsweg: Schema und Laufweg
+- [~] **A14** `!` **M** Eingangsweg: Schema und Laufweg — **teilweise**
+
+      **Fertig:** Migration 127 mit `estab_eingangsweg_bemerkung` und
+      `estab_gegenstelle_id`; die Prüfung des Wegs gegen Feld 1 im
+      Bestätigungszweig des LdF; die Freiwilligkeit des Wegs; der bewusst
+      fehlende Fremdschlüssel auf die Gegenstelle.
+
+      **Offen:** die Formularverdrahtung — Auswahlkasten beim `FM-Eingang`,
+      Anzeige und Berichtigung beim `LdF-Eingang`, die Bemerkung des
+      Fernmelders als nur lesbar. Dazu **A19**, die Vorbelegung von Feld 15
+      aus der ausgewählten Gegenstelle.
+
+      **Zwei Rücknahmen unterwegs, beide durch Wächter gefunden:**
+      Die Felder gehörten nicht in `official_message_required_fields()` —
+      das ist die **Pflicht**liste, meine Felder sind freiwillig. Und der
+      Terminalnachweis darf nicht nebenbei erweitert werden: `V1` ist mit
+      einer Prüfsumme festgenagelt, eine Erweiterung ist ein eigener,
+      versionierter Schritt.
+
       → `docker/db/migrations/127-eingangsweg.sql`, `app/message_repository.php`, `app/workflow.php`
       - [ ] `estab_eingangsweg_bemerkung`, `estab_gegenstelle_id` an `nv_nachrichten`
       - [ ] Verriegelung `04_richtung = 'A'` fällt für den Wegbezug ([message_repository.php:1770](app/message_repository.php:1770))
