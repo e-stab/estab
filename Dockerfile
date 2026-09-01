@@ -152,6 +152,10 @@ COPY 4fsym/4fach_aktiv.png \
     4fsym/nw.png \
     4fsym/tbb_aktiv.png \
     ./4fsym/
+# Die taktischen Zeichen der Kommunikationsskizze (CC-BY-4.0, siehe
+# THIRD_PARTY_NOTICES.md). Als ganzes Verzeichnis, weil die Skizze je nach
+# Plan andere braucht; die Quelltafel-Pruefung laesst darin nur SVG zu.
+COPY 4fsym/taktische-zeichen/ ./4fsym/taktische-zeichen/
 COPY 4fueltg/ue_ltg.php 4fueltg/null.gif ./4fueltg/
 COPY app/*.php ./app/
 COPY handbuch/index.php \

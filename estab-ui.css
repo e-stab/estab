@@ -11077,3 +11077,18 @@ a.estab-message-list-chip:hover {
   font-size: var(--schrift-1);
   padding: 0 var(--abstand-2);
 }
+
+/*
+ * Das Kennzeichen eines Wegs in der taktischen Ansicht.
+ *
+ * Rufgruppe, Band und Kanal stehen dort nicht als technische Einzelheit --
+ * die gehoert in die betriebliche Tiefe --, sondern als das Einzige, was
+ * zwei Wege derselben Stelle mit demselben Funkrufnamen unterscheidet.
+ */
+.estab-telecom-station-key {
+  background: var(--grund-gedaempft);
+  border-radius: var(--radius-2);
+  color: var(--tinte-neben);
+  font-size: var(--schrift-1);
+  padding: 0 var(--abstand-2);
+}

@@ -315,6 +315,76 @@ foreach ([
     );
 }
 
+/* --- Zwei Wege mit demselben Rufnamen bleiben unterscheidbar --- */
+
+/*
+ * Eine Fuehrungsstelle hat mehrere Digitalfunkwege unter EINEM eigenen
+ * Funkrufnamen -- nach oben eine andere Rufgruppe als nach unten. Ohne das
+ * Kennzeichen stuenden zwei gleiche Zeilen untereinander. Am Bildschirm
+ * aufgefallen, nicht im Test; deshalb steht die Probe jetzt hier.
+ */
+$assert(
+    estab_dv_telecom_route_key([
+        'medium' => 'Fu', 'funkart' => 'DIGITAL',
+        'rufgruppe' => 'TMO Fü Nord 310', 'betriebsart' => 'TMO',
+    ]) === 'TMO Fü Nord 310 · TMO',
+    'Der Digitalfunkweg nennt seine Rufgruppe nicht.'
+);
+$assert(
+    estab_dv_telecom_route_key([
+        'medium' => 'Fu', 'funkart' => 'ANALOG',
+        'band' => '2m', 'kanal' => '55', 'bandlage' => 'Oberband',
+    ]) === '2m · Kanal 55 · Oberband',
+    'Der Analogfunkweg nennt Band, Kanal und Bandlage nicht.'
+);
+$assert(
+    estab_dv_telecom_route_key([
+        'medium' => 'Fu', 'funkart' => 'DIGITAL', 'rufgruppe' => '',
+    ]) === '',
+    'Ein Weg ohne Kennzeichen bekommt einen erfundenen.'
+);
+$zweiRufgruppen = array_replace($plan, [
+    'eintraege' => [
+        $weg([
+            'fernmeldeplan_eintrag_id' => 21,
+            'weg_nummer' => 21,
+            'funkart' => 'DIGITAL',
+            'rufgruppe' => 'TMO RSt BS 210',
+            'erreichbarkeit' => 'Heros Übungsplatz 10',
+            'gegenstellen' => [
+                $gegen(1, 'Regionalstelle', 'UEBER', 'Heros Braunschweig'),
+            ],
+        ]),
+        $weg([
+            'fernmeldeplan_eintrag_id' => 22,
+            'weg_nummer' => 22,
+            'funkart' => 'DIGITAL',
+            'rufgruppe' => 'TMO Fü Nord 310',
+            'erreichbarkeit' => 'Heros Übungsplatz 10',
+            'gegenstellen' => [
+                $gegen(2, 'Abschnitt Nord', 'UNTER', 'Florian Nord'),
+            ],
+        ]),
+    ],
+]);
+$zweiBild = estab_telecom_sketch_svg(
+    $zweiRufgruppen,
+    'Führungsstelle Übungsplatz'
+);
+$assert(
+    str_contains($zweiBild, estab_telecom_sketch_html('TMO RSt BS 210'))
+        && str_contains(
+            $zweiBild,
+            estab_telecom_sketch_html('TMO Fü Nord 310')
+        ),
+    estab_dv_requirement(
+        'TKM-FERNMELDEPLAN',
+        'Zwei Digitalfunkwege mit demselben eigenen Funkrufnamen stehen in '
+            . 'der Skizze als zwei gleiche Zeilen. Wer sie liest, kann nicht '
+            . 'sagen, welcher nach oben und welcher nach unten führt.'
+    )
+);
+
 /* --- Die taktischen Zeichen und die Nebenstellentafel --- */
 
 /*

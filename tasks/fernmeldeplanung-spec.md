@@ -1154,8 +1154,20 @@ Unterlagen. eStab führt **einen** Bestand und **zwei** Ansichten darauf:
 
 **Taktische Ansicht** — Vorgabe für alle. Je Stelle ein Block in der Gestalt
 des Q6-Kastens: Stelle, Stellenart, darunter je Weg das Mittel und die
-Erreichbarkeit, darunter eingerückt die Gegenstellen dieses Wegs. Keine
-Bandlage, keine Rufgruppe, keine Betriebsart. Das ist die Antwort auf
+Erreichbarkeit, darunter eingerückt die Gegenstellen dieses Wegs.
+
+> **Berichtigung vom 01.09.2026.** Hier stand „keine Bandlage, keine
+> Rufgruppe, keine Betriebsart". Das war richtig, solange ein Weg auf eine
+> Stelle zeigte — und wurde falsch, als der Plan die eigenen Mittel führt:
+> Eine Führungsstelle hat mehrere Digitalfunkwege unter **einem** eigenen
+> Funkrufnamen; nach oben wird in einer anderen Rufgruppe gesprochen als nach
+> unten. Ohne sie stünde „Funk (digital) · Heros Übungsplatz 10" zweimal
+> untereinander, und niemand könnte sagen, welcher Weg wohin führt.
+>
+> Die Ansicht führt deshalb das **Kennzeichen** des Wegs — beim Digitalfunk
+> Rufgruppe und Betriebsart, beim Analogfunk Band, Kanal und Bandlage, beim
+> Fernsprecher die Anschlussart. Nicht die ganze Technik: die bleibt der
+> betrieblichen Tiefe. Nur das, was zwei Wege unterscheidet. Das ist die Antwort auf
 Abschnitt 3.2 — und die Ansicht, die die Frage „wen erreiche ich womit"
 beantwortet, ohne dass jemand eine Tabelle filtern muss.
 

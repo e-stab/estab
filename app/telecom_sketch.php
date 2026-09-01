@@ -582,12 +582,26 @@ function estab_telecom_sketch_svg(
         $teile[] = '<text x="' . ($linkeKante + 12)
             . '" y="' . ($y + 4) . '" font-size="12" font-weight="bold">'
             . $h(estab_telecom_sketch_kurz($wort, 18)) . '</text>';
+        /*
+         * Das Kennzeichen des Wegs steht rechts unter der Erreichbarkeit.
+         * Ohne es stuenden zwei Digitalfunkwege derselben Stelle mit
+         * demselben Funkrufnamen untereinander und waeren nicht zu
+         * unterscheiden -- am Bildschirm aufgefallen, nicht im Test.
+         */
+        $kennzeichen = estab_dv_telecom_route_key($eigenes);
+        $adresse = estab_telecom_sketch_kurz(
+            (string) ($eigenes['erreichbarkeit'] ?? ''),
+            24
+        );
+        if ($kennzeichen !== '') {
+            $adresse .= '  ·  ' . estab_telecom_sketch_kurz(
+                $kennzeichen,
+                22
+            );
+        }
         $teile[] = '<text x="' . ($rechteKante - 12)
-            . '" y="' . ($y + 4) . '" text-anchor="end" font-size="12">'
-            . $h(estab_telecom_sketch_kurz(
-                (string) ($eigenes['erreichbarkeit'] ?? ''),
-                24
-            )) . '</text>';
+            . '" y="' . ($y + 4) . '" text-anchor="end" font-size="11">'
+            . $h($adresse) . '</text>';
     }
     /*
      * Die Nebenstellentafel, wie im Vordruck: Technik, NSt-Nr., Teilnehmer.

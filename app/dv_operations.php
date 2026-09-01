@@ -309,6 +309,50 @@ function estab_dv_telecom_route_label(mixed $medium, mixed $funkart): string
     return (string) ESTAB_DV_TELECOM_ROUTE_KINDS[$kind]['label'];
 }
 
+/**
+ * Woran ein Weg zu erkennen ist, wenn Mittel und Erreichbarkeit nicht reichen.
+ *
+ * Eine Führungsstelle hat mehrere Digitalfunkwege unter EINEM eigenen
+ * Funkrufnamen -- nach oben wird in einer anderen Rufgruppe gesprochen als
+ * nach unten. „Funk (digital) · Heros Übungsplatz 10" steht dann zweimal da,
+ * und die Zeilen sind nicht auseinanderzuhalten.
+ *
+ * Zurück kommt genau das, was sie unterscheidet: beim Digitalfunk die
+ * Rufgruppe (und die Betriebsart, wo sie gesetzt ist), beim Analogfunk Band,
+ * Kanal und Bandlage, beim Fernsprecher die Anschlussart. Nicht die ganze
+ * Technik -- die steht in der betrieblichen Ansicht; nur das Kennzeichen.
+ */
+function estab_dv_telecom_route_key(array $entry): string
+{
+    $medium = (string) ($entry['medium'] ?? '');
+    $funkart = $entry['funkart'] ?? null;
+    if ($medium === 'Fu' && $funkart === 'DIGITAL') {
+        $teile = [
+            trim((string) ($entry['rufgruppe'] ?? '')),
+            trim((string) ($entry['betriebsart'] ?? '')),
+        ];
+    } elseif ($medium === 'Fu') {
+        $band = trim((string) ($entry['band'] ?? ''));
+        $kanal = trim((string) ($entry['kanal'] ?? ''));
+        $teile = [
+            $band === '' ? '' : $band,
+            $kanal === '' ? '' : 'Kanal ' . $kanal,
+            trim((string) ($entry['bandlage'] ?? '')),
+        ];
+    } elseif ($medium === 'Fe') {
+        $teile = [trim((string) ($entry['anschlussart'] ?? ''))];
+    } else {
+        $teile = [trim((string) ($entry['datenart'] ?? ''))];
+    }
+    return implode(
+        ' · ',
+        array_values(array_filter(
+            $teile,
+            static fn (string $teil): bool => $teil !== ''
+        ))
+    );
+}
+
 function estab_dv_positive_id(mixed $value, string $label): int
 {
     if (

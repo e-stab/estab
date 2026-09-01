@@ -1565,6 +1565,19 @@ foreach ($plans as $plan) {
                   . dv_operations_html((string) $weg['erreichbarkeit'])
                   . '</span>',
               ];
+              /*
+               * Das Kennzeichen des Wegs.
+               *
+               * Eine Führungsstelle hat mehrere Digitalfunkwege unter EINEM
+               * eigenen Funkrufnamen -- nach oben eine andere Rufgruppe als
+               * nach unten. Ohne sie stünde „Funk (digital) · Heros
+               * Übungsplatz 10" zweimal da und wäre nicht auseinanderzuhalten.
+               */
+              $kennzeichen = estab_dv_telecom_route_key($weg);
+              if ($kennzeichen !== '') {
+                  $stuecke[] = '<span class="estab-telecom-station-key">'
+                      . dv_operations_html($kennzeichen) . '</span>';
+              }
               if ($weg['weg_nummer'] !== null) {
                   $stuecke[] = '<span class="estab-telecom-station-route">Weg '
                       . (int) $weg['weg_nummer'] . '</span>';
