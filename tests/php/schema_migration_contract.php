@@ -3433,7 +3433,7 @@ $assert(
         && str_contains($verifySql, "index_name <> 'PRIMARY') = 0")
         && str_contains(
             $verifySql,
-            '(SELECT COUNT(*) FROM `estab_schema_migrations`) = 37'
+            '(SELECT COUNT(*) FROM `estab_schema_migrations`) = 38'
         )
         && str_contains($verifySql, "'96-etb-duty-function.sql'")
         && str_contains(
@@ -3510,7 +3510,8 @@ $assert(
             $verifySql,
             "'131-fernmeldeplan-nebenstellen.sql'"
         )
-        && str_contains($verifySql, ") = 37) AS `schema_migrations_ok`")
+        && str_contains($verifySql, "'132-ttb-schreiber-ldf.sql'")
+        && str_contains($verifySql, ") = 38) AS `schema_migrations_ok`")
         && str_contains(
             $verifySql,
             'Discarded telecommunications drafts are immutable evidence'
@@ -3537,7 +3538,7 @@ $assert(
         && str_contains($readinessSql, "index_name <> 'PRIMARY') = 0")
         && str_contains(
             $readinessSql,
-            '(SELECT COUNT(*) FROM estab_schema_migrations) = 37'
+            '(SELECT COUNT(*) FROM estab_schema_migrations) = 38'
         )
         && str_contains($readinessSql, "'96-etb-duty-function.sql'")
         && str_contains(
@@ -3589,7 +3590,7 @@ $assert(
         )
         && str_contains(
             $readinessSql,
-            "checksum REGEXP BINARY '^[0-9a-f]{64}$') = 37"
+            "checksum REGEXP BINARY '^[0-9a-f]{64}$') = 38"
         ),
     'Runtime readiness does not require the exact final ETB catalogue and ledger'
 );
@@ -3855,8 +3856,10 @@ $assert(
         && str_contains($readiness, "'130-komplan-abbau.sql'")
         && str_contains($verify, "'131-fernmeldeplan-nebenstellen.sql'")
         && str_contains($readiness, "'131-fernmeldeplan-nebenstellen.sql'")
-        && str_contains($verify, 'estab_schema_migrations`) = 37')
-        && str_contains($readiness, 'estab_schema_migrations) = 37'),
+        && str_contains($verify, "'132-ttb-schreiber-ldf.sql'")
+        && str_contains($readiness, "'132-ttb-schreiber-ldf.sql'")
+        && str_contains($verify, 'estab_schema_migrations`) = 38')
+        && str_contains($readiness, 'estab_schema_migrations) = 38'),
     'Migration ledger/readiness does not require all release migrations'
 );
 $assert(

@@ -1477,7 +1477,7 @@ function estab_readiness_schema_query(): string
         . "WHERE estab_status = 'closed' AND (estab_closed_at IS NULL "
         . "OR estab_retain_until IS NULL OR estab_retain_until "
         . "< DATE_ADD(estab_closed_at, INTERVAL 10 YEAR))) = 0) "
-        . "AND ((SELECT COUNT(*) FROM estab_schema_migrations) = 37) "
+        . "AND ((SELECT COUNT(*) FROM estab_schema_migrations) = 38) "
         . "AND ((SELECT COUNT(*) FROM estab_schema_migrations "
         . "WHERE version IN ('20-nullable-dates.sql','30-runtime-schema.sql',"
         . "'40-recipient-matrix-standard.sql','45-global-incidents-prepare.sql',"
@@ -1508,7 +1508,8 @@ function estab_readiness_schema_query(): string
         . "'128-fernmeldeplan-kopfleiste.sql',"
         . "'129-gegenstelle-stellenart.sql',"
         . "'130-komplan-abbau.sql',"
-        . "'131-fernmeldeplan-nebenstellen.sql') "
+        . "'131-fernmeldeplan-nebenstellen.sql',"
+        . "'132-ttb-schreiber-ldf.sql') "
         . "AND state = 'applied' "
-        . "AND checksum REGEXP BINARY '^[0-9a-f]{64}$') = 37)";
+        . "AND checksum REGEXP BINARY '^[0-9a-f]{64}$') = 38)";
 }
