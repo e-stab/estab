@@ -20,7 +20,7 @@ services:
     #
     # Wird die Grenze doch zu knapp, startet der Dienst neu statt langsam
     # zu werden -- das ist gewollt und sichtbar.
-    mem_limit: 256m
+    mem_limit: ${ESTAB_DB_MEM_LIMIT:-256m}
     restart: unless-stopped
     command:
       - --sql-mode=STRICT_TRANS_TABLES,NO_ZERO_DATE,NO_ZERO_IN_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION

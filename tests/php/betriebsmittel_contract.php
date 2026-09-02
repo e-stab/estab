@@ -104,8 +104,21 @@ foreach ($composeDateien as $name => $inhalt) {
      * haetten 11 Prozent Reserve gelassen -- zu wenig fuer die Streuung,
      * die MariaDB ueber Tage im Speicherallokator aufbaut.
      */
+    /*
+     * Die Grenze steht als Vorgabewert einer Variablen, nicht als nackte
+     * Zahl. Der Betrieb bekommt weiterhin 256m -- ohne gesetzte Variable
+     * greift genau dieser Wert. Anheben kann sie nur, wer sie ausdruecklich
+     * setzt; der einzige bekannte Fall ist die Migrationspruefung, die acht
+     * Schemata gleichzeitig haelt (siehe tests/integration/ci.sh).
+     *
+     * Form und Vorgabewert bleiben damit gebunden: Wer die 256m aendert oder
+     * die Variable entfernt, faellt hier auf.
+     */
     $assert(
-        preg_match('~mem_limit:\s*256m~', $inhalt) === 1,
+        preg_match(
+            '~mem_limit:\s*\$\{ESTAB_DB_MEM_LIMIT:-256m\}~',
+            $inhalt
+        ) === 1,
         $name . ' setzt keine Speichergrenze von 256m für die Datenbank.'
     );
     $assert(

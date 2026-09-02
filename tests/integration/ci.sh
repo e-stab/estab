@@ -74,6 +74,17 @@ export ESTAB_DB_USER=${ESTAB_DB_USER:-estab}
 export ESTAB_ADMIN_USER=${ESTAB_ADMIN_USER:-estab-admin}
 export ESTAB_HTTP_BIND=${ESTAB_HTTP_BIND:-127.0.0.1}
 export ESTAB_HTTP_PORT=${ESTAB_HTTP_PORT:-18080}
+# Die Pruefung braucht mehr Speicher als der Betrieb, aus einem Grund, den es
+# nur hier gibt: Die Migrationspruefung legt acht vollstaendige Schemata in
+# EINEM Server an und haelt sie bis zum Ende. Der Vorlauf von Migration 118
+# zaehlt Ausloeser ueber information_schema und oeffnet dabei jede
+# Tabellendefinition ALLER Schemata. Unter den 256m des Betriebs stirbt der
+# Dienst daran reproduzierbar und startet mitten im Lauf neu -- nachgemessen
+# am 02.09.2026: zweimal Absturz unter 256m, durchgelaufen darueber.
+#
+# Der Betriebswert in compose.yaml bleibt unberuehrt und gilt weiter, sobald
+# diese Variable nicht gesetzt ist.
+export ESTAB_DB_MEM_LIMIT=${ESTAB_DB_MEM_LIMIT:-1g}
 export ESTAB_PUBLIC_URL=${ESTAB_PUBLIC_URL:-/}
 export ESTAB_ORGANISATION=GLOBAL-CONFIG-MUST-NOT-APPEAR
 export ESTAB_ALLOW_SELF_REGISTRATION=false

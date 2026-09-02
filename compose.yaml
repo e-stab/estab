@@ -20,7 +20,16 @@ services:
     #
     # Wird die Grenze doch zu knapp, startet der Dienst neu statt langsam
     # zu werden -- das ist gewollt und sichtbar.
-    mem_limit: 256m
+    #
+    # Der Betrieb bleibt bei 256m; die Zahl ist gemessen, nicht geraten.
+    # Anheben laesst sie sich nur, wer einen anderen Lastfall hat -- und der
+    # einzige bekannte ist die Migrationspruefung: Sie haelt acht vollstaendige
+    # Schemata gleichzeitig in einem Server, und der Vorlauf von Migration 118
+    # zaehlt Ausloeser ueber information_schema, was jede Tabellendefinition
+    # ALLER Schemata oeffnet. Das sprengt die 256m reproduzierbar; der Dienst
+    # startet mitten im Lauf neu. tests/integration/ci.sh setzt sich dafuer
+    # eine eigene Grenze.
+    mem_limit: ${ESTAB_DB_MEM_LIMIT:-256m}
     restart: unless-stopped
     command:
       - --sql-mode=STRICT_TRANS_TABLES,NO_ZERO_DATE,NO_ZERO_IN_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION
