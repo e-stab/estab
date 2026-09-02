@@ -1058,6 +1058,15 @@ def _text_expression(frame_name: str | None, selector: str) -> str:
     )
 
 
+# Der Anmeldeknopf, benannt ueber sein Formular. Ueber die Farbe ging es
+# nicht mehr: Die Kontentafel bringt seit ihrer Suchleiste einen zweiten
+# Hauptknopf ("Anwenden") mit, und der steht im Baum vor dem Anmelden.
+_LOGIN_SUBMIT_SELECTOR = (
+    'form:has(input[name="kennwort1"]) '
+    'button.estab-button-primary[type="submit"]'
+)
+
+
 class BrowserAcceptance:
     navigation_keys = (
         "overview",
@@ -1124,6 +1133,19 @@ class BrowserAcceptance:
     def __init__(self, cdp: CDP, config: TestConfig) -> None:
         self.cdp = cdp
         self.config = config
+
+    def _duty_gated_navigation_keys(self) -> list[str]:
+        """Areas the menu marks with a duty requirement.
+
+        Sie stehen im Menue wie jeder andere Bereich; der Vorbehalt ist ein
+        Merkmal am Eintrag und kein Weglassen. Die Reihenfolge folgt der des
+        Menues.
+        """
+        return [
+            key
+            for key in self.navigation_keys
+            if key in ("message-overview", "tracking")
+        ]
 
     def _authenticated_navigation_keys(self) -> list[str]:
         """Return LOOSE areas from primary and explicit extra functions."""
@@ -1582,7 +1604,7 @@ class BrowserAcceptance:
         )
         self.cdp.click(
             "mainframe",
-            'button.estab-button-primary[type="submit"]',
+            _LOGIN_SUBMIT_SELECTOR,
             "S2-Bestandskonto anmelden",
         )
         self._wait_for_top_level_path(
@@ -1642,7 +1664,6 @@ class BrowserAcceptance:
             print("[2/3] Vorhandene Betreffmarker oder den Leerzustand prüfen")
 
         self._assert_session_bar(
-            None,
             "S2-Meldungsübersicht",
             "message-overview",
         )
@@ -2002,7 +2023,7 @@ class BrowserAcceptance:
         )
         self.cdp.click(
             "mainframe",
-            'button.estab-button-primary[type="submit"]',
+            _LOGIN_SUBMIT_SELECTOR,
             "A/W-Bestandskonto absenden",
         )
         # This browser fixture runs in the explicitly LOOSE central incident:
@@ -2257,7 +2278,7 @@ class BrowserAcceptance:
             )
         self.cdp.click(
             "mainframe",
-            'button.estab-button-primary[type="submit"]',
+            _LOGIN_SUBMIT_SELECTOR,
             "S6-Bestandskonto absenden",
         )
         operations_url = self.config.base_url + "/4fach/fuehrungsstelle.php"
@@ -3166,7 +3187,7 @@ class BrowserAcceptance:
             )
         self.cdp.click(
             "mainframe",
-            'button.estab-button-primary[type="submit"]',
+            _LOGIN_SUBMIT_SELECTOR,
             "LdF-Bestandskonto absenden",
         )
 
@@ -3535,8 +3556,12 @@ class BrowserAcceptance:
                     query.get("next") === "messages";
             })() &&
             document.forms.length > 0 &&
+            /* Kein Formular darf in einen anderen Kontext abspringen. Ein
+               fehlendes Ziel bedeutet denselben Kontext und ist damit so
+               sicher wie "_self" -- das Suchband der Kontentafel kommt aus
+               dem gemeinsamen Tafelbauteil und setzt keins. */
             Array.from(document.forms).every(
-                form => form.target === "_self"
+                form => form.target === "" || form.target === "_self"
             ) &&
             !document.querySelector('form[target="mainframe"]') &&
             Boolean(document.querySelector("[data-estab-auth-cancel]")) &&
@@ -3600,8 +3625,9 @@ class BrowserAcceptance:
             )) &&
             Boolean(document.querySelector("[data-estab-auth-cancel]")) &&
             document.forms.length > 0 &&
+            /* Ein fehlendes Ziel ist derselbe Kontext -- siehe oben. */
             Array.from(document.forms).every(
-                form => form.target === "_self"
+                form => form.target === "" || form.target === "_self"
             ) &&
             !document.querySelector('form[target="mainframe"]')
             """,
@@ -3693,7 +3719,9 @@ class BrowserAcceptance:
                         query.get("next") === "messages" &&
                         doc.querySelectorAll("iframe").length === 0 &&
                         forms.length > 0 &&
-                        forms.every(form => form.target === "_self") &&
+                        forms.every(form =>
+                            form.target === "" || form.target === "_self"
+                        ) &&
                         !doc.querySelector('form[target="mainframe"]') &&
                         Boolean(cancel) &&
                         cancel.target === "_top";
@@ -3770,7 +3798,7 @@ class BrowserAcceptance:
         )
         self.cdp.click(
             "mainframe",
-            'button.estab-button-primary[type="submit"]',
+            _LOGIN_SUBMIT_SELECTOR,
             "Bestandskonto anmelden",
         )
         self._wait_for_top_level_path(
@@ -3779,7 +3807,6 @@ class BrowserAcceptance:
             "als angefordertes Ziel geöffnet",
         )
         self._assert_session_bar(
-            None,
             "Einsatztagebuch nach Bestandslogin",
             "incident-log",
         )
@@ -3803,7 +3830,6 @@ class BrowserAcceptance:
             "zusätzliche Session-Bar im Inhaltsframe",
         )
         self._assert_session_bar(
-            "vorgaben",
             "Anwendungs-Navigationsframe",
             "messages",
         )
@@ -3881,7 +3907,7 @@ class BrowserAcceptance:
             ),
             "BOS-Navigationsframe wurde nicht vollständig geladen",
         )
-        self._assert_session_bar("status", "BOS-Navigationsframe", "bos-info")
+        self._assert_session_bar("BOS-Infosammlung", "bos-info")
         self._equal(
             self.cdp.evaluate(
                 _visible_count_expression(
@@ -3942,7 +3968,6 @@ class BrowserAcceptance:
             "BOS-Infosammlung bei 390×844 px"
         )
         self._assert_session_bar(
-            "status",
             "BOS-Navigationsframe nach Inhaltswechsel",
             "bos-info",
         )
@@ -3998,7 +4023,7 @@ class BrowserAcceptance:
             "/stabetb/etb.php",
             "Einsatztagebuch wurde nicht über seine Root-Karte geöffnet",
         )
-        self._assert_session_bar(None, "Einsatztagebuch", "incident-log")
+        self._assert_session_bar("Einsatztagebuch", "incident-log")
         self._assert_command_post_tool()
         self._assert_generated_forms_tool()
         self._assert_attachment_upload_form()
@@ -4380,12 +4405,11 @@ class BrowserAcceptance:
                 """
                 document.readyState === "complete" &&
                 Boolean(document.querySelector("[data-estab-dv-operations]")) &&
-                Boolean(document.querySelector("aside[data-estab-session-bar]"))
+                Boolean(document.querySelector("[data-estab-shell-menu]"))
                 """,
                 "Fernmeldeplan wurde nicht vollständig geladen",
             )
             self._assert_session_bar(
-                None,
                 f"Fernmeldeplan bei {width}×{height} px",
                 "command-post",
             )
@@ -4407,12 +4431,11 @@ class BrowserAcceptance:
                 Boolean(document.querySelector(
                     "[data-estab-messenger-jobs]"
                 )) &&
-                Boolean(document.querySelector("aside[data-estab-session-bar]"))
+                Boolean(document.querySelector("[data-estab-shell-menu]"))
                 """,
                 "Melderaufträge wurden nicht vollständig geladen",
             )
             self._assert_session_bar(
-                None,
                 f"Melderaufträge bei {width}×{height} px",
                 "messenger-jobs",
             )
@@ -4440,7 +4463,6 @@ class BrowserAcceptance:
             "wieder geladen",
         )
         self._assert_session_bar(
-            None,
             "Einsatztagebuch nach der Führungsstellenprüfung",
             "incident-log",
         )
@@ -4463,7 +4485,7 @@ class BrowserAcceptance:
                 """
                 document.readyState === "complete" &&
                 Boolean(document.querySelector("[data-estab-generated-forms]")) &&
-                Boolean(document.querySelector("aside[data-estab-session-bar]"))
+                Boolean(document.querySelector("[data-estab-shell-menu]"))
                 """,
                 "einsatzbezogene Vordruckübersicht wurde nicht vollständig geladen",
             )
@@ -4491,7 +4513,6 @@ class BrowserAcceptance:
             "Einsatztagebuch wurde nach der Vordruckprüfung nicht wieder geladen",
         )
         self._assert_session_bar(
-            None,
             "Einsatztagebuch nach Vordruckprüfung",
             "incident-log",
         )
@@ -4502,7 +4523,7 @@ class BrowserAcceptance:
             """
             document.readyState === "complete" &&
             Boolean(document.querySelector('input[name="ah_upload"]')) &&
-            Boolean(document.querySelector("aside[data-estab-session-bar]"))
+            Boolean(document.querySelector("[data-estab-shell-menu]"))
             """,
             "eigenständige Anhangübersicht wurde nicht vollständig geladen",
         )
@@ -4579,7 +4600,6 @@ class BrowserAcceptance:
             "Einsatztagebuch wurde nach der Anhangprüfung nicht wieder geladen",
         )
         self._assert_session_bar(
-            None,
             "Einsatztagebuch nach Anhangprüfung",
             "incident-log",
         )
@@ -4683,7 +4703,6 @@ class BrowserAcceptance:
                     f"{label} mit kombinierter Anmeldung wurde nicht geladen",
                 )
                 self._assert_session_bar(
-                    None,
                     f"{label} mit eStab- und Administrationsanmeldung",
                     "administration",
                 )
@@ -4708,7 +4727,6 @@ class BrowserAcceptance:
             "Einsatztagebuch wurde nach der Admin-Sitzungsprüfung nicht geladen",
         )
         self._assert_session_bar(
-            None,
             "Einsatztagebuch nach der Admin-Sitzungsprüfung",
             "incident-log",
         )
@@ -5849,12 +5867,12 @@ class BrowserAcceptance:
                     location.pathname === expected.pathname &&
                     location.search === expected.search &&
                     Boolean(document.querySelector("#estab-open")) &&
-                    Boolean(document.querySelector("aside[data-estab-session-bar]"));
+                    Boolean(document.querySelector("[data-estab-shell-menu]"));
             }})()
             """,
             description,
         )
-        self._assert_session_bar(None, "Modulübersicht", "overview")
+        self._assert_session_bar("Modulübersicht", "overview")
         self._equal(
             self.cdp.evaluate(_visible_count_expression(None, "#estab-open")),
             1,
@@ -10977,9 +10995,13 @@ class BrowserAcceptance:
             """,
             "Berechtigungsfehler der Nachweisung blieb keine gestaltete Seite",
         )
+        # Die abgewiesene Seite bleibt eine Seite der Anwendung: Sie behaelt
+        # die Huelle, und die Kennung steht wie ueberall im Cockpit.
         self._equal(
             self.cdp.evaluate(
-                _visible_count_expression(None, "aside[data-estab-session-bar]")
+                _visible_count_expression(
+                    "vorgaben", "aside[data-estab-session-bar]"
+                )
             ),
             1,
             "sichtbare Session-Leiste auf der Berechtigungsseite",
@@ -10988,10 +11010,16 @@ class BrowserAcceptance:
             """
             (() => {
                 const page = document.querySelector("[data-estab-error-page]");
-                const bar = document.querySelector("aside[data-estab-session-bar]");
+                const cockpit = document.querySelector(
+                    'iframe[name="vorgaben"]'
+                );
+                const cockpitDocument = cockpit && cockpit.contentDocument;
+                const bar = cockpitDocument && cockpitDocument.querySelector(
+                    "aside[data-estab-session-bar]"
+                );
                 const identity = bar && bar.querySelector("[data-estab-user-code]");
-                const navigation = bar && bar.querySelector(
-                    "[data-estab-navigation]"
+                const navigation = document.querySelector(
+                    "[data-estab-shell-menu] [data-estab-navigation]"
                 );
                 const recovery = document.querySelector(
                     "[data-estab-error-recovery] a"
@@ -11035,10 +11063,13 @@ class BrowserAcceptance:
             and details.get("code") == self.config.login_code
             and details.get("hasLogout") is True
             and details.get("hasProtectedContent") is False
-            and details.get("currentKeys") == []
+            # Das Menue zeigt jeden Bereich, auch den abgewiesenen, und
+            # sagt weiterhin, wo man steht. Verwehrt wird an der Tuer, nicht
+            # im Verzeichnis -- der Inhalt der Nachweisung bleibt fort.
+            and details.get("currentKeys") == ["tracking"]
             and "overview" in details.get("navigationKeys", [])
             and "messages" in details.get("navigationKeys", [])
-            and "tracking" not in details.get("navigationKeys", [])
+            and "tracking" in details.get("navigationKeys", [])
             and str(details.get("recoveryPath", "")).endswith("/")
             and details.get("recoverySearch") == ""
             and details.get("recoveryTarget") == "_top",
@@ -11113,179 +11144,83 @@ class BrowserAcceptance:
 
     def _assert_session_bar(
         self,
-        frame_name: str | None,
         location: str,
         expected_active_key: str,
     ) -> None:
+        """Prove identity and areas across the split shell.
+
+        Die Sitzungsleiste stand frueher zusammen mit der Navigation in
+        derselben Leiste. Seit dem Umbau auf Menue links, Cockpit rechts sind
+        es zwei Orte: Wer angemeldet ist und wie er sich abmeldet, steht im
+        Cockpit-Rahmen; welche Bereiche es gibt und in welchem man steht,
+        steht im Menue der Huelle. Geprueft wird beides -- nur eben dort, wo
+        es heute steht.
+        """
         self._truth(
             expected_active_key in (*self.navigation_keys, "administration"),
             f"Unbekannter erwarteter Navigationsbereich {expected_active_key!r}.",
         )
         selector = "aside[data-estab-session-bar]"
-        expected_navigation_keys = self._authenticated_navigation_keys()
         self._equal(
-            self.cdp.evaluate(_visible_count_expression(frame_name, selector)),
+            self.cdp.evaluate(
+                _visible_count_expression("vorgaben", selector)
+            ),
             1,
             f"Anzahl sichtbarer Session-Bars in {location}",
         )
-        details = self.cdp.evaluate(
+        self._equal(
+            self.cdp.evaluate(_visible_count_expression(None, selector)),
+            0,
+            f"Session-Bar ausserhalb des Cockpits in {location}",
+        )
+        identity = self.cdp.evaluate(
             _frame_expression(
-                frame_name,
+                "vorgaben",
                 f"""
                 const bar = doc.querySelector({json.dumps(selector)});
-                const identity = bar && bar.querySelector("[data-estab-user-code]");
+                const code = bar && bar.querySelector("[data-estab-user-code]");
                 const name = bar && bar.querySelector("[data-estab-user-name]");
-                const sidebarRoot = bar && bar.closest(
-                    "[data-estab-sidebar-root]"
+                const logout = bar && bar.querySelector(
+                    "[data-estab-logout-form] button"
                 );
-                const navigation = bar && (
-                    bar.querySelector("[data-estab-navigation]") ||
-                    (
-                        sidebarRoot &&
-                        sidebarRoot.querySelector(
-                            ":scope > [data-estab-navigation]"
-                        )
-                    )
-                );
-                const sidebarStatus = sidebarRoot && sidebarRoot.querySelector(
-                    ":scope > [data-estab-sidebar-status]"
-                );
-                const sidebarWorkflow = sidebarRoot && sidebarRoot.querySelector(
-                    ":scope > [data-estab-workflow-menu]"
-                );
-                const expectedCoreKeys = new Set(
-                    {json.dumps(expected_navigation_keys)}
-                );
-                const links = navigation
-                    ? Array.from(
-                        navigation.querySelectorAll("a[data-estab-nav-key]")
-                    ).filter(link => expectedCoreKeys.has(
-                        link.getAttribute("data-estab-nav-key")
-                    ))
-                    : [];
-                const current = navigation
-                    ? Array.from(navigation.querySelectorAll('[aria-current="page"]'))
-                    : [];
-                const overview = navigation &&
-                    navigation.querySelector('a[data-estab-nav-key="overview"]');
-                const disclosure = navigation && navigation.querySelector("details");
-                const summary = disclosure && disclosure.querySelector("summary");
-                const logout = bar && bar.querySelector("[data-estab-logout-form] button");
-                if (!bar || !identity || !name || !navigation || !overview || !logout) {{
-                    return null;
-                }}
-                const navigationRect = navigation.getBoundingClientRect();
+                if (!bar || !code || !name || !logout) return null;
                 const logoutRect = logout.getBoundingClientRect();
-                const visible = element => {{
-                    const rect = element.getBoundingClientRect();
-                    const style = target.getComputedStyle(element);
-                    return rect.width > 0 && rect.height > 0 &&
-                        style.display !== "none" && style.visibility !== "hidden";
-                }};
                 return {{
                     name: name.getAttribute("data-estab-user-name"),
-                    code: identity.getAttribute("data-estab-user-code"),
-                    functionName: identity.getAttribute("data-estab-user-function"),
-                    role: identity.getAttribute("data-estab-user-role"),
+                    code: code.getAttribute("data-estab-user-code"),
+                    functionName: code.getAttribute("data-estab-user-function"),
+                    role: code.getAttribute("data-estab-user-role"),
                     text: bar.innerText.replace(/\\s+/g, " ").trim(),
-                    navigationCount:
-                        doc.querySelectorAll("[data-estab-navigation]").length,
-                    navigationKeys:
-                        links.map(link => link.getAttribute("data-estab-nav-key")),
-                    allCoreTargetsTop:
-                        links.every(link => link.getAttribute("target") === "_top"),
-                    activeKeys:
-                        current.map(link => link.getAttribute("data-estab-nav-key")),
-                    navigationVisible:
-                        navigationRect.width > 0 && navigationRect.height > 0,
-                    allNavigationLinksVisible: links.every(visible),
-                    navigationMode:
-                        navigation.getAttribute("data-estab-navigation-mode"),
-                    compact: bar.classList.contains("estab-session-bar-compact"),
-                    sidebarOrder: !sidebarRoot || (
-                        Boolean(
-                            sidebarStatus &&
-                            sidebarWorkflow &&
-                            navigation
-                        ) &&
-                        (
-                            sidebarStatus.compareDocumentPosition(bar) &
-                            Node.DOCUMENT_POSITION_FOLLOWING
-                        ) !== 0 &&
-                        (
-                            bar.compareDocumentPosition(sidebarWorkflow) &
-                            Node.DOCUMENT_POSITION_FOLLOWING
-                        ) !== 0 &&
-                        (
-                            sidebarWorkflow.compareDocumentPosition(navigation) &
-                            Node.DOCUMENT_POSITION_FOLLOWING
-                        ) !== 0
+                    compact: bar.classList.contains(
+                        "estab-session-bar-compact"
                     ),
-                    hasDisclosure: Boolean(disclosure),
-                    disclosureSummaryVisible: Boolean(summary && visible(summary)),
-                    overviewContract:
-                        overview.textContent.replace(/\\s+/g, " ").trim() === "Übersicht" &&
-                        overview.getAttribute("target") === "_top",
-                    logoutVisible: logoutRect.width > 0 && logoutRect.height > 0 &&
-                        !logout.disabled
+                    logoutVisible: logoutRect.width > 0 &&
+                        logoutRect.height > 0 && !logout.disabled
                 }};
                 """,
             )
         )
-        if not details:
+        if not identity:
             raise TestFailure(f"Session-Informationen fehlen in {location}.")
-        self._equal(details["name"], self.config.login_name, f"Benutzername in {location}")
-        self._equal(details["code"], self.config.login_code, f"Kürzel in {location}")
         self._equal(
-            details["functionName"],
+            identity["name"], self.config.login_name, f"Benutzername in {location}"
+        )
+        self._equal(
+            identity["code"], self.config.login_code, f"Kürzel in {location}"
+        )
+        self._equal(
+            identity["functionName"],
             self.config.login_function,
             f"Funktion in {location}",
         )
-        role = details.get("role")
-        self._truth(isinstance(role, str) and bool(role.strip()), f"Rolle fehlt in {location}.")
-        self._equal(
-            details.get("navigationCount"),
-            1,
-            f"Anzahl gemeinsamer Navigationen in {location}",
-        )
-        self._equal(
-            details.get("navigationKeys"),
-            expected_navigation_keys,
-            f"Reihenfolge der Kernbereiche in {location}",
-        )
+        role = identity.get("role")
         self._truth(
-            details.get("allCoreTargetsTop"),
-            f"Kernbereich wechselt in {location} nicht durchgehend das Top-Level-Ziel.",
+            isinstance(role, str) and bool(role.strip()),
+            f"Rolle fehlt in {location}.",
         )
-        self._equal(
-            details.get("activeKeys"),
-            [expected_active_key],
-            f"Aktiver Navigationsbereich in {location}",
-        )
-        self._truth(
-            details.get("navigationVisible"),
-            f"Gemeinsame Navigation ist in {location} nicht sichtbar.",
-        )
-        if details.get("navigationMode") == "sidebar":
-            self._truth(
-                details.get("compact")
-                and not details.get("hasDisclosure")
-                and details.get("allNavigationLinksVisible")
-                and details.get("sidebarOrder"),
-                f"Status, Identität, Aktionen und sichtbare Navigation sind "
-                f"in {location} nicht korrekt angeordnet.",
-            )
-        elif details.get("compact"):
-            self._truth(
-                details.get("hasDisclosure") and details.get("disclosureSummaryVisible"),
-                f"Kompakte Bereichsauswahl fehlt in {location}.",
-            )
-        else:
-            self._truth(
-                details.get("allNavigationLinksVisible"),
-                f"Mindestens ein Kernbereich ist in {location} nicht sichtbar.",
-            )
-        visible_text = details.get("text", "")
+        # Die Leiste setzt ihre Beschriftung in Grossbuchstaben; innerText
+        # gibt zurueck, was zu lesen ist, und nicht, was im Quelltext steht.
+        visible_text = str(identity.get("text", "")).casefold()
         for expected in (
             "Angemeldet als",
             self.config.login_name,
@@ -11294,9 +11229,137 @@ class BrowserAcceptance:
             role,
             "Abmelden",
         ):
-            self._truth(expected in visible_text, f"Session-Bar in {location} ist unvollständig.")
-        self._truth(details.get("logoutVisible"), f"Abmeldebutton fehlt in {location}.")
-        self._truth(details.get("overviewContract"), f"Übersichtslink fehlt in {location}.")
+            self._truth(
+                str(expected).casefold() in visible_text,
+                f"Session-Bar in {location} ist unvollständig.",
+            )
+        self._truth(
+            identity.get("logoutVisible"), f"Abmeldebutton fehlt in {location}."
+        )
+        self._truth(
+            identity.get("compact"),
+            f"Session-Bar im Cockpit ist in {location} nicht kompakt.",
+        )
+
+        areas = self.cdp.evaluate(
+            f"""
+            (() => {{
+                const menu = document.querySelector(
+                    "[data-estab-shell-menu]"
+                );
+                const navigation = menu && menu.querySelector(
+                    "[data-estab-navigation]"
+                );
+                if (!navigation) return null;
+                const items = Array.from(navigation.querySelectorAll(
+                    '[data-estab-navigation-group="areas"]'
+                    + " [data-estab-navigation-item]"
+                ));
+                const links = items
+                    .map(item => item.querySelector("a[data-estab-nav-key]"))
+                    .filter(Boolean);
+                const visible = element => {{
+                    const rect = element.getBoundingClientRect();
+                    const style = getComputedStyle(element);
+                    return rect.width > 0 && rect.height > 0 &&
+                        style.display !== "none" &&
+                        style.visibility !== "hidden";
+                }};
+                const overview = navigation.querySelector(
+                    'a[data-estab-nav-key="overview"]'
+                );
+                const navigationRect = navigation.getBoundingClientRect();
+                return {{
+                    navigationCount: document.querySelectorAll(
+                        "[data-estab-navigation]"
+                    ).length,
+                    mode: navigation.getAttribute(
+                        "data-estab-navigation-mode"
+                    ),
+                    keys: links.map(
+                        link => link.getAttribute("data-estab-nav-key")
+                    ),
+                    allTargetsTop: links.every(
+                        link => link.getAttribute("target") === "_top"
+                    ),
+                    allVisible: links.every(visible),
+                    navigationVisible: navigationRect.width > 0 &&
+                        navigationRect.height > 0,
+                    lockedKeys: items
+                        .filter(item => item.hasAttribute(
+                            "data-estab-navigation-locked"
+                        ))
+                        .map(item => item.getAttribute(
+                            "data-estab-navigation-key"
+                        )),
+                    dutyKeys: items
+                        .filter(item => item.hasAttribute(
+                            "data-estab-navigation-duty-access"
+                        ))
+                        .map(item => item.getAttribute(
+                            "data-estab-navigation-key"
+                        )),
+                    activeKeys: Array.from(navigation.querySelectorAll(
+                        '[aria-current="page"]'
+                    )).map(link => link.getAttribute("data-estab-nav-key")),
+                    overviewContract: Boolean(overview) &&
+                        overview.textContent.replace(/\\s+/g, " ").trim()
+                            === "Übersicht" &&
+                        overview.getAttribute("target") === "_top"
+                }};
+            }})()
+            """
+        )
+        if not areas:
+            raise TestFailure(
+                f"Bereichsnavigation der Huelle fehlt in {location}."
+            )
+        self._equal(
+            areas.get("navigationCount"),
+            1,
+            f"Anzahl gemeinsamer Navigationen in {location}",
+        )
+        self._equal(areas.get("mode"), "sidebar", f"Navigationsart in {location}")
+        # Angemeldet steht die ganze Karte da: Das Menue zeigt jeden Bereich.
+        # Was eine Dienstfunktion nicht darf, traegt seinen Dienstvorbehalt
+        # als Merkmal -- der Riegel sitzt an der Tuer und nicht im Menue --,
+        # und angemeldet ist nichts mehr hinter dem Anmeldeschloss.
+        self._equal(
+            areas.get("keys"),
+            list(self.navigation_keys),
+            f"Reihenfolge der Kernbereiche in {location}",
+        )
+        self._equal(
+            areas.get("lockedKeys"),
+            [],
+            f"Anmeldepflichtige Bereiche in {location}",
+        )
+        self._equal(
+            areas.get("dutyKeys"),
+            self._duty_gated_navigation_keys(),
+            f"Dienstvorbehalte der Bereiche in {location}",
+        )
+        self._truth(
+            areas.get("allTargetsTop"),
+            f"Kernbereich wechselt in {location} nicht durchgehend das Top-Level-Ziel.",
+        )
+        self._equal(
+            areas.get("activeKeys"),
+            [expected_active_key],
+            f"Aktiver Navigationsbereich in {location}",
+        )
+        self._truth(
+            areas.get("navigationVisible"),
+            f"Gemeinsame Navigation ist in {location} nicht sichtbar.",
+        )
+        self._truth(
+            areas.get("allVisible"),
+            f"Mindestens ein Kernbereich ist in {location} nicht sichtbar.",
+        )
+        self._truth(
+            areas.get("overviewContract"),
+            f"Übersichtslink fehlt in {location}.",
+        )
 
     @staticmethod
     def _equal(actual: Any, expected: Any, description: str) -> None:
