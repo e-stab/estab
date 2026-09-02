@@ -5955,6 +5955,7 @@ class BrowserAcceptance:
         cockpit = workspace.get("cockpit")
         actions = workspace.get("actions")
         inner_width = float(workspace.get("innerWidth", 0))
+        inner_height = float(workspace.get("innerHeight", 0))
         # A classic Linux scrollbar reduces the usable layout viewport while
         # Chrome deliberately keeps innerWidth at the emulated device width.
         client_width = float(workspace.get("clientWidth", 0))
@@ -6008,7 +6009,13 @@ class BrowserAcceptance:
                 <= float(content.get("left", -1)) + 0.5
                 and float(content.get("right", 0))
                 <= float(cockpit.get("left", -1)) + 0.5
-                and float(content.get("width", 0)) >= 300,
+                # Der Inhalt ist die Hauptsache: Er darf nie schmaler stehen
+                # als das Menue daneben. Eine feste Zahl taugt hier nicht --
+                # dicht ueber 42rem nehmen Menue und Cockpit zusammen schon
+                # 456 Bildpunkte, und darunter stehen die drei ohnehin
+                # untereinander.
+                and float(content.get("width", 0))
+                >= float(menu.get("width", 0)),
                 f"Die Spalten stehen in {location} nicht nebeneinander über "
                 f"die volle Höhe: {workspace!r}",
             )
@@ -6506,7 +6513,14 @@ class BrowserAcceptance:
                         refreshed,
                         before,
                         after: root.scrollTop,
-                        focusPreserved: doc.activeElement === action,
+                        /* Die Aktualisierung tauscht den Statusblock aus
+                           und setzt den Fokus danach ausdruecklich auf den
+                           neuen Schalter. Verglichen wird deshalb mit dem
+                           Schalter, der jetzt dasteht, nicht mit dem
+                           gemerkten Knoten. */
+                        focusPreserved: doc.activeElement === doc.querySelector(
+                            "[data-estab-sound-toggle]"
+                        ),
                         statusCount: doc.querySelectorAll(
                             "[data-estab-sidebar-status]"
                         ).length,
@@ -6553,6 +6567,7 @@ class BrowserAcceptance:
                         return null;
                     }
                     button.focus({preventScroll: true});
+                    const pressedBefore = button.getAttribute("aria-pressed");
                     const before = root.scrollTop;
                     const refreshed = await target.estabRefreshSidebarStatus();
                     await new Promise(resolve =>
@@ -6561,9 +6576,20 @@ class BrowserAcceptance:
                     const restored = doc.querySelector(
                         "[data-estab-sound-toggle]"
                     );
+                    /* Der Schalter steht seit 532af85 klein neben der Uhr --
+                       also im Block, den die Aktualisierung austauscht. Dass
+                       derselbe Knoten stehen bleibt, ist damit kein Massstab
+                       mehr; die Aktualisierung setzt den Fokus ausdruecklich
+                       auf den neuen. Was zaehlt, ist: Er ist wieder da, er
+                       hat den Fokus, und er sagt dasselbe wie vorher. */
                     return {
                         refreshed,
-                        identityPreserved: restored === button,
+                        restoredPresent: Boolean(restored),
+                        pressedPreserved: Boolean(
+                            restored &&
+                            restored.getAttribute("aria-pressed")
+                                === pressedBefore
+                        ),
                         focusPreserved:
                             Boolean(restored && doc.activeElement === restored),
                         before,
@@ -6576,7 +6602,8 @@ class BrowserAcceptance:
         self._truth(
             isinstance(sound_focus_refresh, dict)
             and sound_focus_refresh.get("refreshed") is True
-            and sound_focus_refresh.get("identityPreserved") is True
+            and sound_focus_refresh.get("restoredPresent") is True
+            and sound_focus_refresh.get("pressedPreserved") is True
             and sound_focus_refresh.get("focusPreserved") is True
             and abs(
                 float(sound_focus_refresh.get("before", -10))
