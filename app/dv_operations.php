@@ -407,6 +407,39 @@ function estab_dv_text(
     return $text;
 }
 
+/**
+ * Freitext, der Zeilen kennen darf.
+ *
+ * Die Kopie einer Planfassung fuehrt beide Vermerkfelder mit einer Leerzeile
+ * zusammen -- siehe die Kopieranweisung weiter unten. Ein Feld, das jeden
+ * Zeilenumbruch zurueckweist, koennte genau diesen Wert danach nie wieder
+ * speichern: Der Weg waere in seinem eigenen Entwurf unveraenderlich, und der
+ * Bedienende bekaeme nur "Bemerkungen ist ungueltig" zu lesen. Deshalb kennt
+ * der Freitext hinter den Vermerkfeldern die Zeile; alles andere an
+ * Steuerzeichen bleibt verboten wie im uebrigen Plan.
+ */
+function estab_dv_multiline_text(
+    mixed $value,
+    string $label,
+    int $maximum,
+    bool $allowEmpty = false
+): string {
+    if (!is_string($value) || preg_match('//u', $value) !== 1) {
+        throw new EstabDvInputException($label . ' ist ungültig.');
+    }
+    // Die Browser schicken drei Zeilenenden; gespeichert wird eines.
+    $value = str_replace(["\r\n", "\r"], "\n", $value);
+    if (preg_match('/[^\P{C}\n]|[<>]/u', $value) === 1) {
+        throw new EstabDvInputException($label . ' ist ungültig.');
+    }
+    $text = trim($value);
+    $length = estab_auth_text_length($text);
+    if ($length > $maximum || (!$allowEmpty && $length < 1)) {
+        throw new EstabDvInputException($label . ' ist ungültig.');
+    }
+    return $text;
+}
+
 function estab_dv_datetime(
     mixed $value,
     string $label,
@@ -4720,13 +4753,13 @@ function estab_dv_telecom_entry_values(array $input): array
         'rufgruppe' => $field('rufgruppe', 'Rufgruppe', 64),
         'anschlussart' => $choice('anschlussart', 'Anschlussart'),
         'datenart' => $choice('datenart', 'Art der Datenübertragung'),
-        'besondere_vermerke' => estab_dv_text(
+        'besondere_vermerke' => estab_dv_multiline_text(
             $input['besondere_vermerke'] ?? '',
             'Besondere Vermerke',
             10000,
             true
         ),
-        'bemerkungen' => estab_dv_text(
+        'bemerkungen' => estab_dv_multiline_text(
             $input['bemerkungen'] ?? '',
             'Bemerkungen',
             10000,
