@@ -285,13 +285,15 @@ assert_session_identity()
         printf 'Category HTTP: expected one session bar, got %s\n' "$bar_count" >&2
         exit 1
     fi
+    # Der Abmeldeknopf traegt ein Sinnbild; seine Beschriftung steht als
+    # unsichtbarer Text darin und bleibt so vorlesbar.
     for marker in \
         "data-estab-user-name=\"$expected_name\"" \
         "data-estab-user-code=\"$expected_code\"" \
         "data-estab-user-function=\"$expected_function\"" \
         "data-estab-user-role=\"$expected_role\"" \
         'data-estab-logout-form' \
-        '>Abmelden</button>'
+        '>Abmelden</span></button>'
     do
         assert_body "$marker"
     done
@@ -402,6 +404,10 @@ load_message_list()
         "$base_url/4fach/mainindex.php"
 }
 
+# Jede Handlung wird mit einer Weiterleitung beantwortet: Wer danach neu laedt,
+# sendet nichts ein zweites Mal. Der Rumpf einer Weiterleitung ist leer, also
+# holt dieser Schritt die Liste davor -- sie traegt das Sitzungsmerkmal -- und
+# danach noch einmal, damit die folgenden Pruefungen die neue Liste sehen.
 post_message_state()
 {
     cookie_jar=$1
@@ -409,6 +415,7 @@ post_message_state()
     todo=$3
     record_id=$4
     expected_status=$5
+    load_message_list "$cookie_jar"
     state_csrf=$(csrf_from_body)
     assert_status "$expected_status" \
         --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
@@ -418,6 +425,9 @@ post_message_state()
         --data-urlencode "00_lfd=$record_id" \
         --data-urlencode "todo=$todo" \
         "$base_url/4fach/mainindex.php"
+    if [ "$expected_status" = 303 ]; then
+        load_message_list "$cookie_jar"
+    fi
 }
 
 assert_workflow_state_control()
@@ -628,19 +638,19 @@ assert_db_equals 1 \
     "SELECT COUNT(*) FROM \`${user_read_table}\` WHERE \`nachnum\`=${message_id};"
 
 load_message_list "$s1_cookies"
-post_message_state "$s1_cookies" gelesen unset "$message_id" 200
+post_message_state "$s1_cookies" gelesen unset "$message_id" 303
 assert_db_equals 0 \
     "SELECT COUNT(*) FROM \`${user_read_table}\` WHERE \`nachnum\`=${message_id};"
 assert_workflow_state_control gelesen set
-post_message_state "$s1_cookies" gelesen unset "$message_id" 200
+post_message_state "$s1_cookies" gelesen unset "$message_id" 303
 assert_db_equals 0 \
     "SELECT COUNT(*) FROM \`${user_read_table}\` WHERE \`nachnum\`=${message_id};"
 
-post_message_state "$s1_cookies" gelesen set "$message_id" 200
+post_message_state "$s1_cookies" gelesen set "$message_id" 303
 assert_db_equals 1 \
     "SELECT COUNT(*) FROM \`${user_read_table}\` WHERE \`nachnum\`=${message_id} AND \`gelesen\` IS NOT NULL;"
 assert_workflow_state_control gelesen unset
-post_message_state "$s1_cookies" gelesen set "$message_id" 200
+post_message_state "$s1_cookies" gelesen set "$message_id" 303
 assert_db_equals 1 \
     "SELECT COUNT(*) FROM \`${user_read_table}\` WHERE \`nachnum\`=${message_id};"
 
@@ -652,11 +662,11 @@ assert_db_equals 0 \
     "SELECT COUNT(*) FROM \`${function_done_table}\` WHERE \`nachnum\`=${foreign_message_id};"
 
 load_message_list "$s1_cookies"
-post_message_state "$s1_cookies" erledigt set "$message_id" 200
+post_message_state "$s1_cookies" erledigt set "$message_id" 303
 assert_db_equals 1 \
     "SELECT COUNT(*) FROM \`${function_done_table}\` WHERE \`nachnum\`=${message_id} AND \`erledigt\` IS NOT NULL;"
 assert_workflow_state_controls_absent
-post_message_state "$s1_cookies" erledigt set "$message_id" 200
+post_message_state "$s1_cookies" erledigt set "$message_id" 303
 assert_db_equals 1 \
     "SELECT COUNT(*) FROM \`${function_done_table}\` WHERE \`nachnum\`=${message_id};"
 assert_workflow_state_controls_absent
@@ -669,12 +679,12 @@ assert_status 200 \
     --data-urlencode 'filter_erledigt_ein_x=1' \
     "$base_url/4fach/mainindex.php"
 assert_workflow_state_control erledigt unset
-post_message_state "$s1_cookies" erledigt unset "$message_id" 200
+post_message_state "$s1_cookies" erledigt unset "$message_id" 303
 assert_db_equals 0 \
     "SELECT COUNT(*) FROM \`${function_done_table}\` WHERE \`nachnum\`=${message_id};"
 assert_body "$workflow_marker"
 assert_workflow_state_control erledigt set
-post_message_state "$s1_cookies" erledigt unset "$message_id" 200
+post_message_state "$s1_cookies" erledigt unset "$message_id" 303
 assert_db_equals 0 \
     "SELECT COUNT(*) FROM \`${function_done_table}\` WHERE \`nachnum\`=${message_id};"
 
@@ -755,7 +765,9 @@ assert_db_equals "$raw_description_hex" \
     "SELECT HEX(\`beschreibung\`) FROM \`${function_category_table}\` WHERE \`lfd\`=${function_category_id};"
 load_manager "$s1_cookies" fkt "$message_id"
 assert_body '&lt;script&gt;'
-assert_body 'Quotes &quot;&#039; &amp; &lt;script&gt;alert(1)&lt;/script&gt;'
+# Das Tabellenbauteil schreibt das Hochkomma als &apos; -- HTML5-Schreibweise
+# derselben Maskierung.
+assert_body 'Quotes &quot;&apos; &amp; &lt;script&gt;alert(1)&lt;/script&gt;'
 assert_body_absent '<script>alert(1)</script>'
 
 create_category "$s1_cookies" user "$message_id" 'USR&Q' 'User "quote" & <script>u</script>'
