@@ -5097,6 +5097,12 @@ form[data-estab-incident-disabled="true"]::before {
     }
 
     .estab-login-cta {
+        /* Die Breite schliesst den Innenabstand ein. Ohne diese Zeile kamen
+           die zwei mal sechzehn Bildpunkte auf die vollen 100% obendrauf:
+           Der Kasten wurde breiter als seine Spalte, der automatische Rand
+           rechts wurde negativ, und auf einem Telefon stand die rechte Kante
+           des Anmeldekastens ausserhalb des Bildes. */
+        box-sizing: border-box;
         margin: var(--abstand-6) auto;
         max-width: 100%;
         overflow-wrap: anywhere;

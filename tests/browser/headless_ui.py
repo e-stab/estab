@@ -3074,7 +3074,7 @@ class BrowserAcceptance:
             "Kopf- oder Wegehinweise fehlen in der kompakten Read-only-Historie.",
         )
         self.cdp.click(
-            None,
+            "vorgaben",
             "[data-estab-logout-form] button",
             "S6 nach dem Fernmeldeplantest abmelden",
         )
@@ -3442,7 +3442,7 @@ class BrowserAcceptance:
             "Der gespeicherte Auftrag mit Ziel ist nach PRG nicht sichtbar.",
         )
         self.cdp.click(
-            None,
+            "vorgaben",
             "[data-estab-logout-form] button",
             "LdF nach dem Melderauftragstest abmelden",
         )
@@ -4040,7 +4040,7 @@ class BrowserAcceptance:
 
         print("[10/12] Logout aus dem Einsatztagebuch und Rückkehr in den anonymen Zustand")
         self.cdp.click(
-            None,
+            "vorgaben",
             "[data-estab-logout-form] button",
             "Abmeldebutton im Einsatztagebuch",
         )
@@ -4526,7 +4526,13 @@ class BrowserAcceptance:
             """
             document.readyState === "complete" &&
             Boolean(document.querySelector('input[name="ah_upload"]')) &&
-            Boolean(document.querySelector("[data-estab-shell-menu]"))
+            /* Die Anhangseite ist ein Fenster fuer sich und steht nicht in
+               der Huelle: Sie wird aus dem Vordruck heraus geoeffnet und
+               kehrt dorthin zurueck. Sie traegt aber die Gestaltung der
+               Anwendung -- ohne sie stuende sie als einzige Seite in Schrift
+               und Farben des Browsers da. */
+            document.body.classList.contains("estab-legacy-page") &&
+            Boolean(document.querySelector('link[href$="estab-ui.css"]'))
             """,
             "eigenständige Anhangübersicht wurde nicht vollständig geladen",
         )
@@ -10464,8 +10470,8 @@ class BrowserAcceptance:
                     innerWidth: window.innerWidth,
                     unexpectedOverflow,
                     regions: {
-                        publicBar: bounds(document.querySelector(
-                            "aside[data-estab-public-bar]"
+                        shellMenu: bounds(document.querySelector(
+                            "[data-estab-shell-menu]"
                         )),
                         masthead: bounds(document.querySelector(
                             ".estab-root-header"
@@ -10526,7 +10532,7 @@ class BrowserAcceptance:
             isinstance(regions, dict),
             "Relevante Seitenbereiche fehlen im schmalen Viewport.",
         )
-        for key in ("publicBar", "masthead", "rootMain", "loginCard", "authNote"):
+        for key in ("shellMenu", "masthead", "rootMain", "loginCard", "authNote"):
             assert_horizontally_contained(
                 regions.get(key),
                 f"Seitenbereich {key}",
@@ -10549,7 +10555,11 @@ class BrowserAcceptance:
             and navigation.get("right", 10000) <= state["innerWidth"] + 0.5
             and navigation.get("bottom", 0) > navigation.get("top", 0)
             and navigation.get("scrollLeft") == 0
-            and navigation.get("scrollWidth", 0) > navigation.get("clientWidth", 0)
+            # Die Navigation war ein waagerecht schiebbares Band. Im Menue
+            # der Huelle steht sie untereinander und in voller Breite: Sie
+            # darf gar nicht mehr waagerecht scrollen.
+            and navigation.get("scrollWidth", 0)
+                <= navigation.get("clientWidth", 0) + 1
             and navigation.get("lastKey") == "handbook",
             "Bereichsnavigation besitzt im schmalen Viewport keinen sauber "
             "begrenzten horizontalen Scrollbereich.",
@@ -10599,26 +10609,10 @@ class BrowserAcceptance:
                 "einspaltig ausgerichtet.",
             )
 
-        scroll_distance = (
-            navigation["scrollWidth"] - navigation["clientWidth"] + 64
-        )
-        scroll_x = (navigation["left"] + navigation["right"]) / 2
-        scroll_y = (navigation["top"] + navigation["bottom"]) / 2
-        self.cdp.call(
-            "Input.dispatchMouseEvent",
-            {"type": "mouseMoved", "x": scroll_x, "y": scroll_y},
-        )
-        self.cdp.call(
-            "Input.dispatchMouseEvent",
-            {
-                "type": "mouseWheel",
-                "x": scroll_x,
-                "y": scroll_y,
-                "deltaX": scroll_distance,
-                "deltaY": 0,
-            },
-        )
-        scroll_state = self.cdp.wait_for(
+        # Waagerecht geschoben wurde die Navigation, als sie ein Band war.
+        # Im Menue der Huelle steht sie untereinander und ganz im Bild: Der
+        # letzte Bereich ist ohne Schieben erreichbar.
+        last_link = self.cdp.evaluate(
             """
             (() => {
                 const navigation = document.querySelector(
@@ -10633,26 +10627,31 @@ class BrowserAcceptance:
                 if (!navigation || !last) return null;
                 const navigationRect = navigation.getBoundingClientRect();
                 const lastRect = last.getBoundingClientRect();
-                if (
-                    navigation.scrollLeft <= 0 ||
-                    lastRect.left < navigationRect.left - 0.5 ||
-                    lastRect.right > navigationRect.right + 0.5
-                ) {
-                    return null;
-                }
                 return {
                     scrollLeft: navigation.scrollLeft,
+                    containedHorizontally:
+                        lastRect.left >= navigationRect.left - 0.5 &&
+                        lastRect.right <= navigationRect.right + 0.5,
+                    withinViewport:
+                        lastRect.left >= -0.5 &&
+                        lastRect.right <= innerWidth + 0.5,
                     lastKey: last.getAttribute("data-estab-nav-key")
                 };
             })()
-            """,
-            "letzter Bereichslink wurde durch horizontales Scrollen "
-            "im schmalen Viewport nicht erreichbar",
+            """
+        )
+        self._truth(
+            isinstance(last_link, dict)
+            and last_link.get("scrollLeft") == 0
+            and last_link.get("containedHorizontally") is True
+            and last_link.get("withinViewport") is True,
+            "Letzter Bereichslink steht im schmalen Viewport nicht ohne "
+            f"Schieben im Bild: {last_link!r}",
         )
         self._equal(
-            scroll_state.get("lastKey"),
+            last_link.get("lastKey"),
             "handbook",
-            "Letzter horizontal erreichbarer Navigationsbereich",
+            "Letzter Navigationsbereich",
         )
 
     def _assert_internal_cards_same_tab(self) -> None:
