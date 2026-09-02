@@ -285,7 +285,19 @@ function dv_operations_render_telecom_entry_fields(array $values): void
       <label>Rückfallebene für
         <select name="rueckfallebene_fuer_weg"
           <?= $andereWege === [] ? 'disabled' : '' ?>>
-          <option value="">keine Rückfallebene</option>
+          <?php
+            /*
+             * Auch die Leerwahl wird ausgezeichnet. Der Aenderungswaechter
+             * vergleicht `selected` gegen `defaultSelected`; eine Vorauswahl,
+             * die nur der Browser trifft, sieht fuer ihn wie eine Bearbeitung
+             * aus. Solange es keinen anderen Weg gab, war das Feld gesperrt
+             * und fiel nicht auf -- ab dem ersten Weg blockierte es jede
+             * weitere Eingabe im Entwurf.
+             */
+          ?>
+          <option value=""
+            <?= (int) ($values['rueckfallebene_fuer_weg'] ?? 0) === 0
+                ? 'selected' : '' ?>>keine Rückfallebene</option>
           <?php foreach ($andereWege as $geschwister): ?>
             <option value="<?= (int) $geschwister['weg_id'] ?>"
               <?= (int) ($values['rueckfallebene_fuer_weg'] ?? 0)
@@ -340,7 +352,9 @@ function dv_operations_render_telecom_entry_fields(array $values): void
           <?php if (is_array($choices)): ?>
             <select name="<?= dv_operations_html($name) ?>"
               <?= $owned ? ($needed ? 'required' : '') : 'disabled' ?>>
-              <option value="">ohne Angabe</option>
+              <?php /* selected: siehe Rueckfallebene. */ ?>
+              <option value=""
+                <?= $current === '' ? 'selected' : '' ?>>ohne Angabe</option>
               <?php foreach ($choices as $value => $text): ?>
                 <option value="<?= dv_operations_html($value) ?>"
                   <?= $current === (string) $value ? 'selected' : '' ?>>
@@ -1944,7 +1958,8 @@ foreach ($plans as $plan) {
                 </ul>
               <?php endif; ?>
               <form class="estab-tool-form" method="post"
-                action="fuehrungsstelle.php" data-estab-dirty-guard>
+                action="fuehrungsstelle.php" data-estab-dirty-guard
+                data-estab-telecom-form-label="Nebenstelle">
                 <?= estab_csrf_field() ?>
                 <input type="hidden" name="operation_action"
                   value="add_plan_extension">
@@ -1954,13 +1969,29 @@ foreach ($plans as $plan) {
                   value="<?= dv_operations_html($revision) ?>">
                 <div class="estab-tool-form-grid">
                   <label>Technik
+                    <?php $technikErste = true; ?>
                     <select name="technik" required>
                       <?php foreach (
                           ESTAB_DV_TELECOM_EXTENSION_KINDS
                           as $technikWert => $technikText
                       ): ?>
+                        <?php
+                          /*
+                           * Die erste Wahl wird ausdrücklich als gewählt
+                           * ausgezeichnet. Ohne das Merkmal waehlt der Browser
+                           * sie zwar auch, aber der Aenderungswaechter
+                           * vergleicht `selected` gegen `defaultSelected` --
+                           * und haelt das Formular dann ab dem Seitenaufbau
+                           * fuer bearbeitet. Jede Eingabe im Entwurf lief
+                           * deshalb in die Warnung "Aktion noch nicht
+                           * ausgefuehrt", ohne dass jemand etwas angefasst
+                           * hatte.
+                           */
+                        ?>
                         <option value="<?= dv_operations_html($technikWert)
-                          ?>"><?= dv_operations_html($technikText) ?></option>
+                          ?>"<?= $technikErste ? ' selected' : '' ?>><?=
+                          dv_operations_html($technikText) ?></option>
+                        <?php $technikErste = false; ?>
                       <?php endforeach; ?>
                     </select>
                     <small>Die Zeilen der Nebenstellentafel des Vordrucks.</small>
@@ -2166,7 +2197,8 @@ foreach ($plans as $plan) {
                       </ul>
                     <?php endif; ?>
                     <form class="estab-tool-form" method="post"
-                      action="fuehrungsstelle.php" data-estab-dirty-guard>
+                      action="fuehrungsstelle.php" data-estab-dirty-guard
+                      data-estab-telecom-form-label="Gegenstelle">
                       <?= estab_csrf_field() ?>
                       <input type="hidden" name="operation_action"
                         value="add_plan_counterpart">
@@ -2183,7 +2215,8 @@ foreach ($plans as $plan) {
                         </label>
                         <label>Stellenart
                           <select name="stellenart">
-                            <option value="">ohne Angabe</option>
+                            <?php /* selected: siehe Nebenstellen-Technik. */ ?>
+                            <option value="" selected>ohne Angabe</option>
                             <?php foreach (
                                 estab_dv_telecom_counterpart_kinds()
                                 as $artWert => $artText
