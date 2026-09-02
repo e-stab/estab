@@ -411,8 +411,15 @@ $assert(
     && str_contains($workflow, 'version: v0.70.0')
     && str_contains($appDockerfile, 'apt-get purge -y --auto-remove')
     && str_contains($migrateDockerfile, 'rm -f /usr/local/bin/gosu')
-    && substr_count($trivyIgnore, 'paths: [usr/local/bin/gosu]') === 15
-    && substr_count($trivyIgnore, 'expired_at: 2026-10-31') === 15,
+    // 22 statt 15: Der Go-Stand im gosu des MariaDB-Bildes hat sieben
+    // weitere Meldungen bekommen (asn1, idna, http2, html/template, xml,
+    // net/url, tls). Alle liegen in derselben Datei und sind vom selben
+    // Grund gedeckt -- gosu wechselt Nutzer- und Gruppenkennung und ruft
+    // keinen der betroffenen Wege auf. Die Zahl steht hier fest, damit die
+    // Liste nicht unbemerkt waechst; sie zu erhoehen ist eine Entscheidung,
+    // kein Nebeneffekt.
+    && substr_count($trivyIgnore, 'paths: [usr/local/bin/gosu]') === 22
+    && substr_count($trivyIgnore, 'expired_at: 2026-10-31') === 22,
     'Native CI or release verification lacks the pinned expiring high/critical image vulnerability gate'
 );
 $assert(

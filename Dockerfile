@@ -14,6 +14,38 @@ ENV ESTAB_DB_HOST=db \
 
 RUN set -eux; \
     apt-get update; \
+# Die Sicherheitsstaende von util-linux und openssl kommen nicht mit dem
+# Grundbild. Dessen Marke wird nicht neu gebaut, wenn Debian nachbessert:
+# nachgemessen am 02.09.2026 trug das aktuelle php:8.5.8-apache-trixie
+# weiterhin util-linux 2.41-5 und openssl 3.5.6-1~deb13u2. Den Digest
+# hochzuziehen half deshalb nichts -- die Pakete muessen hier angehoben
+# werden. Ohne das meldet der Bildscan 39 behebbare Luecken (CVE-2026-53612
+# bis -53615 in util-linux, CVE-2026-14456 in openssl) und der Auftrag
+# bricht ab.
+#
+# Die Pruefung darunter besteht darauf, dass die Anhebung wirklich ankam.
+# Ein stiller Rueckfall -- etwa weil ein Spiegel den Stand noch nicht hat --
+# waere schlimmer als gar keine Anhebung: das Bild saehe geprueft aus und
+# waere es nicht.
+    apt-get install -y --no-install-recommends --only-upgrade \
+        bsdutils \
+        libblkid1 \
+        liblastlog2-2 \
+        libmount1 \
+        libsmartcols1 \
+        libssl3t64 \
+        libuuid1 \
+        login \
+        mount \
+        openssl \
+        openssl-provider-legacy \
+        util-linux; \
+    dpkg --compare-versions \
+        "$(dpkg-query --showformat='${Version}' --show util-linux)" \
+        ge '2.41.5-0+deb13u1'; \
+    dpkg --compare-versions \
+        "$(dpkg-query --showformat='${Version}' --show openssl)" \
+        ge '3.5.7-1~deb13u2'; \
     apt-get install -y --no-install-recommends \
         acl \
         apache2-utils \
