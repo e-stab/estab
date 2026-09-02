@@ -8796,8 +8796,12 @@ class BrowserAcceptance:
 
                 const timelineStyle = target.getComputedStyle(timeline);
                 const trackStyle = target.getComputedStyle(track);
-                const expectedDisplay = expectedMobile ? "grid" : "flex";
-                if (trackStyle.display !== expectedDisplay) return false;
+                /* Der Bearbeitungsweg ist seit a40da6d ueberall eine
+                   Zeile: Als Reihe gestapelter Karten war er 655 Bildpunkte
+                   hoch und stand dem Vordruck im Weg. Passen nicht alle
+                   Marken nebeneinander, laesst sich die Leiste schieben --
+                   auf dem Telefon wie auf dem Schreibtisch. */
+                if (trackStyle.display !== "flex") return false;
 
                 const steps = Array.from(
                     track.querySelectorAll(
@@ -8980,14 +8984,15 @@ class BrowserAcceptance:
             and state.get("returnEvidenceValid") is True
         )
         if mobile:
+            # Dieselbe schiebbare Zeile wie auf dem Schreibtisch; sie darf nur
+            # die Seite nicht ueber die Fensterbreite hinaus wachsen lassen.
             layout_valid = (
-                state.get("trackDisplay") == "grid"
-                and state.get("verticalOrder") is True
-                and state.get("overflowX") == "visible"
-                and state.get("overflowY") == "visible"
+                state.get("trackDisplay") == "flex"
+                and state.get("horizontalOrder") is True
+                and state.get("overflowX") in {"auto", "scroll"}
+                and state.get("overflowY") == "hidden"
                 and state.get("maxHeight") == "none"
                 and state.get("noInternalVerticalScroller") is True
-                and state.get("noInternalHorizontalScroller") is True
                 and state.get("fitsMobileViewport") is True
             )
         else:
@@ -9750,8 +9755,15 @@ class BrowserAcceptance:
             "Staatsnot wurde nicht im amtlichen Vorrangfeld angekreuzt",
         )
         # Ein Kaestchen "keine" gibt es nicht mehr: Auf dem amtlichen Vordruck
-        # ist die fehlende Stufe die Abwesenheit eines Kreuzes. Geblieben ist,
-        # dass immer hoechstens eine Stufe angekreuzt sein kann.
+        # ist die fehlende Stufe die Abwesenheit eines Kreuzes. Zurueckgenommen
+        # wird eine gewaehlte Stufe seither mit einem zweiten Klick auf sie --
+        # mit der Maus; mit der Tastatur waehlt man in der Gruppe weiter und
+        # nicht ab.
+        self.cdp.click(
+            "mainframe",
+            "#f_09_vorrangstufe_staatsnot",
+            "Vorrang im amtlichen Feld durch zweiten Klick zurücksetzen",
+        )
         self.cdp.wait_for(
             _frame_expression(
                 "mainframe",
@@ -9765,12 +9777,11 @@ class BrowserAcceptance:
                     && doc.querySelectorAll(
                         '.estab-official-priority '
                         + 'input[name="09_vorrangstufe"]:checked'
-                    ).length === 1
+                    ).length === 0
                 );
                 """,
             ),
-            "Das amtliche Vorrangfeld fuehrt nicht genau drei Stufen mit "
-            "hoechstens einem Kreuz",
+            "Vorrang ließ sich nicht durch einen zweiten Klick zurücksetzen",
         )
 
         self.cdp.click(
@@ -9945,11 +9956,20 @@ class BrowserAcceptance:
                     "[data-estab-official-message-form]"
                 );
                 if (!scroll || !form) return false;
+                const formStyle = target.getComputedStyle(form);
                 return {
                     viewportWidth: doc.documentElement.clientWidth,
                     bodyScrollWidth: doc.body.scrollWidth,
                     scrollClientWidth: scroll.clientWidth,
                     scrollWidth: scroll.scrollWidth,
+                    /* Das Blatt behaelt sein Raster von 56rem und wird
+                       skaliert, nicht gestaucht: Die gemessene Breite ist
+                       die des Rasters, die sichtbare das Produkt aus ihr
+                       und dem Zoom. Unter 0.75 hoert das Skalieren auf --
+                       angeschnittener Text in lesbarer Groesse schlaegt
+                       vollstaendigen in unlesbarer. */
+                    formGridWidth: parseFloat(formStyle.width),
+                    formZoom: parseFloat(formStyle.zoom) || 1,
                     formWidth: form.getBoundingClientRect().width
                 };
                 """,
@@ -9962,9 +9982,15 @@ class BrowserAcceptance:
                 <= mobile_state.get("viewportWidth", 0) + 1
             and mobile_state.get("scrollWidth", 0)
                 > mobile_state.get("scrollClientWidth", 0)
-            and 895 <= mobile_state.get("formWidth", 0) <= 897,
+            and 895 <= mobile_state.get("formGridWidth", 0) <= 897
+            and mobile_state.get("formZoom", 0) >= 0.75
+            and abs(
+                float(mobile_state.get("formWidth", 0))
+                - float(mobile_state.get("formGridWidth", 0))
+                * float(mobile_state.get("formZoom", 0))
+            ) <= 1,
             "Das amtliche Raster bleibt mobil nicht in seinem beschrifteten "
-            "Scrollbereich.",
+            f"Scrollbereich: {mobile_state!r}",
         )
         self.cdp.call(
             "Emulation.setDeviceMetricsOverride",
