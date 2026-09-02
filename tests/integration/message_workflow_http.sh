@@ -4350,10 +4350,13 @@ assert_db_equals \
     "t|Fe|${s1_code}|${authoritative_sender}|unset|unset|0|unset|unset" \
     'conversation author cannot pre-fill Si/LdF/A-W evidence' \
     "SELECT CONCAT(\`11_gesprnotiz\`, '|', \`01_medium\`, '|', \`01_zeichen\`, '|', \`13_abseinheit\`, '|', IF(\`05_gegenstelle\` IS NULL OR \`05_gegenstelle\`='', 'unset', 'set'), '|', IF(\`06_befweg\` IS NULL OR \`06_befweg\`='', 'unset', 'set'), '|', COALESCE(\`estab_fernmeldeplan_eintrag_id\`, 0), '|', IF(\`02_zeit\` IS NULL, 'unset', 'set'), '|', IF(\`03_datum\` IS NULL, 'unset', 'set')) FROM \`nv_nachrichten\` WHERE \`00_lfd\`=${conversation_id};"
+# Die Gespraechsnotiz endet bei der Sichtung: keine Disposition durch den
+# LdF, keine Befoerderung durch die Fernmelder. Die unveraenderliche
+# Erstellungsevidenz darf beides deshalb nicht behaupten.
 assert_db_equals \
-    'A|4|true|true|true|Fe' \
-    'conversation creation event requires all later stages' \
-    "SELECT CONCAT(JSON_UNQUOTE(JSON_EXTRACT(\`field_snapshot\`, '$.direction')), '|', \`to_status\`, '|', JSON_UNQUOTE(JSON_EXTRACT(\`field_snapshot\`, '$.review_required')), '|', JSON_UNQUOTE(JSON_EXTRACT(\`field_snapshot\`, '$.ldf_disposition_required')), '|', JSON_UNQUOTE(JSON_EXTRACT(\`field_snapshot\`, '$.transport_evidence_required')), '|', JSON_UNQUOTE(JSON_EXTRACT(\`field_snapshot\`, '$.original_conversation_medium'))) FROM \`nv_nachrichten_ereignisse\` WHERE \`message_id\`=${conversation_id} AND \`event_type\`='conversation_note_created';"
+    'A|4|true|null|null|Fe' \
+    'conversation creation event claims only the review that follows' \
+    "SELECT CONCAT(JSON_UNQUOTE(JSON_EXTRACT(\`field_snapshot\`, '$.direction')), '|', \`to_status\`, '|', JSON_UNQUOTE(JSON_EXTRACT(\`field_snapshot\`, '$.review_required')), '|', IFNULL(JSON_UNQUOTE(JSON_EXTRACT(\`field_snapshot\`, '$.ldf_disposition_required')), 'null'), '|', IFNULL(JSON_UNQUOTE(JSON_EXTRACT(\`field_snapshot\`, '$.transport_evidence_required')), 'null'), '|', JSON_UNQUOTE(JSON_EXTRACT(\`field_snapshot\`, '$.original_conversation_medium'))) FROM \`nv_nachrichten_ereignisse\` WHERE \`message_id\`=${conversation_id} AND \`event_type\`='conversation_note_created';"
 assert_db_equals 0 'conversation note has no TTB evidence before transport' \
     "SELECT COUNT(*) FROM \`nv_tbb\` WHERE \`einsatz_id\`=${active_incident_id} AND \`estab_message_id\`=${conversation_id};"
 if ! generated_form_check absent A "$conversation_number"; then

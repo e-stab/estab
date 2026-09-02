@@ -559,8 +559,9 @@ assert_export_zip() {
 # in einer eigenen Anfrage geholt, damit die laufende Antwort unberuehrt
 # bleibt.
 fetch_cockpit_fragment() {
+    jar=${1:-$cookie_jar}
     if ! curl --silent --show-error --max-time 20 --connect-timeout 5 \
-        --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+        --cookie "$jar" --cookie-jar "$jar" \
         --output "$cockpit_body" \
         "$base_url/4fach/vorgaben.php?fragment=cockpit"; then
         printf 'HTTP smoke: cockpit fragment could not be fetched\n' >&2
@@ -606,6 +607,10 @@ assert_session_bar() {
     expected_code=$2
     expected_function=$3
     expected_role=$4
+    # Der Cockpit-Ausschnitt wird eigens geholt; dafuer braucht er den
+    # Keksbehaelter der Sitzung, um die es gerade geht. Ohne Angabe ist es
+    # der laufende.
+    session_jar=${5:-$cookie_jar}
     expected_function_label=$expected_function
     expected_role_visible=true
     if [ "$expected_function" = 'A/W' ] && [ "$expected_role" = 'Fernmelder' ]; then
@@ -628,7 +633,7 @@ assert_session_bar() {
         done
     fi
 
-    fetch_cockpit_fragment
+    fetch_cockpit_fragment "$session_jar"
     bar_count=$(grep -o 'data-estab-session-bar' "$cockpit_body" | wc -l | tr -d ' ')
     logout_count=$(grep -o 'data-estab-logout-form' "$cockpit_body" | wc -l | tr -d ' ')
     if [ "$bar_count" != 1 ] || [ "$logout_count" != 1 ]; then
@@ -3772,8 +3777,13 @@ if grep -Eq 'Fatal error|Uncaught (Error|TypeError)|Warning:' "$body"; then
     exit 1
 fi
 submit_open_conversation_note 303
+# Die Erstellungsevidenz ist hashverkettet und unveraenderlich; sie darf
+# deshalb nichts behaupten, was der Laufweg nicht vorsieht. Eine
+# Gespraechsnotiz endet bei der Sichtung -- es folgt weder eine Disposition
+# durch den LdF noch eine Befoerderung durch die Fernmelder. Die beiden
+# Merkmale sind darum weggefallen und muessen fehlen.
 conversation_evidence_count=$(
-    printf "SELECT COUNT(*) FROM nv_nachrichten n JOIN nv_nachrichten_ereignisse e ON e.message_id = n.\`00_lfd\` AND e.einsatz_id = n.einsatz_id WHERE n.\`12_inhalt\` = '%s' AND n.\`04_richtung\` = 'A' AND n.\`x00_status\` = 4 AND n.\`x01_abschluss\` = 'f' AND n.\`01_zeichen\` = '%s' AND n.\`14_zeichen\` = '%s' AND n.\`14_funktion\` = '%s' AND n.\`02_zeit\` IS NULL AND COALESCE(n.\`02_zeichen\`, '') = '' AND n.\`03_datum\` IS NULL AND COALESCE(n.\`03_zeichen\`, '') = '' AND COALESCE(n.\`15_quitzeichen\`, '') = '' AND n.\`15_quitdatum\` IS NULL AND e.event_type = 'conversation_note_created' AND e.from_status IS NULL AND e.to_status = 4 AND e.actor_code = '%s' AND e.actor_function = '%s' AND JSON_UNQUOTE(JSON_EXTRACT(e.field_snapshot, '$.direction')) = 'A' AND JSON_UNQUOTE(JSON_EXTRACT(e.field_snapshot, '$.object_type')) = 'conversation_note' AND JSON_UNQUOTE(JSON_EXTRACT(e.field_snapshot, '$.author_code')) = '%s' AND JSON_UNQUOTE(JSON_EXTRACT(e.field_snapshot, '$.review_required')) = 'true' AND JSON_UNQUOTE(JSON_EXTRACT(e.field_snapshot, '$.ldf_disposition_required')) = 'true' AND JSON_UNQUOTE(JSON_EXTRACT(e.field_snapshot, '$.transport_evidence_required')) = 'true';\n" \
+    printf "SELECT COUNT(*) FROM nv_nachrichten n JOIN nv_nachrichten_ereignisse e ON e.message_id = n.\`00_lfd\` AND e.einsatz_id = n.einsatz_id WHERE n.\`12_inhalt\` = '%s' AND n.\`04_richtung\` = 'A' AND n.\`x00_status\` = 4 AND n.\`x01_abschluss\` = 'f' AND n.\`01_zeichen\` = '%s' AND n.\`14_zeichen\` = '%s' AND n.\`14_funktion\` = '%s' AND n.\`02_zeit\` IS NULL AND COALESCE(n.\`02_zeichen\`, '') = '' AND n.\`03_datum\` IS NULL AND COALESCE(n.\`03_zeichen\`, '') = '' AND COALESCE(n.\`15_quitzeichen\`, '') = '' AND n.\`15_quitdatum\` IS NULL AND e.event_type = 'conversation_note_created' AND e.from_status IS NULL AND e.to_status = 4 AND e.actor_code = '%s' AND e.actor_function = '%s' AND JSON_UNQUOTE(JSON_EXTRACT(e.field_snapshot, '$.direction')) = 'A' AND JSON_UNQUOTE(JSON_EXTRACT(e.field_snapshot, '$.object_type')) = 'conversation_note' AND JSON_UNQUOTE(JSON_EXTRACT(e.field_snapshot, '$.author_code')) = '%s' AND JSON_UNQUOTE(JSON_EXTRACT(e.field_snapshot, '$.review_required')) = 'true' AND JSON_EXTRACT(e.field_snapshot, '$.ldf_disposition_required') IS NULL AND JSON_EXTRACT(e.field_snapshot, '$.transport_evidence_required') IS NULL;\n" \
         "$vordruck_marker" "$test_code" "$test_code" "$test_function" \
         "$test_code" "$test_function" "$test_code" | db_sql
 )
@@ -4086,19 +4096,23 @@ assert_body 'Die Nachweisung ist nur für eine aktive LdF- oder Fernmelder-Funkt
 assert_body 'role="alert"'
 assert_body 'data-estab-error-recovery'
 assert_body '>Zur eStab-Übersicht</a>'
-assert_body_absent 'data-estab-nav-key="tracking"'
+# Das Menue zeigt angemeldet die ganze Karte, auch den abgewiesenen Bereich:
+# Der Riegel sitzt an der Tuer und nicht im Verzeichnis. Fortbleiben muss der
+# Inhalt der Nachweisung.
+assert_body 'data-estab-nav-key="tracking"'
 assert_body_absent 'Nachweisung Eingang / Ausgang'
 assert_session_bar "$test_name" "$test_code" "$test_function" "$test_role"
-assert_status 403 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+# Die Meldungsuebersicht steht seit der Entscheidung des Betreibers jeder
+# Funktion offen: Wer im Stab arbeitet, muss wissen, was laeuft. Geoeffnet ist
+# nur das Lesen -- verlangt bleibt ein angetretener Dienst im aktiven Einsatz,
+# und geschrieben wird hier nichts.
+assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     "$base_url/4fueltg/ue_ltg.php"
 assert_header_fixed 'Content-Type: text/html; charset=UTF-8'
 assert_header_fixed 'Cache-Control: private, no-store, max-age=0'
-assert_body 'data-estab-error-page'
-assert_body 'data-estab-error-context="message-overview"'
-assert_body 'Keine Berechtigung für die Meldungsübersicht'
-assert_body 'Die Meldungsübersicht ist der aktiven Lage/Dokumentation vorbehalten.'
-assert_body_absent 'data-estab-nav-key="message-overview"'
-assert_body_absent "$workflow_marker"
+assert_body_absent 'data-estab-error-page'
+assert_body 'data-estab-tabelle="meldungen"'
+assert_body_absent 'value="save_entry"'
 assert_session_bar "$test_name" "$test_code" "$test_function" "$test_role"
 assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     "$base_url/stabetb/etb.php"
@@ -4122,7 +4136,6 @@ assert_session_bar "$test_name" "$test_code" "$test_function" "$test_role"
 assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     "$base_url/stabinfo/l_index.php"
 assert_body 'Info-Bereiche'
-assert_body 'estab-session-bar-compact'
 assert_session_bar "$test_name" "$test_code" "$test_function" "$test_role"
 
 assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
@@ -4137,7 +4150,6 @@ assert_session_bar "$test_name" "$test_code" "$test_function" "$test_role"
 
 assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     "$base_url/4fach/vorgaben.php"
-assert_body 'estab-session-bar-compact'
 assert_body 'data-estab-sidebar-status'
 assert_body 'data-estab-sidebar-refresh'
 assert_body 'data-estab-sound-toggle'
@@ -4160,12 +4172,16 @@ case "$test_role:$test_function" in
 esac
 assert_body \
     "src=\"$expected_app_root/4fach/audio/$expected_sidebar_sound\""
+# Die Arbeitsschritte stehen in ihrem eigenen Ausschnitt, links unter den
+# Zielen -- nicht mehr im Cockpit.
+assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+    "$base_url/4fach/vorgaben.php?fragment=aktionen"
 assert_body 'data-estab-workflow-key="stab_schreiben"'
 assert_body 'data-estab-workflow-key="stab_lesen"'
 assert_body 'data-estab-workflow-key="m2_benutzer"'
 assert_body_absent 'data-estab-workflow-key="fm_eingang"'
 assert_session_bar "$test_name" "$test_code" "$test_function" "$test_role"
-older_logout_csrf=$(csrf_from_body)
+older_logout_csrf=$(csrf_from_cockpit "$cookie_jar")
 assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     "$base_url/4fach/vorgaben.php?fragment=status"
 assert_body 'data-estab-sidebar-status'
@@ -4290,8 +4306,8 @@ assert_status 200 --location --cookie "$newer_cookie_jar" --cookie-jar "$newer_c
 assert_status 200 \
     --cookie "$newer_cookie_jar" --cookie-jar "$newer_cookie_jar" \
     "$base_url/4fach/vordrucke.php"
-assert_session_bar "$test_name" "$test_code" "$test_function" "$test_role"
-newer_operational_csrf=$(csrf_from_body)
+assert_session_bar "$test_name" "$test_code" "$test_function" "$test_role" "$newer_cookie_jar"
+newer_operational_csrf=$(csrf_from_cockpit "$newer_cookie_jar")
 newer_authenticated_session_id=$(session_cookie_from_jar "$newer_cookie_jar")
 if [ -z "$newer_authenticated_session_id" ]; then
     printf 'HTTP smoke: newer authenticated session cookie missing\n' >&2
@@ -4310,7 +4326,7 @@ if ! grep -Eiq '^Location: .*4fach/index[.]php[[:space:]]*$' "$headers"; then
 fi
 assert_status 303 --cookie "$cookie_jar" "$base_url/4fach/vordrucke.php"
 assert_status 200 --cookie "$newer_cookie_jar" "$base_url/4fach/vordrucke.php"
-assert_session_bar "$test_name" "$test_code" "$test_function" "$test_role"
+assert_session_bar "$test_name" "$test_code" "$test_function" "$test_role" "$newer_cookie_jar"
 if [ "$(account_assignment "$test_code")" != "$(printf '%s\t%s\t1' "$test_function" "$test_role")" ]; then
     printf 'HTTP smoke: stale-session logout deactivated the newer login\n' >&2
     exit 1
@@ -4349,8 +4365,8 @@ assert_status 200 --location --cookie "$current_cookie_jar" --cookie-jar "$curre
 assert_status 200 \
     --cookie "$current_cookie_jar" --cookie-jar "$current_cookie_jar" \
     "$base_url/4fach/vordrucke.php"
-assert_session_bar "$test_name" "$test_code" "$test_function" "$test_role"
-current_logout_csrf=$(csrf_from_body)
+assert_session_bar "$test_name" "$test_code" "$test_function" "$test_role" "$current_cookie_jar"
+current_logout_csrf=$(csrf_from_cockpit "$current_cookie_jar")
 current_authenticated_session_id=$(session_cookie_from_jar "$current_cookie_jar")
 if [ -z "$current_authenticated_session_id" ] ||
     [ "$current_authenticated_session_id" = "$newer_authenticated_session_id" ]; then
@@ -4383,19 +4399,19 @@ login_parallel_test_browser() {
     assert_status 200 \
         --cookie "$parallel_cookie_jar" --cookie-jar "$parallel_cookie_jar" \
         "$base_url/4fach/vordrucke.php"
-    assert_session_bar "$test_name" "$test_code" "$test_function" "$test_role"
+    assert_session_bar "$test_name" "$test_code" "$test_function" "$test_role" "$parallel_cookie_jar"
 }
 
 # Keep three independently stale PHP sessions so each denial path is exercised
 # before its local workflow state is invalidated by the authoritative SID check.
 redirect_cookie_jar=$work_dir/redirect-cookies.txt
 login_parallel_test_browser "$redirect_cookie_jar"
-redirect_operational_csrf=$(csrf_from_body)
+redirect_operational_csrf=$(csrf_from_cockpit "$redirect_cookie_jar")
 redirect_session_id=$(session_cookie_from_jar "$redirect_cookie_jar")
 
 final_current_cookie_jar=$work_dir/final-current-cookies.txt
 login_parallel_test_browser "$final_current_cookie_jar"
-final_current_logout_csrf=$(csrf_from_body)
+final_current_logout_csrf=$(csrf_from_cockpit "$final_current_cookie_jar")
 final_current_session_id=$(session_cookie_from_jar "$final_current_cookie_jar")
 if [ -z "$redirect_session_id" ] || [ -z "$final_current_session_id" ] ||
     [ "$redirect_session_id" = "$final_current_session_id" ]; then
@@ -4485,7 +4501,7 @@ assert_status 303 --cookie "$newer_cookie_jar" --cookie-jar "$newer_cookie_jar" 
     "$base_url/4fach/vordrucke.php"
 assert_status 200 --cookie "$current_cookie_jar" --cookie-jar "$current_cookie_jar" \
     "$base_url/4fach/vordrucke.php"
-assert_session_bar "$test_name" "$test_code" "$test_function" "$test_role"
+assert_session_bar "$test_name" "$test_code" "$test_function" "$test_role" "$current_cookie_jar"
 if [ "$(account_assignment "$test_code")" != "$(printf '%s\t%s\t1' "$test_function" "$test_role")" ]; then
     printf 'HTTP smoke: stale protected request deactivated the current login\n' >&2
     exit 1
@@ -4600,11 +4616,12 @@ if [ -n "${ESTAB_TEST_ADMIN_USER:-}" ] && [ -n "$admin_password" ]; then
     assert_body 'data-estab-admin-card="system-status"'
     assert_body '<h1>Administration</h1>'
     assert_body 'Einsatzexport'
-    assert_body 'data-estab-public-bar'
+    # Die Verwaltungsseite steht in derselben Huelle wie alles andere. Eine
+    # Sitzungsleiste hat sie nicht: Der Administrationszugang ist kein
+    # eStab-Funktionskonto, und die Anmeldung liegt bei HTTP Basic.
+    assert_body 'data-estab-shell-menu'
     assert_body 'data-estab-navigation'
-    assert_body 'Administrationszugang'
-    assert_body "data-estab-admin-user=\"$ESTAB_TEST_ADMIN_USER\""
-    assert_body 'Kein eStab-Funktionskonto angemeldet'
+    assert_body 'Technischer Administrationszugang'
     assert_body 'data-estab-nav-key="administration" aria-current="page"'
     assert_body_absent 'data-estab-session-bar'
     assert_body_absent 'Administrative Maßnahmen</th>'
@@ -4725,7 +4742,7 @@ if [ -n "${ESTAB_TEST_ADMIN_USER:-}" ] && [ -n "$admin_password" ]; then
     assert_status 200 \
         --cookie "$access_shift_cookie" --cookie-jar "$access_shift_cookie" \
         "$base_url/4fach/vordrucke.php"
-    assert_session_bar "$idle_account_name" "$idle_account_code" S3 Stab
+    assert_session_bar "$idle_account_name" "$idle_account_code" S3 Stab "$access_shift_cookie"
     access_memberships_before=$(printf '%s\n' \
         "SELECT COUNT(*) FROM nv_zugangsschicht_mitglieder WHERE BINARY benutzer_kuerzel = BINARY '${idle_account_code}' AND entfernt_am IS NULL;" |
         db_sql | tr -d '\r\n')
@@ -4865,7 +4882,7 @@ if [ -n "${ESTAB_TEST_ADMIN_USER:-}" ] && [ -n "$admin_password" ]; then
     assert_status 200 \
         --cookie "$access_shift_cookie" --cookie-jar "$access_shift_cookie" \
         "$base_url/4fach/vordrucke.php"
-    assert_session_bar "$idle_account_name" "$idle_account_code" S3 Stab
+    assert_session_bar "$idle_account_name" "$idle_account_code" S3 Stab "$access_shift_cookie"
 
     # Disabling the account's only active group revokes the running session.
     # Operational records are untouched; the group is solely an access gate.
@@ -4966,8 +4983,11 @@ if [ -n "${ESTAB_TEST_ADMIN_USER:-}" ] && [ -n "$admin_password" ]; then
     assert_body 'Anhangsspeicher'
     assert_body 'Vordruckspeicher'
     assert_body 'Einsatzexport'
-    assert_body 'data-estab-public-bar'
-    assert_body "data-estab-admin-user=\"$ESTAB_TEST_ADMIN_USER\""
+    # Die Verwaltungsseite steht in derselben Huelle wie alles andere. Eine
+    # Sitzungsleiste hat sie nicht: Der Administrationszugang ist kein
+    # eStab-Funktionskonto, und die Anmeldung liegt bei HTTP Basic.
+    assert_body 'data-estab-shell-menu'
+    assert_body 'Technischer Administrationszugang'
     assert_body_absent 'Prüfung erforderlich'
 
     readiness_probe_state=$(printf '%s\n' \
