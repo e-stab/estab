@@ -186,7 +186,10 @@ try {
             . ' WHERE plan.`einsatz_id` = ?'
             . " AND plan.`status` = 'AKTIV'"
             . " AND route.`medium` = 'Fu'"
-            . " AND route.`rufname` = 'E2E Gegenstelle'",
+            // Migration 124 hat `rufname` in `erreichbarkeit` umbenannt: ein
+            // Plan traegt nicht mehr nur Funk, und eine Rufnummer ist kein
+            // Rufname. Die Abfrage liess sich seitdem nicht mehr vorbereiten.
+            . " AND route.`erreichbarkeit` = 'E2E Gegenstelle'",
         (string) $incidentId
     );
     estab_e2e_assert($routeCount === 1, 'the active S6 route is missing');

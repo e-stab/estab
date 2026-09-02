@@ -358,7 +358,7 @@ $createLegacyTelecomDraft = static function (
             $insertEntry = $connection->prepare(
                 'INSERT INTO `nv_fernmeldeplan_eintraege`'
                     . ' (`fernmeldeplan_id`, `sortierung`, `betriebsstelle`,'
-                    . ' `rufname`, `medium`, `kanal`, `bandlage`,'
+                    . ' `erreichbarkeit`, `medium`, `kanal`, `bandlage`,'
                     . ' `verkehrsform`, `besondere_vermerke`, `bemerkungen`)'
                     . " VALUES (?, 1, ?, ?, 'Fu', 'TMO 401', 'G/U',"
                     . " 'Gegenverkehr', '', '')"
@@ -2136,9 +2136,27 @@ try {
         $planId,
         $s6Identity,
         [
+            /*
+             * Die Vokabeln dieses Vordrucks haben sich zweimal geaendert,
+             * und beide Male hat diese Pruefung es nicht mitbekommen -- sie
+             * kam auf der CI nie so weit, weil der Auftrag vorher an einer
+             * anderen Stelle abbrach.
+             *
+             * Migration 124: `rufname` heisst `erreichbarkeit`. Ein Plan
+             * traegt nicht mehr nur Funk, und eine Rufnummer ist kein
+             * Rufname.
+             *
+             * Und der Weg nennt seine WEGART, nicht mehr ein blosses Mittel:
+             * "Fu" allein gibt es nicht mehr, seit Analog- und Digitalfunk
+             * getrennt sind. Analogfunk verlangt dann auch ein Band.
+             *
+             * Was eine Wegart nicht besitzt, wird geleert statt behalten.
+             * Der Melderweg hier fuehrt weder Kanal noch Bandlage -- die
+             * Angaben stehen nur noch da, um genau das zu belegen.
+             */
             'betriebsstelle' => 'Gegenstelle Integration',
-            'rufname' => 'Integration 01',
-            'medium' => 'Me',
+            'erreichbarkeit' => 'Integration 01',
+            'wegart' => 'Me',
             'kanal' => 'persönlich',
             'bandlage' => 'entfällt',
             'verkehrsform' => 'Melderbeförderung',
@@ -2153,8 +2171,9 @@ try {
         $s6Identity,
         [
             'betriebsstelle' => 'Funk-Gegenstelle Integration',
-            'rufname' => 'Integration Funk 02',
-            'medium' => 'Fu',
+            'erreichbarkeit' => 'Integration Funk 02',
+            'wegart' => 'Fu:ANALOG',
+            'band' => '2m',
             'kanal' => 'TMO 402',
             'bandlage' => 'G/U',
             'verkehrsform' => 'Gegenverkehr',
@@ -2444,8 +2463,8 @@ try {
         $s6Identity,
         [
             'betriebsstelle' => 'Gegenstelle LOOSE',
-            'rufname' => 'Integration LOOSE 01',
-            'medium' => 'Me',
+            'erreichbarkeit' => 'Integration LOOSE 01',
+            'wegart' => 'Me',
             'kanal' => 'persönlich',
             'bandlage' => 'entfällt',
             'verkehrsform' => 'Melderbeförderung',
@@ -4729,7 +4748,7 @@ try {
         static function () use ($connection, $routeId): void {
             $statement = $connection->prepare(
                 'UPDATE `nv_fernmeldeplan_eintraege`'
-                . ' SET `rufname` = ? WHERE `fernmeldeplan_eintrag_id` = ?'
+                . ' SET `erreichbarkeit` = ? WHERE `fernmeldeplan_eintrag_id` = ?'
             );
             $changedCallSign = 'Manipuliert';
             try {
@@ -4913,7 +4932,7 @@ try {
         [
             'sortierung',
             'betriebsstelle',
-            'rufname',
+            'erreichbarkeit',
             'medium',
             'kanal',
             'bandlage',
@@ -4933,6 +4952,31 @@ try {
         $entryCopyState,
         $draftAfterClone['eintraege']
     );
+    /*
+     * Die Vermerke werden getrennt geprueft, alles andere unveraendert.
+     *
+     * Die Kopie fuehrt die beiden Vermerkfelder ZUSAMMEN -- absichtlich:
+     * Weder Fb Fue 76 noch PDV 800 kennt zwei davon, der Plan fuehrt kuenftig
+     * eines. Umgeschrieben wird nichts: Die freigegebene Fassung behaelt ihre
+     * beiden Felder, nur die Kopie legt sie zusammen, und mit der naechsten
+     * Version ist die Trennung von selbst verschwunden. Siehe die Begruendung
+     * an der Kopieranweisung in app/dv_operations.php.
+     *
+     * Diese Pruefung verlangte vorher Feld fuer Feld Gleichheit und stammte
+     * damit aus der Zeit vor dieser Entscheidung. Sie haelt jetzt beides
+     * fest: dass die Quelle unberuehrt bleibt UND dass die Kopie genau so
+     * zusammenfuehrt, wie es gemeint ist -- kein Wort geht verloren.
+     */
+    $notesFields = ['besondere_vermerke' => true, 'bemerkungen' => true];
+    $withoutNotes = static fn (array $state): array =>
+        array_diff_key($state, $notesFields);
+    $mergedNotes = static fn (array $state): string => implode(
+        "\n\n",
+        array_values(array_filter([
+            $state['besondere_vermerke'],
+            $state['bemerkungen'],
+        ], static fn (string $value): bool => $value !== ''))
+    );
     $assert(
         estab_dv_telecom_plan_header_audit_state($draftAfterClone)
             === estab_dv_telecom_plan_header_audit_state($sourceAfterClone)
@@ -4941,7 +4985,8 @@ try {
             && min($draftEntryIds) > 0
             && count(array_unique($draftEntryIds)) === 2
             && array_intersect($sourceEntryIds, $draftEntryIds) === []
-            && $draftEntryStates === $sourceEntryStates
+            && array_map($withoutNotes, $draftEntryStates)
+                === array_map($withoutNotes, $sourceEntryStates)
             && $sourceEntryStates[0]['besondere_vermerke']
                 === 'Identität am Ziel feststellen'
             && $sourceEntryStates[0]['bemerkungen']
@@ -4949,7 +4994,13 @@ try {
             && $sourceEntryStates[1]['besondere_vermerke']
                 === 'Priorisierte Führungsverbindung'
             && $sourceEntryStates[1]['bemerkungen']
-                === 'Rückfallebene über Fernsprecher',
+                === 'Rückfallebene über Fernsprecher'
+            && $draftEntryStates[0]['besondere_vermerke'] === ''
+            && $draftEntryStates[1]['besondere_vermerke'] === ''
+            && $draftEntryStates[0]['bemerkungen']
+                === $mergedNotes($sourceEntryStates[0])
+            && $draftEntryStates[1]['bemerkungen']
+                === $mergedNotes($sourceEntryStates[1]),
         'clone changed complete header or route fields, optional notes, or IDs'
     );
     /*
@@ -5134,8 +5185,9 @@ try {
                 $s6Identity,
                 [
                     'betriebsstelle' => 'Veraltete Änderung',
-                    'rufname' => 'Veraltet 01',
-                    'medium' => 'Fu',
+                    'erreichbarkeit' => 'Veraltet 01',
+                    'wegart' => 'Fu:ANALOG',
+                    'band' => '2m',
                     'kanal' => '99',
                     'bandlage' => 'O/U',
                     'verkehrsform' => 'Gegenverkehr',
@@ -5167,8 +5219,9 @@ try {
         $s6Identity,
         [
             'betriebsstelle' => 'Gegenstelle Folgeversion',
-            'rufname' => 'Integration 02',
-            'medium' => 'Fu',
+            'erreichbarkeit' => 'Integration 02',
+            'wegart' => 'Fu:ANALOG',
+            'band' => '2m',
             'kanal' => 'TMO 404',
             'bandlage' => 'G/U',
             'verkehrsform' => 'Gegenverkehr',
@@ -5194,8 +5247,8 @@ try {
         $s6Identity,
         [
             'betriebsstelle' => 'Temporärer Fernsprecherweg',
-            'rufname' => 'Integration Telefon',
-            'medium' => 'Fe',
+            'erreichbarkeit' => 'Integration Telefon',
+            'wegart' => 'Fe',
             'kanal' => 'Browser-Manipulation',
             'bandlage' => 'Browser-Manipulation',
             'verkehrsform' => 'Fernsprechverbindung',
@@ -5217,7 +5270,16 @@ try {
             '|',
             '|',
             $temporaryRouteId
-        ) === 'Fe|||Fernsprechverbindung',
+            /*
+             * 'Fe|||' -- auch die Verkehrsform faellt weg.
+             *
+             * Der Fernsprecher besitzt genau ein Fachfeld, die Anschlussart.
+             * Was eine Wegart nicht besitzt, wird geleert statt behalten, und
+             * das gilt seit der Trennung der Wegarten auch fuer die
+             * Verkehrsform -- sie gehoert dem Funk. Frueher hing sie am
+             * Mittel und ueberlebte hier; diese Erwartung ist von damals.
+             */
+        ) === 'Fe|||',
         'medium-inapplicable channel or band values survived server validation'
     );
     $currentDraft = $telecomPlanById(
@@ -5234,8 +5296,8 @@ try {
         $s6Identity,
         [
             'betriebsstelle' => 'Temporärer Fernsprecherweg mit Langtext',
-            'rufname' => 'Integration Langtext',
-            'medium' => 'Fe',
+            'erreichbarkeit' => 'Integration Langtext',
+            'wegart' => 'Fe',
             'verkehrsform' => 'Fernsprechverbindung',
             'besondere_vermerke' => $largeUtf8,
             'bemerkungen' => $largeUtf8,
@@ -5396,7 +5458,7 @@ try {
             $revisionPlanId,
             $planId,
             $routeId
-        ) === 'ERSETZT|AKTIV|Gegenstelle Integration|Me|||Melderbeförderung',
+        ) === 'ERSETZT|AKTIV|Gegenstelle Integration|Me|||',
         'publishing the edited successor changed its immutable source version'
     );
     $expect(
@@ -5417,7 +5479,7 @@ try {
     );
     $assert(
         (int) $resolvedSuccessor['version'] === $expectedRevisionVersion
-            && $resolvedSuccessor['rufname'] === 'Integration 02',
+            && $resolvedSuccessor['erreichbarkeit'] === 'Integration 02',
         'edited successor route was not selected from the active revision'
     );
 
@@ -5552,7 +5614,7 @@ try {
         mysqli_sql_exception::class,
         static function () use ($connection, $staleLegacyEntryId): void {
             $statement = $connection->prepare(
-                'UPDATE `nv_fernmeldeplan_eintraege` SET `rufname` = ?'
+                'UPDATE `nv_fernmeldeplan_eintraege` SET `erreichbarkeit` = ?'
                     . ' WHERE `fernmeldeplan_eintrag_id` = ?'
             );
             try {

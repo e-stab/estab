@@ -615,7 +615,33 @@ $assert(
             $integration,
             'array_intersect($sourceEntryIds, $draftEntryIds) === []'
         )
-        && str_contains($integration, '$draftEntryStates === $sourceEntryStates')
+        /*
+         * Verglichen wird alles ausser den Vermerken -- und die Vermerke
+         * werden eigens geprueft.
+         *
+         * Hier stand der schlichte Vergleich beider Zustaende. Der gilt nicht
+         * mehr, seit die Kopie die zwei Vermerkfelder bewusst zusammenfuehrt;
+         * die Begruendung steht an der Kopieranweisung in app/dv_operations.php.
+         * Die Integrationspruefung belegt jetzt beides: Gleichheit aller
+         * uebrigen Felder UND die gemeinte Zusammenfuehrung. Das ist mehr
+         * Nachweis als vorher, nicht weniger.
+         */
+        && str_contains(
+            $integration,
+            'array_map($withoutNotes, $draftEntryStates)'
+        )
+        && str_contains(
+            $integration,
+            '=== array_map($withoutNotes, $sourceEntryStates)'
+        )
+        && str_contains(
+            $integration,
+            '=== $mergedNotes($sourceEntryStates[0])'
+        )
+        && str_contains(
+            $integration,
+            '=== $mergedNotes($sourceEntryStates[1])'
+        )
         && str_contains(
             $integration,
             'estab_dv_telecom_plan_header_audit_state($draftAfterClone)'

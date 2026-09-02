@@ -2053,8 +2053,9 @@ assert_status 303 'add S6 route through Führungsstellen HTTP controller' \
     --data-urlencode "fernmeldeplan_id=$http_plan_id" \
     --data-urlencode "plan_revision=$s6_plan_revision" \
     --data-urlencode 'betriebsstelle=HTTP Betriebsstelle' \
-    --data-urlencode 'rufname=HTTP Rufname' \
-    --data-urlencode 'medium=Fu' \
+    --data-urlencode 'erreichbarkeit=HTTP Rufname' \
+    --data-urlencode 'wegart=Fu:ANALOG' \
+    --data-urlencode 'band=2m' \
     --data-urlencode 'kanal=HTTP-1' \
     --data-urlencode 'bandlage=G/U' \
     --data-urlencode 'verkehrsform=Gegenverkehr' \
@@ -2088,7 +2089,7 @@ assert_status 303 'activate S6 plan through Führungsstellen HTTP controller' \
 assert_db_equals \
     "AKTIV|${s6_code}|${s6_code}|HTTP Betriebsstelle|HTTP Rufname|Fu|HTTP-1|G/U|Gegenverkehr" \
     'HTTP-created S6 plan persisted route and release' \
-    "SELECT CONCAT(p.\`status\`, '|', p.\`erstellt_von\`, '|', p.\`freigegeben_von\`, '|', e.\`betriebsstelle\`, '|', e.\`rufname\`, '|', e.\`medium\`, '|', e.\`kanal\`, '|', e.\`bandlage\`, '|', e.\`verkehrsform\`) FROM \`nv_fernmeldeplaene\` AS p JOIN \`nv_fernmeldeplan_eintraege\` AS e ON e.\`fernmeldeplan_id\`=p.\`fernmeldeplan_id\` WHERE p.\`fernmeldeplan_id\`=${http_plan_id} AND e.\`fernmeldeplan_eintrag_id\`=${http_plan_entry_id};"
+    "SELECT CONCAT(p.\`status\`, '|', p.\`erstellt_von\`, '|', p.\`freigegeben_von\`, '|', e.\`betriebsstelle\`, '|', $1.\`erreichbarkeit\`, '|', e.\`medium\`, '|', e.\`kanal\`, '|', e.\`bandlage\`, '|', e.\`verkehrsform\`) FROM \`nv_fernmeldeplaene\` AS p JOIN \`nv_fernmeldeplan_eintraege\` AS e ON e.\`fernmeldeplan_id\`=p.\`fernmeldeplan_id\` WHERE p.\`fernmeldeplan_id\`=${http_plan_id} AND e.\`fernmeldeplan_eintrag_id\`=${http_plan_entry_id};"
 assert_db_equals '3|3|3' 'HTTP-created S6 plan immutable audit trail' \
     "SELECT CONCAT(COUNT(*), '|', COUNT(DISTINCT \`aktion\`), '|', SUM(BINARY \`akteur_kuerzel\`=BINARY '${s6_code}')) FROM \`nv_betriebsereignisse\` WHERE \`einsatz_id\`=${active_incident_id} AND \`objekttyp\`='FERNMELDEPLAN' AND \`objekt_id\`=${http_plan_id} AND \`aktion\` IN ('plan_created','plan_entry_added','plan_activated');"
 
@@ -2134,7 +2135,7 @@ fi
 assert_db_equals \
     "AKTIV|ENTWURF|HTTP Betriebsstelle|HTTP Rufname|Fu|HTTP-1|G/U|Gegenverkehr" \
     'active S6 plan cloned without mutating its source' \
-    "SELECT CONCAT(source_plan.\`status\`, '|', draft.\`status\`, '|', entry.\`betriebsstelle\`, '|', entry.\`rufname\`, '|', entry.\`medium\`, '|', entry.\`kanal\`, '|', entry.\`bandlage\`, '|', entry.\`verkehrsform\`) FROM \`nv_fernmeldeplaene\` AS source_plan JOIN \`nv_fernmeldeplaene\` AS draft ON draft.\`fernmeldeplan_id\`=${http_revision_plan_id} JOIN \`nv_fernmeldeplan_eintraege\` AS entry ON entry.\`fernmeldeplan_id\`=draft.\`fernmeldeplan_id\` WHERE source_plan.\`fernmeldeplan_id\`=${http_plan_id} AND entry.\`fernmeldeplan_eintrag_id\`=${http_revision_entry_id};"
+    "SELECT CONCAT(source_plan.\`status\`, '|', draft.\`status\`, '|', entry.\`betriebsstelle\`, '|', $1.\`erreichbarkeit\`, '|', entry.\`medium\`, '|', entry.\`kanal\`, '|', entry.\`bandlage\`, '|', entry.\`verkehrsform\`) FROM \`nv_fernmeldeplaene\` AS source_plan JOIN \`nv_fernmeldeplaene\` AS draft ON draft.\`fernmeldeplan_id\`=${http_revision_plan_id} JOIN \`nv_fernmeldeplan_eintraege\` AS entry ON entry.\`fernmeldeplan_id\`=draft.\`fernmeldeplan_id\` WHERE source_plan.\`fernmeldeplan_id\`=${http_plan_id} AND entry.\`fernmeldeplan_eintrag_id\`=${http_revision_entry_id};"
 
 assert_status 200 'load prefilled S6 draft' \
     --cookie "$s6_cookies" --cookie-jar "$s6_cookies" \
@@ -2202,8 +2203,8 @@ assert_status 303 'update cloned S6 route with medium normalization' \
     --data-urlencode "fernmeldeplan_eintrag_id=$http_revision_entry_id" \
     --data-urlencode "plan_revision=$s6_stale_revision" \
     --data-urlencode 'betriebsstelle=HTTP Melderziel' \
-    --data-urlencode 'rufname=HTTP Melderrufname' \
-    --data-urlencode 'medium=Me' \
+    --data-urlencode 'erreichbarkeit=HTTP Melderrufname' \
+    --data-urlencode 'wegart=Me' \
     --data-urlencode 'kanal=Browser-Manipulation-Kanal' \
     --data-urlencode 'bandlage=Browser-Manipulation-Band' \
     --data-urlencode 'verkehrsform=Melderbeförderung' \

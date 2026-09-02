@@ -940,6 +940,9 @@ try {
             'access_shift_memberships' => 0,
             's6_plans' => 0,
             's6_plan_entries' => 0,
+            // Die Gegenstellen haengen seit Migration 126 am Weg und werden
+            // seitdem mit ausgefuehrt. Der Schluessel fehlte hier noch.
+            's6_plan_counterparts' => 0,
             'courier' => 0,
             'operations_evidence' => 0,
         ],

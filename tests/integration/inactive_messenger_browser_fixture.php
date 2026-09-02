@@ -159,11 +159,12 @@ function inactive_messenger_fixture_active_me_route(
         $identity,
         [
             'betriebsstelle' => 'Browser-Melderweg',
-            'rufname' => 'Browser-Melder',
-            'medium' => 'Me',
-            'kanal' => '',
-            'bandlage' => '',
-            'verkehrsform' => 'Persönliche Beförderung',
+            // Migration 124: aus `rufname` wurde `erreichbarkeit`; die
+            // Wegart trat an die Stelle des Mittels. Der Melderweg besitzt
+            // keine Funkfelder -- Kanal, Bandlage und Verkehrsform gehoeren
+            // ihm nicht und wuerden ohnehin geleert.
+            'erreichbarkeit' => 'Browser-Melder',
+            'wegart' => 'Me',
             'besondere_vermerke' => '',
             'bemerkungen' => $marker,
         ],

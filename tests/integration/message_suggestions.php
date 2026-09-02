@@ -434,8 +434,13 @@ try {
         $identities['s6'],
         [
             'betriebsstelle' => 'Mapping Einheit',
-            'rufname' => 'Mapping Rufname',
-            'medium' => 'Fu',
+            // Migration 124 hat `rufname` in `erreichbarkeit` umbenannt, und
+            // der Weg traegt seit der Trennung von Analog- und Digitalfunk
+            // eine Wegart statt eines blossen Mittels. Analogfunk verlangt
+            // zusaetzlich ein Band.
+            'erreichbarkeit' => 'Mapping Rufname',
+            'wegart' => 'Fu:ANALOG',
+            'band' => '2m',
             'kanal' => 'Mapping-1',
             'bandlage' => 'G/U',
             'verkehrsform' => 'Gegenverkehr',

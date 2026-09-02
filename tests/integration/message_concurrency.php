@@ -653,7 +653,7 @@ try {
         $connection,
         'INSERT INTO `nv_fernmeldeplan_eintraege`'
             . ' (`fernmeldeplan_id`, `sortierung`, `betriebsstelle`,'
-            . ' `rufname`, `medium`, `kanal`, `bandlage`, `verkehrsform`,'
+            . ' `erreichbarkeit`, `medium`, `kanal`, `bandlage`, `verkehrsform`,'
             . ' `besondere_vermerke`, `bemerkungen`)'
             . " VALUES (?, 1, 'CI Betriebsstelle', 'Florian 1', 'Fu',"
             . " 'Kanal 404', 'G/U', 'Gegenverkehr', '', '')",
@@ -669,7 +669,7 @@ try {
         $connection,
         'INSERT INTO `nv_fernmeldeplan_eintraege`'
             . ' (`fernmeldeplan_id`, `sortierung`, `betriebsstelle`,'
-            . ' `rufname`, `medium`, `kanal`, `bandlage`, `verkehrsform`,'
+            . ' `erreichbarkeit`, `medium`, `kanal`, `bandlage`, `verkehrsform`,'
             . ' `besondere_vermerke`, `bemerkungen`)'
             . " VALUES (?, 2, 'CI Ersatzstelle', 'Florian 2', 'Fu',"
             . " 'Kanal 505', 'O/U', 'Wechselverkehr', '', 'Redisposition B')",

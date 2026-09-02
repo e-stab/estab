@@ -160,7 +160,9 @@ try {
         string $origin,
         string $station,
         string $callSign,
-        string $medium,
+        // Die Wegart, nicht mehr das blosse Mittel: "Fu" allein gibt es seit
+        // der Trennung von Analog- und Digitalfunk nicht mehr.
+        string $routeKind,
         string $channel,
         string $band,
         string $traffic,
@@ -243,8 +245,12 @@ try {
             $identity,
             [
                 'betriebsstelle' => $station,
-                'rufname' => $callSign,
-                'medium' => $medium,
+                // Migration 124: aus `rufname` wurde `erreichbarkeit`.
+                'erreichbarkeit' => $callSign,
+                'wegart' => $routeKind,
+                // Analogfunk verlangt ein Band; jede andere Wegart besitzt
+                // das Feld nicht und laesst den Wert fallen.
+                'band' => $routeKind === 'Fu:ANALOG' ? '2m' : '',
                 'kanal' => $channel,
                 'bandlage' => $band,
                 'verkehrsform' => $traffic,
@@ -294,7 +300,7 @@ try {
             'CI-AKTIV-' . $token,
             'CI Betriebsstelle',
             'CI Rufname',
-            'Fu',
+            'Fu:ANALOG',
             'Kanal 404',
             'G/U',
             'Gegenverkehr',
@@ -312,7 +318,7 @@ try {
             'CI-AKTIV-B-' . $token,
             'CI Ersatz-Betriebsstelle',
             'CI Ersatz-Rufname',
-            'Fu',
+            'Fu:ANALOG',
             'Kanal 505',
             'O/U',
             'Wechselverkehr',
