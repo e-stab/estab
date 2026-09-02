@@ -1170,7 +1170,7 @@ class BrowserAcceptance:
             """
             document.readyState === "complete" &&
             Boolean(document.querySelector("[data-estab-handbook]")) &&
-            document.querySelectorAll("[data-estab-handbook-section]").length === 19
+            document.querySelectorAll("[data-estab-handbook-section]").length === 21
             """,
             "öffentliches Web-Handbuch wurde nicht vollständig geladen",
         )
@@ -1186,7 +1186,7 @@ class BrowserAcceptance:
                         rect.width > 0 && rect.height > 0;
                 };
                 const navigation = document.querySelector(
-                    "aside[data-estab-public-bar] [data-estab-navigation]"
+                    "[data-estab-shell-menu] [data-estab-navigation]"
                 );
                 const toc = document.querySelector(".estab-handbook-toc");
                 const search = document.querySelector("[data-estab-handbook-search]");
@@ -1196,8 +1196,8 @@ class BrowserAcceptance:
                 return {
                     title: document.title,
                     h1: document.querySelectorAll("h1").length,
-                    publicBars: document.querySelectorAll(
-                        "aside[data-estab-public-bar]"
+                    shellMenus: document.querySelectorAll(
+                        "[data-estab-shell-menu]"
                     ).length,
                     sessionBars: document.querySelectorAll(
                         "aside[data-estab-session-bar]"
@@ -1230,7 +1230,7 @@ class BrowserAcceptance:
             isinstance(desktop, dict)
             and desktop.get("title") == "eStab Handbuch"
             and desktop.get("h1") == 1
-            and desktop.get("publicBars") == 1
+            and desktop.get("shellMenus") == 1
             and desktop.get("sessionBars") == 0
             and desktop.get("active") == ["handbook"]
             and desktop.get("sections") == 21
@@ -1248,7 +1248,7 @@ class BrowserAcceptance:
         self.cdp.set_value(
             None,
             "[data-estab-handbook-search]",
-            "Beförderungsweg Absender",
+            "Melder Auftrag",
             "Handbuchsuche",
         )
         search_state = self.cdp.wait_for(
@@ -1265,7 +1265,7 @@ class BrowserAcceptance:
                     "[data-estab-handbook-clear]"
                 );
                 return visible.length > 0 && visible.length < sections.length &&
-                    visible.some(section => section.id === "nachrichtenlauf") &&
+                    visible.some(section => section.id === "melder") &&
                     status && status.textContent.includes("passende") &&
                     clear && !clear.hidden ? {
                         visible: visible.map(section => section.id),
@@ -1278,7 +1278,7 @@ class BrowserAcceptance:
         )
         self._equal(
             search_state.get("query"),
-            "Beförderungsweg Absender",
+            "Melder Auftrag",
             "Suchbegriff in der Handbuch-URL",
         )
         self.cdp.click(
@@ -1290,7 +1290,7 @@ class BrowserAcceptance:
             """
             document.querySelectorAll(
                 "[data-estab-handbook-section]:not([hidden])"
-            ).length === 19 &&
+            ).length === 21 &&
             !new URL(location.href).searchParams.has("q")
             """,
             "gelöschte Handbuchsuche stellt nicht alle Kapitel wieder her",
@@ -1323,7 +1323,7 @@ class BrowserAcceptance:
                 const search = document.querySelector(".estab-handbook-search");
                 const toc = document.querySelector(".estab-handbook-toc");
                 const firstCard = document.querySelector(
-                    ".estab-handbook-role-grid a"
+                    ".estab-handbook-admin-grid a"
                 );
                 const sessionBar = document.querySelector(
                     "body > aside.estab-session-bar"
@@ -1393,8 +1393,8 @@ class BrowserAcceptance:
                         toc.scrollHeight <= toc.clientHeight + 1,
                     cardTouchTarget: cardRect.height >= 44,
                     overflowElements,
-                    roleColumns: getComputedStyle(
-                        document.querySelector(".estab-handbook-role-grid")
+                    cardColumns: getComputedStyle(
+                        document.querySelector(".estab-handbook-admin-grid")
                     ).gridTemplateColumns.split(" ").length
                 };
             })()
@@ -1410,7 +1410,7 @@ class BrowserAcceptance:
             and mobile.get("tocStatic") is True
             and mobile.get("tocScrollFree") is True
             and mobile.get("cardTouchTarget") is True
-            and mobile.get("roleColumns") == 1,
+            and mobile.get("cardColumns") == 1,
             f"Mobiles Handbuch ist nicht vollständig bedienbar: {mobile!r}",
         )
 
@@ -1423,36 +1423,34 @@ class BrowserAcceptance:
             "/stabinfo/index.php",
             "öffentliche BOS-Infosammlung wurde nicht geladen",
         )
+        # Die Dokumentwahl steht seit 5abd596 im Menue der Huelle und nicht
+        # mehr als eigener Rahmen neben dem Inhalt.
         self.cdp.wait_for(
-            _frame_expression(
-                "status",
-                """
-                return target.location.pathname.endsWith(
-                    "/stabinfo/l_index.php"
-                ) && doc.readyState === "complete";
-                """,
-            ),
-            "öffentliche BOS-Sidebar wurde nicht vollständig geladen",
+            """
+            document.readyState === "complete" &&
+            Boolean(document.querySelector("[data-estab-shell-context]")) &&
+            document.querySelectorAll(
+                "[data-estab-bos-document-link]"
+            ).length > 0
+            """,
+            "öffentliche BOS-Dokumentwahl wurde nicht vollständig geladen",
         )
         self._equal(
             self.cdp.evaluate(
-                _visible_count_expression(
-                    "status",
-                    "aside[data-estab-public-bar]"
-                )
+                _visible_count_expression(None, "[data-estab-shell-menu]")
             ),
             1,
-            "öffentliche Shared-Bar in der BOS-Sidebar",
+            "Menuespalte der öffentlichen BOS-Infosammlung",
         )
         self._equal(
             self.cdp.evaluate(
                 _visible_count_expression(
-                    "status",
+                    None,
                     "aside[data-estab-session-bar]"
                 )
             ),
             0,
-            "authentifizierte Bar in der öffentlichen BOS-Sidebar",
+            "authentifizierte Bar in der öffentlichen BOS-Huelle",
         )
         self._equal(
             self.cdp.evaluate(
@@ -2279,7 +2277,7 @@ class BrowserAcceptance:
         labels = self.cdp.evaluate(
             """
             Array.from(document.querySelectorAll(
-                '[data-estab-telecom-entry-form] select[name="medium"] option'
+                '[data-estab-telecom-entry-form] select[name="wegart"] option'
             )).map(option => option.textContent.trim()).filter(Boolean)
             """
         )
@@ -2380,15 +2378,17 @@ class BrowserAcceptance:
                 const routes = Array.from(document.querySelectorAll(
                     '[data-estab-telecom-entry-mode="edit"]'
                 )).map(form => {
-                    const medium = form.elements.medium;
+                    const kind = form.elements.wegart;
                     const technical = [
-                        medium?.selectedOptions[0]?.textContent,
+                        kind?.selectedOptions[0]?.textContent,
                         form.elements.kanal?.value,
                         form.elements.bandlage?.value
                     ].map(normalize).filter(Boolean).join(" · ");
                     return {
                         station: normalize(form.elements.betriebsstelle?.value),
-                        callsign: normalize(form.elements.rufname?.value),
+                        callsign: normalize(
+                            form.elements.erreichbarkeit?.value
+                        ),
                         technical,
                         traffic: normalize(form.elements.verkehrsform?.value),
                         notes: [
@@ -2420,7 +2420,7 @@ class BrowserAcceptance:
                     '[data-estab-telecom-entry-mode="add"]'
                 );
                 const placeholder = addForm?.querySelector(
-                    'select[name="medium"] option[value=""]'
+                    'select[name="wegart"] option[value=""]'
                 );
                 const navigation = document.createElement("nav");
                 navigation.setAttribute("data-estab-navigation", "");
@@ -2452,7 +2452,7 @@ class BrowserAcceptance:
         self._equal(
             pristine_guard_state,
             {"selected": True, "defaultSelected": True, "confirms": 0},
-            "frischer Entwurf ohne falsche Verlustwarnung durch Medien-Platzhalter",
+            "frischer Entwurf ohne falsche Verlustwarnung durch Wegart-Platzhalter",
         )
         inherited_route = self.cdp.evaluate(
             """
@@ -2471,8 +2471,8 @@ class BrowserAcceptance:
                     id: details.id,
                     entryId: details.dataset.estabTelecomEntryId,
                     station: form.elements.betriebsstelle.value,
-                    callsign: form.elements.rufname.value,
-                    medium: form.elements.medium.value,
+                    callsign: form.elements.erreichbarkeit.value,
+                    kind: form.elements.wegart.value,
                     disclosureWidth: marker?.borderLeftWidth,
                     disclosureStyle: marker?.borderLeftStyle
                 } : null;
@@ -2485,7 +2485,7 @@ class BrowserAcceptance:
             and bool(inherited_route.get("entryId"))
             and bool(inherited_route.get("station"))
             and bool(inherited_route.get("callsign"))
-            and bool(inherited_route.get("medium"))
+            and bool(inherited_route.get("kind"))
             and inherited_route.get("disclosureWidth") not in (None, "0px")
             and inherited_route.get("disclosureStyle") == "solid",
             "übernommener Fernmeldeweg oder sichtbare Aufklappmarkierung fehlt.",
@@ -2506,7 +2506,7 @@ class BrowserAcceptance:
                     {inherited_selector_literal}
                 );
                 const input = details?.querySelector(
-                    'input[name="rufname"]'
+                    'input[name="erreichbarkeit"]'
                 );
                 const rect = input?.getBoundingClientRect();
                 return Boolean(details?.open && rect && rect.width > 0 &&
@@ -2519,7 +2519,7 @@ class BrowserAcceptance:
         edited_callsign = "Browser-geprüfter Rufname"
         self.cdp.set_value(
             None,
-            inherited_selector + ' input[name="rufname"]',
+            inherited_selector + ' input[name="erreichbarkeit"]',
             edited_callsign,
             "Rufname des übernommenen Fernmeldewegs",
         )
@@ -2547,7 +2547,7 @@ class BrowserAcceptance:
                     location.hash === {inherited_hash_literal} &&
                     details?.open === true && rect && rect.bottom > 0 &&
                     rect.top < innerHeight &&
-                    details.querySelector('input[name="rufname"]')?.value ===
+                    details.querySelector('input[name="erreichbarkeit"]')?.value ===
                         {edited_callsign_literal} &&
                     details.querySelector(':scope > summary')?.textContent
                         .includes({edited_callsign_literal}) &&
@@ -2563,22 +2563,22 @@ class BrowserAcceptance:
             """
             Array.from(document.querySelectorAll(
                 '[data-estab-telecom-entry-mode="add"] '
-                + 'select[name="medium"] option'
+                + 'select[name="wegart"] option'
             )).map(option => option.textContent.trim()).filter(Boolean)
             """
         )
         self._equal(
             labels,
             [
-                "Medium auswählen",
+                "Wegart auswählen",
                 "Fernsprecher",
-                "Funk",
+                "Funk (analog)",
+                "Funk (digital)",
                 "Melder",
                 "Telefax",
-                "Fernschreiber",
                 "Datenübertragung",
             ],
-            "ausgeschriebene Medien im Fernmeldeplanentwurf",
+            "ausgeschriebene Wegarten im Fernmeldeplanentwurf",
         )
         add_details_selector = (
             'details.estab-telecom-section:has('
@@ -2590,7 +2590,7 @@ class BrowserAcceptance:
             "Formular für einen weiteren Fernmeldeweg sichtbar öffnen",
         )
         add_select = (
-            '[data-estab-telecom-entry-mode="add"] select[name="medium"]'
+            '[data-estab-telecom-entry-mode="add"] select[name="wegart"]'
         )
         self.cdp.wait_for(
             f"""
@@ -2598,7 +2598,7 @@ class BrowserAcceptance:
                 const details = document.querySelector(
                     {json.dumps(add_details_selector)}
                 );
-                const select = details?.querySelector('select[name="medium"]');
+                const select = details?.querySelector('select[name="wegart"]');
                 const rect = select?.getBoundingClientRect();
                 return Boolean(details?.open && rect && rect.width > 0 &&
                     rect.height > 0 && rect.bottom > 0 && rect.top < innerHeight);
@@ -2606,7 +2606,9 @@ class BrowserAcceptance:
             """,
             "Formular für den neuen Fernmeldeweg ist nicht sichtbar",
         )
-        self.cdp.set_value(None, add_select, "Fu", "Medium Funk", select=True)
+        self.cdp.set_value(
+            None, add_select, "Fu:ANALOG", "Wegart Funk (analog)", select=True
+        )
         radio_fields = self.cdp.evaluate(
             """
             (() => {
@@ -2639,7 +2641,9 @@ class BrowserAcceptance:
             },
             "Funk blendet Kanal, Bandlage oder Verkehrsform nicht korrekt ein.",
         )
-        self.cdp.set_value(None, add_select, "Me", "Medium Melder", select=True)
+        self.cdp.set_value(
+            None, add_select, "Me", "Wegart Melder", select=True
+        )
         messenger_fields = self.cdp.evaluate(
             """
             (() => {
@@ -2684,7 +2688,7 @@ class BrowserAcceptance:
                 "Betriebsstelle des neuen Melderwegs",
             ),
             (
-                add_form_selector + ' input[name="rufname"]',
+                add_form_selector + ' input[name="erreichbarkeit"]',
                 messenger_callsign,
                 "Rufname des neuen Melderwegs",
             ),
@@ -2716,9 +2720,9 @@ class BrowserAcceptance:
                     );
                     return form?.elements.betriebsstelle.value ===
                         {messenger_station_literal} &&
-                        form?.elements.rufname.value ===
+                        form?.elements.erreichbarkeit.value ===
                             {messenger_callsign_literal} &&
-                        form?.elements.medium.value === "Me";
+                        form?.elements.wegart.value === "Me";
                 }});
                 return details?.id || "";
             }})()
@@ -2823,7 +2827,7 @@ class BrowserAcceptance:
         resolved_callsign = "Browser-geprüfter Mehrfachentwurf"
         self.cdp.set_value(
             None,
-            inherited_selector + ' input[name="rufname"]',
+            inherited_selector + ' input[name="erreichbarkeit"]',
             resolved_callsign,
             "gleichzeitig geänderter Rufname des Fernmeldewegs",
         )
@@ -2874,7 +2878,7 @@ class BrowserAcceptance:
                     {inherited_selector_literal}
                 );
                 const routeCallsign = route?.querySelector(
-                    'input[name="rufname"]'
+                    'input[name="erreichbarkeit"]'
                 );
                 const headerOrigin = document.querySelector(
                     'form:has(input[name="operation_action"]'
@@ -5775,7 +5779,7 @@ class BrowserAcceptance:
         public_navigation = self.cdp.evaluate(
             """
             (() => {
-                const bar = document.querySelector("aside[data-estab-public-bar]");
+                const bar = document.querySelector("[data-estab-shell-menu]");
                 const navigation = bar &&
                     bar.querySelector("[data-estab-navigation]");
                 const core = navigation
@@ -5812,7 +5816,7 @@ class BrowserAcceptance:
         )
         self._equal(
             public_navigation.get("locked"),
-            7,
+            8,
             "Anzahl anmeldepflichtiger Bereiche in der anonymen Navigation",
         )
         technical_log_label = self.cdp.evaluate(
@@ -6968,42 +6972,52 @@ class BrowserAcceptance:
         )
 
     def _assert_bos_workspace_layout(self, location: str) -> None:
+        """Prove the three shell columns of the BOS collection.
+
+        Die Dokumentwahl stand bis 5abd596 als eigener Rahmen neben dem
+        Inhalt. Sie steht jetzt im Menue der Huelle, und die Seite hat
+        dieselbe Bauart wie jede andere: links das Menue, in der Mitte der
+        Inhalt, rechts das Cockpit. Unter 42rem stehen sie untereinander,
+        jede so hoch wie das Fenster.
+        """
         workspace = self.cdp.evaluate(
             """
             (() => {
                 if (innerWidth <= 672) {
                     scrollTo(0, 0);
                 }
+                const bounds = element => {
+                    if (!element) return null;
+                    const rect = element.getBoundingClientRect();
+                    return {
+                        left: rect.left,
+                        right: rect.right,
+                        top: rect.top,
+                        bottom: rect.bottom,
+                        width: rect.width,
+                        height: rect.height
+                    };
+                };
                 const shell = document.querySelector(
                     "[data-estab-bos-workspace]"
                 );
-                const sidebar = document.querySelector(
-                    'iframe[name="status"]'
+                const menu = document.querySelector(
+                    "[data-estab-shell-menu]"
                 );
                 const content = document.querySelector(
-                    'iframe[name="mainframe"]'
+                    "[data-estab-shell-content]"
                 );
-                if (!shell || !sidebar || !content) return null;
-                const sidebarRect = sidebar.getBoundingClientRect();
-                const contentRect = content.getBoundingClientRect();
+                const cockpit = document.querySelector(
+                    ".estab-shell-cockpit"
+                );
+                if (!shell || !menu || !content || !cockpit) return null;
                 return {
                     frameNames: Array.from(
                         document.querySelectorAll("iframe[name]")
                     ).map(frame => frame.getAttribute("name")),
-                    sidebar: {
-                        left: sidebarRect.left,
-                        right: sidebarRect.right,
-                        top: sidebarRect.top,
-                        bottom: sidebarRect.bottom,
-                        width: sidebarRect.width
-                    },
-                    content: {
-                        left: contentRect.left,
-                        right: contentRect.right,
-                        top: contentRect.top,
-                        bottom: contentRect.bottom,
-                        width: contentRect.width
-                    },
+                    menu: bounds(menu),
+                    content: bounds(content),
+                    cockpit: bounds(cockpit),
                     innerWidth,
                     innerHeight,
                     clientWidth: document.documentElement.clientWidth,
@@ -7020,11 +7034,12 @@ class BrowserAcceptance:
         )
         self._equal(
             workspace.get("frameNames"),
-            ["status", "mainframe"],
+            ["mainframe", "vorgaben"],
             f"BOS-Frame-Struktur in {location}",
         )
-        sidebar_frame = workspace.get("sidebar")
-        content_frame = workspace.get("content")
+        menu = workspace.get("menu")
+        content = workspace.get("content")
+        cockpit = workspace.get("cockpit")
         inner_width = float(workspace.get("innerWidth", 0))
         # A classic Linux scrollbar reduces the usable layout viewport while
         # Chrome deliberately keeps innerWidth at the emulated device width.
@@ -7038,66 +7053,62 @@ class BrowserAcceptance:
             float(workspace.get("scrollWidth", 0)) <= client_width + 1,
             f"BOS-Arbeitsbereich erzeugt in {location} horizontales Scrolling.",
         )
+        self._truth(
+            isinstance(menu, dict)
+            and isinstance(content, dict)
+            and isinstance(cockpit, dict),
+            f"BOS-Huelle fehlt in {location} eine Spalte: {workspace!r}",
+        )
         if inner_width <= 672:
             self._truth(
-                isinstance(sidebar_frame, dict)
-                and isinstance(content_frame, dict)
-                and abs(float(sidebar_frame.get("left", -1))) <= 0.5
-                and abs(float(content_frame.get("left", -1))) <= 0.5
-                and abs(float(sidebar_frame.get("top", -1))) <= 0.5
-                and abs(float(sidebar_frame.get("bottom", -1)) - client_height)
-                <= 0.5
-                and abs(float(content_frame.get("top", -1)) - client_height)
-                <= 0.5
-                and abs(
-                    float(content_frame.get("bottom", -1))
-                    - (2 * client_height)
+                all(
+                    abs(float(column.get("left", -1))) <= 0.5
+                    and abs(float(column.get("width", 0)) - client_width)
+                    <= 0.5
+                    for column in (menu, content, cockpit)
                 )
-                <= 0.5
-                and abs(float(sidebar_frame.get("width", 0)) - client_width)
-                <= 0.5
-                and abs(float(content_frame.get("width", 0)) - client_width)
+                and abs(float(menu.get("top", -1))) <= 0.5
+                and abs(float(content.get("top", -1)) - client_height) <= 0.5
+                and abs(float(cockpit.get("top", -1)) - (2 * client_height))
                 <= 0.5
                 and abs(
                     float(workspace.get("scrollHeight", 0))
-                    - (2 * client_height)
+                    - (3 * client_height)
                 )
                 <= 1,
-                f"BOS-Navigation und Inhalt bilden in {location} keine "
-                f"zwei vollen mobilen Ansichten: {workspace!r}",
+                f"Menue, Inhalt und Cockpit bilden in {location} keine drei "
+                f"vollen mobilen Ansichten: {workspace!r}",
             )
         else:
             self._truth(
-                isinstance(sidebar_frame, dict)
-                and isinstance(content_frame, dict)
-                and abs(float(sidebar_frame.get("top", -1))) <= 0.5
-                and abs(
-                    float(sidebar_frame.get("bottom", -1)) - client_height
+                all(
+                    abs(float(column.get("top", -1))) <= 0.5
+                    and abs(float(column.get("bottom", -1)) - client_height)
+                    <= 0.5
+                    for column in (menu, content, cockpit)
                 )
-                <= 0.5
-                and abs(float(content_frame.get("top", -1))) <= 0.5
-                and abs(float(content_frame.get("bottom", -1)) - client_height)
-                <= 0.5
-                and float(sidebar_frame.get("width", 0)) >= 260
-                and float(sidebar_frame.get("right", 0))
-                <= float(content_frame.get("left", -1)) + 0.5
-                and float(content_frame.get("width", 0)) >= 300,
-                f"BOS-Sidebar nutzt in {location} nicht die volle linke Höhe.",
+                and float(menu.get("right", 0))
+                <= float(content.get("left", -1)) + 0.5
+                and float(content.get("right", 0))
+                <= float(cockpit.get("left", -1)) + 0.5
+                and float(content.get("width", 0)) >= 300,
+                f"BOS-Spalten stehen in {location} nicht nebeneinander über "
+                f"die volle Höhe: {workspace!r}",
             )
 
-        sidebar_state = self.cdp.evaluate(
-            _frame_expression(
-                "status",
-                """
-                const root = doc.scrollingElement;
-                const bar = doc.querySelector(
-                    "aside[data-estab-session-bar],aside[data-estab-public-bar]"
+        navigation_state = self.cdp.evaluate(
+            """
+            (() => {
+                const root = document.scrollingElement ||
+                    document.documentElement;
+                const menu = document.querySelector(
+                    "[data-estab-shell-menu]"
                 );
-                const navigation = bar && bar.querySelector(
+                const navigation = menu && menu.querySelector(
                     "[data-estab-navigation]"
                 );
-                const documents = doc.querySelector(
-                    "[data-estab-bos-document-navigation]"
+                const documents = document.querySelector(
+                    "[data-estab-shell-context]"
                 );
                 const links = documents
                     ? Array.from(
@@ -7106,41 +7117,42 @@ class BrowserAcceptance:
                         )
                     )
                     : [];
-                const barRect = bar && bar.getBoundingClientRect();
+                const navigationRect =
+                    navigation && navigation.getBoundingClientRect();
                 const documentRect =
                     documents && documents.getBoundingClientRect();
                 return {
                     navigationMode: navigation && navigation.getAttribute(
                         "data-estab-navigation-mode"
                     ),
-                    detailsCount: doc.querySelectorAll("details").length,
                     documentCount: links.length,
                     documentOrder:
-                        Boolean(barRect && documentRect) &&
-                        documentRect.top >= barRect.bottom - 0.5,
+                        Boolean(navigationRect && documentRect) &&
+                        documentRect.top >= navigationRect.bottom - 0.5,
                     linksFit: links.every(link => {
                         const rect = link.getBoundingClientRect();
-                        return rect.width >= 44 && rect.height >= 44 &&
+                        return rect.width >= 24 && rect.height >= 24 &&
                             rect.left >= -0.5 &&
                             rect.right <= root.clientWidth + 0.5;
                     }),
                     scrollWidth: root.scrollWidth,
                     clientWidth: root.clientWidth
                 };
-                """,
-            )
+            })()
+            """
         )
         self._truth(
-            isinstance(sidebar_state, dict)
-            and sidebar_state.get("navigationMode") == "sidebar"
-            and sidebar_state.get("detailsCount") == 0
-            and sidebar_state.get("documentCount") == 7
-            and sidebar_state.get("documentOrder") is True
-            and sidebar_state.get("linksFit") is True
-            and int(sidebar_state.get("scrollWidth", 0))
-            <= int(sidebar_state.get("clientWidth", 0)) + 1,
-            f"BOS-Sidebar ist in {location} nicht vollständig sichtbar: "
-            f"{sidebar_state!r}",
+            isinstance(navigation_state, dict)
+            and navigation_state.get("navigationMode") == "sidebar"
+            and navigation_state.get("documentCount") == len(
+                self.bos_documents
+            )
+            and navigation_state.get("documentOrder") is True
+            and navigation_state.get("linksFit") is True
+            and int(navigation_state.get("scrollWidth", 0))
+            <= int(navigation_state.get("clientWidth", 0)) + 1,
+            f"BOS-Dokumentwahl ist in {location} nicht vollständig sichtbar: "
+            f"{navigation_state!r}",
         )
 
         content_state = self.cdp.evaluate(
@@ -7177,7 +7189,7 @@ class BrowserAcceptance:
         selector = f'a[href="{href}"][target="mainframe"]'
         expected_path = "/stabinfo/" + urllib.parse.unquote(href)
         self.cdp.click(
-            "status",
+            None,
             selector,
             f"BOS-Dokument „{expected_title}“",
         )
@@ -7211,15 +7223,10 @@ class BrowserAcceptance:
                 const frame = document.querySelector(
                     'iframe[name="mainframe"]'
                 );
-                const sidebar = document.querySelector(
-                    'iframe[name="status"]'
-                );
                 if (
                     !frame
                     || !frame.contentDocument
                     || !frame.contentWindow
-                    || !sidebar
-                    || !sidebar.contentDocument
                 ) {
                     return null;
                 }
@@ -7235,7 +7242,7 @@ class BrowserAcceptance:
                 const content = shell && shell.querySelector(
                     '[data-estab-bos-original-content]'
                 );
-                const selected = sidebar.contentDocument.querySelector(
+                const selected = document.querySelector(
                     'a[data-estab-bos-document-link][aria-current="page"]'
                 );
                 if (
@@ -7277,8 +7284,17 @@ class BrowserAcceptance:
                 const headerStyle = frame.contentWindow.getComputedStyle(
                     header
                 );
-                const selectedTitle = selected.querySelector('strong');
-                const selectedDescription = selected.querySelector('span');
+                const selectedHint = selected.querySelector(
+                    '.estab-visually-hidden'
+                );
+                const selectedTitle = Array.from(selected.childNodes)
+                    .filter(node => node.nodeType === Node.TEXT_NODE)
+                    .map(node => node.textContent)
+                    .join('')
+                    .trim();
+                const selectedDescription = selectedHint
+                    ? selectedHint.textContent.replace(/^\\s*—\\s*/, '').trim()
+                    : null;
                 const contrastRatio = (foreground, background) => {
                     const channels = colour => {
                         const values = colour.match(/[\\d.]+/g);
@@ -7347,12 +7363,11 @@ class BrowserAcceptance:
                     title: heading.textContent.trim(),
                     titleMatchesNavigation:
                         Boolean(selectedTitle) &&
-                        heading.textContent.trim()
-                            === selectedTitle.textContent.trim(),
+                        heading.textContent.trim() === selectedTitle,
                     descriptionMatchesNavigation:
                         Boolean(selectedDescription) &&
                         description.textContent.trim()
-                            === selectedDescription.textContent.trim(),
+                            === selectedDescription,
                     originalTextPreserved:
                         Boolean(parsed.body) &&
                         content.textContent === parsed.body.textContent,
@@ -7375,10 +7390,14 @@ class BrowserAcceptance:
                         contentStyle.borderTopLeftRadius
                     ),
                     fontFamily: contentStyle.fontFamily,
-                    headerGradient:
-                        headerStyle.backgroundImage.includes(
-                            'linear-gradient'
-                        ),
+                    /* Der farbige Kopfbalken ist mit a40da6d gefallen --
+                       er ass auf flachen Bildschirmen ein Viertel der Hoehe
+                       fuer eine Angabe, die nach dem zweiten Aufruf niemand
+                       mehr liest. Der Titel steht jetzt ueber einer Linie. */
+                    headerRule:
+                        headerStyle.backgroundImage === 'none' &&
+                        headerStyle.borderBottomStyle === 'solid' &&
+                        parseFloat(headerStyle.borderBottomWidth) > 0,
                     semanticColoursReadable,
                     scrollRegionsReady
                 };
@@ -7398,9 +7417,9 @@ class BrowserAcceptance:
             and state.get("imagesFit") is True
             and state.get("rootFits") is True
             and state.get("contentBackground") == "rgb(255, 255, 255)"
-            and float(state.get("contentRadius", 0)) >= 8
+            and float(state.get("contentRadius", 0)) >= 4
             and "Arial" in str(state.get("fontFamily", ""))
-            and state.get("headerGradient") is True
+            and state.get("headerRule") is True
             and state.get("semanticColoursReadable") is True
             and state.get("scrollRegionsReady") is True,
             f"BOS-Dokument ist in {location} nicht konsistent: {state!r}",
@@ -7479,14 +7498,14 @@ class BrowserAcceptance:
         self.cdp.wait_for(
             """
             (() => {
-                const sidebar = document.querySelector(
-                    'iframe[name="status"]'
+                const menu = document.querySelector(
+                    "[data-estab-shell-menu]"
                 );
                 const returnButton = document.querySelector(
                     "[data-estab-mobile-menu-return]"
                 );
-                if (!sidebar || !returnButton) return false;
-                const rect = sidebar.getBoundingClientRect();
+                if (!menu || !returnButton) return false;
+                const rect = menu.getBoundingClientRect();
                 const visibleHeight = Math.max(
                     0,
                     Math.min(innerHeight, rect.bottom)
@@ -7494,7 +7513,7 @@ class BrowserAcceptance:
                 );
                 return scrollY <= 1 &&
                     visibleHeight >= innerHeight - 1 &&
-                    document.activeElement === sidebar &&
+                    document.activeElement === menu &&
                     returnButton.hidden;
             })()
             """,

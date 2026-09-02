@@ -83,7 +83,14 @@ function estab_shell_menu_markup(
     bool $withActions = false,
     string $contextMarkup = ''
 ): string {
-    return '<div class="estab-shell-menu" data-estab-shell-menu>'
+    /*
+     * tabindex="-1": Die Menuespalte nimmt keinen Fokus aus der Tastatur --
+     * sie steht nicht in der Tabreihenfolge --, aber der Rueckkehrknopf auf
+     * schmalen Schirmen setzt ihn ausdruecklich dorthin. Ohne das Attribut
+     * lief dessen focus()-Aufruf ins Leere: Der Blick sprang zurueck zum
+     * Menue, die Tastatur blieb im Inhalt.
+     */
+    return '<div class="estab-shell-menu" data-estab-shell-menu tabindex="-1">'
         . '<a class="estab-shell-brand" href="'
         . estab_auth_html(estab_application_root()) . '" target="_top">'
         . 'eStab</a>'

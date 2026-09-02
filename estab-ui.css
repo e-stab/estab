@@ -820,6 +820,11 @@
     background: var(--grund-spalte);
     border: 0;
     border-left: 2px solid var(--linie-spalte);
+    /* Der Rand zaehlt zur Breite. Ohne diese Zeile legte der Rahmen seine
+       zwei Bildpunkte Rand NEBEN die volle Spaltenbreite und schob die
+       Seite um genau so viel ueber die Fensterkante -- auf jeder Seite mit
+       Cockpit, bei jeder Fensterbreite. */
+    box-sizing: border-box;
     display: block;
     height: 100%;
     width: 100%;
@@ -849,6 +854,42 @@
     bottom: auto;
     margin-top: 0;
     position: static;
+}
+
+/* Unter 42rem steht nichts mehr nebeneinander.
+
+   Die drei Spalten verlangen zusammen rund 30rem, bevor der Inhalt
+   ueberhaupt anfaengt. Auf einem Telefon blieb dafuer nichts uebrig: die
+   mittlere Spalte fiel auf null Breite, und der Inhalt stand neben dem
+   sichtbaren Bereich -- zu sehen war nur das Menue.
+
+   Sie stehen deshalb untereinander, jede so hoch wie das Fenster. Das ist
+   dieselbe Bauart, die die Infosammlung schon benutzt, und die, die das
+   Rueckkehrskript der Huelle voraussetzt: Es scrollt bei genau dieser
+   Breite zwischen Menue und Inhalt hin und her, was ein Nebeneinander gar
+   nicht haette leisten koennen. */
+@media (max-width: 42rem) {
+    .estab-shell-body {
+        overflow: visible;
+    }
+
+    .estab-shell {
+        grid-auto-rows: 100dvh;
+        grid-template-columns: minmax(0, 1fr);
+        height: auto;
+    }
+
+    /* Die Trennlinien folgen der Richtung: untereinander trennt oben und
+       unten, nicht links und rechts. */
+    .estab-shell-menu {
+        border-bottom: 2px solid var(--linie-spalte);
+        border-right: 0;
+    }
+
+    .estab-shell-cockpit {
+        border-left: 0;
+        border-top: 2px solid var(--linie-spalte);
+    }
 }
 
 .estab-message-workspace-grid {
@@ -3858,7 +3899,12 @@ form[data-estab-incident-disabled="true"]::before {
 /* Der erklaerende Satz. Er beschreibt, was der Bereich tut -- das weiss,
    wer hier arbeitet. Bleibt der Satz ein Zustand ("darf schreiben"), steht
    er ohnehin im Kasten darunter, wo er hingehoert. */
-.estab-tool-hero > p:not(.estab-tool-eyebrow),
+/* Ausgenommen: der Abbruch. Er steht im Kopf ebenfalls als Absatz, ist aber
+   keine Erklaerung, sondern die einzige Tuer zurueck zur Uebersicht. Unter
+   dieser Regel stand auf der Anmeldung ein Formular ohne Ausgang -- wer ein
+   geschuetztes Modul direkt aufrief, kam nur ueber den Zurueck-Knopf des
+   Browsers wieder heraus. */
+.estab-tool-hero > p:not(.estab-tool-eyebrow):not(.estab-auth-exit),
 .estab-message-page-header p,
 .estab-bos-document-header p,
 .estab-admin-dashboard-hero > p:not(.estab-tool-eyebrow),
