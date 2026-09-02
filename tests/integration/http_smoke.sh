@@ -1134,12 +1134,20 @@ assert_body 'name="stab_lesen_groesse"'
     assert_session_bar "$test_name" "$test_code" "$test_function" "$restore_role"
 
     assert_body "$workflow_marker"
-    # The restored explicitly LOOSE incident lets the fixed S1 account read
-    # its own workflow object, but never grants S2 Lage-/Dokumentationsrechte.
-    # No formal duty assignment is required after the restore.
-    assert_status 403 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+    # The restored explicitly LOOSE incident lets the fixed S1 account read its
+    # own workflow object. No formal duty assignment is required after the
+    # restore.
+    #
+    # Die Meldungsuebersicht steht seit der Entscheidung des Betreibers jeder
+    # Funktion offen: Wer im Stab arbeitet, muss wissen, was laeuft. Geoeffnet
+    # ist nur das Lesen -- verlangt bleibt ein angetretener Dienst im aktiven
+    # Einsatz, und geschrieben wird dort nichts. Nach der Wiederherstellung
+    # gilt das genauso.
+    assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
         "$base_url/4fueltg/ue_ltg.php"
-    assert_body_absent "$workflow_marker"
+    assert_body 'data-estab-message-overview'
+    assert_body_absent 'value="save_entry"'
+    assert_body "$workflow_marker"
     assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
         "$base_url/4fach/download.php?area=attachment&file=$restore_attachment"
     expected_attachment=$work_dir/expected-attachment.txt
