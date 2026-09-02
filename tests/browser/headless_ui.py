@@ -8864,9 +8864,16 @@ class BrowserAcceptance:
                         ) overlapPairs.push([left, right]);
                     }}
                 }}
+                /* Eine Reihe: Jede Marke beginnt hinter der vorigen, und
+                   alle liegen auf derselben Hoehe. Gemessen wird die
+                   Ueberlappung und nicht die gleiche Oberkante -- die
+                   aktuelle Station ist etwas flacher als die geplanten und
+                   sitzt mittig, was ihre Oberkante um wenige Bildpunkte
+                   verschiebt. */
                 const horizontalOrder = rects.every((rect, index) =>
                     index === 0 || (
-                        Math.abs(rect.top - rects[0].top) <= 1
+                        Math.min(rect.bottom, rects[0].bottom)
+                            - Math.max(rect.top, rects[0].top) > 0.5
                         && rect.left >= rects[index - 1].right - 1
                     )
                 );
@@ -9094,11 +9101,10 @@ class BrowserAcceptance:
                 const priorityLabels = priorityControls.map(control =>
                     control?.closest("label") || null
                 );
-                const priorityClear = doc.querySelector(
-                    "#f_09_vorrangstufe_keine"
-                );
-                const priorityClearLabel = priorityClear?.closest("label")
-                    || null;
+                /* Feld 9 hat drei Kaestchen. "Keine Vorrangstufe" ist auf
+                   dem amtlichen Vordruck die Abwesenheit eines Kreuzes und
+                   kein eigenes Kaestchen -- 013b14d hat das vierte
+                   entfernt. */
                 const extraDistribution = doc.querySelector(
                     ".estab-message-distribution-extras"
                 );
@@ -9167,17 +9173,11 @@ class BrowserAcceptance:
                 const priorityHelpRect = priorityField?.querySelector(
                     ".estab-official-help-anchor"
                 )?.getBoundingClientRect();
-                const visiblePriorityLabels = [
-                    priorityClearLabel,
-                    ...priorityLabels
-                ].filter(Boolean);
+                const visiblePriorityLabels = priorityLabels.filter(Boolean);
                 const priorityLabelRects = visiblePriorityLabels.map(
                     label => label.getBoundingClientRect()
                 );
-                const priorityBoxesSquare = [
-                    priorityClear,
-                    ...priorityControls
-                ].every(control => {
+                const priorityBoxesSquare = priorityControls.every(control => {
                     if (!control) return false;
                     const style = target.getComputedStyle(control);
                     const rect = control.getBoundingClientRect();
@@ -9195,7 +9195,7 @@ class BrowserAcceptance:
                     : null;
                 const priorityGeometry = Boolean(
                     priorityRect
-                    && priorityLabelRects.length === 4
+                    && priorityLabelRects.length === 3
                     && priorityLabelRects.every(rect =>
                         rect.left >= priorityRect.left - 1
                         && rect.right <= priorityRect.right + 1
@@ -9416,10 +9416,11 @@ class BrowserAcceptance:
                                 && control.name === "09_vorrangstufe"
                             )
                         )
-                        && priorityClear
-                        && priorityField.contains(priorityClear)
-                        && priorityClear.name === "09_vorrangstufe"
-                        && priorityClear.checked
+                        /* Ohne Kreuz ist keine Stufe gewaehlt: Die drei
+                           Kaestchen stehen frei, und keines ist gesetzt. */
+                        && priorityControls.every(
+                            control => control.checked === false
+                        )
                         && Array.from(
                             doc.querySelectorAll(
                                 '[name="09_vorrangstufe"]'
@@ -9748,22 +9749,19 @@ class BrowserAcceptance:
             ),
             "Staatsnot wurde nicht im amtlichen Vorrangfeld angekreuzt",
         )
-        self.cdp.click(
-            "mainframe",
-            "#f_09_vorrangstufe_keine",
-            "Vorrang im amtlichen Feld zurücksetzen",
-        )
+        # Ein Kaestchen "keine" gibt es nicht mehr: Auf dem amtlichen Vordruck
+        # ist die fehlende Stufe die Abwesenheit eines Kreuzes. Geblieben ist,
+        # dass immer hoechstens eine Stufe angekreuzt sein kann.
         self.cdp.wait_for(
             _frame_expression(
                 "mainframe",
                 """
-                const clear = doc.querySelector(
-                    "#f_09_vorrangstufe_keine"
-                );
                 return Boolean(
-                    clear
-                    && clear.checked
-                    && clear.value === ""
+                    !doc.querySelector("#f_09_vorrangstufe_keine")
+                    && doc.querySelectorAll(
+                        '.estab-official-priority '
+                        + 'input[name="09_vorrangstufe"]'
+                    ).length === 3
                     && doc.querySelectorAll(
                         '.estab-official-priority '
                         + 'input[name="09_vorrangstufe"]:checked'
@@ -9771,7 +9769,8 @@ class BrowserAcceptance:
                 );
                 """,
             ),
-            "Vorrang ließ sich nicht im amtlichen Feld zurücksetzen",
+            "Das amtliche Vorrangfeld fuehrt nicht genau drei Stufen mit "
+            "hoechstens einem Kreuz",
         )
 
         self.cdp.click(
@@ -10089,9 +10088,11 @@ class BrowserAcceptance:
                     breakInside: sheetStyle.breakInside,
                     pseudoContent: pseudo.content,
                     pseudoDisplay: pseudo.display,
-                    priorityClearDisplay: priorityClear
-                        ? getComputedStyle(priorityClear).display
-                        : "missing",
+                    /* Mit dem vierten Kaestchen ist auch die Klasse
+                       gefallen, die es im Ausdruck verbarg. Sie darf nicht
+                       zurueckkommen: Eine Regel fuer ein Element, das es
+                       nicht gibt, waere eine Leiche. */
+                    priorityClearAbsent: priorityClear === null,
                     staatsnotChecked: Boolean(staatsnot?.checked),
                     blue: contentBlue,
                     zones: document.querySelectorAll(
@@ -10109,7 +10110,7 @@ class BrowserAcceptance:
             and print_state.get("breakInside") in {"avoid", "avoid-page"}
             and print_state.get("pseudoContent") in {"none", "normal"}
             and print_state.get("pseudoDisplay") == "none"
-            and print_state.get("priorityClearDisplay") == "none"
+            and print_state.get("priorityClearAbsent") is True
             and print_state.get("staatsnotChecked") is True
             and 695 <= print_state.get("width", 0) <= 705
             and 0 < print_state.get("height", 9999) <= 1069.7,
