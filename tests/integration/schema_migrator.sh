@@ -81,12 +81,29 @@ failure_log=$(mktemp "${TMPDIR:-/tmp}/estab-migration-test-failure.XXXXXX")
 concurrency_log=$(mktemp "${TMPDIR:-/tmp}/estab-logbook-concurrency.XXXXXX")
 pre_110_migrations=$(mktemp -d "${TMPDIR:-/tmp}/estab-pre-110-migrations.XXXXXX")
 
+# Der Stand VOR 110 -- als Zahl, nicht als Namensliste.
+#
+# Hier stand eine Aufzaehlung von 110 bis 121. Sie war vollstaendig, solange
+# 121 die juengste Migration war. Jede spaeter hinzugekommene Migration fiel
+# durch die Liste hindurch und landete in diesem Satz -- zusammen mit ihren
+# Vorbedingungen, die es hier per Definition nicht gibt: Migration 122
+# verlangt 121 im Verzeichnis der angewandten Migrationen, und genau das
+# sollte dieser Satz ja NICHT haben. Der Migrator brach ab, und die Pruefung
+# darunter, die genau 15 angewandte Migrationen erwartet, kam nie dazu.
+#
+# Die Grenze steht jetzt einmal da und haelt auch fuer die naechste Migration.
 for migration_path in "$ESTAB_MIGRATIONS_DIR"/*.sql; do
-    case "$(basename "$migration_path")" in
-        110-etb-tbb-rules.sql|111-logbook-shift-assignment.sql|112-optional-access-shifts.sql|113-password-policy.sql|114-self-registration-policy.sql|115-incident-permission-mode.sql|116-standard-categories.sql|117-telecom-draft-discard.sql|118-operational-authority.sql|119-inactive-messenger-dispatch.sql|120-single-function-relief.sql|121-transport-disposition-field-one.sql)
-            continue
+    migration_number=$(basename "$migration_path")
+    migration_number=${migration_number%%-*}
+    case "$migration_number" in
+        ''|*[!0-9]*)
+            echo "schema migrator test: unnumbered migration filename" >&2
+            exit 1
             ;;
     esac
+    if [ "$migration_number" -ge 110 ]; then
+        continue
+    fi
     cp "$migration_path" "$pre_110_migrations/"
 done
 
@@ -353,16 +370,14 @@ assert_equal "$pre_110_ledger_snapshot" "$(
 SELECT GROUP_CONCAT(CONCAT(version, ':', checksum, ':', state)
                     ORDER BY version SEPARATOR ',')
  FROM estab_schema_migrations
- WHERE version NOT IN (
-   '110-etb-tbb-rules.sql', '111-logbook-shift-assignment.sql',
-   '112-optional-access-shifts.sql', '113-password-policy.sql',
-   '114-self-registration-policy.sql', '115-incident-permission-mode.sql',
-   '116-standard-categories.sql', '117-telecom-draft-discard.sql',
-   '118-operational-authority.sql',
-   '119-inactive-messenger-dispatch.sql',
-   '120-single-function-relief.sql',
-   '121-transport-disposition-field-one.sql'
- )"
+ -- Verglichen wird der Stand VOR 110, also alles, was der Aufstieg nicht
+ -- angefasst haben darf. Hier stand dieselbe Namensliste 110 bis 121 wie
+ -- oben beim Zusammenstellen des Satzes, mit demselben Mangel: Migrationen
+ -- ab 122 fielen nicht heraus, standen nach dem Aufstieg im Verzeichnis und
+ -- liessen den Vergleich scheitern, obwohl keine einzige alte Zeile
+ -- angeruehrt worden war. Die Grenze steht als Zahl da und haelt auch fuer
+ -- die naechste Migration.
+ WHERE CAST(SUBSTRING_INDEX(version, '-', 1) AS UNSIGNED) < 110"
 )" \
     "migration 110 upgrade rewrote a released migration ledger row"
 assert_equal "1|1|1|1|1|1|1|1|1|1|1|3|1|2|1" "$(database_query "$logbook_upgrade_database" "
@@ -596,7 +611,10 @@ SELECT GROUP_CONCAT(kategorie ORDER BY BINARY kategorie SEPARATOR ',')
   FROM nv_masterkatego"
 )" \
     "fresh installation did not receive exact standard categories"
-assert_equal "7|7|1|1|1|1|27" "$(database_query "$fresh_database" "
+# Der letzte Wert ist die Gesamtzahl angewandter Migrationen: 38 statt 27.
+# Sie steht bewusst als Zahl da -- wer eine Migration hinzufuegt, soll hier
+# vorbeikommen. Die elf neuen sind 122 bis 132.
+assert_equal "7|7|1|1|1|1|38" "$(database_query "$fresh_database" "
 SELECT CONCAT(
          COUNT(*), '|', COUNT(DISTINCT BINARY kategorie), '|',
          (SELECT COUNT(*) FROM estab_schema_migrations
@@ -1045,7 +1063,7 @@ SET @release_plan_id = LAST_INSERT_ID();
 SET @estab_dv_actor_assignment_id = NULL;
 SET @estab_dv_target_assignment_id = NULL;
 INSERT INTO nv_fernmeldeplan_eintraege
-  (fernmeldeplan_id, sortierung, betriebsstelle, rufname, medium,
+  (fernmeldeplan_id, sortierung, betriebsstelle, erreichbarkeit, medium,
    kanal, bandlage, verkehrsform, besondere_vermerke, bemerkungen)
 VALUES
   (@release_plan_id, 1, 'Migration test station', 'Schema 117', 'Fu',
@@ -1212,7 +1230,7 @@ SET @end_second_plan_id = LAST_INSERT_ID();
 SET @estab_dv_actor_assignment_id = NULL;
 SET @estab_dv_target_assignment_id = NULL;
 INSERT INTO nv_fernmeldeplan_eintraege
-  (fernmeldeplan_id, sortierung, betriebsstelle, rufname, medium,
+  (fernmeldeplan_id, sortierung, betriebsstelle, erreichbarkeit, medium,
    kanal, bandlage, verkehrsform, besondere_vermerke, bemerkungen)
 VALUES
   (@end_second_plan_id, 1, 'End-second station', 'Schema end second',
@@ -1414,7 +1432,7 @@ SELECT einsatz_id, 4, 'Loose plan through additional function',
  WHERE kennung = 'SCHEMA-TELECOM-DISCARD';
 SET @loose_grant_plan_id = LAST_INSERT_ID();
 INSERT INTO nv_fernmeldeplan_eintraege
-  (fernmeldeplan_id, sortierung, betriebsstelle, rufname, medium,
+  (fernmeldeplan_id, sortierung, betriebsstelle, erreichbarkeit, medium,
    kanal, bandlage, verkehrsform, besondere_vermerke, bemerkungen)
 VALUES
   (@loose_grant_plan_id, 1, 'Additional function station', 'Schema 118',
@@ -1732,7 +1750,15 @@ SELECT CONCAT(
            WHERE singleton_id = 1)
        )")" \
     "interrupted baseline was not retried and recorded"
-assert_equal "nv_anhang,nv_benutzer,nv_bhp50,nv_einsaetze,nv_einsatz_ereignisse,nv_einsatz_status,nv_empfmtx,nv_empfmtx_standard,nv_etb,nv_etbtitel,nv_komplan,nv_masterkatego,nv_masterkategolink,nv_nachrichten,nv_protokoll,nv_tbb,nv_tbbtitel,nv_ubb" "$(database_query "$retry_database" "
+# nv_komplan steht hier nicht mehr.
+#
+# Die Grundfassung legt die Tabelle weiterhin an -- ihre Pruefsumme haengt
+# daran --, aber Migration 130 raeumt sie danach weg. Gezaehlt wird hier der
+# Zustand NACH allen Migrationen, also ohne sie. Dieselbe Anpassung hat
+# docker/db/migrate.sh schon bekommen (14 auf 13 Tabellen); hier war sie
+# vergessen worden, und es fiel nicht auf, weil dieser Test auf der CI nie
+# so weit kam.
+assert_equal "nv_anhang,nv_benutzer,nv_bhp50,nv_einsaetze,nv_einsatz_ereignisse,nv_einsatz_status,nv_empfmtx,nv_empfmtx_standard,nv_etb,nv_etbtitel,nv_masterkatego,nv_masterkategolink,nv_nachrichten,nv_protokoll,nv_tbb,nv_tbbtitel,nv_ubb" "$(database_query "$retry_database" "
 SELECT GROUP_CONCAT(table_name ORDER BY BINARY table_name SEPARATOR ',')
   FROM information_schema.tables
  WHERE table_schema = DATABASE()
@@ -1740,7 +1766,7 @@ SELECT GROUP_CONCAT(table_name ORDER BY BINARY table_name SEPARATOR ',')
    AND table_name IN (
      'nv_nachrichten', 'nv_empfmtx', 'nv_empfmtx_standard', 'nv_benutzer',
      'nv_masterkatego', 'nv_masterkategolink', 'nv_protokoll',
-     'nv_anhang', 'nv_etb', 'nv_tbb', 'nv_ubb', 'nv_komplan',
+     'nv_anhang', 'nv_etb', 'nv_tbb', 'nv_ubb',
      'nv_bhp50', 'nv_etbtitel', 'nv_tbbtitel', 'nv_einsaetze',
      'nv_einsatz_status', 'nv_einsatz_ereignisse'
    )")" \
@@ -1980,6 +2006,26 @@ ESTAB_DB_NAME="$retry_database" "$ESTAB_MIGRATOR_BIN"
 # Migration 97 may be interrupted after its autocommitted ADD COLUMN but before
 # the ledger acknowledgement. Only the exact owned VARCHAR(128) shape is
 # resumable; a same-name foreign or narrower field must remain untouched.
+#
+# Vorher muss `nv_komplan` wieder dastehen. Migration 97 liest die Tabelle in
+# einer EXISTS-Abfrage, um zu erkennen, ob ein Einsatz Altbestand hat --
+# Migration 130 hat sie inzwischen abgebaut. Diese Datenbank ist bereits an
+# 130 vorbei, die Wiederholung von 97 faende die Tabelle also nicht mehr und
+# scheiterte an ihr statt an der Kollision, die hier geprueft werden soll.
+#
+# Wiederhergestellt wird die Gestalt, die 97 vorfand: der Schluessel aus der
+# Grundfassung und der Einsatzbezug aus Migration 45. Leer, wie die Tabelle
+# es immer war -- die EXISTS-Abfrage findet nichts, genau wie im Echtbetrieb.
+#
+# In der Wirklichkeit kann diese Lage nicht entstehen: 97 kann nur abbrechen,
+# waehrend 97 laeuft, und das ist lange vor 130. Hier wird sie kuenstlich
+# hergestellt, weil die Ledger-Zeile von Hand entfernt wird.
+database_query "$retry_database" "
+CREATE TABLE IF NOT EXISTS \`nv_komplan\` (
+  \`lfd\` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  \`einsatz_id\` BIGINT UNSIGNED NULL DEFAULT NULL,
+  PRIMARY KEY (\`lfd\`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
 database_query "$retry_database" "
 DELETE FROM estab_schema_migrations
  WHERE version = '97-incident-command-post-name.sql';
@@ -2480,8 +2526,9 @@ finish_checksum=$(
     sha256sum "$ESTAB_MIGRATIONS_DIR/55-global-incidents-finish.sql" |
         awk '{print $1}'
 )
+# 38 statt 27: elf neue Migrationen (122 bis 132). Siehe oben.
 assert_equal \
-    "27|27|$prepare_checksum|$incident_predecessor_checksum|$finish_checksum" \
+    "38|38|$prepare_checksum|$incident_predecessor_checksum|$finish_checksum" \
     "$(database_query "$predecessor_database" "
 SELECT CONCAT(
          COUNT(*), '|',
@@ -2760,7 +2807,8 @@ SELECT CONCAT(
        )")" \
     "second upgrade run changed existing global categories or links"
 
-assert_equal "27" "$(fixture_query "
+# 38 statt 27: elf neue Migrationen (122 bis 132). Siehe oben.
+assert_equal "38" "$(fixture_query "
 SELECT COUNT(*) FROM estab_schema_migrations
  WHERE state = 'applied'
    AND checksum REGEXP BINARY '^[0-9a-f]{64}$'")" \
@@ -3042,7 +3090,8 @@ fixture_query "
 DELETE FROM estab_schema_migrations
  WHERE version = '119-inactive-messenger-dispatch.sql'"
 ESTAB_DB_NAME="$test_database" "$ESTAB_MIGRATOR_BIN"
-assert_equal "$inactive_messenger_dispatch_checksum|applied|27|1" "$(fixture_query "
+# 38 statt 27: elf neue Migrationen (122 bis 132). Siehe oben.
+assert_equal "$inactive_messenger_dispatch_checksum|applied|38|1" "$(fixture_query "
 SELECT CONCAT(
          (SELECT checksum FROM estab_schema_migrations
            WHERE version = '119-inactive-messenger-dispatch.sql'), '|',
@@ -3933,7 +3982,9 @@ SELECT GROUP_CONCAT(
        )
   FROM estab_schema_migrations
  WHERE version <> '114-self-registration-policy.sql'")"
-assert_equal "26|26" "$(fixture_query "
+# 37 statt 26: 38 Migrationen ohne die eine, die hier ausgenommen ist.
+# Siehe die uebrigen Zaehlungen weiter oben -- 122 bis 132 sind dazugekommen.
+assert_equal "37|37" "$(fixture_query "
 SELECT CONCAT(
          COUNT(*), '|',
          SUM(state = 'applied' AND checksum REGEXP BINARY '^[0-9a-f]{64}$')

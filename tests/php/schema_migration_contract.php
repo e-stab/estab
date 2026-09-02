@@ -3366,7 +3366,10 @@ foreach ([
     'missing ETB head was not rejected explicitly',
     'missing TTB head was not rejected explicitly',
     'MariaDB default snapshot isolation is not enabled for concurrency tests',
-    'assert_equal "27"',
+    // 38 statt 27: so viele Migrationen gibt es, seit 122 bis 132
+    // dazugekommen sind. Die Zahl steht drueben im Integrationstest bewusst
+    // fest, und hier als Beleg, dass dort ueberhaupt noch gezaehlt wird.
+    'assert_equal "38"',
 ] as $marker) {
     $assert(
         str_contains($schemaIntegration, $marker),
