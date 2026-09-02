@@ -213,6 +213,21 @@ $assert(
         && str_contains($sources['form'], 'estab_message_priority_label'),
     'The operational message form bypasses the central priority presentation'
 );
+/*
+ * Die Zahlen sind gesunken, weil drei Listenzweige verschwunden sind.
+ *
+ * liste.php trug drei Nachweisungszweige, die niemand mehr aufrief; sie
+ * sind geloescht (siehe ges_tabelle_einheitlich, "kein Listenzweig ohne
+ * Aufrufer"). Mit ihnen fielen je ein Rangausdruck und eine Beschriftung
+ * weg.
+ *
+ * Die Anforderung ist damit nicht kleiner geworden, sondern verteilt:
+ * Die lebende Nachweisung liegt in app/nachweisung.php und stuft ihre
+ * Vorrangspalte ueber die Spaltenart "vorrang" ein -- das Bauteil
+ * sortiert danach nach Dringlichkeit, nicht alphabetisch. Beide Haelften
+ * werden geprueft; nur die erste hiesse, dass die Nachweisung ihre
+ * Vorrangstufen selbst erfinden duerfte.
+ */
 $assert(
     substr_count(
         $sources['list'],
@@ -221,12 +236,21 @@ $assert(
         && substr_count(
             $sources['list'],
             'estab_message_priority_label'
-        ) >= 6
+        ) >= 5
         && str_contains(
             $sources['list'],
             'estab_message_priority_requires_attention'
         ),
     'Operational lists lack explicit ranks, translated labels or highlighting'
+);
+$nachweisung = file_get_contents($root . '/app/nachweisung.php');
+$assert(
+    is_string($nachweisung)
+        && str_contains($nachweisung, 'estab_message_priority_label')
+        && str_contains($nachweisung, "'art' => 'vorrang'")
+        && str_contains($nachweisung, "'filter' => ['Sofort', 'Blitz', 'Staatsnot']"),
+    'Die Nachweisung stuft ihre Vorrangstufen nicht zentral ein. '
+        . 'Alphabetisch sortiert stuende Blitz vor Staatsnot.'
 );
 $assert(
     str_contains(

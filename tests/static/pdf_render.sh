@@ -47,8 +47,23 @@ for pdf_file in "$single_pdf" "$dossier_pdf"; do
 
     grep -Eq '^Pages:[[:space:]]+1$' "$info_file"
     grep -Eq '^Page size:[[:space:]]+595\.28 x 841\.89 pts \(A4\)$' "$info_file"
-    for marker in EINGANG AUSGANG Nachweis-Nr. Fm-Betriebsstelle; do
-        grep -Fq "$marker" "$text_file"
+    # Die Beschriftungen des heutigen Blattes, ohne Ruecksicht auf Gross- und
+    # Kleinschreibung.
+    #
+    # Der Abzug zeigt seit dem Umbau dasselbe Blatt wie der Bildschirm. Dort
+    # stehen die Richtungen als "Eingang" und "Ausgang", nicht in Versalien;
+    # belegt werden soll, DASS das Blatt beide Richtungen nennt, und wie es
+    # sie setzt, ist Typografie und darf sich aendern.
+    #
+    # "Nachweis-Nr." und "Fm-Betriebsstelle" standen hier bis eben. Sie
+    # gehoeren zum Raster des Altbestandes, das mit dem Umbau fortgefallen
+    # ist -- tests/php/pdf_smoke.php und tests/php/incident_pdf_security.php
+    # VERBIETEN sie inzwischen ausdruecklich. Diese Pruefung verlangte damit
+    # genau das, was jene beiden untersagen; sie kam nur nie so weit, weil
+    # der Auftrag vorher abbrach. An ihrer Stelle stehen zwei Beschriftungen,
+    # die das heutige Blatt fuehrt und die dieselben Felder benennen.
+    for marker in EINGANG AUSGANG Fm-Zentrale Aufnahmevermerk; do
+        grep -Fqi "$marker" "$text_file"
     done
     for marker in Vorrang Sofort Blitz Staatsnot; do
         grep -Fq "$marker" "$text_file"
@@ -111,31 +126,36 @@ medium_box_crop() {
 # deliberately shares the DFÜ square with the current @ value.
 for medium_fixture_name in none fu fe fax fs at me; do
     for medium_row_name in incoming transport; do
+        # Nachgemessen am 02.09.2026 gegen den umgebauten Vordruck: Die
+        # Marke ist 14 mal 14 Bildpunkte gross, der Ausschnitt 21 mal 21 mit
+        # drei Punkten Rand. Die alten Werte stammten vom Raster des
+        # Altbestandes und trafen ins Leere, seit der Abzug dasselbe Blatt
+        # zeigt wie der Bildschirm.
         case "$medium_row_name" in
-            incoming) medium_box_y=109 ;;
-            transport) medium_box_y=285 ;;
+            incoming) medium_box_y=62 ;;
+            transport) medium_box_y=332 ;;
         esac
         for medium_box_name in fu fe fax dfue me; do
             case "$medium_box_name" in
                 fu)
                     [ "$medium_row_name" = incoming ] \
-                        && medium_box_x=64 || medium_box_x=829
+                        && medium_box_x=185 || medium_box_x=185
                     ;;
                 fe)
                     [ "$medium_row_name" = incoming ] \
-                        && medium_box_x=126 || medium_box_x=891
+                        && medium_box_x=327 || medium_box_x=366
                     ;;
                 fax)
                     [ "$medium_row_name" = incoming ] \
-                        && medium_box_x=188 || medium_box_x=953
+                        && medium_box_x=470 || medium_box_x=546
                     ;;
                 dfue)
                     [ "$medium_row_name" = incoming ] \
-                        && medium_box_x=250 || medium_box_x=1016
+                        && medium_box_x=612 || medium_box_x=727
                     ;;
                 me)
                     [ "$medium_row_name" = incoming ] \
-                        && medium_box_x=313 || medium_box_x=1078
+                        && medium_box_x=754 || medium_box_x=907
                     ;;
             esac
             medium_box_crop \
@@ -225,9 +245,20 @@ for priority_name in none sofort blitz staatsnot; do
         exit 1
     }
     pdftotext -layout "$priority_pdf" "$priority_text"
-    for marker in Vorrang Sofort Blitz Staatsnot; do
+    # Fest auf dem Blatt stehen "Sofort" und "Blitz".
+    #
+    # "Staatsnot" steht NICHT dauerhaft da: Es darf nur auf ausdrueckliche
+    # Weisung einer berechtigten Stelle verwendet werden und wird deshalb
+    # erst gedruckt, wenn es gewaehlt ist -- zusammen mit der Beschriftung
+    # "Vorrangstufe". Die Pruefung verlangte alle vier auf jedem Abzug und
+    # stammte damit vom Vordruck vor dem Umbau.
+    for marker in Sofort Blitz; do
         grep -Fq "$marker" "$priority_text"
     done
+    if [ "$priority_name" = staatsnot ]; then
+        grep -Fq 'Staatsnot' "$priority_text"
+        grep -Fq 'Vorrang' "$priority_text"
+    fi
     if grep -Fq 'Beförderungshinweis' "$priority_text" || \
         grep -Fq 'Sofort weiterleiten' "$priority_text"; then
         echo "Priority fixture still exposes the obsolete transport hint: $priority_pdf" >&2
@@ -265,15 +296,22 @@ priority_box_crop() {
     box_name=$2
     box_x=$3
     pdftoppm -png -r 144 -f 1 -l 1 -singlefile \
-        -x "$box_x" -y 347 -W 20 -H 20 \
+        -x "$box_x" -y 381 -W 20 -H 20 \
         "$fixture_dir/message-form-priority-$priority_name.pdf" \
         "$fixture_dir/priority-box-$priority_name-$box_name"
 }
 
 for priority_name in none sofort blitz staatsnot; do
-    priority_box_crop "$priority_name" sofort 733
-    priority_box_crop "$priority_name" blitz 840
-    priority_box_crop "$priority_name" staatsnot 931
+    # Nachgemessen am 02.09.2026. Sofort und Blitz tragen je ein Kaestchen
+    # von 11 mal 11 Bildpunkten; der Ausschnitt von 20 mal 20 laesst Rand.
+    #
+    # Staatsnot hat KEIN Kaestchen mehr. Es wird als Wort gedruckt, und zwar
+    # nur, wenn es gewaehlt ist. Der Ausschnitt liegt deshalb auf dem Anfang
+    # dieses Wortes -- er aendert sich, wie zuvor, genau bei dieser einen
+    # Wahl, und die Auswertung darunter bleibt unveraendert gueltig.
+    priority_box_crop "$priority_name" sofort 761
+    priority_box_crop "$priority_name" blitz 833
+    priority_box_crop "$priority_name" staatsnot 894
 done
 
 assert_only_expected_priority_mark() {
@@ -332,12 +370,15 @@ done
 # The 61/39 divider must cross the complete Nachrichtenform/Vorrang row. A
 # neighbouring strip is intentionally blank at the same y-range; without the
 # divider both crops become byte-identical.
+# Nachgemessen am 02.09.2026: Der Trenner steht bei x=748, die Nachbarspalte
+# bei x=739 ist im selben Band leer. Die alten Werte gehoerten zum Raster vor
+# dem Umbau.
 pdftoppm -png -r 144 -f 1 -l 1 -singlefile \
-    -x 713 -y 318 -W 3 -H 70 \
+    -x 748 -y 330 -W 3 -H 60 \
     "$fixture_dir/message-form-priority-none.pdf" \
     "$fixture_dir/priority-divider"
 pdftoppm -png -r 144 -f 1 -l 1 -singlefile \
-    -x 704 -y 318 -W 3 -H 70 \
+    -x 739 -y 330 -W 3 -H 60 \
     "$fixture_dir/message-form-priority-none.pdf" \
     "$fixture_dir/priority-divider-reference"
 if cmp -s \
@@ -347,14 +388,22 @@ if cmp -s \
     exit 1
 fi
 
-# A former divider at x=55 mm split Nachrichtenform into an empty extra cell.
-# Its old position and a neighbouring blank strip must now render identically.
+# Kein zweiter Trenner zerschneidet die Nachrichtenform.
+#
+# Frueher stand hier die alte Position eines entfernten Trenners bei 55 mm.
+# Nach dem Umbau des Blattes trifft diese Koordinate anderen Inhalt, und der
+# Vergleich schlug fehl, obwohl kein Trenner zurueck war. Nachgemessen am
+# 02.09.2026 laeuft die Zeile vom linken Rand bei x=168 bis zum 61/39-Trenner
+# bei x=749 -- dazwischen liegt keine einzige durchgehende Senkrechte. Die
+# beiden Sonden stehen nebeneinander in dieser leeren Mitte und sind heute
+# bildgleich;
+# wer dort wieder einen Trenner zieht, bricht die Gleichheit.
 pdftoppm -png -r 144 -f 1 -l 1 -singlefile \
-    -x 367 -y 318 -W 4 -H 70 \
+    -x 341 -y 330 -W 4 -H 60 \
     "$fixture_dir/message-form-priority-none.pdf" \
     "$fixture_dir/priority-legacy-divider"
 pdftoppm -png -r 144 -f 1 -l 1 -singlefile \
-    -x 356 -y 318 -W 4 -H 70 \
+    -x 345 -y 330 -W 4 -H 60 \
     "$fixture_dir/message-form-priority-none.pdf" \
     "$fixture_dir/priority-legacy-divider-reference"
 if ! cmp -s \
@@ -437,7 +486,25 @@ for pdf_file in "$long_single_pdf" "$long_dossier_pdf"; do
     grep -Eq '^Page size:[[:space:]]+595\.28 x 841\.89 pts \(A4\)$' \
         "$info_file"
     grep -Fq 'ENDE-MEHRSEITIGER-VORDRUCK' "$text_file"
-    [ "$(grep -Fc 'EINGANG' "$text_file")" -eq "$current_page_count" ]
+    # Jede Seite traegt die Richtungsangabe -- gezaehlt werden SEITEN.
+    #
+    # Vorher wurden Treffer gezaehlt und mit der Seitenzahl verglichen. Das
+    # hielt genau so lange, wie die Angabe einmal je Seite stand. Der
+    # umgebaute Vordruck nennt sie zweimal, in der Kopfzeile und in der
+    # rechten Spalte, und die Zaehlung schlug fehl, obwohl keine Seite ohne
+    # sie war. Gemeint war immer: auf jeder Seite steht sie.
+    marked_pages=0
+    page_number=1
+    while [ "$page_number" -le "$current_page_count" ]; do
+        page_text=$pdf_file.direction-page-$page_number.txt
+        pdftotext -layout -f "$page_number" -l "$page_number" \
+            "$pdf_file" "$page_text"
+        if grep -Fqi 'EINGANG' "$page_text"; then
+            marked_pages=$((marked_pages + 1))
+        fi
+        page_number=$((page_number + 1))
+    done
+    [ "$marked_pages" -eq "$current_page_count" ]
     if awk 'NR > 2 && $1 ~ /^[0-9]+$/ { found = 1 } END { exit found ? 0 : 1 }' \
         "$image_file"; then
         echo "Long message form still contains a rendered image: $pdf_file" >&2
@@ -799,7 +866,13 @@ while [ "$page_number" -le "$complete_page_count" ]; do
     pdftotext -layout -f "$page_number" -l "$page_number" \
         "$complete_dossier_pdf" \
         "$complete_dossier_pdf.page-$page_number.layout.txt"
-    if grep -Fq 'EINGANG' \
+    # "Aufnahmevermerk" statt "Eingang" als Seitenmarke.
+    #
+    # Gesucht ist DIE eine Vordruckseite. Das Wort "Eingang" steht auf dem
+    # heutigen Blatt in gemischter Schreibung und kommt im Dossier auf drei
+    # Seiten vor; als Marke taugt es nicht mehr. "Aufnahmevermerk" steht auf
+    # genau einer Seite -- nachgemessen am 02.09.2026.
+    if grep -Fq 'Aufnahmevermerk' \
         "$complete_dossier_pdf.page-$page_number.layout.txt"; then
         [ -z "$message_page" ] || {
             echo "Complete dossier contains more than one message-form page" >&2
@@ -861,8 +934,8 @@ awk '
     echo "Visible JPEG attachment page lacks its exact content image" >&2
     exit 1
 }
-for marker in EINGANG AUSGANG Nachweis-Nr. Fm-Betriebsstelle; do
-    grep -Fq "$marker" \
+for marker in EINGANG AUSGANG Fm-Zentrale Aufnahmevermerk; do
+    grep -Fqi "$marker" \
         "$complete_dossier_pdf.page-$message_page.layout.txt"
 done
 for marker in Vorrang Sofort Blitz Staatsnot; do
@@ -970,12 +1043,18 @@ compare_production_crop() {
 }
 
 # The only excluded rectangle contains the intentionally dossier-global
-# dossier-global page counter. Every other pixel of the productive message
-# page must equal the standalone form, including fields, grid and content.
-compare_production_crop top 0 0 1191 180
-compare_production_crop counter-left 0 180 840 50
-compare_production_crop counter-right 1020 180 171 50
-compare_production_crop below-counter 0 230 1191 1454
+# page counter. Every other pixel of the productive message page must equal
+# the standalone form, including fields, grid and content.
+#
+# Der Zaehler ist mit dem Umbau vom Kopf an den Fuss des Blattes gewandert.
+# Nachgemessen am 02.09.2026: Einzelblatt und Dossierseite unterscheiden sich
+# in genau 103 Bildpunkten bei x 1075-1103, y 1644-1654 -- und sonst nirgends.
+# Das ausgesparte Rechteck liegt jetzt dort; die vier Ausschnitte decken
+# zusammen weiterhin die ganze Seite ab.
+compare_production_crop top 0 0 1191 1640
+compare_production_crop counter-left 0 1640 1070 20
+compare_production_crop counter-right 1110 1640 81 20
+compare_production_crop below-counter 0 1660 1191 24
 
 pdfdetach -save 1 -o "$fixture_dir/extracted-attachment.txt" "$dossier_pdf"
 cmp \

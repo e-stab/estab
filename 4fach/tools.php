@@ -1,5 +1,7 @@
 <?php
 
+require_once __DIR__ . "/../app/nv_datetime_group.php";
+
 //define ("debug", false);              // true = gibt debuginformationen aus
 
 /*****************************************************************************\
@@ -20,18 +22,110 @@ require_once __DIR__ . "/../app/auth.php";
 require_once __DIR__ . "/../app/csrf.php";
 require_once __DIR__ . "/../app/file_access.php";
 require_once __DIR__ . "/../app/navigation.php";
+require_once __DIR__ . "/../app/tabelle.php";
 require_once __DIR__ . "/../app/self_registration.php";
 require_once __DIR__ . "/../app/session_ui.php";
 
-  function pre_html ($art, $titel, $cssstr, $sharedUi = false){
+  /*
+   * $sharedUi war frueher abgeschaltet, und kein Aufrufer schaltete es ein.
+   * Damit bekam keine der uebernommenen Seiten das gemeinsame Stylesheet --
+   * sie standen in der Schrift und den Farben des Browsers da, waehrend
+   * daneben die Huelle in der Gestaltung der Anwendung stand. Wer beides
+   * gleichzeitig sah, sah zwei Programme.
+   */
+  /**
+   * Die Rueckmeldung einer abgeschlossenen Handlung einsetzen.
+   *
+   * Seit der Umstellung auf die Weiterleitung (siehe resetframeset in
+   * mainindex.php) beantwortet der Steuerlauf eine Handlung nicht mehr mit
+   * einer Seite, sondern mit 303. Was der Bedienende lesen soll -- was
+   * geschehen ist und wohin die Nachricht ging -- traegt die Sitzung
+   * hinueber und wird auf der Zielseite gezeigt.
+   *
+   * Eingesetzt wird sie hier, in der einen Funktion, die jede Ansicht des
+   * Nachrichtenrahmens vor ihrem <body> aufruft. Der Aufrufer schreibt
+   * sein <body> selbst und mit eigener Klasse; deshalb ein Ausgabepuffer,
+   * der die Tafel hinter das erste <body> setzt, statt sie davor
+   * auszugeben. Vor dem <body> ausgegeben, oeffnete der Browser den
+   * Koerper selbst -- und die Klasse des Aufrufers ginge verloren.
+   *
+   * Ohne diese eine Stelle muesste jede der sieben Ansichten dieselbe
+   * Zeile tragen, und die achte vergaesse sie.
+   */
+  function estab_rueckmeldung_einsetzen (){
+    if (!isset ($_SESSION) || !is_array ($_SESSION)) {
+      return;
+    }
+    $rueckmeldung = estab_session_ui_outcome_take ($_SESSION);
+    if ($rueckmeldung === null) {
+      return;
+    }
+    include ("../4fcfg/config.inc.php");
+    try {
+      $tafel = estab_session_ui_message_confirmation_markup (
+        $rueckmeldung,
+        (string) ($conf_4f ["MainURL"] ?? "")
+      );
+    } catch (Throwable $exception) {
+      // Die Nachricht ist gespeichert. Scheitert allein die Tafel, bleibt
+      // die Ansicht stehen, statt dass die Seite zerbricht.
+      error_log (
+        "eStab message confirmation rendering failed: ".
+        $exception->getMessage ()
+      );
+      return;
+    }
+    if ($tafel === "") {
+      return;
+    }
+    /*
+     * Mit der Tafel wird die Seitenleiste aufgefrischt.
+     *
+     * Sonst stimmten die Warteschlangenzaehler und der Zaehler der
+     * Korrekturschleife bis zu dreissig Sekunden lang nicht -- so lange
+     * bis das Cockpit von allein nachsieht. Wer eine Meldung abgesetzt hat
+     * und daneben unveraendert dieselbe Zahl liest, glaubt, sie sei nicht
+     * durchgelaufen.
+     *
+     * Nur die Seitenleiste: Wer auch den Nachrichtenrahmen auffrischte,
+     * loeschte die Tafel, bevor sie gelesen werden kann.
+     */
+    $tafel = estab_session_ui_frame_refresh_markup (
+      estab_session_ui_sidebar_refresh_script ()
+    ).$tafel;
+    ob_start (static function (string $ausgabe) use ($tafel): string {
+      $stelle = stripos ($ausgabe, "<body");
+      if ($stelle === false) {
+        return $ausgabe;
+      }
+      $ende = strpos ($ausgabe, ">", $stelle);
+      if ($ende === false) {
+        return $ausgabe;
+      }
+      return substr ($ausgabe, 0, $ende + 1)
+        . $tafel
+        . substr ($ausgabe, $ende + 1);
+    });
+  }
+
+  function pre_html ($art, $titel, $cssstr, $sharedUi = true){
     include ("../4fcfg/para.inc.php");
     include ("../4fcfg/config.inc.php");
+    estab_rueckmeldung_einsetzen ();
     echo "<!DOCTYPE html PUBLIC \"-//W3C//DTD HTML 4.01 Transitional//EN\">\n";
-    echo "<html>\n";
+    // Die Sprache gehoert an das Dokument, nicht in die Annahme des Browsers.
+    //
+    // Ohne sie trennt kein Browser deutsche Woerter -- "hyphens: auto" bleibt
+    // wirkungslos, und lange Fachwoerter brechen hart mitten durch ("Befoerde
+    // run / g"). Ein Vorleseprogramm raet ausserdem die Sprache und spricht
+    // deutsche Namen englisch aus. Die uebrigen Seitenrahmen der Anwendung
+    // (app_shell.php, session_ui.php) setzen sie seit jeher; nur dieser
+    // Bestandsrahmen tat es nicht.
+    echo "<html lang=\"de\">\n";
     echo "<head><meta http-equiv=\"content-type\" content=\"text/html; charset=UTF-8\" />\n";
     echo "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n";
 
-    echo "<script language=\"JavaScript\">\n";
+    echo "<script".estab_csp_script_attribute()." language=\"JavaScript\">\n";
     echo "<!--\n";
     echo "function FramesVeraendern(){";
     echo "for(var i=0;i+1<arguments.length;i+=2){";
@@ -42,11 +136,37 @@ require_once __DIR__ . "/../app/session_ui.php";
     echo "//-->\n";
     echo "</script>\n";
 
+    // Der Druckknopf trug frueher onclick beziehungsweise eine
+    // Adresse mit javascript-Schema. Beides verwirft die Richtlinie. Die
+    // Bindung liegt jetzt zentral am Datenattribut und traegt eine Sperre
+    // gegen Mehrfachbindung, weil einzelne Seiten mehrere Formulare
+    // aufbauen.
+    echo "<script".estab_csp_script_attribute()." data-estab-print-binding>";
+    echo "if(!window.estabPrintBound){window.estabPrintBound=true;";
+    echo "document.addEventListener(\"click\",function(event){";
+    echo "var target=event.target;";
+    echo "if(!target||typeof target.closest!==\"function\"){return;}";
+    echo "if(!target.closest(\"[data-estab-print]\")){return;}";
+    echo "event.preventDefault();window.print();});}";
+    echo "</script>\n";
+
     echo "<meta http-equiv=\"Content-Type\" content=\"text/html; charset=UTF-8\">\n";
    switch ($art){
      case "N":
-        echo"<script type=\"text/javascript\">";
+        echo"<script".estab_csp_script_attribute()." type=\"text/javascript\">";
         echo "function FensterOeffnen (Adresse) {MeinFenster = window.open(Adresse, \"Zweitfenster\", \"width=700,height=650,left=100,top=100,menubar=no,location=no,resizable=yes,scrollbars=yes,status=no,toolbar=no\"); if (MeinFenster) { MeinFenster.focus(); }}";
+        echo "</script>";
+        // Der Hilfeverweis trug einen onclick-Handler; den lehnt die
+        // Richtlinie ab. Die Bindung liegt jetzt am Datenattribut.
+        echo "<script".estab_csp_script_attribute()." data-estab-help-window-binding>";
+        echo "document.addEventListener(\"click\",function(event){";
+        echo "var target=event.target;";
+        echo "if(!target||typeof target.closest!==\"function\"){return;}";
+        echo "var link=target.closest(\"[data-estab-help-window]\");";
+        echo "if(!link){return;}";
+        echo "event.preventDefault();";
+        echo "FensterOeffnen(link.href);";
+        echo "});";
         echo "</script>";
 
      break;
@@ -59,22 +179,22 @@ require_once __DIR__ . "/../app/session_ui.php";
      case "ldfliste":
        echo "<meta http-equiv=\"pragma\" content=\"no cache\">\n";
        echo "<meta http-equiv=\"expires\" content=\"0\">\n";
-       echo "<meta http-equiv=\"refresh\" content=\"".$cfg ["itv"] ["fmdliste"]."\">\n";
+       echo estab_list_refresh_script ($cfg ["itv"] ["fmdliste"]);
      break;
      case "stabliste":
        echo "<meta http-equiv=\"pragma\" content=\"no cache\">\n";
        echo "<meta http-equiv=\"expires\" content=\"0\">\n";
-       echo "<meta http-equiv=\"refresh\" content=\"".$cfg ["itv"] ["stabliste"]."\">\n";
+       echo estab_list_refresh_script ($cfg ["itv"] ["stabliste"]);
      break;
      case "siliste":
        echo "<meta http-equiv=\"pragma\" content=\"no cache\">\n";
        echo "<meta http-equiv=\"expires\" content=\"0\">\n";
-       echo "<meta http-equiv=\"refresh\" content=\"".$cfg ["itv"] ["siliste"]."\">\n";
+       echo estab_list_refresh_script ($cfg ["itv"] ["siliste"]);
      break;
      case "si2liste":
        echo "<meta http-equiv=\"pragma\" content=\"no cache\">\n";
        echo "<meta http-equiv=\"expires\" content=\"0\">\n";
-       echo "<meta http-equiv=\"refresh\" content=\"".$cfg ["itv"] ["si2liste"]."\">\n";
+       echo estab_list_refresh_script ($cfg ["itv"] ["si2liste"]);
      break;
      case "reset":
        echo "<meta http-equiv=\"pragma\" content=\"no cache\">\n";
@@ -182,37 +302,29 @@ require_once __DIR__ . "/../app/session_ui.php";
   | Formatausgang: YYYY-MM-TT hh:mm:ss
   \****************************************************************************/
   function conv_time_datetime($data){
-    $tak_monate = array (
-         "01" => 'jan',
-         "02" => 'feb',
-         "03" => 'mar',
-         "04" => 'apr',
-         "05" => 'mai',
-         "06" => 'jun',
-         "07" => 'jul',
-         "08" => 'aug',
-         "09" => 'sep',
-         "10" => 'oct',
-         "11" => 'nov',
-         "12" => 'dec' );
-    $rew_tak_monate = array (
-         "jan" => '01',
-         "feb" => '02',
-         "mar" => '03',
-         "apr" => '04',
-         "mai" => '05',
-         "may" => '05',
-         "jun" => '06',
-         "jul" => '07',
-         "aug" => '08',
-         "sep" => '09',
-         "okt" => '10',
-         "oct" => '10',
-         "nov" => '11',
-         "dez" => '12',
-         "dec" => '12' );
+    // Beide Tabellen kommen aus app/nv_datetime_group.php: geschrieben wird
+    // englisch, gelesen zusaetzlich die deutschen Kuerzel des Bestands.
+    $tak_monate = estab_nv_month_abbreviations ();
+    $rew_tak_monate = estab_nv_month_numbers ();
 
     $laenge = strlen ($data);
+    /* Ausfuellanleitung Nachrichtenvordruck: Uhrzeiten werden vierstellig
+       gefuehrt, Datumsangaben mindestens zweistellig. Nur Ziffern sind eine
+       Zeitangabe - ohne diese Pruefung vergleicht PHP eine Eingabe wie "1x"
+       als Zeichenkette mit 23, und "1x59" wandert bis in die Datenbankzeit. */
+    $zeitangabe = (string) $data;
+    $ziffernform = true;
+    if ( ($laenge == 4) or ($laenge == 6) ){
+      $ziffernform = ctype_digit ($zeitangabe);
+    }
+    if ( $laenge == 13 ){
+      $ziffernform = (ctype_digit (substr ($zeitangabe, 0, 6))
+                      && ctype_digit (substr ($zeitangabe, 9, 4))
+                      && isset ($rew_tak_monate [substr ($zeitangabe, 6, 3)]));
+    }
+    if ( !$ziffernform ){
+      return array ("l_data" => false, "data" => $data);
+    }
     switch ( $laenge ){
       case 13:// TThhmmMMMJJJJ
           $tag    = substr ($data, 0, 2);
@@ -651,33 +763,59 @@ bersichtlich dargestellt werden.
     }
 
     /*Benutzerliste*/
+    // Vor der Verzweigung: Auch der Fall "noch kein Konto" muss wissen, ob er
+    // auf der Anmeldeseite steht -- dort bringt die Seite die Huelle mit.
+    $loginSelectable = $what == "verlinkt"
+      && in_array (($_SESSION ["menue"] ?? ""), array ("WELCOME", "LOGIN"), true);
     if ($benutzer !== array ()){
       include ("../4fcfg/config.inc.php");
-      $loginSelectable = $what == "verlinkt"
-        && in_array (($_SESSION ["menue"] ?? ""), array ("WELCOME", "LOGIN"), true);
       if ($what == 'verlinkt'){
-         echo "\n\n<form action=\"".estab_auth_html ($conf_4f ["MainURL"])."\" method=\"POST\" target=\"_self\">\n";
+         /*
+          * Die Kennung verbindet die Auswahlknoepfe der Kontenliste mit
+          * diesem Formular.
+          *
+          * Es traegt nur die verborgenen Felder und ist sofort wieder zu.
+          * Frueher umschloss es Ueberschrift und Hilfssatz und endete
+          * mitten im <fieldset>, das nach ihm begonnen hatte -- der
+          * Browser flickt das, aber verlassen sollte man sich darauf
+          * nicht. Die Auswahlknoepfe stehen ohnehin nicht darin: Sie
+          * haengen ueber form="estab-kontenwahl" daran, denn das
+          * Tabellenbauteil bringt sein eigenes Suchformular mit, und ein
+          * Formular im Formular wirft der Browser weg.
+          */
+         echo "\n\n<form id=\"estab-kontenwahl\" action=\"".estab_auth_html ($conf_4f ["MainURL"])."\" method=\"POST\" target=\"_self\">\n";
          echo estab_csrf_field ()."\n";
          echo estab_navigation_login_destination_field ($loginDestination)."\n";
          echo "<!-- Benutzerliste mit POST-Auswahl zur Anmeldung -->\n";
+         echo "</form>\n";
       }
 
-      echo "<section class=\"estab-auth-shell\">\n";
-      echo "<fieldset class=\"estab-auth-card\">";
-      echo "<legend><b><big>".
+      /*
+       * Nur die Tafel, keine Huelle: Die Anmeldeseite stellt die Liste in
+       * ihren Arbeitsbereich neben die Felder, die Kontenuebersicht der
+       * angemeldeten Sitzung in ihre Inhaltsspalte. Wer beides mitbraechte,
+       * haette zwei Huellen ineinander mit zwei Innenabstaenden.
+       */
+      echo "<section class=\"estab-tool-panel".
+           ($loginSelectable
+             ? " estab-anmeldung-tafel estab-anmeldung-konten"
+             : "")."\">\n";
+      echo "<div class=\"estab-tool-panel-heading\"><h2>".
            ($loginSelectable ? "Bestehendes Konto auswählen" : "Benutzerliste").
-           "</big></b></legend>\n";
+           "</h2></div>\n";
       if ($loginSelectable) {
-        echo "<p>Die Auswahl übernimmt Name, Kürzel und Funktion. Zum Anmelden benötigen Sie weiterhin das zugehörige Kennwort.</p>\n";
+        echo "<p class=\"estab-auth-help\">Die Auswahl übernimmt Name, Kürzel und Funktion. Zum Anmelden benötigen Sie weiterhin das zugehörige Kennwort.</p>\n";
       }
-      echo "<table class=\"estab-account-list\">\n";
-      echo "<tbody>\n";
-      echo "<tr>";
-      echo "<th scope=\"col\">Benutzer</th><th scope=\"col\">Kürzel</th><th scope=\"col\">Rolle</th><th scope=\"col\">Funktion</th><th scope=\"col\">Status</th>";
-      if ($loginSelectable) {
-        echo "<th scope=\"col\">Aktion</th>";
-      }
-      echo "</tr>\n";
+      /*
+       * Die Kontenliste kommt aus dem Tabellenbauteil (app/tabelle.php).
+       *
+       * Sie war die letzte Liste mit eigenem Markup und eigener Klasse
+       * (estab-account-list) -- und deshalb ist sie meinem Waechter
+       * entgangen, der nur zwei bestimmte Klassennamen zaehlte. Bei einer
+       * Uebung mit hundert Konten sucht man ein Kuerzel sonst mit dem Finger
+       * am Bildschirm.
+       */
+      $kontenZeilen = array ();
       foreach ($benutzer as $user){
         $presence = estab_auth_presence_state ($user);
         $isCurrentSession = (string) ($user ["sid"] ?? "") !== ""
@@ -694,34 +832,92 @@ bersichtlich dargestellt werden.
               "blocked" => "Gesperrt",
               default => "Abgemeldet",
             };
-        echo "<tr class=\"".$rowClass."\">";
-        $identityToken = $loginSelectable ? estab_auth_identity_token ($user) : "";
-        foreach (array ("benutzer", "kuerzel", "rolle", "funktion") as $column) {
-          $value = (string) ($user [$column] ?? "");
-          if ($column === "funktion") {
-            $value = estab_function_display_name ($value);
-          }
-          $safeValue = estab_auth_html ($value);
-          echo "<td>".$safeValue."</td>";
-        }
-        echo "<td>".estab_auth_html ($statusText)."</td>";
-        if ($loginSelectable) {
-          $safeToken = estab_auth_html ($identityToken);
-          $safeName = estab_auth_html ($user ["benutzer"] ?? "");
-          $safeCode = estab_auth_html ($user ["kuerzel"] ?? "");
-          echo "<td><button class=\"estab-button\" type=\"submit\" name=\"login_identity\" value=\"".$safeToken."\" aria-label=\"Konto ".$safeName." mit Kürzel ".$safeCode." auswählen\">Konto auswählen</button></td>";
-        }
-        echo "</tr>\n";
+        $kontenZeilen[] = array (
+          "benutzer" => (string) ($user ["benutzer"] ?? ""),
+          "kuerzel" => (string) ($user ["kuerzel"] ?? ""),
+          "rolle" => (string) ($user ["rolle"] ?? ""),
+          "funktion" => estab_function_display_name (
+            (string) ($user ["funktion"] ?? "")
+          ),
+          "status" => $statusText,
+          "marke" => $rowClass,
+          "kennung" => $loginSelectable
+            ? estab_auth_identity_token ($user)
+            : "",
+        );
       }
-      echo "</tbody></table>\n";
-      echo "</fieldset>\n";
+
+      $kontenStati = array ();
+      foreach ($kontenZeilen as $kontenZeile) {
+        $kontenStati [$kontenZeile ["status"]] = true;
+      }
+      ksort ($kontenStati);
+
+      /*
+       * Die Breiten sind an der engsten Lage gerechnet, in der diese Liste
+       * neben den Anmeldefeldern steht: Fenster 1024, Liste 656
+       * Bildpunkte. Jede Spalte muss dort ihren laengsten unteilbaren
+       * Inhalt tragen -- "Fernmelder" 68 Punkte, der Auswahlknopf 82, der
+       * Kopf "KÜRZEL" mit seinem Sortierzeichen 73 -- plus 16 Punkte
+       * Zellpolster. Waren die Spalten schmaler, brach der Browser mitten
+       * im Wort um, und der Knopf stand ausserhalb seiner Spalte.
+       */
+      $kontenSpalten = array (
+        array ("schluessel" => "benutzer", "kopf" => "Benutzer",
+          "breite" => $loginSelectable ? 19 : 28,
+          "sortierbar" => true, "suchbar" => true, "art" => "text"),
+        array ("schluessel" => "kuerzel", "kopf" => "Kürzel",
+          "breite" => 12,
+          "sortierbar" => true, "suchbar" => true, "art" => "text"),
+        array ("schluessel" => "rolle", "kopf" => "Rolle",
+          "breite" => 14,
+          "sortierbar" => true, "suchbar" => true, "art" => "text"),
+        array ("schluessel" => "funktion", "kopf" => "Funktion",
+          "breite" => $loginSelectable ? 15 : 16,
+          "sortierbar" => true, "suchbar" => true, "art" => "text"),
+        array ("schluessel" => "status", "kopf" => "Status",
+          "breite" => $loginSelectable ? 23 : 30,
+          "sortierbar" => true, "suchbar" => true, "art" => "text",
+          "filter" => array_keys ($kontenStati),
+          "filtername" => "Alle Zustände"),
+      );
+      if ($loginSelectable) {
+        $kontenSpalten[] = array (
+          "schluessel" => "kennung", "kopf" => "Aktion", "breite" => 17,
+          "sortierbar" => false, "suchbar" => false, "art" => "text",
+          "zelle" => static function (array $z): string {
+            return "<button class=\"estab-button\" type=\"submit\""
+              . " form=\"estab-kontenwahl\""
+              . " name=\"login_identity\" value=\""
+              . estab_auth_html ($z ["kennung"])."\""
+              . " aria-label=\"Konto ".estab_auth_html ($z ["benutzer"])
+              . " mit Kürzel ".estab_auth_html ($z ["kuerzel"])
+              . " auswählen\">Auswählen</button>";
+          },
+        );
+      }
+
+      echo estab_tabelle_markup (array (
+        "id" => "konten",
+        "beschriftung" => $loginSelectable
+          ? "Bestehende Konten mit Rolle, Funktion und Anmeldestatus"
+          : "Benutzerkonten mit Rolle, Funktion und Anmeldestatus",
+        "mindestbreite" => "36rem",
+        // Wenige Spalten, aber ein schmaler Platz: erst unter 30rem Karten.
+        "schmal" => true,
+        "zeilenmarke" => static function (array $z): string {
+          return "class=\"".estab_auth_html ($z ["marke"])."\"";
+        },
+        "spalten" => $kontenSpalten,
+        "zeilen" => $kontenZeilen,
+        "leer" => "Kein Konto entspricht den gesetzten Filtern.",
+      ));
       echo "</section>\n";
-      if ($what == 'verlinkt'){
-         echo "</form>\n";
-      }
     } else {
-      echo "<section class=\"estab-auth-shell\"><div class=\"estab-auth-card\">\n";
-      echo "<h2>Noch keine Konten vorhanden</h2>\n";
+      echo "<section class=\"estab-tool-panel".
+           ($loginSelectable ? " estab-anmeldung-tafel" : "")."\">\n";
+      echo "<div class=\"estab-tool-panel-heading\">".
+           "<h2>Noch keine Konten vorhanden</h2></div>\n";
       if ($registrationAvailable && $registrationAllowed) {
         echo "<p>Legen Sie das erste Funktionskonto über „Neues Konto anlegen“ an.</p>\n";
       } elseif (!$registrationAvailable) {
@@ -729,7 +925,7 @@ bersichtlich dargestellt werden.
       } else {
         echo "<p>Die Selbstregistrierung ist geschlossen. Die zuständige Stelle kann ein Konto in der Benutzerverwaltung anlegen oder die Kontoanlage zeitlich freigeben.</p>\n";
       }
-      echo "</div></section>\n";
+      echo "</section>\n";
     }
   }
 
@@ -799,7 +995,7 @@ bersichtlich dargestellt werden.
   function errorwindow ($lokation, $parameter){
     $timestr = date ("His");
     echo "<!--  fehlermeldung ".$timestr."   -->";
-    echo "<script type=\"text/javascript\">\n";
+    echo "<script".estab_csp_script_attribute()." type=\"text/javascript\">\n";
     echo "var Neufenster = window.open(\"./info.php?sub=$lokation&info=".$parameter."\",\"AnderesFenster\",\"width=640,height=480, resizable=yes, scrollbars=yes\");\n";
     echo "</script>\n";
   }
@@ -838,6 +1034,105 @@ bersichtlich dargestellt werden.
     return $coloursByFunction;
   }
 
+  /****************************************************************************\
+  | Selbsttaetige Aktualisierung einer Liste.
+  |
+  | Bisher stand hier ein <meta http-equiv="refresh">. Der laedt die Seite
+  | unbedingt neu und ist nicht aufzuhalten: alle zehn Sekunden verlor die
+  | Sichter- und Fernmelderliste die Sucheingabe und die Scrollposition, und
+  | wer gerade tippte, tippte ins Leere. Der Ersatz verschiebt die
+  | Aktualisierung, solange jemand in einem Eingabefeld steht oder Text
+  | markiert hat, und stellt die Scrollposition danach wieder her.
+  \****************************************************************************/
+  /*
+   * Die Liste erneuert ihren Inhalt, ohne die Seite zu verlassen.
+   *
+   * Sie lud sich frueher selbst neu (window.location.reload). Das hatte
+   * drei Nachteile, und der dritte war der schlimmste:
+   *
+   * 1. Die Bildlaufstelle ging verloren und musste umstaendlich gemerkt
+   *    und wiederhergestellt werden.
+   * 2. Kopf, Menue und Skripte wurden mit aufgebaut, obwohl sich nur die
+   *    Liste aendert.
+   * 3. Die Listenseiten kommen aus einem POST. Ein Neuladen einer
+   *    POST-Antwort laesst den Browser fragen, ob die Daten erneut
+   *    gesendet werden sollen -- bei zehn Sekunden Takt alle zehn
+   *    Sekunden. Genau das hat der Betrieb gemeldet.
+   *
+   * Nachgemessen: Ein GET auf dieselbe Adresse liefert dieselbe Ansicht,
+   * weil die Sitzung den Zustand traegt. Der Inhalt laesst sich also
+   * holen und einsetzen.
+   *
+   * ## Warum keine Skripte aus der Antwort ausgefuehrt werden
+   *
+   * Eingesetztes Markup fuehrt seine <script>-Elemente ohnehin nicht aus.
+   * Sie neu zu erzeugen waere die uebliche Abhilfe; hier waere sie falsch.
+   * Die Sicherheitsrichtlinie bindet Skripte an eine Einmalkennung, und
+   * die der geholten Antwort ist eine andere als die des laufenden
+   * Dokuments. Ein nachgebautes Skript waere entweder gesperrt, oder man
+   * muesste die Kennung durchreichen -- und haette die Richtlinie
+   * ausgehebelt. Die Listenseiten tragen ihre Skripte im Kopf, nicht im
+   * Inhalt; die Pruefung list_refresh_security haelt das fest.
+   */
+  function estab_list_refresh_script ($seconds){
+    $interval = filter_var (
+      $seconds,
+      FILTER_VALIDATE_INT,
+      array ("options" => array ("min_range" => 5, "max_range" => 3600))
+    );
+    if ($interval === false) {
+      return "";
+    }
+    $milliseconds = $interval * 1000;
+    return "<script".estab_csp_script_attribute().
+      " data-estab-list-refresh=\"".$interval."\">\n".
+      "(function(){\n".
+      // Niemanden unterbrechen, der gerade arbeitet.
+      "function busy(){\n".
+      "var active=document.activeElement;\n".
+      "if(active){var tag=String(active.tagName||'').toLowerCase();\n".
+      "if(tag==='input'||tag==='textarea'||tag==='select'){return true;}\n".
+      "if(active.isContentEditable){return true;}}\n".
+      "var selection=window.getSelection&&window.getSelection();\n".
+      "if(selection&&String(selection).length>0){return true;}\n".
+      // Ein geoeffnetes Aufklappfeld ist eine Absicht des Lesenden.
+      "if(document.querySelector('details[open]')){return true;}\n".
+      "return false;}\n".
+      "function einsetzen(text){\n".
+      "var doc=new DOMParser().parseFromString(text,'text/html');\n".
+      "var neu=doc.body;\n".
+      "if(!neu){return;}\n".
+      // Skripte werden nicht uebernommen; siehe Erklaerung oben.
+      "var skripte=neu.querySelectorAll('script');\n".
+      "for(var i=0;i<skripte.length;i++){skripte[i].remove();}\n".
+      "if(busy()){return;}\n".
+      "document.body.replaceChildren.apply(document.body,\n".
+      "Array.prototype.slice.call(neu.childNodes));}\n".
+      "function holen(){\n".
+      "return fetch(window.location.href,{credentials:'same-origin',\n".
+      "headers:{'Accept':'text/html'}}).then(function(antwort){\n".
+      // Eine Weiterleitung auf die Anmeldung ist keine Liste. Sie
+      // einzusetzen zeigte ein Anmeldeformular im Listenrahmen; besser
+      // gar nichts tun und beim naechsten Takt erneut versuchen.
+      "if(!antwort.ok||antwort.redirected){return null;}\n".
+      "var art=antwort.headers.get('content-type')||'';\n".
+      "if(art.indexOf('text/html')<0){return null;}\n".
+      "return antwort.text();}).then(function(text){\n".
+      "if(text!==null){einsetzen(text);}});}\n".
+      "function schedule(delay){window.setTimeout(function(){\n".
+      "if(busy()){schedule(5000);return;}\n".
+      // Ein Fehler beim Holen laesst die Seite stehen, wie sie ist, und
+      // versucht es beim naechsten Takt wieder. Eine leere Liste waere
+      // schlimmer als eine, die einen Takt alt ist.
+      "holen().catch(function(){}).then(function(){\n".
+      "schedule(".$milliseconds.");});},delay);}\n".
+      "function start(){schedule(".$milliseconds.");}\n".
+      "if(document.readyState==='complete'){start();}\n".
+      "else{window.addEventListener('load',start);}\n".
+      "})();\n".
+      "</script>\n";
+  }
+
   function estab_recipient_copy_colours ($copyColours){
     $result = array ();
     foreach (explode (",", (string) $copyColours) as $colour) {
@@ -850,6 +1145,101 @@ bersichtlich dargestellt werden.
       }
     }
     return $result;
+  }
+
+  /****************************************************************************\
+  | Lesbare Schriftfarbe zu einem Durchschriften-Hintergrund.
+  |
+  | Die Durchschriftenfarben sind helle Pastelltoene und der Standardwert ist
+  | Weiss. Eine fest verdrahtete weisse Schrift verschwindet darauf. Die Farbe
+  | wird deshalb aus der Helligkeit des Hintergrunds bestimmt, und bei mehreren
+  | Durchschriften so gewaehlt, dass sie auf jedem Abschnitt lesbar bleibt.
+  \****************************************************************************/
+  function estab_colour_channels ($colour){
+    $colour = trim (strtolower ((string) $colour));
+    if (preg_match ('/\A#([0-9a-f]{3})\z/', $colour, $short) === 1) {
+      return array (
+        hexdec (str_repeat ($short [1] [0], 2)),
+        hexdec (str_repeat ($short [1] [1], 2)),
+        hexdec (str_repeat ($short [1] [2], 2))
+      );
+    }
+    if (preg_match ('/\A#([0-9a-f]{6})\z/', $colour, $long) === 1) {
+      return array (
+        hexdec (substr ($long [1], 0, 2)),
+        hexdec (substr ($long [1], 2, 2)),
+        hexdec (substr ($long [1], 4, 2))
+      );
+    }
+    if (
+      preg_match (
+        '/\Argba?\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*[,)]/',
+        $colour,
+        $rgb
+      ) === 1
+    ) {
+      $channels = array ((int) $rgb [1], (int) $rgb [2], (int) $rgb [3]);
+      foreach ($channels as $channel) {
+        if ($channel > 255) {
+          return null;
+        }
+      }
+      return $channels;
+    }
+    return null;
+  }
+
+  function estab_colour_relative_luminance (array $channels){
+    $linear = array ();
+    foreach ($channels as $channel) {
+      $value = $channel / 255;
+      $linear [] = $value <= 0.03928
+        ? $value / 12.92
+        : pow (($value + 0.055) / 1.055, 2.4);
+    }
+    return 0.2126 * $linear [0] + 0.7152 * $linear [1] + 0.0722 * $linear [2];
+  }
+
+  function estab_colour_contrast_ratio ($first, $second){
+    $lighter = max ($first, $second);
+    $darker = min ($first, $second);
+    return ($lighter + 0.05) / ($darker + 0.05);
+  }
+
+  function estab_recipient_copy_ink (
+    $copyColours,
+    array $backgroundColours,
+    $defaultColour
+  ){
+    $resolved = array ();
+    foreach (estab_recipient_copy_colours ($copyColours) as $colour) {
+      $lookup = $colour === "gb" ? "ge" : $colour;
+      if (isset ($backgroundColours [$lookup])) {
+        $resolved [] = (string) $backgroundColours [$lookup];
+      }
+    }
+    if (count ($resolved) === 0) {
+      $resolved [] = (string) $defaultColour;
+    }
+    $darkWorst = null;
+    $lightWorst = null;
+    foreach ($resolved as $colour) {
+      $channels = estab_colour_channels ($colour);
+      if ($channels === null) {
+        // Unbekannte Notation: die Vordruckfarben sind hell, also dunkle Tinte.
+        return "#000000";
+      }
+      $luminance = estab_colour_relative_luminance ($channels);
+      $againstDark = estab_colour_contrast_ratio ($luminance, 0.0);
+      $againstLight = estab_colour_contrast_ratio ($luminance, 1.0);
+      $darkWorst = $darkWorst === null
+        ? $againstDark
+        : min ($darkWorst, $againstDark);
+      $lightWorst = $lightWorst === null
+        ? $againstLight
+        : min ($lightWorst, $againstLight);
+    }
+    return $darkWorst >= $lightWorst ? "#000000" : "#ffffff";
   }
 
   function estab_recipient_copy_background (
@@ -907,9 +1297,20 @@ bersichtlich dargestellt werden.
     foreach ($colours as $colour) {
       $labels [] = $names [$colour];
     }
+    $ink = estab_recipient_copy_ink (
+      $copyColours,
+      $backgroundColours,
+      "rgb(250, 250, 250)"
+    );
     return "<td style=\"text-align: center; background: ".
       htmlspecialchars (
         $background,
+        ENT_QUOTES | ENT_SUBSTITUTE | ENT_HTML5,
+        "UTF-8"
+      ).
+      "; color: ".
+      htmlspecialchars (
+        $ink,
         ENT_QUOTES | ENT_SUBSTITUTE | ENT_HTML5,
         "UTF-8"
       ).
@@ -945,6 +1346,22 @@ bersichtlich dargestellt werden.
   | Formateinausgang:  YYYY-MM-TT hh:mm:ss
   | Formatausgang   :  TThhmmMMYYYY
   \****************************************************************************/
+  /**
+   * Eine taktische Zeitgruppe in eine Datenbankzeit -- oder null.
+   *
+   * Null heisst: Es gibt keine Zeitangabe. Frueher stand hier "", und das
+   * ist keine Zeit, sondern eine Behauptung: In einer DATETIME-Spalte weist
+   * MariaDB den leeren Text im strikten Modus mit Fehler 1292 ab, und der
+   * ganze Vorgang scheitert.
+   *
+   * Aufgefallen ist das, als die Abfassungszeit dem Fernmelder gesperrt
+   * wurde. Sie bleibt beim Eingang leer -- so gewollt, denn er hat die
+   * Nachricht nicht abgefasst -- und das gesperrte Feld sendet trotzdem mit.
+   * Der Fernmelder konnte daraufhin keinen Eingang mehr aufnehmen.
+   *
+   * Die Spalten lassen NULL zu; das ist die Schreibweise fuer "nicht
+   * angegeben".
+   */
   function konv_taktime_datetime ($taktime){
     include ("../4fcfg/config.inc.php");
     // taktische Zeit konvertiert in Datenbankzeit
@@ -955,10 +1372,13 @@ bersichtlich dargestellt werden.
       $minute = substr ($taktime, 4, 2);
       $monat  = substr ($taktime, 6, 3);
       $jahr   = substr ($taktime, 9, 4);
+      if (!isset ($rew_tak_monate [$monat])) {
+        return (null);
+      }
       $monat = $rew_tak_monate [$monat];
       return ($jahr."-".$monat."-".$tag." ".$stunde.":".$minute.":00" );
     } else {
-      return ("");
+      return (null);
     }
   }
 

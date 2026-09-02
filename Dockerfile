@@ -14,6 +14,38 @@ ENV ESTAB_DB_HOST=db \
 
 RUN set -eux; \
     apt-get update; \
+# Die Sicherheitsstaende von util-linux und openssl kommen nicht mit dem
+# Grundbild. Dessen Marke wird nicht neu gebaut, wenn Debian nachbessert:
+# nachgemessen am 02.09.2026 trug das aktuelle php:8.5.8-apache-trixie
+# weiterhin util-linux 2.41-5 und openssl 3.5.6-1~deb13u2. Den Digest
+# hochzuziehen half deshalb nichts -- die Pakete muessen hier angehoben
+# werden. Ohne das meldet der Bildscan 39 behebbare Luecken (CVE-2026-53612
+# bis -53615 in util-linux, CVE-2026-14456 in openssl) und der Auftrag
+# bricht ab.
+#
+# Die Pruefung darunter besteht darauf, dass die Anhebung wirklich ankam.
+# Ein stiller Rueckfall -- etwa weil ein Spiegel den Stand noch nicht hat --
+# waere schlimmer als gar keine Anhebung: das Bild saehe geprueft aus und
+# waere es nicht.
+    apt-get install -y --no-install-recommends --only-upgrade \
+        bsdutils \
+        libblkid1 \
+        liblastlog2-2 \
+        libmount1 \
+        libsmartcols1 \
+        libssl3t64 \
+        libuuid1 \
+        login \
+        mount \
+        openssl \
+        openssl-provider-legacy \
+        util-linux; \
+    dpkg --compare-versions \
+        "$(dpkg-query --showformat='${Version}' --show util-linux)" \
+        ge '2.41.5-0+deb13u1'; \
+    dpkg --compare-versions \
+        "$(dpkg-query --showformat='${Version}' --show openssl)" \
+        ge '3.5.7-1~deb13u2'; \
     apt-get install -y --no-install-recommends \
         acl \
         apache2-utils \
@@ -33,7 +65,12 @@ RUN set -eux; \
     docker-php-ext-configure gd --with-freetype --with-jpeg; \
     docker-php-ext-install -j1 gd mysqli zip; \
     php -r 'foreach (["fileinfo", "gd", "mbstring", "mysqli", "Zend OPcache", "zip"] as $extension) { if (!extension_loaded($extension)) { fwrite(STDERR, "Missing PHP extension: $extension\n"); exit(1); } } $gd = gd_info(); foreach (["JPEG Support", "PNG Support", "GIF Read Support", "BMP Support"] as $feature) { if (!($gd[$feature] ?? false)) { fwrite(STDERR, "Missing GD feature: $feature\n"); exit(1); } }'; \
-    php -r 'if (!defined("PASSWORD_ARGON2ID")) { fwrite(STDERR, "Missing Argon2id password support\n"); exit(1); } $options = ["memory_cost" => PASSWORD_ARGON2_DEFAULT_MEMORY_COST, "time_cost" => PASSWORD_ARGON2_DEFAULT_TIME_COST, "threads" => PASSWORD_ARGON2_DEFAULT_THREADS]; $prefix = str_repeat("a", 72); $hash = password_hash($prefix . "x", PASSWORD_ARGON2ID, $options); $info = is_string($hash) ? password_get_info($hash) : []; if (!is_string($hash) || strlen($hash) > 255 || ($info["algoName"] ?? "") !== "argon2id" || ($info["options"] ?? null) !== $options || !password_verify($prefix . "x", $hash) || password_verify($prefix . "y", $hash)) { fwrite(STDERR, "Argon2id password verification is unsafe\n"); exit(1); }'; \
+# Die Kostenparameter stehen hier als Zahl, nicht als PASSWORD_ARGON2_DEFAULT_*.
+# Sie muessen mit ESTAB_AUTH_ARGON2_* in app/auth.php uebereinstimmen; die
+# Pruefung tests/php/auth_security.php haelt beide Seiten zusammen. Gesetzt
+# ist die OWASP-Empfehlung fuer Argon2id (m=19456 KiB, t=2, p=1) -- eine
+# Entscheidung des Betreibers vom 30.08.2026, siehe app/auth.php.
+    php -r 'if (!defined("PASSWORD_ARGON2ID")) { fwrite(STDERR, "Missing Argon2id password support\n"); exit(1); } $options = ["memory_cost" => 19456, "time_cost" => 2, "threads" => 1]; $prefix = str_repeat("a", 72); $hash = password_hash($prefix . "x", PASSWORD_ARGON2ID, $options); $info = is_string($hash) ? password_get_info($hash) : []; if (!is_string($hash) || strlen($hash) > 255 || ($info["algoName"] ?? "") !== "argon2id" || ($info["options"] ?? null) !== $options || !password_verify($prefix . "x", $hash) || password_verify($prefix . "y", $hash)) { fwrite(STDERR, "Argon2id password verification is unsafe\n"); exit(1); }'; \
     command -v setpriv >/dev/null; \
     command -v prlimit >/dev/null; \
     command -v pdfinfo >/dev/null; \
@@ -74,6 +111,7 @@ COPY 4fach/4fachform.php \
     4fach/download.php \
     4fach/email.php \
     4fach/fuehrungsstelle.php \
+    4fach/melderauftraege.php \
     4fach/index.php \
     4fach/info.php \
     4fach/katego.php \
@@ -147,6 +185,10 @@ COPY 4fsym/4fach_aktiv.png \
     4fsym/nw.png \
     4fsym/tbb_aktiv.png \
     ./4fsym/
+# Die taktischen Zeichen der Kommunikationsskizze (CC-BY-4.0, siehe
+# THIRD_PARTY_NOTICES.md). Als ganzes Verzeichnis, weil die Skizze je nach
+# Plan andere braucht; die Quelltafel-Pruefung laesst darin nur SVG zu.
+COPY 4fsym/taktische-zeichen/ ./4fsym/taktische-zeichen/
 COPY 4fueltg/ue_ltg.php 4fueltg/null.gif ./4fueltg/
 COPY app/*.php ./app/
 COPY handbuch/index.php \
@@ -164,6 +206,7 @@ COPY stabetb/etb.php stabetb/null.gif stabetb/null.jpg ./stabetb/
 
 COPY docker/apache/estab.conf /etc/apache2/sites-available/estab.conf
 COPY docker/apache/ports.conf /etc/apache2/ports.conf
+COPY docker/apache/mpm_prefork.conf /etc/apache2/mods-available/mpm_prefork.conf
 COPY docker/php/estab.ini /usr/local/etc/php/conf.d/zz-estab.ini
 COPY docker/app/entrypoint.sh /usr/local/bin/estab-entrypoint
 COPY docker/app/cleanup-pdf-render-tmp.sh /usr/local/bin/estab-cleanup-pdf-render-tmp

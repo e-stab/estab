@@ -109,7 +109,7 @@ function estab_incident_ui_datetime(mixed $value): string
 /** Disable only forms explicitly marked as operational when fail-closed. */
 function estab_incident_ui_input_guard_script(): string
 {
-    return '<script data-estab-incident-input-guard>'
+    return '<script' . estab_csp_script_attribute() . ' data-estab-incident-input-guard>'
         . '(function(){'
         . 'function lock(){'
         . 'var forms=document.querySelectorAll('
@@ -205,10 +205,6 @@ function estab_incident_ui_markup(
             . '</section>'
             . estab_incident_ui_input_guard_script();
     }
-    $details = array_values(array_filter([
-        estab_incident_ui_datetime($incident['beginn'] ?? null),
-        trim((string) ($incident['ort'] ?? '')),
-    ], static fn (string $part): bool => $part !== ''));
     $permissionMode = estab_permission_mode(
         $incident['estab_permission_mode'] ?? null
     );
@@ -220,26 +216,46 @@ function estab_incident_ui_markup(
         . ' data-estab-incident-state="active"'
         . ' data-estab-incident-id="' . $id . '"'
         . ' data-estab-incident-code="' . estab_auth_html($code) . '"'
+        . ' data-estab-incident-name="' . estab_auth_html($name) . '"'
+        . ' data-estab-incident-permission-mode="'
+        . estab_auth_html($permissionMode) . '"'
         . ' data-estab-command-post-name="'
         . estab_auth_html($commandPostName) . '"'
-        . ' aria-label="Aktiver Einsatz">'
+        . ' aria-label="Aktiver Einsatz: ' . estab_auth_html($code)
+        . ' · ' . estab_auth_html($name) . '">'
+        /*
+         * Der Kasten steht dauerhaft offen und nennt genau eines: welche
+         * Fuehrungsstelle gerade arbeitet. Alles Weitere -- Kennung und Name
+         * des Einsatzes, Beginn, Ort, Betriebsart -- stand frueher darunter
+         * und wurde bei jedem Blick mitgelesen, ohne dass es sich waehrend
+         * eines Einsatzes aendert. Es steht im Fuehrungsstellenbetrieb, wo
+         * man es sucht, wenn man es braucht.
+         *
+         * Die Merkmale bleiben am Element: Sie tragen Kennung und Namen fuer
+         * die Auswertung, ohne Platz zu nehmen.
+         */
         . '<span class="estab-incident-indicator-label">'
         . 'Aktive Führungsstelle</span>'
         . '<strong>' . estab_auth_html($commandPostName) . '</strong>'
-        . '<span>Einsatz: ' . estab_auth_html($code)
-        . ' · ' . estab_auth_html($name) . '</span>'
-        . ($details === []
-            ? ''
-            : '<span>' . estab_auth_html(implode(' · ', $details)) . '</span>')
-        . '<span data-estab-incident-permission-mode="'
-        . estab_auth_html($permissionMode) . '">Berechtigungsmodus: <strong>'
-        . estab_auth_html(estab_permission_mode_label($permissionMode))
-        . '</strong>'
-        . ($loose
-            ? ' · Rechte folgen fester Kontofunktion und ausdrücklich '
-                . 'vergebenen Zusatzfunktionen; eine formale Dienstschicht '
-                . 'ist nicht erforderlich.'
-            : '')
-        . '</span>'
         . '</section>';
+}
+
+/**
+ * Was eine Betriebsart bedeutet, in einem Satz.
+ *
+ * Der Satz stand bisher fest im Kasten und wurde bei jedem Blick mitgelesen,
+ * obwohl er sich waehrend eines Einsatzes nie aendert. Er steht jetzt an
+ * einer Stelle, an der ihn abrufen kann, wer ihn braucht.
+ */
+function estab_permission_mode_description(mixed $mode): string
+{
+    return match (estab_permission_mode($mode)) {
+        ESTAB_PERMISSION_MODE_LOOSE =>
+            'Rechte folgen fester Kontofunktion und ausdrücklich vergebenen '
+                . 'Zusatzfunktionen; eine formale Dienstschicht ist nicht '
+                . 'erforderlich.',
+        ESTAB_PERMISSION_MODE_STRICT =>
+            'Rechte folgen der angetretenen Dienstschicht; ohne angenommene '
+                . 'Funktion ist keine operative Arbeit möglich.',
+    };
 }

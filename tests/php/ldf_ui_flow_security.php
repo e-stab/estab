@@ -25,11 +25,11 @@ $assert(is_string($repository), 'Message repository source is unreadable');
 
 $incomingRepositoryStart = strpos(
     $repository,
-    "if (\$direction === 'E' && \$status === 1)"
+    "if (\$direction === 'E' && \$status === ESTAB_MESSAGE_STATUS_LDF)"
 );
 $outgoingRepositoryStart = strpos(
     $repository,
-    "if (\$direction === 'A' && \$status === 1)",
+    "if (\$direction === 'A' && \$status === ESTAB_MESSAGE_STATUS_LDF)",
     $incomingRepositoryStart === false ? 0 : $incomingRepositoryStart
 );
 $incomingRepository = (
@@ -135,16 +135,37 @@ $assert(
 $assert(
     str_contains(
         $repository,
-        "if (\$direction === 'E' && \$status === 1)"
+        "if (\$direction === 'E' && \$status === ESTAB_MESSAGE_STATUS_LDF)"
     )
         && str_contains(
             $incomingRepository,
-            "'SELECT `01_medium`, `13_abseinheit`, `05_gegenstelle` FROM '"
+            "'SELECT `01_medium`, `13_abseinheit`, `05_gegenstelle`,'"
+        )
+        // Die vom Fernmelder benannte Gegenstelle wird unter derselben
+        // Sperre gelesen wie das Mittel. Ein Nachweis, der sie aus dem
+        // Browser naehme, koennte nicht sagen, was der Fernmelder erklaert
+        // hat -- sondern nur, was der Pruefer behauptet.
+        && str_contains(
+            $incomingRepository,
+            "' `estab_gegenstelle_id` FROM '"
         )
         && str_contains(
             $incomingRepository,
             ". ' FOR UPDATE'"
         )
+        // Woher Feld 15 kommt, gehoert in den Nachweis: die Gegenstelle,
+        // die Planfassung, und ob die Vorbelegung stehen blieb.
+        && str_contains(
+            $incomingRepository,
+            "'incoming_counterpart_id'"
+        )
+        && str_contains(
+            $incomingRepository,
+            "'incoming_plan_version'"
+        )
+        && str_contains($incomingRepository, "'plan_unchanged'")
+        && str_contains($incomingRepository, "'plan_overridden'")
+        && str_contains($incomingRepository, "'plan_withdrawn'")
         && str_contains(
             $repository,
             "'previous_incoming_transport_medium'"
@@ -274,9 +295,47 @@ $assert(
     str_contains($listHeaders, 'case "ldfliste":')
         && str_contains($listHeaders, 'http-equiv=\"pragma\"')
         && str_contains($listHeaders, 'http-equiv=\"expires\"')
-        && str_contains($listHeaders, 'http-equiv=\"refresh\"')
+        && str_contains($listHeaders, 'estab_list_refresh_script')
         && str_contains($listHeaders, '$cfg ["itv"] ["fmdliste"]'),
-    'LdF queue does not inherit the no-cache and automatic refresh headers'
+    'LdF queue does not inherit the no-cache headers and the automatic refresh'
+);
+
+// The queue has to keep refreshing itself, and it must not do so while the
+// operator is working in the page: an unconditional reload discarded the
+// search term and the scroll position every ten seconds.
+$originalWorkingDirectory = getcwd();
+if (!is_string($originalWorkingDirectory) || !chdir($root . '/4fach')) {
+    throw new RuntimeException('Cannot enter the message runtime directory');
+}
+try {
+    require_once $root . '/4fach/tools.php';
+} finally {
+    chdir($originalWorkingDirectory);
+}
+/*
+ * Die Warteschlange des LdF erneuert sich -- aber ohne die Seite zu
+ * verlassen.
+ *
+ * Hier stand `window.location.reload()`. Das laedt eine POST-Antwort neu,
+ * und der Browser fragt dann bei jedem Takt, ob die Daten erneut gesendet
+ * werden sollen. Seit dem 30.08.2026 wird stattdessen der Inhalt geholt
+ * und eingesetzt (siehe list_refresh_security).
+ *
+ * Was hier zaehlt, ist unveraendert: Die Warteschlange erneuert sich von
+ * allein, und sie unterbricht dabei niemanden.
+ */
+$ldfRefresh = estab_list_refresh_script(30);
+$assert(
+    $ldfRefresh !== ''
+        && !str_contains($ldfRefresh, 'window.location.reload')
+        && str_contains($ldfRefresh, 'fetch(')
+        && str_contains($ldfRefresh, 'replaceChildren'),
+    'The LdF queue no longer refreshes itself'
+);
+$assert(
+    !str_contains($ldfRefresh, 'http-equiv')
+        && str_contains($ldfRefresh, 'schedule(5000)'),
+    'The LdF queue reloads unconditionally and interrupts the operator'
 );
 
 printf("LdF UI flow security test: OK (%d assertions)\n", $assertions);

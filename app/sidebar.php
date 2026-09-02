@@ -141,8 +141,178 @@ function estab_sidebar_fetch_configured_positions(
     return $positions;
 }
 
+/** Upper bound of queues one status fragment measures and renders. */
+const ESTAB_SIDEBAR_MAX_QUEUES = 16;
+
 /**
- * Resolve the role-specific queue, label and portable notification sound.
+ * Resolve one queue profile per function the account actually wears.
+ *
+ * DV 1-101 lets one person occupy several stations of the message run in a
+ * small command post. Every worn function therefore needs its own queue: a
+ * single ranked profile hides the traffic of all further functions. The order
+ * stays LdF, A/W, Si and then the staff functions, so the first entry remains
+ * the primary display and its notification sound. The baseline key separates
+ * the staff queues per function; the session key keeps naming the query shape.
+ *
+ * @return list<array{
+ *     session_key: string,
+ *     baseline_key: string,
+ *     sound_file: string,
+ *     label: string,
+ *     short_label: string,
+ *     funktion: string,
+ *     rolle: string
+ * }>
+ */
+function estab_sidebar_queue_profiles(?array $identity): array
+{
+    if ($identity === null) {
+        return [];
+    }
+    $functions = estab_auth_effective_function_roles($identity);
+    if ($functions === []) {
+        throw new InvalidArgumentException('Invalid sidebar queue identity');
+    }
+    $wears = static function (string $role, string $function) use (
+        $functions
+    ): bool {
+        foreach ($functions as $tuple) {
+            if (
+                hash_equals($role, $tuple['rolle'])
+                && hash_equals($function, $tuple['funktion'])
+            ) {
+                return true;
+            }
+        }
+        return false;
+    };
+
+    $profiles = [];
+    $baselineKeys = [];
+    $append = static function (array $profile) use (
+        &$profiles,
+        &$baselineKeys
+    ): void {
+        if (isset($baselineKeys[$profile['baseline_key']])) {
+            return;
+        }
+        $baselineKeys[$profile['baseline_key']] = true;
+        $profiles[] = $profile;
+    };
+
+    if ($wears('Fernmelder', 'LdF')) {
+        $append([
+            'session_key' => 'old_que_ldf',
+            'baseline_key' => 'old_que_ldf',
+            'sound_file' => 'notify_aw.wav',
+            'label' => 'Bei LdF',
+            'short_label' => 'LdF',
+            'funktion' => 'LdF',
+            'rolle' => 'Fernmelder',
+        ]);
+    }
+    if ($wears('Fernmelder', 'A/W')) {
+        $append([
+            'session_key' => 'old_que_aw',
+            'baseline_key' => 'old_que_aw',
+            'sound_file' => 'notify_aw.wav',
+            'label' => 'Im Ausgang',
+            'short_label' => 'Ausgang',
+            'funktion' => 'A/W',
+            'rolle' => 'Fernmelder',
+        ]);
+    }
+    if ($wears('Stab', 'Si')) {
+        $append([
+            'session_key' => 'old_que_si',
+            'baseline_key' => 'old_que_si',
+            'sound_file' => 'notify_si.wav',
+            'label' => 'Zu sichten',
+            'short_label' => 'Sichtung',
+            'funktion' => 'Si',
+            'rolle' => 'Stab',
+        ]);
+    }
+    foreach ($functions as $tuple) {
+        if (
+            !estab_auth_has_staff_message_workspace(
+                $tuple['funktion'],
+                $tuple['rolle']
+            )
+            || preg_match('/\A[A-Za-z0-9_]{1,10}\z/D', $tuple['funktion'])
+                !== 1
+        ) {
+            continue;
+        }
+        $append([
+            'session_key' => 'old_que_stab',
+            'baseline_key' => 'old_que_stab_' . strtolower($tuple['funktion']),
+            'sound_file' => 'notify_stab.wav',
+            'label' => 'Offene Meldungen',
+            'short_label' => $tuple['funktion'],
+            'funktion' => $tuple['funktion'],
+            'rolle' => $tuple['rolle'],
+        ]);
+    }
+
+    // The status fragment renders one large counter plus a strip of flat
+    // rows. Beyond that budget the sidebar would throw while rendering and
+    // take the whole navigation frame down, so the measurement stops here
+    // instead: a legible partial list beats a dead sidebar.
+    return array_slice($profiles, 0, ESTAB_SIDEBAR_MAX_QUEUES);
+}
+
+/**
+ * Resolve one correction queue per staff function the account actually wears.
+ *
+ * A formally returned outgoing message waits for its author, not for a
+ * station of the message run. It therefore needs its own measurement, in the
+ * same shape the queue batch already understands, so that the sidebar can
+ * offer the correction loop without a second database round trip.
+ *
+ * @return list<array{
+ *     session_key: string,
+ *     baseline_key: string,
+ *     funktion: string,
+ *     rolle: string
+ * }>
+ */
+function estab_sidebar_correction_profiles(?array $identity): array
+{
+    if ($identity === null) {
+        return [];
+    }
+    $profiles = [];
+    $seen = [];
+    foreach (estab_auth_effective_function_roles($identity) as $tuple) {
+        if (
+            !estab_auth_has_staff_message_workspace(
+                $tuple['funktion'],
+                $tuple['rolle']
+            )
+            || preg_match('/\A[A-Za-z0-9_]{1,10}\z/D', $tuple['funktion'])
+                !== 1
+        ) {
+            continue;
+        }
+        $key = 'old_que_korr_' . strtolower($tuple['funktion']);
+        if (isset($seen[$key])) {
+            continue;
+        }
+        $seen[$key] = true;
+        $profiles[] = [
+            'session_key' => 'old_que_korr',
+            'baseline_key' => $key,
+            'funktion' => $tuple['funktion'],
+            'rolle' => $tuple['rolle'],
+        ];
+    }
+
+    return array_slice($profiles, 0, ESTAB_SIDEBAR_MAX_QUEUES);
+}
+
+/**
+ * Resolve the primary queue profile in the established legacy shape.
  *
  * @return array{
  *     session_key: string,
@@ -153,75 +323,48 @@ function estab_sidebar_fetch_configured_positions(
  */
 function estab_sidebar_queue_profile(?array $identity): ?array
 {
-    if ($identity === null) {
+    $profiles = estab_sidebar_queue_profiles($identity);
+    if ($profiles === []) {
         return null;
     }
-    $functions = estab_auth_effective_function_roles($identity);
-    if ($functions === []) {
-        throw new InvalidArgumentException('Invalid sidebar queue identity');
-    }
-    if (array_filter(
-        $functions,
-        static fn (array $tuple): bool =>
-            $tuple['rolle'] === 'Fernmelder'
-            && $tuple['funktion'] === 'LdF'
-    ) !== []) {
-        return [
-            'session_key' => 'old_que_ldf',
-            'sound_file' => 'notify_aw.wav',
-            'label' => 'Bei LdF',
-            'funktion' => 'LdF',
-        ];
-    }
-    if (array_filter(
-        $functions,
-        static fn (array $tuple): bool =>
-            $tuple['rolle'] === 'Fernmelder'
-            && $tuple['funktion'] === 'A/W'
-    ) !== []) {
-        return [
-            'session_key' => 'old_que_aw',
-            'sound_file' => 'notify_aw.wav',
-            'label' => 'Im Ausgang',
-            'funktion' => 'A/W',
-        ];
-    }
-    if (array_filter(
-        $functions,
-        static fn (array $tuple): bool =>
-            $tuple['rolle'] === 'Stab' && $tuple['funktion'] === 'Si'
-    ) !== []) {
-        return [
-            'session_key' => 'old_que_si',
-            'sound_file' => 'notify_si.wav',
-            'label' => 'Zu sichten',
-            'funktion' => 'Si',
-        ];
-    }
-    if (array_filter(
-        $functions,
-        static fn (array $tuple): bool =>
-            estab_auth_has_staff_message_workspace(
-                $tuple['funktion'],
-                $tuple['rolle']
-            )
-    ) !== []) {
-        foreach ($functions as $tuple) {
-            if (estab_auth_has_staff_message_workspace(
-                $tuple['funktion'],
-                $tuple['rolle']
-            )) {
-                return [
-                    'session_key' => 'old_que_stab',
-                    'sound_file' => 'notify_stab.wav',
-                    'label' => 'Offene Meldungen',
-                    'funktion' => $tuple['funktion'],
-                ];
-            }
-        }
+
+    return [
+        'session_key' => $profiles[0]['session_key'],
+        'sound_file' => $profiles[0]['sound_file'],
+        'label' => $profiles[0]['label'],
+        'funktion' => $profiles[0]['funktion'],
+    ];
+}
+
+/**
+ * Validate one queue baseline key, including the per-function staff keys.
+ *
+ * Two staff functions share the query shape but never the baseline: a common
+ * key would let the S2 measurement overwrite the S1 one and silence the tone.
+ */
+function estab_sidebar_queue_baseline_key(string $key): string
+{
+    if (
+        !in_array(
+            $key,
+            [
+                'old_que_ldf',
+                'old_que_aw',
+                'old_que_si',
+                'old_que_stab',
+                'old_que_korr',
+            ],
+            true
+        )
+        && preg_match(
+            '/\Aold_que_(?:stab|korr)_[a-z0-9_]{1,10}\z/D',
+            $key
+        ) !== 1
+    ) {
+        throw new InvalidArgumentException('Invalid sidebar queue key');
     }
 
-    return null;
+    return $key;
 }
 
 /**
@@ -272,7 +415,8 @@ function estab_sidebar_queue_query(
                 . " AND `04_richtung` = 'A'"
                 . ' AND `02_zeit` IS NOT NULL'
                 . " AND `02_zeichen` != ''"
-                . " AND `06_befwegausw` != ''"
+                . " AND `01_medium` != ''"
+                . " AND `06_befweg` != ''"
                 . ' AND `03_datum` IS NULL'
                 . " AND `03_zeichen` = ''"
                 . ' AND `15_quitdatum` IS NOT NULL'
@@ -299,6 +443,37 @@ function estab_sidebar_queue_query(
                 . " AND `15_quitzeichen` = ''"
                 . " AND `04_richtung` IN ('E','A')",
             'parameters' => [$incidentId],
+        ];
+    }
+
+    if ($queueSessionKey === 'old_que_korr') {
+        if (preg_match('/\A[A-Za-z0-9_]{1,10}\z/D', $function) !== 1) {
+            throw new InvalidArgumentException('Invalid sidebar queue function');
+        }
+
+        /*
+         * Dieselben Merkmale, die 4fach/liste.php als Korrekturwarteschlange
+         * anzeigt: formal zurueckgewiesener Ausgang der eigenen Funktion, vom
+         * Sichter quittiert, noch ohne Annahme und noch nicht abgeschlossen.
+         * Der Funktionsvergleich ist BINARY, weil estab_message_object_allowed()
+         * die Zeilen der Liste anschliessend exakt vergleicht; ein loser
+         * Kollationsvergleich meldete sonst mehr, als die Liste zeigt.
+         */
+        return [
+            'sql' => 'SELECT COUNT(*) FROM ' . $messages
+                . ' WHERE `einsatz_id` = ?'
+                . ' AND `x00_status` = 10'
+                . " AND `04_richtung` = 'A'"
+                . ' AND BINARY `14_funktion` = BINARY ?'
+                . " AND `14_zeichen` != ''"
+                . ' AND `02_zeit` IS NULL'
+                . " AND `02_zeichen` = ''"
+                . ' AND `03_datum` IS NULL'
+                . " AND `03_zeichen` = ''"
+                . ' AND `15_quitdatum` IS NOT NULL'
+                . " AND `15_quitzeichen` != ''"
+                . " AND `x01_abschluss` = 'f'",
+            'parameters' => [$incidentId, $function],
         ];
     }
 
@@ -344,28 +519,118 @@ function estab_sidebar_queue_query(
 }
 
 /**
- * Read one queue count without entering the legacy database layer, whose
- * query helpers terminate the complete request on an SQL error.
+ * Build one prepared statement that measures every worn function's queue.
+ *
+ * A second or third function must not cost a second or third database round
+ * trip: each profile contributes one scalar sub-select column to the same
+ * statement, and the parameters follow the column order.
+ *
+ * The shape is re-checked at runtime instead of being trusted: this is the
+ * boundary between the session-derived profile list and a prepared statement.
+ *
+ * @param list<array<string, mixed>> $profiles
+ * @return array{sql: string, parameters: list<int|string>, keys: list<string>}
  */
-function estab_sidebar_queue_count(
-    mysqli $connection,
-    string $queueSessionKey,
+function estab_sidebar_queue_batch_query(
+    array $profiles,
     string $messageTable,
     string $userTablePrefix,
-    string $function,
-    bool $includeOutgoingForReview
-): int {
-    $incident = estab_incident_active($connection);
-    if ($incident === null) {
-        return 0;
+    bool $includeOutgoingForReview,
+    int $incidentId
+): array {
+    if ($profiles === [] || count($profiles) > ESTAB_SIDEBAR_MAX_QUEUES) {
+        throw new InvalidArgumentException('Invalid sidebar queue profile set');
     }
-    $query = estab_sidebar_queue_query(
-        $queueSessionKey,
+    $incidentId = estab_incident_positive_id($incidentId);
+    $columns = [];
+    $parameters = [];
+    $keys = [];
+    foreach ($profiles as $index => $profile) {
+        if (
+            !is_string($profile['session_key'] ?? null)
+            || !is_string($profile['baseline_key'] ?? null)
+            || !is_string($profile['funktion'] ?? null)
+        ) {
+            throw new InvalidArgumentException('Invalid sidebar queue profile');
+        }
+        $key = estab_sidebar_queue_baseline_key($profile['baseline_key']);
+        if (in_array($key, $keys, true)) {
+            throw new InvalidArgumentException('Duplicate sidebar queue key');
+        }
+        $query = estab_sidebar_queue_query(
+            $profile['session_key'],
+            $messageTable,
+            $userTablePrefix,
+            $profile['funktion'],
+            $includeOutgoingForReview,
+            $incidentId
+        );
+        $columns[] = '(' . $query['sql'] . ') AS `queue_' . $index . '`';
+        foreach ($query['parameters'] as $parameter) {
+            $parameters[] = $parameter;
+        }
+        $keys[] = $key;
+    }
+
+    return [
+        'sql' => 'SELECT ' . implode(', ', $columns),
+        'parameters' => $parameters,
+        'keys' => $keys,
+    ];
+}
+
+/** Accept only a non-negative integer measurement from the database. */
+function estab_sidebar_queue_value(mixed $value): int
+{
+    if (
+        !is_int($value)
+        && (
+            !is_string($value)
+            || preg_match('/\A(?:0|[1-9][0-9]*)\z/D', $value) !== 1
+        )
+    ) {
+        throw new RuntimeException('Invalid sidebar queue lookup result');
+    }
+    $count = filter_var(
+        $value,
+        FILTER_VALIDATE_INT,
+        ['options' => ['min_range' => 0, 'max_range' => PHP_INT_MAX]]
+    );
+    if (!is_int($count)) {
+        throw new RuntimeException('Sidebar queue count is out of range');
+    }
+
+    return $count;
+}
+
+/**
+ * Read every worn function's queue count without entering the legacy database
+ * layer, whose query helpers terminate the complete request on an SQL error.
+ *
+ * @param list<array{
+ *     session_key: string,
+ *     baseline_key: string,
+ *     funktion: string
+ * }> $profiles
+ * @return array<string, int> baseline key => waiting messages
+ */
+function estab_sidebar_queue_counts(
+    mysqli $connection,
+    array $profiles,
+    string $messageTable,
+    string $userTablePrefix,
+    bool $includeOutgoingForReview,
+    int $incidentId
+): array {
+    if ($profiles === []) {
+        return [];
+    }
+    $query = estab_sidebar_queue_batch_query(
+        $profiles,
         $messageTable,
         $userTablePrefix,
-        $function,
         $includeOutgoingForReview,
-        (int) $incident['active_einsatz_id']
+        $incidentId
     );
     $statement = $connection->prepare($query['sql']);
     if (!$statement) {
@@ -382,25 +647,14 @@ function estab_sidebar_queue_count(
         }
         $row = $result->fetch_row();
         $result->free();
-        $value = $row[0] ?? null;
-        if (
-            !is_int($value)
-            && (
-                !is_string($value)
-                || preg_match('/\A(?:0|[1-9][0-9]*)\z/D', $value) !== 1
-            )
-        ) {
+        if (!is_array($row) || count($row) !== count($query['keys'])) {
             throw new RuntimeException('Invalid sidebar queue lookup result');
         }
-        $count = filter_var(
-            $value,
-            FILTER_VALIDATE_INT,
-            ['options' => ['min_range' => 0, 'max_range' => PHP_INT_MAX]]
-        );
-        if (!is_int($count)) {
-            throw new RuntimeException('Sidebar queue count is out of range');
+        $counts = [];
+        foreach ($query['keys'] as $index => $key) {
+            $counts[$key] = estab_sidebar_queue_value($row[$index]);
         }
-        return $count;
+        return $counts;
     } finally {
         $statement->close();
     }
@@ -455,15 +709,7 @@ function estab_sidebar_queue_notification(
         }
         return null;
     }
-    if (
-        !in_array(
-            $queueSessionKey,
-            ['old_que_ldf', 'old_que_aw', 'old_que_si', 'old_que_stab'],
-            true
-        )
-    ) {
-        throw new InvalidArgumentException('Invalid sidebar queue key');
-    }
+    estab_sidebar_queue_baseline_key($queueSessionKey);
     if ($queueCount === null) {
         return null;
     }
@@ -500,6 +746,108 @@ function estab_sidebar_queue_notification(
 }
 
 /**
+ * Advance every worn function's baseline and signal once when any of them
+ * grew.
+ *
+ * The loop never stops at the first increase: a queue whose baseline is not
+ * advanced would report the same growth again at the next poll.
+ *
+ * The shape is re-checked at runtime instead of being trusted: the baselines
+ * are written back into the session.
+ *
+ * @param list<array<string, mixed>> $measurements
+ */
+function estab_sidebar_queue_notifications(
+    array &$session,
+    array $measurements,
+    bool $soundsEnabled,
+    ?string $soundUrl
+): ?string {
+    $signal = null;
+    $seen = [];
+    foreach ($measurements as $measurement) {
+        if (
+            !is_string($measurement['baseline_key'] ?? null)
+            || (
+                ($measurement['count'] ?? null) !== null
+                && !is_int($measurement['count'])
+            )
+        ) {
+            throw new InvalidArgumentException(
+                'Invalid sidebar queue measurement'
+            );
+        }
+        $key = estab_sidebar_queue_baseline_key($measurement['baseline_key']);
+        if (isset($seen[$key])) {
+            throw new InvalidArgumentException('Duplicate sidebar queue key');
+        }
+        $seen[$key] = true;
+        $sound = estab_sidebar_queue_notification(
+            $session,
+            $key,
+            $measurement['count'] ?? null,
+            $soundsEnabled,
+            $soundUrl
+        );
+        if ($sound !== null && $signal === null) {
+            $signal = $sound;
+        }
+    }
+
+    return $signal;
+}
+
+/**
+ * Return the duty functions one account has actually accepted, or null when
+ * the overview is not backed by an active duty shift.
+ *
+ * @return list<array{rolle: string, funktion: string}>|null
+ */
+function estab_sidebar_duty_functions_for_account(
+    array $dutyFunctions,
+    mixed $userCode
+): ?array {
+    if ($dutyFunctions === []) {
+        return null;
+    }
+    if (!is_string($userCode)) {
+        return [];
+    }
+    $assigned = $dutyFunctions[strtolower(trim($userCode))] ?? null;
+    if (!is_array($assigned)) {
+        return [];
+    }
+    $tuples = [];
+    $seen = [];
+    foreach ($assigned as $tuple) {
+        if (
+            !is_array($tuple)
+            || !is_string($tuple['rolle'] ?? null)
+            || !is_string($tuple['funktion'] ?? null)
+        ) {
+            continue;
+        }
+        $role = trim($tuple['rolle']);
+        $function = trim($tuple['funktion']);
+        if (
+            $role === ''
+            || $function === ''
+            || strlen($role) > 80
+            || strlen($function) > 40
+            || preg_match('//u', $role) !== 1
+            || preg_match('//u', $function) !== 1
+            || isset($seen[$role . "\0" . $function])
+        ) {
+            continue;
+        }
+        $seen[$role . "\0" . $function] = true;
+        $tuples[] = ['rolle' => $role, 'funktion' => $function];
+    }
+
+    return $tuples;
+}
+
+/**
  * Render the persistent audio element outside the replaceable status fragment.
  */
 function estab_sidebar_audio_markup(?string $soundUrl): string
@@ -516,17 +864,24 @@ function estab_sidebar_audio_markup(?string $soundUrl): string
 /**
  * Return the complete legacy role action set as semantic sidebar buttons.
  *
+ * $correctionCounts maps one worn staff function to its number of formally
+ * returned messages. The correction loop only ever appears with work behind
+ * it, so an empty map keeps the established action set unchanged.
+ *
+ * @param array<string, int> $correctionCounts
  * @return list<array{
  *     key: string,
  *     name: string,
  *     label: string,
  *     description: string,
- *     acting_function?: string
+ *     acting_function?: string,
+ *     badge?: string
  * }>
  */
 function estab_sidebar_workflow_actions(
     ?array $identity,
-    mixed $menuState
+    mixed $menuState,
+    array $correctionCounts = []
 ): array {
     if ($identity === null || $menuState !== 'ROLLE') {
         return [];
@@ -602,7 +957,22 @@ function estab_sidebar_workflow_actions(
                 'description' => 'Rufnamen und Beförderungswege festlegen',
             ]);
         }
-        if ($role === 'Fernmelder' && $function === 'A/W') {
+        /*
+         * Die Arbeitsschritte des Annahme- und Weitergabeplatzes -- und der
+         * LdF sieht sie mit.
+         *
+         * Er ist fuer den Betrieb zustaendig: Er ueberwacht die Kennzahlen
+         * seiner Fernmelder, erkennt, wenn es klemmt, und uebernimmt im
+         * Problemfall einzelne Aufgaben selbst. Ohne die Schritte in der
+         * Spalte muesste er dafuer die Funktion wechseln.
+         *
+         * Er bleibt dabei LdF -- seine Dispositionsschritte stehen weiter
+         * darueber, und er traegt weiterhin eine Warteschlange, nicht zwei.
+         */
+        if (
+            $role === 'Fernmelder'
+            && in_array($function, ['A/W', 'LdF'], true)
+        ) {
             $append([
                 'key' => 'fm_eingang',
                 'name' => 'fm_eingang_x',
@@ -628,6 +998,40 @@ function estab_sidebar_workflow_actions(
                 'description' => 'Dateien auswählen und hochladen',
             ]);
         }
+    }
+
+    /*
+     * Die Korrekturschleife hatte bisher keinen Einstieg: die Route bestand,
+     * aber kein Bedienelement fuehrte dorthin. Sie erscheint genau dann, wenn
+     * fuer eine getragene Stabsfunktion wirklich etwas zurueckliegt, und der
+     * Zaehler stammt aus derselben Messung wie die Warteschlangen.
+     */
+    $pendingCorrections = 0;
+    foreach (estab_auth_effective_function_roles($identity) as $tuple) {
+        if (
+            !estab_auth_has_staff_message_workspace(
+                $tuple['funktion'],
+                $tuple['rolle']
+            )
+        ) {
+            continue;
+        }
+        $pending = $correctionCounts[$tuple['funktion']] ?? null;
+        if (is_int($pending) && $pending > 0) {
+            $pendingCorrections += $pending;
+        }
+    }
+    if ($pendingCorrections > 0) {
+        $append([
+            'key' => 'stab_korrekturen',
+            'name' => 'stab_korrekturen_x',
+            'label' => 'Korrekturen',
+            'description' => $pendingCorrections === 1
+                ? '1 zurückgewiesene Meldung überarbeiten'
+                : $pendingCorrections
+                    . ' zurückgewiesene Meldungen überarbeiten',
+            'badge' => (string) $pendingCorrections,
+        ]);
     }
 
     $append([
@@ -717,7 +1121,32 @@ function estab_sidebar_account_function_markup(
 }
 
 /**
- * Render queue, server time and account activity by primary function.
+ * Die Glocke am Knopf fuer die Hinweistoene.
+ *
+ * Gezeichnet statt gesetzt: ein Sonderzeichen sieht auf jedem Geraet anders
+ * aus und behaelt seine eigene Farbe. Der Schraegstrich gehoert zum Bild und
+ * wird ausgeblendet, sobald die Toene an sind -- durchgestrichen heisst stumm.
+ */
+function estab_sidebar_bell_markup(): string
+{
+    return '<svg class="estab-sidebar-sound-bell" viewBox="0 0 24 24"'
+        . ' width="18" height="18" aria-hidden="true" focusable="false"'
+        . ' fill="none" stroke="currentColor" stroke-width="2"'
+        . ' stroke-linecap="round" stroke-linejoin="round">'
+        . '<path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"></path>'
+        . '<path d="M13.7 21a2 2 0 0 1-3.4 0"></path>'
+        . '<line class="estab-sidebar-sound-bell-slash"'
+        . ' x1="3" y1="21" x2="21" y2="3"></line>'
+        . '</svg>';
+}
+
+/**
+ * Render queue, server time and account activity by occupied function.
+ *
+ * $secondaryQueues carries every further worn function beyond the primary one
+ * as {baseline_key, label, short_label, count}; $dutyFunctions maps a lower
+ * case account code to the duty functions that account has accepted. An empty
+ * duty map keeps the established account-function overview.
  */
 function estab_sidebar_status_markup(
     array $session,
@@ -730,7 +1159,10 @@ function estab_sidebar_status_markup(
     ?string $notificationSoundUrl = null,
     string $freshnessState = 'current',
     string $incidentMarkup = '',
-    ?array $operationalIdentity = null
+    ?array $operationalIdentity = null,
+    array $secondaryQueues = [],
+    array $dutyFunctions = [],
+    string $identityMarkup = ''
 ): string {
     $identity = estab_auth_session_identity($session);
     if ($identity === null) {
@@ -768,7 +1200,7 @@ function estab_sidebar_status_markup(
     );
     $strictDutyPresence = $permissionMode === 'STRICT'
         && is_int($dutyAssignment);
-    $currentFunctionText = $strictDutyPresence
+    $currentFunctionText = $strictDutyPresence || $dutyFunctions !== []
         ? 'Ihre aktive Dienstfunktion'
         : 'Ihre Primärfunktion';
     $queueLabel = trim($queueLabel);
@@ -810,8 +1242,8 @@ function estab_sidebar_status_markup(
     $onlineUsers = 0;
     $currentPresence = 'expired';
     $currentKey = null;
-    $presenceUsers = $users;
-    foreach ($presenceUsers as $index => $user) {
+    $presenceUsers = [];
+    foreach ($users as $user) {
         if (
             !is_array($user)
             || !is_string($user['rolle'] ?? null)
@@ -830,23 +1262,67 @@ function estab_sidebar_status_markup(
         if ($isCurrentAccount && $strictDutyPresence) {
             $user['rolle'] = $identity['rolle'];
             $user['funktion'] = $identity['funktion'];
-            $presenceUsers[$index] = $user;
         }
-        $role = trim((string) $user['rolle']);
-        $function = trim((string) $user['funktion']);
-        if ($role === '' || $function === '') {
-            continue;
-        }
-        $key = $role . "\0" . $function;
-        if ($isCurrentAccount) {
-            $currentPresence = $presence;
-            $currentKey = $key;
+        // A duty shift decides which station a person took over. Without one
+        // the account columns remain the only truth the sidebar has.
+        $occupied = estab_sidebar_duty_functions_for_account(
+            $dutyFunctions,
+            $user['kuerzel'] ?? null
+        ) ?? [[
+            'rolle' => trim((string) $user['rolle']),
+            'funktion' => trim((string) $user['funktion']),
+        ]];
+        $occupied = array_values(array_filter(
+            $occupied,
+            static fn (array $tuple): bool =>
+                $tuple['rolle'] !== '' && $tuple['funktion'] !== ''
+        ));
+        if ($occupied === []) {
+            // A duty shift that no longer lists the signed-in account would
+            // otherwise erase the very chip the legend points at.
+            if (!$isCurrentAccount) {
+                continue;
+            }
+            $occupied = [[
+                'rolle' => trim((string) $identity['rolle']),
+                'funktion' => trim((string) $identity['funktion']),
+            ]];
+            if (
+                $occupied[0]['rolle'] === ''
+                || $occupied[0]['funktion'] === ''
+            ) {
+                continue;
+            }
         }
         if ($presence === 'online') {
-            $online[$key] = ($online[$key] ?? 0) + 1;
             $onlineUsers++;
-        } else {
-            $inactive[$key] = ($inactive[$key] ?? 0) + 1;
+        }
+        foreach ($occupied as $tuple) {
+            $role = $tuple['rolle'];
+            $function = $tuple['funktion'];
+            $occupancy = $user;
+            $occupancy['rolle'] = $role;
+            $occupancy['funktion'] = $function;
+            $presenceUsers[] = $occupancy;
+            $key = $role . "\0" . $function;
+            if (
+                $isCurrentAccount
+                && (
+                    $currentKey === null
+                    || (
+                        hash_equals((string) $identity['rolle'], $role)
+                        && hash_equals((string) $identity['funktion'], $function)
+                    )
+                )
+            ) {
+                $currentPresence = $presence;
+                $currentKey = $key;
+            }
+            if ($presence === 'online') {
+                $online[$key] = ($online[$key] ?? 0) + 1;
+            } else {
+                $inactive[$key] = ($inactive[$key] ?? 0) + 1;
+            }
         }
     }
 
@@ -929,6 +1405,63 @@ function estab_sidebar_status_markup(
     $queueState = $queueCount === null
         ? 'unavailable'
         : ($queueCount > 0 ? 'has-work' : 'empty');
+    if (count($secondaryQueues) > ESTAB_SIDEBAR_MAX_QUEUES - 1) {
+        throw new InvalidArgumentException('Too many sidebar queues');
+    }
+    $queueItems = '';
+    foreach ($secondaryQueues as $queue) {
+        if (!is_array($queue)) {
+            throw new InvalidArgumentException('Invalid sidebar queue entry');
+        }
+        $itemKey = estab_sidebar_queue_baseline_key(
+            is_string($queue['baseline_key'] ?? null)
+                ? $queue['baseline_key']
+                : ''
+        );
+        $itemLabel = is_string($queue['label'] ?? null)
+            ? trim($queue['label'])
+            : '';
+        $itemShortLabel = is_string($queue['short_label'] ?? null)
+            ? trim($queue['short_label'])
+            : '';
+        $itemCount = $queue['count'] ?? null;
+        if (
+            $itemLabel === ''
+            || strlen($itemLabel) > 80
+            || preg_match('//u', $itemLabel) !== 1
+            || $itemShortLabel === ''
+            || strlen($itemShortLabel) > 40
+            || preg_match('//u', $itemShortLabel) !== 1
+            || ($itemCount !== null && (!is_int($itemCount) || $itemCount < 0))
+        ) {
+            throw new InvalidArgumentException('Invalid sidebar queue entry');
+        }
+        $itemState = $itemCount === null
+            ? 'unavailable'
+            : ($itemCount > 0 ? 'has-work' : 'empty');
+        $itemAccessible = $itemLabel . ' ' . $itemShortLabel . ': '
+            . ($itemCount === null
+                ? 'nicht verfügbar'
+                : $itemCount . ' wartend');
+        $queueItems .= '<li class="estab-sidebar-queue-item ' . $itemState . '"'
+            . ' data-estab-queue-state="' . $itemState . '"'
+            . ' aria-label="' . estab_auth_html($itemAccessible) . '">'
+            . '<span>' . estab_auth_html($itemShortLabel) . '</span>'
+            . '<strong data-estab-queue-count="'
+            . estab_auth_html($itemKey) . '" aria-live="polite">'
+            . estab_auth_html(
+                $itemCount === null ? '–' : (string) $itemCount
+            ) . '</strong>'
+            . '</li>';
+    }
+    $queueStrip = $queueItems === ''
+        ? ''
+        : '<ul class="estab-sidebar-queue-strip" data-estab-queue-strip'
+            . ' aria-label="Warteschlangen Ihrer weiteren Funktionen">'
+            . $queueItems . '</ul>';
+    $presenceScope = $dutyFunctions === []
+        ? 'Primärfunktion'
+        : 'Dienstfunktion';
     $onlineText = $onlineUsers === 1
         ? '1 Person aktiv'
         : $onlineUsers . ' Personen aktiv';
@@ -942,19 +1475,30 @@ function estab_sidebar_status_markup(
         'unavailable' => 'Statusdaten nicht verfügbar',
         default => 'Status aktuell',
     };
+    /*
+     * Die Hinweistoene sind ein Knopf mit einer Glocke, nicht ein Satz.
+     *
+     * Durchgestrichen heisst stumm, offen heisst hoerbar -- das ist dasselbe
+     * Zeichen, das jedes Geraet dafuer benutzt, und es braucht keine
+     * Uebersetzung. Der Zustand steht zusaetzlich in aria-pressed und im
+     * Titel, damit Vorleseprogramme und der Mauszeiger ihn ebenfalls
+     * bekommen; die Rueckmeldung bleibt fuer sie erhalten, nimmt aber keine
+     * Zeile mehr.
+     */
     $soundControl = $soundUrl === null
         ? ''
-        : '<div class="estab-sidebar-sound-control">'
-            . '<button class="estab-sidebar-sound-toggle" type="button"'
+        : '<button class="estab-sidebar-sound-toggle" type="button"'
             . ' data-estab-sound-toggle'
             . ' data-estab-sound-url="' . estab_auth_html($soundUrl) . '"'
-            . ' aria-pressed="false">'
-            . '<span data-estab-sound-label>Hinweistöne aktivieren</span>'
+            . ' aria-pressed="false"'
+            . ' title="Hinweistöne aktivieren">'
+            . estab_sidebar_bell_markup()
+            . '<span class="estab-visually-hidden" data-estab-sound-label>'
+            . 'Hinweistöne aktivieren</span>'
             . '</button>'
-            . '<span class="estab-sidebar-sound-feedback"'
+            . '<span class="estab-sidebar-sound-feedback estab-visually-hidden"'
             . ' data-estab-sound-feedback role="status"'
-            . ' aria-live="polite">Hinweistöne sind ausgeschaltet.</span>'
-            . '</div>';
+            . ' aria-live="polite">Hinweistöne sind ausgeschaltet.</span>';
     $notificationText = $notificationSoundUrl === null
         ? ''
         : '<span class="estab-visually-hidden"'
@@ -980,7 +1524,20 @@ function estab_sidebar_status_markup(
         . '<strong>' . estab_auth_html($now->format('H:i')) . '</strong>'
         . '<span>' . estab_auth_html($now->format('d.m.Y')) . '</span>'
         . '</time>'
+        . $soundControl
         . '</div>'
+        /*
+         * Wer angemeldet ist und der Weg hinaus stehen nebeneinander in einer
+         * Zeile unter Warteschlange und Uhr -- nicht untereinander in einem
+         * eigenen Feld. Es sind zwei kurze Angaben; ein Kasten dafuer kostete
+         * mehr Platz als sie selbst, und weiter unten fehlt der Platz dann
+         * beim Aktivitaetsraster.
+         */
+        . ($identityMarkup === ''
+            ? ''
+            : '<div class="estab-sidebar-identity-row">'
+                . $identityMarkup . '</div>')
+        . $queueStrip
         . $incidentMarkup
         . '<div class="estab-sidebar-freshness"'
         . ' data-estab-sidebar-freshness'
@@ -990,23 +1547,31 @@ function estab_sidebar_status_markup(
         . '<span data-estab-sidebar-freshness-text>'
         . estab_auth_html($freshnessText) . '</span>'
         . '</div>'
+        /*
+         * Wer gerade besetzt ist, steht offen. Ein zugeklapptes Raster spart
+         * Platz, kostet aber den Blick, um dessentwillen die Spalte da ist:
+         * Man sieht dann nicht mehr, ob eine Station unbesetzt ist, sondern
+         * muss danach fragen.
+         */
+        . '<div class="estab-sidebar-presence-block"'
+        . ' data-estab-sidebar-presence>'
         . '<div class="estab-sidebar-presence-heading">'
-        . '<h2>Aktivität nach Primärfunktion</h2>'
+        . '<h2>Aktivität nach ' . $presenceScope . '</h2>'
         . '<span data-estab-online-count="' . $onlineUsers . '">'
         . estab_auth_html($onlineText) . '</span>'
         . '</div>'
         . '<ul class="estab-sidebar-presence-grid"'
-        . ' aria-label="Anmeldeaktivität nach Primärfunktion">'
+        . ' aria-label="Anmeldeaktivität nach ' . $presenceScope . '">'
         . $chips . '</ul>'
         . '<div class="estab-sidebar-presence-legend"'
-        . ' aria-label="Legende zur Primärfunktion">'
+        . ' aria-label="Legende zur ' . $presenceScope . '">'
         . '<span><i class="online" aria-hidden="true"></i>Aktiv</span>'
         . '<span><i class="inactive" aria-hidden="true"></i>Inaktiv (15 Min.)</span>'
         . '<span><i class="current" aria-hidden="true"></i>'
         . estab_auth_html($currentFunctionText) . '</span>'
         . '<span><i class="offline" aria-hidden="true"></i>Abgemeldet</span>'
         . '</div>'
-        . $soundControl
+        . '</div>'
         . $notificationText
         . '</section>';
 }
@@ -1046,7 +1611,8 @@ function estab_sidebar_status_refresh_script(
             | JSON_THROW_ON_ERROR
     );
 
-    return '<script data-estab-sidebar-refresh data-refresh-seconds="'
+    return '<script' . estab_csp_script_attribute()
+        . ' data-estab-sidebar-refresh data-refresh-seconds="'
         . $intervalSeconds . '" data-timeout-ms="'
         . $timeoutMilliseconds . '">'
         . '(function(){'
@@ -1198,11 +1764,19 @@ function estab_sidebar_status_refresh_script(
         . 'freshFreshness.replaceWith(currentFreshness);'
         . '}'
         . '}'
-        . 'var currentQueue=current.querySelector("[data-estab-queue-count]");'
-        . 'var freshQueue=fresh.querySelector("[data-estab-queue-count]");'
-        . 'if(currentQueue&&freshQueue'
+        . 'var currentQueues=current.querySelectorAll('
+        . '"[data-estab-queue-count]");'
+        . 'var freshQueues=fresh.querySelectorAll("[data-estab-queue-count]");'
+        . 'if(currentQueues.length===freshQueues.length){'
+        . 'for(var queueIndex=0;queueIndex<currentQueues.length;queueIndex++){'
+        . 'var currentQueue=currentQueues[queueIndex];'
+        . 'var freshQueue=freshQueues[queueIndex];'
+        . 'if(currentQueue.getAttribute("data-estab-queue-count")'
+        . '===freshQueue.getAttribute("data-estab-queue-count")'
         . '&&currentQueue.textContent===freshQueue.textContent){'
         . 'freshQueue.replaceWith(currentQueue);'
+        . '}'
+        . '}'
         . '}'
         . 'return soundPreserved;'
         . '}'

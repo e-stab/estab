@@ -68,6 +68,59 @@ $assert(
         ),
     'untrusted post-login destination or interruption notice was accepted'
 );
+
+// Die Kontenliste der Anmeldeseite ist eine Tabelle wie jede andere: Sie
+// sortiert, sie sucht, sie blaettert. Ihr Sieb steht in der Adresse, sonst
+// ueberlebte eine Suche den Seitenaufbau nicht. Vor der Anmeldung darf die
+// Seite trotzdem nicht alles annehmen -- zugelassen ist genau das Sieb
+// dieser einen Tabelle, und nichts sonst.
+//
+// Ohne diese Zulassung antwortete die Seite auf jede Suche mit "Aktion
+// nicht erlaubt": Wer unter achtzehn Konten das richtige sucht, bekam die
+// Sperre statt der Trefferliste.
+$siebschluessel = [
+    'konten_sort',
+    'konten_richtung',
+    'konten_seite',
+    'konten_groesse',
+    'konten_suche',
+    'konten_s_benutzer',
+    'konten_f_status',
+];
+foreach ($siebschluessel as $schluessel) {
+    $assert(
+        estab_workflow_public_login_request(
+            ['REQUEST_METHOD' => 'GET'],
+            ['login_flow' => 'existing', 'next' => 'messages', $schluessel => 'ldf'],
+            []
+        ),
+        'Das Sieb der Kontenliste wird abgewiesen: ' . $schluessel
+    );
+}
+$assert(
+    !estab_workflow_public_login_request(
+        ['REQUEST_METHOD' => 'GET'],
+        ['konten_suche' => ['ldf']],
+        []
+    )
+        && !estab_workflow_public_login_request(
+            ['REQUEST_METHOD' => 'GET'],
+            ['konten_beliebig' => 'x'],
+            []
+        )
+        && !estab_workflow_public_login_request(
+            ['REQUEST_METHOD' => 'GET'],
+            ['meldungen_suche' => 'x'],
+            []
+        )
+        && !estab_workflow_public_login_request(
+            ['REQUEST_METHOD' => 'GET'],
+            ['konten_s_' => 'x'],
+            []
+        ),
+    'Die Anmeldeseite nimmt vor der Anmeldung mehr an als das Sieb der '
+        . 'Kontenliste.'
+);
 $assert(
     estab_workflow_public_login_request(['REQUEST_METHOD' => 'POST'], [], ['login' => 'Anmelden']),
     'login transition rejected'
@@ -935,13 +988,26 @@ foreach ($incomingTelecommunicationsTasks as $incomingTask) {
             $incomingTask . ' accepts browser-controlled distribution data'
         );
     }
+    /*
+     * Der LdF vertritt den A/W, der Vordruck steht ihm deshalb offen --
+     * sonst fuehrte sein eigener Knopf in eine Sackgasse. Gebunden bleibt
+     * er trotzdem: Er handelt als LdF und nicht als zweiter A/W, und den
+     * Rufnamen in einen Absender zu uebersetzen bleibt ihm auch hier
+     * verwehrt. Das gehoert in den Schritt LdF-Eingang.
+     */
     $assert(
-        !estab_workflow_route_allowed(
+        estab_workflow_route_allowed(
             $telecommunicationsLead,
             'POST',
             ['task' => $incomingTask]
-        ),
-        $incomingTask . ' is reachable through the LdF role'
+        )
+            && !estab_workflow_route_allowed(
+                $telecommunicationsLead,
+                'POST',
+                ['task' => $incomingTask, '13_abseinheit' => 'Leitstelle Nord']
+            )
+            && !estab_workflow_is_telecommunications($telecommunicationsLead),
+        $incomingTask . ' does not carry the LdF stand-in for the A/W'
     );
 }
 $removedSelfReviewTasks = [

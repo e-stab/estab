@@ -23,6 +23,7 @@ require_once __DIR__ . '/../app/read_authorization.php';
 require_once __DIR__ . '/../4fcfg/config.inc.php';
 require_once __DIR__ . '/../4fcfg/dbcfg.inc.php';
 require_once __DIR__ . '/../4fcfg/e_cfg.inc.php';
+require_once __DIR__ . '/../app/tabelle.php';
 
 header('Cache-Control: no-store');
 header('X-Content-Type-Options: nosniff');
@@ -156,17 +157,14 @@ function estab_category_render_manager(
     echo '<h2 id="category-list-title">Vorhandene Kategorien</h2>';
     echo '<p>Bearbeiten Sie Bezeichnung und Beschreibung oder entfernen Sie '
         . 'nicht mehr benötigte Kategorien.</p></header>';
-    echo '<div class="estab-tool-table-wrap estab-tool-table-responsive">';
-    echo '<table class="estab-tool-table">';
-    echo '<caption class="estab-visually-hidden">'
-        . estab_auth_html($heading) . '</caption>';
-    echo '<thead><tr><th scope="col">Kategorie</th>'
-        . '<th scope="col">Beschreibung</th><th scope="col">Aktionen</th>'
-        . '</tr></thead><tbody>';
-    if ($rows === []) {
-        echo '<tr><td colspan="3" class="estab-tool-empty">'
-            . 'Noch keine Kategorien vorhanden.</td></tr>';
-    }
+    /*
+     * Die Kategorienliste kommt aus dem Tabellenbauteil.
+     *
+     * Eine Fuehrungsstelle sammelt im Lauf einer Uebung schnell dreissig
+     * Kategorien; ohne Suche findet man eine bestimmte nur mit dem Finger
+     * am Bildschirm.
+     */
+    $kategorieZeilen = array ();
     foreach ($rows as $row) {
         $categoryId = (int) $row['lfd'];
         $editUrl = estab_category_manager_url(
@@ -176,32 +174,74 @@ function estab_category_render_manager(
             $actingFunction
         )
             . '&edit_id=' . rawurlencode((string) $categoryId);
-        echo '<tr><td data-label="Kategorie"><strong>'
-            . estab_auth_html($row['kategorie']) . '</strong></td>';
-        echo '<td data-label="Beschreibung">'
-            . estab_auth_html($row['beschreibung']) . '</td>';
-        echo '<td data-label="Aktionen"><div class="estab-tool-actions">';
-        echo '<a class="estab-button" href="' . estab_auth_html($editUrl)
-            . '">Bearbeiten</a>';
-        echo '<details class="estab-tool-details">';
-        echo '<summary>Kategorie löschen …</summary>';
-        echo '<p>Diese Kategorie und ihre Zuordnungen werden entfernt.</p>';
-        echo '<form method="post" action="' . estab_auth_html($formAction) . '">';
-        echo estab_csrf_field();
-        echo '<input type="hidden" name="category_action" value="delete">';
-        echo '<input type="hidden" name="dbtyp" value="' . estab_auth_html($type) . '">';
-        echo '<input type="hidden" name="msgno" value="' . estab_auth_html($messageId) . '">';
-        echo '<input type="hidden" name="acting_function" value="'
-            . estab_auth_html($actingFunction) . '">';
-        echo '<input type="hidden" name="category_id" value="'
-            . estab_auth_html($categoryId) . '">';
-        echo '<button class="estab-button estab-button-danger-outline" '
-            . 'type="submit" aria-label="Kategorie '
-            . estab_auth_html($row['kategorie']) . ' löschen">Löschen</button>';
-        echo '</form></details>';
-        echo '</div></td></tr>';
+        $kategorieZeilen[] = array(
+            'kategorie' => (string) $row['kategorie'],
+            'beschreibung' => (string) $row['beschreibung'],
+            'kennung' => $categoryId,
+            'bearbeiten' => $editUrl,
+        );
     }
-    echo '</tbody></table></div></section>';
+    echo estab_tabelle_markup(array(
+        'id' => 'kategorien',
+        'beschriftung' => $heading,
+        'mindestbreite' => '44rem',
+        // Wenige Spalten auf schmalem Platz: erst spaet zu Karten.
+        'schmal' => true,
+        'spalten' => array(
+            array('schluessel' => 'kategorie', 'kopf' => 'Kategorie',
+                'breite' => 26, 'sortierbar' => true, 'suchbar' => true,
+                'art' => 'text',
+                'zelle' => static fn (array $z): string =>
+                    '<strong>' . estab_auth_html($z['kategorie']) . '</strong>'),
+            array('schluessel' => 'beschreibung', 'kopf' => 'Beschreibung',
+                'breite' => 48, 'sortierbar' => true, 'suchbar' => true,
+                'art' => 'text', 'klammern' => true),
+            array('schluessel' => 'aktion', 'kopf' => 'Aktionen',
+                'breite' => 26, 'sortierbar' => false, 'suchbar' => false,
+                'art' => 'text',
+                'zelle' => static function (array $z) use (
+                    $formAction,
+                    $type,
+                    $messageId,
+                    $actingFunction
+                ): string {
+                    /*
+                     * Das Loeschen liegt hinter einem Aufklappfeld. Ein
+                     * Knopf, der ohne Rueckfrage loescht, steht sonst
+                     * neben einem, der nur bearbeitet -- und beide sehen
+                     * gleich aus.
+                     */
+                    return '<div class="estab-tool-actions">'
+                        . '<a class="estab-button" href="'
+                        . estab_auth_html($z['bearbeiten'])
+                        . '">Bearbeiten</a>'
+                        . '<details class="estab-tool-details">'
+                        . '<summary>Kategorie löschen …</summary>'
+                        . '<p>Diese Kategorie und ihre Zuordnungen werden '
+                        . 'entfernt.</p>'
+                        . '<form method="post" action="'
+                        . estab_auth_html($formAction) . '">'
+                        . estab_csrf_field()
+                        . '<input type="hidden" name="category_action" value="delete">'
+                        . '<input type="hidden" name="dbtyp" value="'
+                        . estab_auth_html($type) . '">'
+                        . '<input type="hidden" name="msgno" value="'
+                        . estab_auth_html($messageId) . '">'
+                        . '<input type="hidden" name="acting_function" value="'
+                        . estab_auth_html($actingFunction) . '">'
+                        . '<input type="hidden" name="category_id" value="'
+                        . estab_auth_html($z['kennung']) . '">'
+                        . '<button class="estab-button estab-button-danger-outline" '
+                        . 'type="submit" aria-label="Kategorie '
+                        . estab_auth_html($z['kategorie'])
+                        . ' löschen">Löschen</button>'
+                        . '</form></details></div>';
+                }),
+        ),
+        'zeilen' => $kategorieZeilen,
+        'leer' => 'Noch keine Kategorien vorhanden.',
+    ));
+    echo '</section>';
 
     $isUpdate = $editing !== null;
     echo '<section class="estab-tool-panel" aria-labelledby="category-form-title">';

@@ -308,6 +308,14 @@ try {
     $evidenceShiftId = (int) $evidenceShift['dienstschicht_id'];
     $evidenceAssignmentId = 0;
     $evidencePrimaryAwAssignmentId = 0;
+    /*
+     * Das Technische Betriebsbuch fuehrt der Leiter des Fernmeldebetriebes.
+     * Die Fachzustaendigkeit FERNMELDEBETRIEB traegt nach Migration 94 allein
+     * LdF / Fernmelder, und der Ausloeser aus Migration 132 verlangt dieselbe
+     * Seite. Der A/W befoerdert, er fuehrt kein Buch -- deshalb braucht diese
+     * Pruefung die LdF-Besetzung derselben Person.
+     */
+    $evidencePrimaryLdfAssignmentId = 0;
     foreach (ESTAB_DV_REQUIRED_HATS as $function) {
         $assignment = estab_dv_assign_hat(
             $connection,
@@ -327,6 +335,10 @@ try {
             $evidenceAssignmentId = (int) $assignment['dienstbesetzung_id'];
         } elseif ($function === 'A/W') {
             $evidencePrimaryAwAssignmentId = (int) (
+                $assignment['dienstbesetzung_id']
+            );
+        } elseif ($function === 'LdF') {
+            $evidencePrimaryLdfAssignmentId = (int) (
                 $assignment['dienstbesetzung_id']
             );
         }
@@ -981,12 +993,12 @@ try {
         'database accepted an ETB correction self-reference'
     );
 
-    $awActor = [
+    $ldfActor = [
         'benutzer' => 'Evidence Integration',
         'kuerzel' => 'evi',
-        'funktion' => 'A/W',
+        'funktion' => 'LdF',
         'rolle' => 'Fernmelder',
-        'duty_assignment_id' => $evidencePrimaryAwAssignmentId,
+        'duty_assignment_id' => $evidencePrimaryLdfAssignmentId,
     ];
     $tbbEntryId = estab_logbook_insert_entry(
         $databaseConfig,
@@ -1002,7 +1014,7 @@ try {
             'receipt' => 'Quittung evi',
             'comment' => 'Strukturierter TBB-Prüfeintrag',
         ],
-        $awActor
+        $ldfActor
     );
     $tbbCorrectionId = estab_logbook_insert_entry(
         $databaseConfig,
@@ -1016,7 +1028,7 @@ try {
             'correction_of' => $tbbEntryId,
             'comment' => 'Schreibfehler im Quittungszeichen',
         ],
-        $awActor
+        $ldfActor
     );
     // The compatibility connector used by estab_logbook_insert_entry()
     // deliberately disables mysqli exception reporting while it opens its
@@ -1047,14 +1059,14 @@ try {
                     . ' COALESCE(`estab_writer_assignment_id`, 0))'
                     . ' FROM `nv_tbb`'
                     . ' WHERE `tbb_lfd-nr` = ' . $tbbEntryId
-            ) === $evidenceShiftId . '|' . $evidencePrimaryAwAssignmentId
+            ) === $evidenceShiftId . '|' . $evidencePrimaryLdfAssignmentId
             && (string) $scalar(
                 $connection,
                 "SELECT CONCAT(COALESCE(`estab_shift_id`, 0), '|',"
                     . ' COALESCE(`estab_writer_assignment_id`, 0))'
                     . ' FROM `nv_tbb`'
                     . ' WHERE `tbb_lfd-nr` = ' . $tbbCorrectionId
-            ) === $evidenceShiftId . '|' . $evidencePrimaryAwAssignmentId,
+            ) === $evidenceShiftId . '|' . $evidencePrimaryLdfAssignmentId,
         'structured TBB entry/correction or '
             . 'incident-local sequence is incomplete'
     );
@@ -1084,7 +1096,7 @@ try {
                 'message_route' => 'Einsatzfremde Nachricht',
                 'message_id' => $foreignMessageId,
             ],
-                $awActor
+                $ldfActor
         )) instanceof InvalidArgumentException,
         'application accepted a manual canonical TBB message link'
     );

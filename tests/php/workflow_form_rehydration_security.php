@@ -187,8 +187,10 @@ $assert(
 $leadOutgoing = estab_rehydrate_authoritative_message_form(
     array_replace($authoritative, ['x00_status' => '1']),
     array_replace($forgedEvidence, [
+        '01_medium' => 'Me',
         '02_zeit' => '310830Jul2026',
         '05_gegenstelle' => 'Florian Ziel Neu',
+        '06_befweg' => 'Melder über Bereitstellungsraum',
         'fernmeldeplan_eintrag_id' => '52',
         'estab_route_error' => 'Plan ist nicht mehr gültig',
     ]),
@@ -200,7 +202,11 @@ $assert(
         && $leadOutgoing['02_zeichen'] === 'ld0002'
         && $leadOutgoing['05_gegenstelle'] === 'Florian Ziel Neu'
         && $leadOutgoing['fernmeldeplan_eintrag_id'] === '52'
-        && $leadOutgoing['06_befweg'] === $authoritative['06_befweg']
+        // Feld 1 und Feld 6 sind die Disposition dieses Arbeitsschritts und
+        // überstehen deshalb eine abgewiesene Eingabe.
+        && $leadOutgoing['01_medium'] === 'Me'
+        && $leadOutgoing['06_befweg'] === 'Melder über Bereitstellungsraum'
+        // Feld 7 bleibt der Wunsch des Verfassers.
         && $leadOutgoing['06_befwegausw'] === $authoritative['06_befwegausw']
         && $leadOutgoing['12_inhalt'] === $authoritative['12_inhalt']
         && $leadOutgoing['15_quitzeichen'] === 'si0001'

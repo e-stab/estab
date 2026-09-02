@@ -69,7 +69,10 @@ async function registerAccount(browser, account) {
 async function workspace(page) {
   await page.goto('/4fach/index.php');
   await expect(page.locator('[data-estab-message-workspace]')).toBeVisible();
-  const navigation = page.frameLocator('iframe[name="vorgaben"]');
+  // Die Arbeitsschritte stehen seit der Huellen-Umstellung links in einem
+  // eigenen Rahmen "aktionen"; "vorgaben" traegt jetzt nur noch das Cockpit
+  // rechts (Anmeldung, Einsatz, Warteschlangen).
+  const navigation = page.frameLocator('iframe[name="aktionen"]');
   const content = page.frameLocator('iframe[name="mainframe"]');
   await expect(navigation.locator('[data-estab-workflow-menu]')).toBeVisible();
   return { navigation, content };
@@ -91,8 +94,21 @@ async function openAction(page, actionName, expectedTask) {
 async function openQueuedMessage(page, actionName, contentMarker, expectedTask) {
   const content = await openAction(page, actionName, null);
   await expect(content.locator('body')).toContainText(contentMarker);
-  await content
-    .getByRole('button', { name: contentMarker, exact: true })
+  // Zwei Bauarten nebeneinander: Die umgestellten Tafeln (Disposition,
+  // Sichtung, Ausgang) tragen in der Aktionsspalte einen Knopf mit
+  // gleichbleibender Aufschrift, und der Nachrichtentext steht in einer
+  // eigenen Zelle. Die noch nicht umgestellten Stab-Listen machen den Text
+  // selbst zum Knopf. Getroffen wird in beiden Faellen ueber die Zeile, die
+  // den Text traegt -- die ist eindeutig, die Aufschrift ist es nicht.
+  // Nicht zwei Zweige ueber count(): count() fragt einmal und wartet nicht.
+  // Faellt die Abfrage in den Augenblick, in dem der Rahmen neu laedt, zaehlt
+  // sie null und der Ersatzzweig wartet in die Zeitgrenze. or() dagegen sucht
+  // beide Bauarten so lange, bis eine von ihnen dasteht.
+  const row = content.locator('tr', { hasText: contentMarker }).first();
+  await row
+    .getByRole('button', { name: 'Vordruck öffnen' })
+    .or(row.getByRole('button', { name: contentMarker, exact: true }))
+    .first()
     .click();
   await expect(
     content.locator(`input[name="task"][value="${expectedTask}"]`)
@@ -131,6 +147,20 @@ async function fillCommonMessageFields(content, values) {
   if (await priority.count()) {
     await priority.selectOption('eee');
   }
+  // Feld 16 gehoert dem Verfasser: die Anwendung setzt die Abfassungszeit
+  // nicht mehr selbst ein, weil sie den Zeitpunkt der Erfassung kennt und
+  // nicht den der Abfassung.
+  // Nur das sichtbare Feld: wo das Formular die Abfassungszeit
+  // schreibgeschuetzt zeigt, gibt es daneben ein verstecktes Spiegelfeld
+  // gleichen Namens, das den Wert mit absendet. Ein verstecktes Feld gilt
+  // Playwright als "editable" -- es ist weder gesperrt noch nur-lesend --,
+  // und die Abfrage lief deshalb in den Zeitablauf statt zu ueberspringen.
+  const compositionTime = content
+    .locator('input[name="12_abfzeit"]:not([type="hidden"])')
+    .first();
+  if (await compositionTime.count() && await compositionTime.isEditable()) {
+    await compositionTime.fill(values.compositionTime ?? '1215');
+  }
 }
 
 async function createOutgoing(page, account) {
@@ -146,6 +176,18 @@ async function createOutgoing(page, account) {
     content: contentMarker,
   });
   await submitLegacyMessageForm(content);
+  // Der Hauptrahmen laedt die Liste nicht mehr nach, sondern bestaetigt das
+  // Absetzen und nennt die naechste Station. Die Rueckmeldung soll stehen
+  // bleiben, bis sie gelesen ist -- deshalb steht hier nicht mehr der
+  // Meldungstext.
+  await expect(
+    content.locator('[data-estab-message-confirmation]')
+  ).toContainText('Nachrichtenvordruck abgesetzt');
+  // Die abgesetzte Meldung muss ueber den angebotenen Weg auffindbar bleiben.
+  await content
+    .getByRole('button', { name: 'Meldungen dieser Funktion' })
+    .first()
+    .click();
   await expect(content.locator('body')).toContainText(contentMarker);
   return contentMarker;
 }
@@ -232,7 +274,12 @@ test.describe('vollständiger Nachrichtenablauf', () => {
       await page
         .getByRole('button', { name: 'Verbindlich annehmen' })
         .click();
-      await expect(page.getByText('ANGENOMMEN', { exact: true })).toBeVisible();
+      // In der Tafel, nicht im Filter: die Besetzungsuebersicht bietet
+      // "ANGENOMMEN" seit der Filterleiste auch als Auswahlwert an, und der
+      // stuende auch dann da, wenn die Zeile den Zustand nie erreicht.
+      await expect(
+        page.getByRole('table').getByText('ANGENOMMEN', { exact: true })
+      ).toBeVisible();
     }
 
     await adminPage.goto('/4fadm/fuehrungsstelle.php');
@@ -278,8 +325,14 @@ test.describe('vollständiger Nachrichtenablauf', () => {
       ),
     });
     await addRoute.locator('[name="betriebsstelle"]').fill('E2E Funkstelle');
-    await addRoute.locator('[name="rufname"]').fill('E2E Gegenstelle');
-    await addRoute.locator('[name="medium"]').selectOption('Fu');
+    // Die Wegart zuerst: sie entscheidet, welche Fachfelder ueberhaupt
+    // dastehen. "Fu" allein gibt es nicht mehr -- Analog- und Digitalfunk
+    // sind seit der Trennung zwei Wegarten unter einem Mittel.
+    await addRoute.locator('[name="wegart"]').selectOption('Fu:ANALOG');
+    // Aus "Rufname" wurde "Erreichbarkeit": das Feld nennt die Anschrift,
+    // unter der die Stelle auf diesem Weg antwortet.
+    await addRoute.locator('[name="erreichbarkeit"]').fill('E2E Gegenstelle');
+    await addRoute.locator('[name="band"]').selectOption('2m');
     await addRoute.locator('[name="kanal"]').fill('E2E-404');
     await addRoute.locator('[name="bandlage"]').fill('G/U');
     await addRoute.locator('[name="verkehrsform"]').fill('Gegenverkehr');

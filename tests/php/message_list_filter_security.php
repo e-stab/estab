@@ -20,6 +20,8 @@ $assert(
         'direction' => '',
         'priority' => '',
         'status' => '',
+        'read_state' => '',
+        'done_state' => '',
         'from' => '',
         'to' => '',
         'recipient' => '',
@@ -39,6 +41,8 @@ $parsed = estab_message_list_parse_filters([
     'ml_direction' => 'E',
     'ml_priority' => 'bbb',
     'ml_status' => 'review',
+    'ml_read_state' => 'unread',
+    'ml_done_state' => 'open',
     'ml_from' => '2024-02-29',
     'ml_to' => '2024-03-01',
     'ml_recipient' => 'S2',
@@ -52,6 +56,8 @@ $assert(
         'direction' => 'E',
         'priority' => 'bbb',
         'status' => 'review',
+        'read_state' => 'unread',
+        'done_state' => 'open',
         'from' => '2024-02-29',
         'to' => '2024-03-01',
         'recipient' => 'S2',
@@ -90,6 +96,10 @@ $invalidRequests = [
     ['ml_direction' => 'X'],
     ['ml_priority' => 'eee'],
     ['ml_status' => 'open'],
+    ['ml_read_state' => 'gelesen'],
+    ['ml_read_state' => 'done'],
+    ['ml_done_state' => 'unread'],
+    ['ml_done_state' => ['done']],
     ['ml_from' => '2023-02-29'],
     ['ml_from' => '0000-01-01'],
     ['ml_from' => '0999-12-31'],
@@ -219,7 +229,8 @@ $assert(
     'Filter removal changed more than the selected field and page'
 );
 $removableFields = [
-    'q', 'direction', 'priority', 'status', 'from', 'to', 'recipient',
+    'q', 'direction', 'priority', 'status', 'read_state', 'done_state',
+    'from', 'to', 'recipient',
 ];
 foreach ($removableFields as $field) {
     $populated = [
@@ -227,6 +238,8 @@ foreach ($removableFields as $field) {
         'direction' => 'A',
         'priority' => 'aaa',
         'status' => 'done',
+        'read_state' => 'read',
+        'done_state' => 'done',
         'from' => '2026-01-01',
         'to' => '2026-12-31',
         'recipient' => 'S1',

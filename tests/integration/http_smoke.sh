@@ -279,6 +279,7 @@ cleanup_http_smoke() {
 trap cleanup_http_smoke EXIT HUP INT TERM
 cookie_jar=$work_dir/cookies.txt
 body=$work_dir/body.html
+cockpit_body=$work_dir/cockpit.html
 headers=$work_dir/headers.txt
 login_password_file=$work_dir/login-password.txt
 collision_password_file=$work_dir/collision-password.txt
@@ -552,23 +553,93 @@ assert_export_zip() {
         ' "$expected_marker" "$expected_command_post" <"$body"
 }
 
+# Die Sitzung steht seit dem Umbau an zwei Orten: Wer angemeldet ist und wie
+# er sich abmeldet, liefert der Cockpit-Ausschnitt; welche Bereiche es gibt,
+# steht im Menue der Huelle. Geprueft wird beides -- die Kennung wird dafuer
+# in einer eigenen Anfrage geholt, damit die laufende Antwort unberuehrt
+# bleibt.
+fetch_cockpit_fragment() {
+    jar=${1:-$cookie_jar}
+    if ! curl --silent --show-error --max-time 20 --connect-timeout 5 \
+        --cookie "$jar" --cookie-jar "$jar" \
+        --output "$cockpit_body" \
+        "$base_url/4fach/vorgaben.php?fragment=cockpit"; then
+        printf 'HTTP smoke: cockpit fragment could not be fetched\n' >&2
+        exit 1
+    fi
+}
+
+# Nach einer erfolgreichen Anmeldung antwortet die Anwendung mit dem
+# Uebergabeblatt, das den Rahmen wechselt -- ein Nachweis steht darin nicht.
+# Der gilt weiter fuer die Sitzung; geholt wird er dort, wo er heute steht.
+csrf_from_cockpit() {
+    jar=$1
+    if ! curl --silent --show-error --max-time 20 --connect-timeout 5 \
+        --cookie "$jar" --cookie-jar "$jar" \
+        --output "$cockpit_body" \
+        "$base_url/4fach/vorgaben.php?fragment=cockpit"; then
+        printf 'HTTP smoke: cockpit fragment could not be fetched\n' >&2
+        exit 1
+    fi
+    token=$(sed -n \
+        's/.*name="csrf_token" value="\([a-f0-9][a-f0-9]*\)".*/\1/p' \
+        "$cockpit_body" | head -n 1)
+    if ! printf '%s' "$token" | grep -Eq '^[a-f0-9]{64}$'; then
+        printf 'HTTP smoke: cockpit carries no usable CSRF token\n' >&2
+        sed -n '1,80p' "$cockpit_body" >&2
+        exit 1
+    fi
+    printf '%s' "$token"
+}
+
+assert_cockpit_body() {
+    pattern=$1
+    fetch_cockpit_fragment
+    if ! grep -Fq -- "$pattern" "$cockpit_body"; then
+        printf 'HTTP smoke: cockpit does not contain %s\n' "$pattern" >&2
+        sed -n '1,80p' "$cockpit_body" >&2
+        exit 1
+    fi
+}
+
 assert_session_bar() {
     expected_name=$1
     expected_code=$2
     expected_function=$3
     expected_role=$4
+    # Der Cockpit-Ausschnitt wird eigens geholt; dafuer braucht er den
+    # Keksbehaelter der Sitzung, um die es gerade geht. Ohne Angabe ist es
+    # der laufende.
+    session_jar=${5:-$cookie_jar}
     expected_function_label=$expected_function
     expected_role_visible=true
     if [ "$expected_function" = 'A/W' ] && [ "$expected_role" = 'Fernmelder' ]; then
         expected_function_label=Fernmelder
         expected_role_visible=false
     fi
-    bar_count=$(grep -o 'data-estab-session-bar' "$body" | wc -l | tr -d ' ')
-    logout_count=$(grep -o 'data-estab-logout-form' "$body" | wc -l | tr -d ' ')
+
+    # Auf einer vollstaendigen Seite steht die Bereichsnavigation im Menue
+    # der Huelle. Der Cockpit-Ausschnitt fuer sich hat keine Huelle -- er ist
+    # ein Teil von ihr -- und wird deshalb nur auf die Sitzung geprueft.
+    if grep -Fq 'data-estab-shell-menu' "$body"; then
+        for marker in \
+            'data-estab-shell-menu' \
+            'data-estab-navigation' \
+            'data-estab-nav-key="overview"' \
+            '>Übersicht</span>' \
+            'target="_top"'
+        do
+            assert_body "$marker"
+        done
+    fi
+
+    fetch_cockpit_fragment "$session_jar"
+    bar_count=$(grep -o 'data-estab-session-bar' "$cockpit_body" | wc -l | tr -d ' ')
+    logout_count=$(grep -o 'data-estab-logout-form' "$cockpit_body" | wc -l | tr -d ' ')
     if [ "$bar_count" != 1 ] || [ "$logout_count" != 1 ]; then
         printf 'HTTP smoke: expected exactly one session bar/logout form, got %s/%s\n' \
             "$bar_count" "$logout_count" >&2
-        sed -n '1,80p' "$body" >&2
+        sed -n '1,80p' "$cockpit_body" >&2
         exit 1
     fi
     for marker in \
@@ -581,20 +652,36 @@ assert_session_bar() {
         'data-estab-logout-form' \
         'method="post"' \
         'target="_top"' \
-        'data-estab-navigation' \
-        'data-estab-nav-key="overview"' \
-        '>Übersicht</span>' \
         '4fach/logout.php' \
         'name="logout_action" value="logout"' \
-        '>Abmelden</button>'
+        'title="Abmelden"' \
+        '<span class="estab-visually-hidden">Abmelden</span>' \
+        "Funktion $expected_function_label"
     do
-        assert_body "$marker"
+        if ! grep -Fq -- "$marker" "$cockpit_body"; then
+            printf 'HTTP smoke: cockpit does not contain %s\n' "$marker" >&2
+            sed -n '1,80p' "$cockpit_body" >&2
+            exit 1
+        fi
     done
-    assert_body "Funktion $expected_function_label"
     if [ "$expected_role_visible" = true ]; then
-        assert_body "Rolle $expected_role"
+        if ! grep -Fq -- "Rolle $expected_role" "$cockpit_body"; then
+            printf 'HTTP smoke: cockpit does not name the role %s\n' \
+                "$expected_role" >&2
+            exit 1
+        fi
     fi
-    csrf_from_body >/dev/null
+    # Das Abmeldeformular traegt seinen eigenen Nachweis. Er steht jetzt im
+    # Cockpit und nicht mehr in jeder Seite -- eine reine Leseseite wie das
+    # Einsatztagebuch bringt gar keinen mehr mit.
+    cockpit_token=$(sed -n \
+        's/.*name="csrf_token" value="\([a-f0-9][a-f0-9]*\)".*/\1/p' \
+        "$cockpit_body" | head -n 1)
+    if ! printf '%s' "$cockpit_token" | grep -Eq '^[a-f0-9]{64}$'; then
+        printf 'HTTP smoke: cockpit carries no usable CSRF token\n' >&2
+        sed -n '1,80p' "$cockpit_body" >&2
+        exit 1
+    fi
 }
 
 csrf_from_body() {
@@ -904,12 +991,12 @@ assert_status 200 "$base_url/stabinfo/index.php"
 assert_status 200 "$base_url/handbuch/"
 assert_header_fixed 'Content-Type: text/html; charset=UTF-8'
 assert_header_fixed 'Cache-Control: private, no-store, max-age=0'
-assert_body '<title>eStab Web-Handbuch</title>'
+assert_body '<title>eStab Handbuch</title>'
 assert_body 'data-estab-handbook-search'
 assert_body 'data-estab-handbook-toc'
 assert_body 'href="./handbuch.css"'
 assert_body 'src="./handbuch.js"'
-assert_body 'data-estab-public-bar'
+assert_body 'data-estab-shell-menu'
 assert_body 'data-estab-nav-key="handbook" aria-current="page"'
 assert_body_absent 'data-estab-session-bar'
 assert_body_absent 'data-estab-logout-form'
@@ -938,6 +1025,7 @@ assert_status 403 "$base_url/4fach/counter.php"
 assert_status 403 "$base_url/4fach/status.php"
 for protected_route in \
     '4fach/fuehrungsstelle.php|command-post|index.php' \
+    '4fach/melderauftraege.php|messenger-jobs|index.php' \
     '4fach/vordrucke.php|forms|index.php' \
     '4fueltg/ue_ltg.php|message-overview|index.php' \
     'stabetb/etb.php|incident-log|index.php' \
@@ -985,7 +1073,7 @@ assert_body 'data-estab-auth-cancel'
 assert_body '>Anmeldung abbrechen · Zur Übersicht</a>'
 
 # The legacy image button still enters the chooser for compatible clients.
-assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+assert_status 200 --location --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --request POST \
     --data-urlencode 'login_x=12' \
     --data-urlencode 'login_y=4' \
@@ -1027,7 +1115,7 @@ if [ "$restore_verify_only" = true ]; then
     assert_body_absent 'name="kennwort2"'
     preauth_csrf_token=$(csrf_from_body)
 
-    assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+    assert_status 200 --location --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
         --request POST \
         --data-urlencode "csrf_token=$preauth_csrf_token" \
         --data-urlencode 'login_flow=existing' \
@@ -1040,17 +1128,26 @@ if [ "$restore_verify_only" = true ]; then
         "$base_url/4fach/mainindex.php"
     assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
         "$base_url/4fach/mainindex.php"
-    assert_body 'Meldung/Seite:'
+    assert_body 'data-estab-tabelle="stab-lesen"'
+assert_body 'name="stab_lesen_groesse"'
     restore_role=$(account_assignment "$test_code" | awk -F '	' '{print $2}')
     assert_session_bar "$test_name" "$test_code" "$test_function" "$restore_role"
 
     assert_body "$workflow_marker"
-    # The restored explicitly LOOSE incident lets the fixed S1 account read
-    # its own workflow object, but never grants S2 Lage-/Dokumentationsrechte.
-    # No formal duty assignment is required after the restore.
-    assert_status 403 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+    # The restored explicitly LOOSE incident lets the fixed S1 account read its
+    # own workflow object. No formal duty assignment is required after the
+    # restore.
+    #
+    # Die Meldungsuebersicht steht seit der Entscheidung des Betreibers jeder
+    # Funktion offen: Wer im Stab arbeitet, muss wissen, was laeuft. Geoeffnet
+    # ist nur das Lesen -- verlangt bleibt ein angetretener Dienst im aktiven
+    # Einsatz, und geschrieben wird dort nichts. Nach der Wiederherstellung
+    # gilt das genauso.
+    assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
         "$base_url/4fueltg/ue_ltg.php"
-    assert_body_absent "$workflow_marker"
+    assert_body 'data-estab-message-overview'
+    assert_body_absent 'value="save_entry"'
+    assert_body "$workflow_marker"
     assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
         "$base_url/4fach/download.php?area=attachment&file=$restore_attachment"
     expected_attachment=$work_dir/expected-attachment.txt
@@ -1093,7 +1190,7 @@ if [ "$restore_verify_only" = true ]; then
     # helper. Missing restore data must fail here instead of being recreated.
     assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
         "$base_url/stabetb/etb.php"
-    assert_body 'data-estab-incident-code="CI-INTEGRATION"'
+    assert_cockpit_body 'data-estab-incident-code="CI-INTEGRATION"'
     assert_body 'Automatisierter CI-Integrationstest'
     assert_body 'CI-Führungsstelle Nord'
     assert_body_absent 'value="save_title"'
@@ -1105,7 +1202,7 @@ if [ "$restore_verify_only" = true ]; then
     fi
     assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
         "$base_url/fmtbb/tbb.php"
-    assert_body 'data-estab-incident-code="CI-INTEGRATION"'
+    assert_cockpit_body 'data-estab-incident-code="CI-INTEGRATION"'
     assert_body 'Automatisierter CI-Integrationstest'
     assert_body 'CI-Führungsstelle Nord'
     assert_body_absent 'value="save_title"'
@@ -1178,7 +1275,7 @@ assert_body 'autocomplete="current-password"'
 assert_body_absent 'name="kennwort2"'
 assert_body 'name="next" value="incident-log"'
 preauth_csrf_token=$(csrf_from_body)
-assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+assert_status 200 --location --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --request POST \
     --data-urlencode "csrf_token=$preauth_csrf_token" \
     --data-urlencode 'login_flow=existing' \
@@ -1207,7 +1304,7 @@ if [ -z "$test_role" ]; then
 fi
 assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     "$base_url/stabetb/etb.php"
-assert_body 'data-estab-incident-code="CI-INTEGRATION"'
+assert_cockpit_body 'data-estab-incident-code="CI-INTEGRATION"'
 assert_session_bar "$test_name" "$test_code" "$test_function" "$test_role"
 assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     "$base_url/4fach/fuehrungsstelle.php"
@@ -1218,6 +1315,15 @@ assert_body 'Berechtigungsmodus'
 assert_body 'Locker'
 assert_body_absent 'name="dienstbesetzung_id"'
 assert_body_absent 'value="select_hat"'
+
+# Die Melderauftraege stehen seit der Trennung auf einer eigenen Seite: Der
+# Plan ist eine Unterlage, ein Melderauftrag ein einzelner Botengang.
+assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+    "$base_url/4fach/melderauftraege.php"
+assert_session_bar "$test_name" "$test_code" "$test_function" "$test_role"
+assert_body 'Melderauftr'
+assert_body 'Berechtigungsmodus'
+assert_body_absent 'value="save_telecom_entry"'
 
 # Disabled public registration must neither log in an existing code nor
 # replace its password hash.
@@ -1320,7 +1426,7 @@ assert_status 200 --cookie "$guard_cookie_jar" \
     --data-urlencode "kennwort1@$collision_password_file" \
     --data-urlencode '2teskennwort=No' \
     "$base_url/4fach/mainindex.php"
-path_info_csrf_token=$(csrf_from_body)
+path_info_csrf_token=$(csrf_from_cockpit "$guard_cookie_jar")
 path_info_marker="PATH_INFO_LOCK_GUARD_$$"
 path_info_record_id=$(
     printf '%s\n' \
@@ -1425,19 +1531,44 @@ assert_body 'Wirksame Funktionen'
 assert_body_absent 'name="dienstbesetzung_id"'
 assert_body_absent 'value="select_hat"'
 
-# In the explicitly LOOSE incident, the fixed A/W account can write while it
-# is unassigned to optional access shifts and formal duty shifts.
+# In the explicitly LOOSE incident, a fixed account function can write while
+# it is unassigned to optional access shifts and formal duty shifts.
+#
+# Geschrieben wird das Technische Betriebsbuch, und das verlangt
+# FERNMELDEBETRIEB. Die traegt der LdF; A/W traegt BEFOERDERUNG -- Aufnahme
+# und Weitergabe, nicht die Fernmeldezentrale. Die Probe nimmt deshalb das
+# feste LdF-Konto und laesst die A/W-Sitzung unberuehrt daneben stehen.
 fixed_account_write_marker="FIXED-ACCOUNT-WRITE-$$"
 fixed_account_write_before=$(
     printf "SELECT COUNT(*) FROM nv_tbb WHERE estab_operations = '%s' AND estab_shift_id IS NULL AND estab_writer_assignment_id IS NULL;\n" \
         "$fixed_account_write_marker" |
         db_sql
 )
-assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+ldf_write_cookie_jar=$work_dir/ldf-write-cookies.txt
+: > "$ldf_write_cookie_jar"
+assert_status 200 --cookie "$ldf_write_cookie_jar" \
+    --cookie-jar "$ldf_write_cookie_jar" \
+    --request POST --data-urlencode 'login_flow=existing' \
+    "$base_url/4fach/mainindex.php"
+ldf_write_preauth_csrf=$(csrf_from_body)
+assert_status 200 --cookie "$ldf_write_cookie_jar" \
+    --cookie-jar "$ldf_write_cookie_jar" \
+    --request POST \
+    --data-urlencode "csrf_token=$ldf_write_preauth_csrf" \
+    --data-urlencode 'login_flow=existing' \
+    --data-urlencode 'benutzer=HTTP Integration LdF' \
+    --data-urlencode "kuerzel=$account_ldf_code" \
+    --data-urlencode 'funktion=LdF' \
+    --data-urlencode 'kennwort1=HTTP-Account-LdF-Only-20260730' \
+    --data-urlencode '2teskennwort=No' \
+    "$base_url/4fach/mainindex.php"
+assert_status 200 --cookie "$ldf_write_cookie_jar" \
+    --cookie-jar "$ldf_write_cookie_jar" \
     "$base_url/fmtbb/tbb.php?tbb_eintrag_x=1"
 fixed_account_write_csrf=$(csrf_from_body)
 assert_body 'value="save_entry"'
-assert_status 303 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+assert_status 303 --cookie "$ldf_write_cookie_jar" \
+    --cookie-jar "$ldf_write_cookie_jar" \
     --request POST \
     --data-urlencode "csrf_token=$fixed_account_write_csrf" \
     --data-urlencode 'logbook_action=save_entry' \
@@ -1451,7 +1582,7 @@ fixed_account_write_after=$(
         db_sql
 )
 if [ "$fixed_account_write_after" -ne "$((fixed_account_write_before + 1))" ]; then
-    printf 'HTTP smoke: fixed A/W account did not write TBB without a shift: %s -> %s\n' \
+    printf 'HTTP smoke: fixed LdF account did not write TBB without a shift: %s -> %s\n' \
         "$fixed_account_write_before" "$fixed_account_write_after" >&2
     exit 1
 fi
@@ -1466,7 +1597,7 @@ if ! printf '%s' "$logout_csrf_token" | grep -Eq '^[a-f0-9]{64}$'; then
     printf 'HTTP smoke: logout CSRF token missing\n' >&2
     exit 1
 fi
-assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+assert_status 200 --location --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --request POST \
     --data-urlencode "csrf_token=$logout_csrf_token" \
     --data-urlencode 'm2_abmelden_x=1' \
@@ -1529,12 +1660,13 @@ assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
 assert_session_bar "$legacy_registration_name" "$legacy_registration_code" \
     'A/W' 'Fernmelder'
 assert_body 'data-estab-sidebar-status'
-assert_body 'data-estab-navigation-mode="sidebar"'
 assert_body 'data-estab-presence-state="current"'
 assert_body 'data-estab-presence-function="A/W"'
 assert_body 'data-estab-sound-toggle'
 assert_body 'data-estab-sidebar-audio'
 assert_body "src=\"$expected_app_root/4fach/audio/notify_aw.wav\""
+assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+    "$base_url/4fach/vorgaben.php?fragment=aktionen"
 for workflow_key in fm_eingang fm_ausgang fm_admin fm_anhang m2_benutzer; do
     assert_body "data-estab-workflow-key=\"$workflow_key\""
 done
@@ -1546,7 +1678,7 @@ assert_body 'data-estab-sidebar-status'
 assert_body 'data-estab-presence-function="A/W"'
 assert_body 'data-estab-sound-toggle'
 assert_body_absent 'data-estab-sidebar-audio'
-assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+assert_status 200 --location --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --request POST \
     --data-urlencode "csrf_token=$sidebar_csrf_token" \
     --data-urlencode 'fm_eingang_x=1' \
@@ -1594,7 +1726,7 @@ direct_aw_upload_file=$repo_root/4fach/design/HS/null.jpg
 direct_aw_upload_md5=$(openssl dgst -md5 -r "$direct_aw_upload_file" |
     awk '{print $1}')
 direct_aw_comment='Direkt & <img src=x onerror=alert(1)>'
-assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+assert_status 200 --location --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --request POST \
     --form "csrf_token=$aw_workflow_csrf_token" \
     --form \
@@ -1750,7 +1882,7 @@ if ! cmp -s "$direct_aw_upload_file" "$body"; then
 fi
 
 # Continue to prove the backward-compatible archive selection flow as well.
-assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+assert_status 200 --location --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --request POST \
     --data-urlencode "csrf_token=$aw_workflow_csrf_token" \
     --data-urlencode \
@@ -1799,7 +1931,7 @@ assert_status 405 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     "$base_url/4fach/anhang.php?ah_upload_x=1"
 assert_body 'nur per Formular'
 
-assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+assert_status 200 --location --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --request POST \
     --data-urlencode "csrf_token=$aw_attachment_menu_csrf_token" \
     --data-urlencode "attachment_flow=$aw_attachment_flow" \
@@ -1828,7 +1960,7 @@ if ! printf '%s' "$aw_upload_timestamp" |
     exit 1
 fi
 
-assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+assert_status 200 --location --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --request POST \
     --form "csrf_token=$aw_attachment_csrf_token" \
     --form "attachment_flow=$aw_attachment_flow" \
@@ -1909,7 +2041,7 @@ fi
 # The 20-MiB application boundary rejects an otherwise fully transported file
 # before MIME persistence. The user receives the configured limit and the
 # reservation still has to be released.
-assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+assert_status 200 --location --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --request POST \
     --data-urlencode "csrf_token=$aw_attachment_menu_csrf_token" \
     --data-urlencode "attachment_flow=$aw_attachment_flow" \
@@ -1944,7 +2076,7 @@ if [ "$oversized_jpeg_size" -le 20971520 ] ||
     printf 'HTTP smoke: generated oversized JPEG is outside the application-limit test window\n' >&2
     exit 1
 fi
-assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+assert_status 200 --location --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --request POST \
     --form "csrf_token=$oversized_jpeg_csrf_token" \
     --form "attachment_flow=$aw_attachment_flow" \
@@ -1977,7 +2109,7 @@ assert_body 'Datei nicht gefunden'
 
 # A browser-supplied MIME claim is not trusted. Plain text named ".JPEG" must
 # fail visibly and release its reservation without publishing bytes or metadata.
-assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+assert_status 200 --location --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --request POST \
     --data-urlencode "csrf_token=$aw_attachment_menu_csrf_token" \
     --data-urlencode "attachment_flow=$aw_attachment_flow" \
@@ -2005,7 +2137,7 @@ if ! printf '%s' "$fake_jpeg_timestamp" |
 fi
 fake_jpeg_file=$work_dir/not-a-jpeg.txt
 printf 'plain text must never pass as JPEG\n' >"$fake_jpeg_file"
-assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+assert_status 200 --location --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --request POST \
     --form "csrf_token=$fake_jpeg_csrf_token" \
     --form "attachment_flow=$aw_attachment_flow" \
@@ -2036,7 +2168,7 @@ assert_status 404 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     "$base_url/4fach/download.php?area=attachment&file=$fake_jpeg_reserved_name.jpeg"
 assert_body 'Datei nicht gefunden'
 
-assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+assert_status 200 --location --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --request POST \
     --data-urlencode "csrf_token=$aw_attachment_menu_csrf_token" \
     --data-urlencode "attachment_flow=$aw_attachment_flow" \
@@ -2123,7 +2255,11 @@ assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
 assert_body 'Konto auswählen'
 assert_body "mit Kürzel $test_code auswählen"
 preauth_csrf_token=$(csrf_from_body)
-identity_row=$(grep -F "<td>$test_code</td>" "$body" | head -n 1)
+# Die Kontenliste ist seit der Umstellung ein Tafelbauteil: Das Kuerzel
+# steht in einer beschrifteten Zelle, und die ganze Tafel steht auf einer
+# Zeile. Die Zeile wird deshalb erst getrennt und dann gesucht.
+identity_row=$(tr '\n' ' ' <"$body" | sed 's/<tr/\n<tr/g' |
+    grep -F ">$test_code<" | head -n 1)
 identity_token=$(printf '%s\n' "$identity_row" | sed -n \
     's/.*name="login_identity" value="\([^"]*\)".*/\1/p' \
     | head -n 1)
@@ -2169,7 +2305,7 @@ assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
 assert_body 'Name, Kürzel oder Kennwort stimmen nicht'
 assert_status 303 --cookie "$cookie_jar" "$base_url/4fach/vordrucke.php"
 
-assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+assert_status 200 --location --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --request POST \
     --data-urlencode "csrf_token=$preauth_csrf_token" \
     --data-urlencode 'login_flow=existing' \
@@ -2182,17 +2318,20 @@ assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     "$base_url/4fach/mainindex.php"
 assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     "$base_url/4fach/mainindex.php"
-assert_body 'Meldung/Seite:'
+assert_body 'data-estab-tabelle="stab-lesen"'
+assert_body 'name="stab_lesen_groesse"'
 assert_session_bar "$test_name" "$test_code" "$test_function" "$test_role"
 assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     "$base_url/handbuch/"
-assert_body '<title>eStab Web-Handbuch</title>'
+assert_body '<title>eStab Handbuch</title>'
 assert_body 'data-estab-handbook-search'
 assert_body 'data-estab-nav-key="handbook" aria-current="page"'
 assert_body_absent 'data-estab-public-bar'
 assert_session_bar "$test_name" "$test_code" "$test_function" "$test_role"
 authenticated_session_id=$(session_cookie_from_jar "$cookie_jar")
-authenticated_csrf_token=$(csrf_from_body)
+# Das Handbuch ist eine reine Leseseite und traegt keinen Nachweis mehr --
+# der stand frueher in der Sitzungsleiste, die auf jeder Seite mitlief.
+authenticated_csrf_token=$(csrf_from_cockpit "$cookie_jar")
 if [ -z "$authenticated_session_id" ] || [ "$authenticated_session_id" = "$preauth_session_id" ]; then
     printf 'HTTP smoke: successful login did not rotate the session cookie\n' >&2
     exit 1
@@ -2213,7 +2352,7 @@ assert_status 200 --cookie "$cookie_jar" "$base_url/4fach/vordrucke.php"
 # user code: open the form, upload an attachment through its reservation/CSRF
 # flow, download it through the authenticated boundary, select it, save a
 # message and find the persisted content in the user's list.
-assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+assert_status 200 --location --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --request POST --data-urlencode 'stab_schreiben_x=1' \
     "$base_url/4fach/mainindex.php"
 assert_body 'name="task" value="Stab_schreiben"'
@@ -2281,7 +2420,10 @@ submit_invalid_direct_staff_message() {
         set -- "$@" --form \
             "message_attachment_upload=@$direct_staff_upload_file;type=image/jpeg;filename=Unfertiger-Entwurf.JPEG"
     fi
-    assert_status 200 "$@" "$base_url/4fach/mainindex.php"
+    # Auch ein abgewiesener Entwurf antwortet seit d15af29 mit einer
+    # Weiterleitung: Der Browser holt das Formular danach neu, damit ein
+    # Neuladen nicht "Daten erneut senden" fragt. Gefolgt wird ihr deshalb.
+    assert_status 200 --location "$@" "$base_url/4fach/mainindex.php"
 }
 
 # This fixture is also used by the successful primary-flow proof below.
@@ -2361,7 +2503,11 @@ submit_recovered_direct_staff_message() {
         --form '17_vermerke=' \
         "$base_url/4fach/mainindex.php"
 }
-submit_recovered_direct_staff_message 200 \
+# Der gespeicherte Entwurf antwortet seit d15af29 mit einer Weiterleitung --
+# genauso wie der wiederholte Versuch mit demselben Nachweis. Die dritte
+# Anfrage traegt den Nachweis des abgewiesenen Entwurfs; sie kann nichts mehr
+# speichern und bekommt darum ihre Erklaerung als Seite.
+submit_recovered_direct_staff_message 303 \
     "$workflow_attachment_request_token"
 submit_recovered_direct_staff_message 303 \
     "$workflow_attachment_request_token"
@@ -2378,7 +2524,7 @@ if [ "$invalid_direct_message_count" != 1 ]; then
 fi
 
 # Start a separate clean draft for the primary image/PDF workflow below.
-assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+assert_status 200 --location --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --request POST --data-urlencode 'stab_schreiben_x=1' \
     "$base_url/4fach/mainindex.php"
 assert_body 'name="task" value="Stab_schreiben"'
@@ -2398,7 +2544,7 @@ direct_staff_pdf_before=$(
     printf "SELECT COUNT(*) FROM nv_anhang WHERE BINARY comment = BINARY '%s' AND BINARY kuerzel = BINARY '%s';\n" \
         "$direct_staff_pdf_comment" "$test_code" | db_sql
 )
-assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+assert_status 200 --location --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --request POST \
     --form "csrf_token=$workflow_csrf_token" \
     --form "recipient_matrix_revision=$workflow_recipient_matrix_revision" \
@@ -2459,7 +2605,7 @@ direct_staff_email_before=$(
     printf "SELECT COUNT(*) FROM nv_anhang WHERE BINARY comment = BINARY '%s' AND BINARY kuerzel = BINARY '%s';\n" \
         "$direct_staff_email_comment" "$test_code" | db_sql
 )
-assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+assert_status 200 --location --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --request POST \
     --form "csrf_token=$workflow_csrf_token" \
     --form "recipient_matrix_revision=$workflow_recipient_matrix_revision" \
@@ -2568,6 +2714,13 @@ submit_direct_staff_message() {
         set -- "$@" --form \
             "message_attachment_upload=@$direct_staff_upload_file;type=image/jpeg;filename=Staff-Direkt.JPEG"
     fi
+    # Ein gespeicherter Entwurf antwortet seit d15af29 mit einer
+    # Weiterleitung. Wer die Seite sehen will -- und den PHP-Lauf darauf
+    # pruefen --, folgt ihr; wer nur den blossen Umlenkschritt nachweisen
+    # will, folgt ihr nicht.
+    if [ "$expected_direct_status" = 200 ]; then
+        set -- --location "$@"
+    fi
     assert_status "$expected_direct_status" "$@" \
         "$base_url/4fach/mainindex.php"
 }
@@ -2645,7 +2798,7 @@ assert_uploaded_attachment \
 # Search isolates the saved row so the badge cannot accidentally belong to a
 # different message. Opening that exact row must expose its image card and the
 # authorized browser-preview link without visiting the attachment archive.
-assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+assert_status 200 --location --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --request POST --data-urlencode 'flt_find_mask_ein_x=1' \
     "$base_url/4fach/mainindex.php"
 assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
@@ -2778,7 +2931,7 @@ assert_header_regex '^Content-Disposition: attachment;' \
 assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --request POST --data-urlencode 'filter_suche_reset=1' \
     "$base_url/4fach/mainindex.php"
-assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+assert_status 200 --location --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --request POST --data-urlencode 'stab_schreiben_x=1' \
     "$base_url/4fach/mainindex.php"
 assert_body 'name="task" value="Stab_schreiben"'
@@ -2831,7 +2984,7 @@ assert_body_absent 'Warning'
 workflow_csrf_token=$(csrf_from_body)
 workflow_recipient_matrix_revision=$(recipient_matrix_revision_from_body)
 
-assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+assert_status 200 --location --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --request POST \
     --data-urlencode "csrf_token=$workflow_csrf_token" \
     --data-urlencode \
@@ -2871,7 +3024,7 @@ attachment_flow=$(attachment_flow_from_body)
 # an origin, draft, or menu state. A forged/stale token and the historical
 # browser-controlled `anhang_plus_x` exception must not consume either flow.
 parallel_marker="${workflow_marker}_PARALLEL_TAB"
-assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+assert_status 200 --location --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --request POST \
     --data-urlencode "csrf_token=$workflow_csrf_token" \
     --data-urlencode \
@@ -2893,7 +3046,7 @@ if [ "$parallel_attachment_flow" = "$attachment_flow" ]; then
     exit 1
 fi
 
-assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+assert_status 200 --location --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --request POST \
     --data-urlencode "csrf_token=$workflow_csrf_token" \
     --data-urlencode 'stab_anhang_x=1' \
@@ -2923,7 +3076,7 @@ assert_status 403 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     "$base_url/4fach/anhang.php"
 assert_body 'ungültig oder nicht mehr autorisiert'
 
-assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+assert_status 200 --location --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --request POST \
     --data-urlencode "csrf_token=$attachment_menu_csrf_token" \
     --data-urlencode "attachment_flow=$parallel_attachment_flow" \
@@ -2935,7 +3088,7 @@ assert_body_absent "$workflow_marker</textarea>"
 assert_body \
     "name=\"recipient_matrix_revision\" value=\"$workflow_recipient_matrix_revision\""
 
-assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+assert_status 200 --location --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --request POST \
     --data-urlencode "csrf_token=$attachment_menu_csrf_token" \
     --data-urlencode "attachment_flow=$attachment_flow" \
@@ -2959,7 +3112,7 @@ if ! printf '%s' "$upload_timestamp" | grep -Eq '^[0-9]{6}[A-Za-z]{3}[0-9]{4}$';
     exit 1
 fi
 
-assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+assert_status 200 --location --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --request POST \
     --form "csrf_token=$csrf_token" \
     --form "attachment_flow=$attachment_flow" \
@@ -3084,7 +3237,7 @@ assert_status 400 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
 assert_body 'Ungültiger Anhangname'
 assert_body_absent 'Warning:'
 
-assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+assert_status 200 --location --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --request POST \
     --data-urlencode "csrf_token=$attachment_menu_csrf_token" \
     --data-urlencode "attachment_flow=$attachment_flow" \
@@ -3101,7 +3254,7 @@ workflow_attachment_request_token=$(
 )
 assert_session_bar "$test_name" "$test_code" "$test_function" "$test_role"
 
-assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+assert_status 200 --location --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --request POST \
     --data-urlencode "csrf_token=$workflow_csrf_token" \
     --data-urlencode \
@@ -3196,13 +3349,15 @@ printf '%s\n' \
     db_sql >/dev/null
 conversation_matrix_fixture_changed=1
 
-assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+assert_status 200 --location --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --request POST --data-urlencode 'stab_schreiben_x=1' \
     "$base_url/4fach/mainindex.php"
 assert_body 'name="task" value="Stab_schreiben"'
+# Feld 19 gilt fuer ein- und ausgehende Nachrichten. Der Verfasser kreuzt den
+# innerdienstlichen Laufweg selbst an, auch bei einer Funktion mit Unterstrich.
 assert_body \
-    'aria-label="AB_C, keine Durchschrift ausgewählt, schreibgeschützt"'
-assert_body_absent 'name="16_54" value="16_54_bl" type="checkbox"'
+    'aria-label="AB_C als Empfänger auswählen"'
+assert_body 'name="16_54" value="16_54_bl" type="checkbox"'
 assert_body '>AB_C</span>'
 workflow_csrf_token=$(csrf_from_body)
 conversation_matrix_revision=$(recipient_matrix_revision_from_body)
@@ -3244,7 +3399,7 @@ fi
 # conversation-note checkbox must open the dedicated step where all five
 # media are enabled and required. The note checkbox is authoritative there
 # and therefore no longer presents an ineffective user choice.
-assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+assert_status 200 --location --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --request POST \
     --data-urlencode "csrf_token=$workflow_csrf_token" \
     --data-urlencode \
@@ -3275,7 +3430,7 @@ assert_body_regex \
 # Start a fresh form for the independent direct-attachment scenario below.
 # Entering the no-JS stage has intentionally consumed the one-time action
 # token from the preceding form.
-assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+assert_status 200 --location --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --request POST --data-urlencode 'stab_schreiben_x=1' \
     "$base_url/4fach/mainindex.php"
 assert_body 'name="task" value="Stab_schreiben"'
@@ -3296,7 +3451,7 @@ conversation_attachment_before=$(
         "$conversation_attachment_comment" "$test_code" | db_sql
 )
 submit_conversation_attachment_stage() {
-    assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+    assert_status 200 --location --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
         --request POST \
         --form "csrf_token=$workflow_csrf_token" \
         --form \
@@ -3396,14 +3551,14 @@ fi
 # session. Keep the first stage open while a second browser tab starts the
 # same workflow. The second tab must also reach Stab_gesprnoti and must not
 # accidentally save its draft as an ordinary staff message.
-assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+assert_status 200 --location --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --request POST --data-urlencode 'stab_schreiben_x=1' \
     "$base_url/4fach/mainindex.php"
 parallel_note_csrf_token=$(csrf_from_body)
 parallel_note_matrix_revision=$(recipient_matrix_revision_from_body)
 parallel_note_request_token=$(message_attachment_request_token_from_body)
 parallel_note_marker="Parallel-Tab ${workflow_marker}"
-assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+assert_status 200 --location --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --request POST \
     --data-urlencode "csrf_token=$parallel_note_csrf_token" \
     --data-urlencode \
@@ -3529,7 +3684,7 @@ staged_note_attachment_request_token=$(
     message_attachment_request_token_from_body
 )
 
-assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+assert_status 200 --location --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --request POST \
     --data-urlencode "csrf_token=$staged_note_csrf_token" \
     --data-urlencode \
@@ -3557,7 +3712,7 @@ assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
 assert_body 'Liste der verfügbaren Dateien'
 staged_note_attachment_csrf=$(csrf_from_body)
 staged_note_attachment_flow=$(attachment_flow_from_body)
-assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+assert_status 200 --location --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --request POST \
     --data-urlencode "csrf_token=$staged_note_attachment_csrf" \
     --data-urlencode \
@@ -3583,7 +3738,13 @@ staged_note_return_attachment_request_token=$(
 
 submit_open_conversation_note() {
     expected_status=$1
-    assert_status "$expected_status" \
+    # Wie beim Direktentwurf: Wer die Seite sehen will, folgt der
+    # Weiterleitung; wer nur den Umlenkschritt nachweist, folgt ihr nicht.
+    set --
+    if [ "$expected_status" = 200 ]; then
+        set -- --location
+    fi
+    assert_status "$expected_status" "$@" \
         --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
         --request POST \
         --data-urlencode "csrf_token=$staged_note_return_csrf" \
@@ -3624,8 +3785,13 @@ if grep -Eq 'Fatal error|Uncaught (Error|TypeError)|Warning:' "$body"; then
     exit 1
 fi
 submit_open_conversation_note 303
+# Die Erstellungsevidenz ist hashverkettet und unveraenderlich; sie darf
+# deshalb nichts behaupten, was der Laufweg nicht vorsieht. Eine
+# Gespraechsnotiz endet bei der Sichtung -- es folgt weder eine Disposition
+# durch den LdF noch eine Befoerderung durch die Fernmelder. Die beiden
+# Merkmale sind darum weggefallen und muessen fehlen.
 conversation_evidence_count=$(
-    printf "SELECT COUNT(*) FROM nv_nachrichten n JOIN nv_nachrichten_ereignisse e ON e.message_id = n.\`00_lfd\` AND e.einsatz_id = n.einsatz_id WHERE n.\`12_inhalt\` = '%s' AND n.\`04_richtung\` = 'A' AND n.\`x00_status\` = 4 AND n.\`x01_abschluss\` = 'f' AND n.\`01_zeichen\` = '%s' AND n.\`14_zeichen\` = '%s' AND n.\`14_funktion\` = '%s' AND n.\`02_zeit\` IS NULL AND COALESCE(n.\`02_zeichen\`, '') = '' AND n.\`03_datum\` IS NULL AND COALESCE(n.\`03_zeichen\`, '') = '' AND COALESCE(n.\`15_quitzeichen\`, '') = '' AND n.\`15_quitdatum\` IS NULL AND e.event_type = 'conversation_note_created' AND e.from_status IS NULL AND e.to_status = 4 AND e.actor_code = '%s' AND e.actor_function = '%s' AND JSON_UNQUOTE(JSON_EXTRACT(e.field_snapshot, '$.direction')) = 'A' AND JSON_UNQUOTE(JSON_EXTRACT(e.field_snapshot, '$.object_type')) = 'conversation_note' AND JSON_UNQUOTE(JSON_EXTRACT(e.field_snapshot, '$.author_code')) = '%s' AND JSON_UNQUOTE(JSON_EXTRACT(e.field_snapshot, '$.review_required')) = 'true' AND JSON_UNQUOTE(JSON_EXTRACT(e.field_snapshot, '$.ldf_disposition_required')) = 'true' AND JSON_UNQUOTE(JSON_EXTRACT(e.field_snapshot, '$.transport_evidence_required')) = 'true';\n" \
+    printf "SELECT COUNT(*) FROM nv_nachrichten n JOIN nv_nachrichten_ereignisse e ON e.message_id = n.\`00_lfd\` AND e.einsatz_id = n.einsatz_id WHERE n.\`12_inhalt\` = '%s' AND n.\`04_richtung\` = 'A' AND n.\`x00_status\` = 4 AND n.\`x01_abschluss\` = 'f' AND n.\`01_zeichen\` = '%s' AND n.\`14_zeichen\` = '%s' AND n.\`14_funktion\` = '%s' AND n.\`02_zeit\` IS NULL AND COALESCE(n.\`02_zeichen\`, '') = '' AND n.\`03_datum\` IS NULL AND COALESCE(n.\`03_zeichen\`, '') = '' AND COALESCE(n.\`15_quitzeichen\`, '') = '' AND n.\`15_quitdatum\` IS NULL AND e.event_type = 'conversation_note_created' AND e.from_status IS NULL AND e.to_status = 4 AND e.actor_code = '%s' AND e.actor_function = '%s' AND JSON_UNQUOTE(JSON_EXTRACT(e.field_snapshot, '$.direction')) = 'A' AND JSON_UNQUOTE(JSON_EXTRACT(e.field_snapshot, '$.object_type')) = 'conversation_note' AND JSON_UNQUOTE(JSON_EXTRACT(e.field_snapshot, '$.author_code')) = '%s' AND JSON_UNQUOTE(JSON_EXTRACT(e.field_snapshot, '$.review_required')) = 'true' AND JSON_EXTRACT(e.field_snapshot, '$.ldf_disposition_required') IS NULL AND JSON_EXTRACT(e.field_snapshot, '$.transport_evidence_required') IS NULL;\n" \
         "$vordruck_marker" "$test_code" "$test_code" "$test_function" \
         "$test_code" "$test_function" "$test_code" | db_sql
 )
@@ -3865,7 +4031,7 @@ assert_body 'Datei nicht gefunden'
 # while every HTML list/search reflection remains inert.
 security_payload="MSGSEC 'quoted' \"double\" & <script>alert(\"x\")</script> ' OR 1=1 --"
 security_subject='Sicherer UTF-8-Betreff äöü'
-assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+assert_status 200 --location --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --request POST --data-urlencode 'stab_schreiben_x=1' \
     "$base_url/4fach/mainindex.php"
 assert_body 'name="task" value="Stab_schreiben"'
@@ -3874,7 +4040,7 @@ security_message_matrix_revision=$(recipient_matrix_revision_from_body)
 security_message_attachment_request_token=$(
     message_attachment_request_token_from_body
 )
-assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+assert_status 200 --location --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --request POST \
     --data-urlencode "csrf_token=$security_message_csrf_token" \
     --data-urlencode \
@@ -3901,7 +4067,7 @@ assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --data-urlencode '17_vermerke=' \
     "$base_url/4fach/mainindex.php"
 
-assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+assert_status 200 --location --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --request POST --data-urlencode 'flt_find_mask_ein_x=1' \
     "$base_url/4fach/mainindex.php"
 assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
@@ -3938,19 +4104,23 @@ assert_body 'Die Nachweisung ist nur für eine aktive LdF- oder Fernmelder-Funkt
 assert_body 'role="alert"'
 assert_body 'data-estab-error-recovery'
 assert_body '>Zur eStab-Übersicht</a>'
-assert_body_absent 'data-estab-nav-key="tracking"'
+# Das Menue zeigt angemeldet die ganze Karte, auch den abgewiesenen Bereich:
+# Der Riegel sitzt an der Tuer und nicht im Verzeichnis. Fortbleiben muss der
+# Inhalt der Nachweisung.
+assert_body 'data-estab-nav-key="tracking"'
 assert_body_absent 'Nachweisung Eingang / Ausgang'
 assert_session_bar "$test_name" "$test_code" "$test_function" "$test_role"
-assert_status 403 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+# Die Meldungsuebersicht steht seit der Entscheidung des Betreibers jeder
+# Funktion offen: Wer im Stab arbeitet, muss wissen, was laeuft. Geoeffnet ist
+# nur das Lesen -- verlangt bleibt ein angetretener Dienst im aktiven Einsatz,
+# und geschrieben wird hier nichts.
+assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     "$base_url/4fueltg/ue_ltg.php"
 assert_header_fixed 'Content-Type: text/html; charset=UTF-8'
 assert_header_fixed 'Cache-Control: private, no-store, max-age=0'
-assert_body 'data-estab-error-page'
-assert_body 'data-estab-error-context="message-overview"'
-assert_body 'Keine Berechtigung für die Meldungsübersicht'
-assert_body 'Die Meldungsübersicht ist der aktiven Lage/Dokumentation vorbehalten.'
-assert_body_absent 'data-estab-nav-key="message-overview"'
-assert_body_absent "$workflow_marker"
+assert_body_absent 'data-estab-error-page'
+assert_body 'data-estab-tabelle="meldungen"'
+assert_body_absent 'value="save_entry"'
 assert_session_bar "$test_name" "$test_code" "$test_function" "$test_role"
 assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     "$base_url/stabetb/etb.php"
@@ -3974,7 +4144,6 @@ assert_session_bar "$test_name" "$test_code" "$test_function" "$test_role"
 assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     "$base_url/stabinfo/l_index.php"
 assert_body 'Info-Bereiche'
-assert_body 'estab-session-bar-compact'
 assert_session_bar "$test_name" "$test_code" "$test_function" "$test_role"
 
 assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
@@ -3989,8 +4158,6 @@ assert_session_bar "$test_name" "$test_code" "$test_function" "$test_role"
 
 assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     "$base_url/4fach/vorgaben.php"
-assert_body 'estab-session-bar-compact'
-assert_body 'data-estab-navigation-mode="sidebar"'
 assert_body 'data-estab-sidebar-status'
 assert_body 'data-estab-sidebar-refresh'
 assert_body 'data-estab-sound-toggle'
@@ -4013,12 +4180,16 @@ case "$test_role:$test_function" in
 esac
 assert_body \
     "src=\"$expected_app_root/4fach/audio/$expected_sidebar_sound\""
+# Die Arbeitsschritte stehen in ihrem eigenen Ausschnitt, links unter den
+# Zielen -- nicht mehr im Cockpit.
+assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+    "$base_url/4fach/vorgaben.php?fragment=aktionen"
 assert_body 'data-estab-workflow-key="stab_schreiben"'
 assert_body 'data-estab-workflow-key="stab_lesen"'
 assert_body 'data-estab-workflow-key="m2_benutzer"'
 assert_body_absent 'data-estab-workflow-key="fm_eingang"'
 assert_session_bar "$test_name" "$test_code" "$test_function" "$test_role"
-older_logout_csrf=$(csrf_from_body)
+older_logout_csrf=$(csrf_from_cockpit "$cookie_jar")
 assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     "$base_url/4fach/vorgaben.php?fragment=status"
 assert_body 'data-estab-sidebar-status'
@@ -4129,7 +4300,7 @@ assert_status 200 --cookie "$newer_cookie_jar" --cookie-jar "$newer_cookie_jar" 
     --request POST --data-urlencode 'login_flow=existing' \
     "$base_url/4fach/mainindex.php"
 newer_preauth_csrf=$(csrf_from_body)
-assert_status 200 --cookie "$newer_cookie_jar" --cookie-jar "$newer_cookie_jar" \
+assert_status 200 --location --cookie "$newer_cookie_jar" --cookie-jar "$newer_cookie_jar" \
     --request POST \
     --data-urlencode "csrf_token=$newer_preauth_csrf" \
     --data-urlencode 'login_flow=existing' \
@@ -4143,8 +4314,8 @@ assert_status 200 --cookie "$newer_cookie_jar" --cookie-jar "$newer_cookie_jar" 
 assert_status 200 \
     --cookie "$newer_cookie_jar" --cookie-jar "$newer_cookie_jar" \
     "$base_url/4fach/vordrucke.php"
-assert_session_bar "$test_name" "$test_code" "$test_function" "$test_role"
-newer_operational_csrf=$(csrf_from_body)
+assert_session_bar "$test_name" "$test_code" "$test_function" "$test_role" "$newer_cookie_jar"
+newer_operational_csrf=$(csrf_from_cockpit "$newer_cookie_jar")
 newer_authenticated_session_id=$(session_cookie_from_jar "$newer_cookie_jar")
 if [ -z "$newer_authenticated_session_id" ]; then
     printf 'HTTP smoke: newer authenticated session cookie missing\n' >&2
@@ -4163,7 +4334,7 @@ if ! grep -Eiq '^Location: .*4fach/index[.]php[[:space:]]*$' "$headers"; then
 fi
 assert_status 303 --cookie "$cookie_jar" "$base_url/4fach/vordrucke.php"
 assert_status 200 --cookie "$newer_cookie_jar" "$base_url/4fach/vordrucke.php"
-assert_session_bar "$test_name" "$test_code" "$test_function" "$test_role"
+assert_session_bar "$test_name" "$test_code" "$test_function" "$test_role" "$newer_cookie_jar"
 if [ "$(account_assignment "$test_code")" != "$(printf '%s\t%s\t1' "$test_function" "$test_role")" ]; then
     printf 'HTTP smoke: stale-session logout deactivated the newer login\n' >&2
     exit 1
@@ -4188,7 +4359,7 @@ assert_status 200 --cookie "$current_cookie_jar" --cookie-jar "$current_cookie_j
     --request POST --data-urlencode 'login_flow=existing' \
     "$base_url/4fach/mainindex.php"
 current_preauth_csrf=$(csrf_from_body)
-assert_status 200 --cookie "$current_cookie_jar" --cookie-jar "$current_cookie_jar" \
+assert_status 200 --location --cookie "$current_cookie_jar" --cookie-jar "$current_cookie_jar" \
     --request POST \
     --data-urlencode "csrf_token=$current_preauth_csrf" \
     --data-urlencode 'login_flow=existing' \
@@ -4202,8 +4373,8 @@ assert_status 200 --cookie "$current_cookie_jar" --cookie-jar "$current_cookie_j
 assert_status 200 \
     --cookie "$current_cookie_jar" --cookie-jar "$current_cookie_jar" \
     "$base_url/4fach/vordrucke.php"
-assert_session_bar "$test_name" "$test_code" "$test_function" "$test_role"
-current_logout_csrf=$(csrf_from_body)
+assert_session_bar "$test_name" "$test_code" "$test_function" "$test_role" "$current_cookie_jar"
+current_logout_csrf=$(csrf_from_cockpit "$current_cookie_jar")
 current_authenticated_session_id=$(session_cookie_from_jar "$current_cookie_jar")
 if [ -z "$current_authenticated_session_id" ] ||
     [ "$current_authenticated_session_id" = "$newer_authenticated_session_id" ]; then
@@ -4221,7 +4392,7 @@ login_parallel_test_browser() {
         --request POST --data-urlencode 'login_flow=existing' \
         "$base_url/4fach/mainindex.php"
     parallel_preauth_csrf=$(csrf_from_body)
-    assert_status 200 \
+    assert_status 200 --location \
         --cookie "$parallel_cookie_jar" --cookie-jar "$parallel_cookie_jar" \
         --request POST \
         --data-urlencode "csrf_token=$parallel_preauth_csrf" \
@@ -4236,19 +4407,19 @@ login_parallel_test_browser() {
     assert_status 200 \
         --cookie "$parallel_cookie_jar" --cookie-jar "$parallel_cookie_jar" \
         "$base_url/4fach/vordrucke.php"
-    assert_session_bar "$test_name" "$test_code" "$test_function" "$test_role"
+    assert_session_bar "$test_name" "$test_code" "$test_function" "$test_role" "$parallel_cookie_jar"
 }
 
 # Keep three independently stale PHP sessions so each denial path is exercised
 # before its local workflow state is invalidated by the authoritative SID check.
 redirect_cookie_jar=$work_dir/redirect-cookies.txt
 login_parallel_test_browser "$redirect_cookie_jar"
-redirect_operational_csrf=$(csrf_from_body)
+redirect_operational_csrf=$(csrf_from_cockpit "$redirect_cookie_jar")
 redirect_session_id=$(session_cookie_from_jar "$redirect_cookie_jar")
 
 final_current_cookie_jar=$work_dir/final-current-cookies.txt
 login_parallel_test_browser "$final_current_cookie_jar"
-final_current_logout_csrf=$(csrf_from_body)
+final_current_logout_csrf=$(csrf_from_cockpit "$final_current_cookie_jar")
 final_current_session_id=$(session_cookie_from_jar "$final_current_cookie_jar")
 if [ -z "$redirect_session_id" ] || [ -z "$final_current_session_id" ] ||
     [ "$redirect_session_id" = "$final_current_session_id" ]; then
@@ -4338,7 +4509,7 @@ assert_status 303 --cookie "$newer_cookie_jar" --cookie-jar "$newer_cookie_jar" 
     "$base_url/4fach/vordrucke.php"
 assert_status 200 --cookie "$current_cookie_jar" --cookie-jar "$current_cookie_jar" \
     "$base_url/4fach/vordrucke.php"
-assert_session_bar "$test_name" "$test_code" "$test_function" "$test_role"
+assert_session_bar "$test_name" "$test_code" "$test_function" "$test_role" "$current_cookie_jar"
 if [ "$(account_assignment "$test_code")" != "$(printf '%s\t%s\t1' "$test_function" "$test_role")" ]; then
     printf 'HTTP smoke: stale protected request deactivated the current login\n' >&2
     exit 1
@@ -4383,7 +4554,7 @@ assert_status 200 --cookie "$idle_cookie_jar" --cookie-jar "$idle_cookie_jar" \
     --request POST --data-urlencode 'login_flow=existing' \
     "$base_url/4fach/mainindex.php"
 idle_preauth_csrf=$(csrf_from_body)
-assert_status 200 --cookie "$idle_cookie_jar" --cookie-jar "$idle_cookie_jar" \
+assert_status 200 --location --cookie "$idle_cookie_jar" --cookie-jar "$idle_cookie_jar" \
     --request POST \
     --data-urlencode "csrf_token=$idle_preauth_csrf" \
     --data-urlencode 'login_flow=existing' \
@@ -4453,11 +4624,12 @@ if [ -n "${ESTAB_TEST_ADMIN_USER:-}" ] && [ -n "$admin_password" ]; then
     assert_body 'data-estab-admin-card="system-status"'
     assert_body '<h1>Administration</h1>'
     assert_body 'Einsatzexport'
-    assert_body 'data-estab-public-bar'
+    # Die Verwaltungsseite steht in derselben Huelle wie alles andere. Eine
+    # Sitzungsleiste hat sie nicht: Der Administrationszugang ist kein
+    # eStab-Funktionskonto, und die Anmeldung liegt bei HTTP Basic.
+    assert_body 'data-estab-shell-menu'
     assert_body 'data-estab-navigation'
-    assert_body 'Administrationszugang'
-    assert_body "data-estab-admin-user=\"$ESTAB_TEST_ADMIN_USER\""
-    assert_body 'Kein eStab-Funktionskonto angemeldet'
+    assert_body 'Technischer Administrationszugang'
     assert_body 'data-estab-nav-key="administration" aria-current="page"'
     assert_body_absent 'data-estab-session-bar'
     assert_body_absent 'Administrative Maßnahmen</th>'
@@ -4563,7 +4735,7 @@ if [ -n "${ESTAB_TEST_ADMIN_USER:-}" ] && [ -n "$admin_password" ]; then
         --cookie "$access_shift_cookie" --cookie-jar "$access_shift_cookie" \
         "$base_url/4fach/mainindex.php?login_flow=existing"
     access_login_csrf=$(csrf_from_body)
-    assert_status 200 \
+    assert_status 200 --location \
         --cookie "$access_shift_cookie" --cookie-jar "$access_shift_cookie" \
         --request POST \
         --data-urlencode "csrf_token=$access_login_csrf" \
@@ -4578,7 +4750,7 @@ if [ -n "${ESTAB_TEST_ADMIN_USER:-}" ] && [ -n "$admin_password" ]; then
     assert_status 200 \
         --cookie "$access_shift_cookie" --cookie-jar "$access_shift_cookie" \
         "$base_url/4fach/vordrucke.php"
-    assert_session_bar "$idle_account_name" "$idle_account_code" S3 Stab
+    assert_session_bar "$idle_account_name" "$idle_account_code" S3 Stab "$access_shift_cookie"
     access_memberships_before=$(printf '%s\n' \
         "SELECT COUNT(*) FROM nv_zugangsschicht_mitglieder WHERE BINARY benutzer_kuerzel = BINARY '${idle_account_code}' AND entfernt_am IS NULL;" |
         db_sql | tr -d '\r\n')
@@ -4718,7 +4890,7 @@ if [ -n "${ESTAB_TEST_ADMIN_USER:-}" ] && [ -n "$admin_password" ]; then
     assert_status 200 \
         --cookie "$access_shift_cookie" --cookie-jar "$access_shift_cookie" \
         "$base_url/4fach/vordrucke.php"
-    assert_session_bar "$idle_account_name" "$idle_account_code" S3 Stab
+    assert_session_bar "$idle_account_name" "$idle_account_code" S3 Stab "$access_shift_cookie"
 
     # Disabling the account's only active group revokes the running session.
     # Operational records are untouched; the group is solely an access gate.
@@ -4819,8 +4991,11 @@ if [ -n "${ESTAB_TEST_ADMIN_USER:-}" ] && [ -n "$admin_password" ]; then
     assert_body 'Anhangsspeicher'
     assert_body 'Vordruckspeicher'
     assert_body 'Einsatzexport'
-    assert_body 'data-estab-public-bar'
-    assert_body "data-estab-admin-user=\"$ESTAB_TEST_ADMIN_USER\""
+    # Die Verwaltungsseite steht in derselben Huelle wie alles andere. Eine
+    # Sitzungsleiste hat sie nicht: Der Administrationszugang ist kein
+    # eStab-Funktionskonto, und die Anmeldung liegt bei HTTP Basic.
+    assert_body 'data-estab-shell-menu'
+    assert_body 'Administration · Diagnose'
     assert_body_absent 'Prüfung erforderlich'
 
     readiness_probe_state=$(printf '%s\n' \

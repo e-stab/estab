@@ -164,40 +164,39 @@ require_once __DIR__ . '/../app/bootstrap.php';
 
 
 
-    $tak_monate = array (
-         "01" => 'jan',
-         "02" => 'feb',
-         "03" => 'mar',
-         "04" => 'apr',
-         "05" => 'mai',
-         "06" => 'jun',
-         "07" => 'jul',
-         "08" => 'aug',
-         "09" => 'sep',
-         "10" => 'oct',
-         "11" => 'nov',
-         "12" => 'dec'
-    );
+    /*
+     * Die Monatskuerzel der Datum-Uhrzeit-Gruppe. Geschrieben wird nach
+     * englischer Schreibweise, gelesen zusaetzlich die im Bestand
+     * vorhandenen deutschen Kuerzel. Beide Tabellen kommen aus
+     * app/nv_datetime_group.php -- zwei Tabellen, die dasselbe sagen sollen,
+     * sagen es irgendwann nicht mehr.
+     */
+    require_once __DIR__ . "/../app/nv_datetime_group.php";
 
+    $tak_monate = estab_nv_month_abbreviations ();
+    $rew_tak_monate = estab_nv_month_numbers ();
+/*****************************************************************/
+//    Verweildauer je Vorrangstufe
+//
+//    Ab "warn" gilt eine offene Nachricht in den Listen als auffaellig,
+//    ab "overdue" als ueberfaellig. Beide Werte in Sekunden. Die Stufen
+//    entsprechen den gespeicherten Vorrangwerten: aaa Staatsnotstand,
+//    bbb Blitz, sss Sofort, eee einfach; der leere Schluessel gilt fuer
+//    Nachrichten ohne gesetzte Vorrangstufe.
+//
+//    Ein Eintrag wird nur uebernommen, wenn beide Werte ganze Zahlen
+//    sind und warn nicht groesser als overdue ist. Sonst gilt die
+//    Vorgabe aus estab_message_list_dwell_default_thresholds().
+/*****************************************************************/
 
+$conf_4f ["verweildauer"] = array (
+    "aaa" => array ("warn" =>   300, "overdue" =>   600),
+    "bbb" => array ("warn" =>   600, "overdue" =>  1200),
+    "sss" => array ("warn" =>  1800, "overdue" =>  3600),
+    "eee" => array ("warn" =>  7200, "overdue" => 14400),
+    ""    => array ("warn" =>  7200, "overdue" => 14400)
+);
 
-    $rew_tak_monate = array (
-         "jan" => '01',
-         "feb" => '02',
-         "mar" => '03',
-         "apr" => '04',
-         "mai" => '05',
-         "may" => '05',
-         "jun" => '06',
-         "jul" => '07',
-         "aug" => '08',
-         "sep" => '09',
-         "okt" => '10',
-         "oct" => '10',
-         "nov" => '11',
-         "dez" => '12',
-         "dec" => '12'
-    );
 /*****************************************************************/
 //    Tabellenfarben
 /*****************************************************************/

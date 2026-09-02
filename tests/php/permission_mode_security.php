@@ -252,7 +252,8 @@ $pendingOutgoing = [
     '02_zeichen' => 'ldf001',
     '03_datum' => null,
     '03_zeichen' => '',
-    '06_befwegausw' => 'Fu',
+    '01_medium' => 'Fu',
+    '06_befweg' => 'FuKrs 1 · Kanal 31',
     '15_quitdatum' => '2026-08-01 11:59:00',
     '15_quitzeichen' => 'si0001',
     '16_empf' => 'S1_rt',
@@ -604,12 +605,27 @@ $correctionController = $slice(
     'if (estab_workflow_should_render_primary_view (',
     '/**********************************************************************\\'
 );
+/*
+ * Geschuetzt wird die Uebernahme, nicht das Hinsehen.
+ *
+ * Hier stand einmal, dass auch "stab_korrekturen_x" durch das CSRF-Tor
+ * muss. Das war nicht haltbar: Der Knopf der Seitenleiste schickt einen
+ * POST mit Token, den der Steuerlauf auf "?stab_korrekturen_x=1"
+ * umleitet -- und der GET danach hat weder POST noch Token. Die
+ * Forderung machte den Einstieg in die Korrekturschleife unerreichbar.
+ *
+ * Was bleibt, ist der Punkt, um den es ging: Wer eine zurueckgewiesene
+ * Meldung uebernimmt, faehrt als "stab=korrektur" durch dasselbe Tor --
+ * mit POST und Token --, und die Uebernahme traegt den neuen Verfasser,
+ * nicht den alten.
+ */
 $assert(
     $csrfGate !== ''
-        && str_contains(
+        && !str_contains(
             $csrfGate,
             'isset ($returnValue ["stab_korrekturen_x"])'
         )
+        && str_contains($csrfGate, '"meldung", "korrektur",')
         && str_contains(
             $csrfGate,
             'estab_csrf_require_post ($_SERVER, $_POST);'
@@ -630,7 +646,7 @@ $assert(
             $correctionController,
             '$formdata ["13_abseinheit"] = $activeCommandPostName;'
         ),
-    'correction queue lacks CSRF protection or keeps the previous author in takeover form fields'
+    'correction takeover lacks CSRF protection or keeps the previous author in takeover form fields'
 );
 
 $modeUpdate = $slice(
@@ -651,7 +667,8 @@ foreach ([
     'nv_ubb',
     'nv_protokoll',
     'nv_bhp50',
-    'nv_komplan',
+    // nv_komplan steht hier nicht mehr: Migration 130 hat die ungenutzte
+    // Alttabelle abgebaut. Der Fernmeldeplan lebt in nv_fernmeldeplaene.
     'nv_etbtitel',
     'nv_tbbtitel',
     'nv_dienstschichten',
@@ -825,10 +842,36 @@ $assert(
             $readiness,
             "'119-inactive-messenger-dispatch.sql'"
         )
+        && str_contains($verify, "'120-single-function-relief.sql'")
+        && str_contains($readiness, "'120-single-function-relief.sql'")
+        && str_contains($verify, "'121-transport-disposition-field-one.sql'")
+        && str_contains($readiness, "'121-transport-disposition-field-one.sql'")
         && str_contains($verify, 'estab_permission_mode')
         && str_contains($readiness, 'estab_permission_mode')
-        && str_contains($verify, 'estab_schema_migrations`) = 25')
-        && str_contains($readiness, 'estab_schema_migrations) = 25')
+        && str_contains($verify, "'122-fernmeldeweg-identitaet.sql'")
+        && str_contains($readiness, "'122-fernmeldeweg-identitaet.sql'")
+        && str_contains($verify, "'123-fernmeldeweg-funkart.sql'")
+        && str_contains($readiness, "'123-fernmeldeweg-funkart.sql'")
+        && str_contains($verify, "'124-fernmeldeweg-erreichbarkeit.sql'")
+        && str_contains($readiness, "'124-fernmeldeweg-erreichbarkeit.sql'")
+        && str_contains($verify, "'125-fernmeldeweg-rueckfallebene.sql'")
+        && str_contains($readiness, "'125-fernmeldeweg-rueckfallebene.sql'")
+        && str_contains($verify, "'126-fernmeldeplan-gegenstellen.sql'")
+        && str_contains($readiness, "'126-fernmeldeplan-gegenstellen.sql'")
+        && str_contains($verify, "'127-eingangsweg.sql'")
+        && str_contains($readiness, "'127-eingangsweg.sql'")
+        && str_contains($verify, "'128-fernmeldeplan-kopfleiste.sql'")
+        && str_contains($readiness, "'128-fernmeldeplan-kopfleiste.sql'")
+        && str_contains($verify, "'129-gegenstelle-stellenart.sql'")
+        && str_contains($readiness, "'129-gegenstelle-stellenart.sql'")
+        && str_contains($verify, "'130-komplan-abbau.sql'")
+        && str_contains($readiness, "'130-komplan-abbau.sql'")
+        && str_contains($verify, "'131-fernmeldeplan-nebenstellen.sql'")
+        && str_contains($readiness, "'131-fernmeldeplan-nebenstellen.sql'")
+        && str_contains($verify, "'132-ttb-schreiber-ldf.sql'")
+        && str_contains($readiness, "'132-ttb-schreiber-ldf.sql'")
+        && str_contains($verify, 'estab_schema_migrations`) = 38')
+        && str_contains($readiness, 'estab_schema_migrations) = 38')
         && str_contains($verify, 'inactive_messenger_target_allowed')
         && str_contains($readiness, 'inactive_messenger_target_allowed')
         && str_contains($readiness, 'nv_zugangsschicht_mitglieder')
@@ -865,7 +908,7 @@ $assert(
             $readiness,
             "'%messenger_account.`aktiv` = 1%'"
         ),
-    'Migrations 115-119 and exact ledger are outside verify/readiness gates'
+    'Migrations 115-127 and exact ledger are outside verify/readiness gates'
 );
 $assert(
     str_contains($permissionSource, 'Missing context fails closed')

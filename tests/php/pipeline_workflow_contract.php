@@ -24,7 +24,22 @@ $osv = $read($root . '/.github/workflows/osv-scanner.yml');
 $dependencyReview = $read($root . '/.github/workflows/dependency-review.yml');
 $dependabot = $read($root . '/.github/dependabot.yml');
 $technicalGuide = $read($root . '/docs/TECHNIK.md');
-$staticSuite = $read($root . '/tests/static/run.sh');
+// Verified against the checks the suite actually registers, not its source text.
+$staticChecks = (static function (string $root): array {
+    $output = [];
+    $status = 0;
+    exec(
+        'sh ' . escapeshellarg($root . '/tests/static/run.sh') . ' --list 2>&1',
+        $output,
+        $status
+    );
+    if ($status !== 0) {
+        throw new RuntimeException(
+            'Could not list the static suite checks: ' . implode("\n", $output)
+        );
+    }
+    return array_values(array_filter(array_map('trim', $output), 'strlen'));
+})($root);
 $composerManifest = json_decode(
     $read($root . '/composer.json'),
     true,
@@ -58,12 +73,41 @@ preg_match_all(
     $ciActionRefs
 );
 
+// Every workflow that spends runner minutes must limit `push` to the shared
+// branches. Without that limit a pull request from a branch in this repository
+// triggers the same jobs twice: once for the push and once for the pull
+// request. `merge_group` keeps the queue covered.
+$triggerScoped = static function (string $workflow): bool {
+    if (preg_match('~^on:\n(?<body>(?: {2}.*\n|\n)*)~m', $workflow, $match) !== 1) {
+        return false;
+    }
+    $body = $match['body'];
+    return preg_match(
+        '~^  push:\n    branches:\n(?:      - (?:main|master|develop)\n)+~m',
+        $body
+    ) === 1
+        && str_contains($body, '  merge_group:');
+};
+foreach (
+    [
+        'ci.yml' => $ci,
+        'audit.yml' => $audit,
+        'osv-scanner.yml' => $osv,
+    ] as $workflowName => $workflowSource
+) {
+    $assert(
+        $triggerScoped($workflowSource),
+        $workflowName . ' runs on every push and therefore duplicates every'
+            . ' pull-request run, or it does not cover the merge queue'
+    );
+}
+
 $assert(
     !str_contains($ci, 'id: provenance')
     && !str_contains($ci, 'migration/verify_provenance.py')
     && !str_contains($ci, 'PROVENANCE_OUTCOME')
     && !str_contains($ci, 'fetch-tags: true')
-    && !str_contains($staticSuite, 'tests/php/provenance_security.php')
+    && !in_array('provenance_security', $staticChecks, true)
     && str_contains($ci, 'name: Enforce static results')
     && str_contains($ci, 'if: ${{ !cancelled() }}')
     && substr_count($ci, 'continue-on-error: true') >= 4,

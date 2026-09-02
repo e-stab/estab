@@ -228,8 +228,20 @@ function estab_message_timeline_initial_station(string $direction, string $kind)
 /** @return list<int> */
 function estab_message_timeline_future_statuses(
     string $direction,
-    int $status
+    int $status,
+    string $kind = ''
 ): array {
+    if ($kind === 'conversation-note') {
+        // Verfasser, Sichter, fertig. Eine Gespraechsnotiz dokumentiert ein
+        // bereits gefuehrtes Gespraech; Disposition und Befoerderung kommen
+        // in ihrem Laufweg nicht vor.
+        return match ($status) {
+            0, 10 => [4, 8],
+            4 => [8],
+            8 => [],
+            default => [],
+        };
+    }
     if ($direction === 'E') {
         return match ($status) {
             0 => [1, 4, 8],
@@ -346,6 +358,13 @@ function estab_message_timeline_known_event_valid(
             && $fromStatus === 2
             && $toStatus === 8,
         'incoming_routed' => $direction === 'E'
+            && $fromStatus === 4
+            && $toStatus === 8,
+        // Eine Gespraechsnotiz dokumentiert ein bereits gefuehrtes Gespraech.
+        // Mit der Sichtung ist der Nachweis abgeschlossen; sie durchlaeuft
+        // weder die Disposition noch die Befoerderung.
+        'conversation_note_closed' => $direction === 'A'
+            && $kind === 'conversation-note'
             && $fromStatus === 4
             && $toStatus === 8,
         default => null,
@@ -605,8 +624,11 @@ function estab_message_timeline_build(
 
     $future = [];
     foreach (
-        estab_message_timeline_future_statuses($direction, $currentStatus)
-        as $futureStatus
+        estab_message_timeline_future_statuses(
+            $direction,
+            $currentStatus,
+            $kind
+        ) as $futureStatus
     ) {
         $station = estab_message_timeline_station(
             $direction,
@@ -669,7 +691,9 @@ function estab_message_timeline_for_draft(
     );
     $initial['duration_label'] = 'Noch nicht eingereicht';
     $future = [];
-    foreach (estab_message_timeline_future_statuses($direction, 0) as $status) {
+    foreach (
+        estab_message_timeline_future_statuses($direction, 0, $kind) as $status
+    ) {
         $station = estab_message_timeline_station($direction, $kind, $status);
         $future[] = [
             'station' => $station['key'],

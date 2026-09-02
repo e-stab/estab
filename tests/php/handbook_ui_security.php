@@ -95,6 +95,7 @@ $assert(
 $expectedRoutes = [
     'messages' => '4fach/index.php',
     'command_post' => '4fach/fuehrungsstelle.php',
+    'messenger_jobs' => '4fach/melderauftraege.php',
     'message_overview' => '4fueltg/ue_ltg.php',
     'forms' => '4fach/vordrucke.php',
     'attachments' => '4fach/anhang.php',
@@ -157,26 +158,38 @@ $assert(
 );
 
 /* Search semantics, landmarks and the exact current chapter contract. */
+/*
+ * Die Kapitel des Handbuchs, in ihrer Reihenfolge.
+ *
+ * Sie sind neu geschnitten: Der Nachrichtenlauf stand als ein Kapitel da und
+ * beschrieb zwei Ablaeufe, die verschiedene Personen betreffen -- jetzt sind
+ * es "Nachricht ausgeben" und "Nachricht aufnehmen". Aus "Uebergabe und
+ * Abschluss" wurden "Schichten" und "Einsatz abschliessen", weil das eine
+ * eingerichtet und das andere beendet wird. Die Kurzreferenz war eine zweite
+ * Fassung des Inhaltsverzeichnisses und ist zu "Begriffe" geworden.
+ */
 $expectedChapters = [
-    'willkommen',
-    'schnellstart',
-    'navigation',
+    'ueberblick',
+    'anmelden',
+    'bildschirm',
     'rollen',
-    'vorbereitung',
     'vordruck',
-    'nachrichtenlauf',
-    'anhaenge',
-    'finden',
+    'ausgang',
+    'eingang',
+    'anlagen',
+    'suchen',
     'etb',
     'ttb',
     'fernmeldeplan',
     'melder',
-    'uebergabe',
-    'export',
+    'einsatz',
+    'schichten',
+    'abschluss',
+    'ausgabe',
     'administration',
     'betrieb',
     'probleme',
-    'kurzreferenz',
+    'begriffe',
 ];
 $chapterMatches = [];
 preg_match_all(
@@ -187,7 +200,7 @@ preg_match_all(
 );
 $assert(
     ($chapterMatches[1] ?? []) === $expectedChapters,
-    'handbook no longer exposes the canonical 19 chapters in order'
+    'handbook no longer exposes the canonical 21 chapters in order'
 );
 $tocSource = '';
 if (preg_match('/<ol\s+data-estab-handbook-toc>(.*?)<\/ol>/s', $index, $tocMatch) === 1) {
@@ -197,7 +210,7 @@ $tocMatches = [];
 preg_match_all('/<a\s+href="#([a-z0-9_-]+)">/', $tocSource, $tocMatches);
 $assert(
     ($tocMatches[1] ?? []) === $expectedChapters,
-    'table of contents does not match all 19 chapter anchors exactly'
+    'table of contents does not match all 21 chapter anchors exactly'
 );
 $assert(
     str_contains($index, '<main id="handbook-content"')
@@ -239,24 +252,34 @@ $assert(
 );
 
 /* Bind the handbook to the currently implemented operational invariants. */
+/*
+ * Saetze, die im Handbuch stehen muessen.
+ *
+ * Sie halten die Beschreibung an der Anwendung fest: Wer eine Regel aendert,
+ * merkt hier, dass das Handbuch sie noch anders erzaehlt. Der Wortlaut ist
+ * einfacher geworden -- das Handbuch erklaert die Bedienung und preist
+ * nichts an; "Autosichtung" und "append-only" waren Woerter, die auf keinem
+ * Bildschirm stehen. Die Aussage ist dieselbe geblieben.
+ */
 $requiredCurrentStatements = [
     'Ausgang: Verfasser → Si → LdF → Fernmelder → abgeschlossen',
     'Eingang: Fernmelder → LdF → Si → Empfänger',
     'Der Fernmelder darf den Absender nicht schreiben.',
-    'Führungsstellenname ist kein Umgebungswert',
-    'Es gibt keine Autosichtung.',
-    'Nach 15 Minuten ohne echte Browserinteraktion erscheint ein Konto als inaktiv.',
-    'Nach 12 Stunden ohne Aktivität wird die Sitzung serverseitig beendet.',
-    'S6-Fernmeldeplan',
-    'Melderaufträge',
+    'Der Name der Führungsstelle gehört zum Einsatz',
+    'Eine automatische Sichtung gibt es nicht.',
+    'Wer 15 Minuten lang nichts tippt und nichts anklickt, wird als inaktiv angezeigt.',
+    'Nach 12 Stunden ohne Aktivität endet die Sitzung.',
+    'Der Plan hält die eigenen Kommunikationsmittel fest.',
+    'Die Melderaufträge stehen auf einer eigenen Seite.',
+    'Das Technische Betriebsbuch führt der LdF.',
     'Einträge werden niemals überschrieben oder gelöscht.',
-    'Auch das TBB ist append-only',
+    'Auch im TBB wird nichts gelöscht.',
     'Deaktivieren ist nicht abschließen',
     'Benutzer',
     'sperren, entsperren und Kennwort zurücksetzen',
     'Neun Bereiche sind wählbar',
-    'PDF-Anlagen seitenweise einschließlich Annotationen',
-    'jedes Original bytegleich eingebettet',
+    'PDF-Anlagen Seite für Seite',
+    'Jedes Original liegt bytegleich im Dossier',
     'Export ist kein Backup',
     'keine digitale Signatur',
 ];

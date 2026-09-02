@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/../app/auth.php';
 require_once __DIR__ . '/../app/navigation.php';
+require_once __DIR__ . '/../app/app_shell.php';
 
 $loginFlow = null;
 $loginDestination = null;
@@ -67,10 +68,6 @@ if ($loginInterrupted) {
 }
 $mainFrameUrl = './mainindex.php'
    . ($mainFrameQuery === [] ? '' : '?' . http_build_query($mainFrameQuery));
-$navigationFrameUrl = './vorgaben.php'
-   . ($loginDestination === null
-      ? ''
-      : '?next=' . rawurlencode($loginDestination));
 /*****************************************************************************\
    Datei: index.php
 
@@ -83,39 +80,30 @@ $navigationFrameUrl = './vorgaben.php'
    mailto://hajo.landmesser@iuk-heinsberg.de
 *****************************************************************************/
 ?>
-<!doctype html>
-<html lang="de" class="estab-message-workspace-document">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="author" content="Hajo Landmesser">
-  <link rel="shortcut icon" href="../favicon.ico">
-  <link rel="stylesheet" href="../estab-ui.css">
-  <title>Nachrichtenvordruck</title>
-</head>
-<body class="estab-message-workspace">
-  <main class="estab-message-workspace-grid" data-estab-message-workspace>
-    <iframe
-      class="estab-message-sidebar-frame"
-      name="vorgaben"
-      title="eStab Navigation und Einsatzstatus"
-      src="<?= htmlspecialchars(
-          $navigationFrameUrl,
-          ENT_QUOTES | ENT_SUBSTITUTE,
-          'UTF-8'
-      ) ?>"
-    ></iframe>
-    <iframe
-      class="estab-message-content-frame"
-      name="mainframe"
-      title="eStab Arbeitsbereich"
-      src="<?= htmlspecialchars(
-          $mainFrameUrl,
-          ENT_QUOTES | ENT_SUBSTITUTE,
-          'UTF-8'
-      ) ?>"
-    ></iframe>
-  </main>
+<?= estab_shell_head('Nachrichtenvordruck') ?>
+<body class="estab-shell-body estab-message-workspace">
+  <div class="estab-shell" data-estab-shell data-estab-message-workspace>
+    <?= estab_shell_menu_markup(
+        estab_auth_session_identity($_SESSION),
+        $_SERVER,
+        null,
+        true
+    ) ?>
+    <main class="estab-shell-content estab-shell-content--frame"
+      data-estab-shell-content>
+      <iframe
+        class="estab-message-content-frame"
+        name="mainframe"
+        title="eStab Arbeitsbereich"
+        src="<?= htmlspecialchars(
+            $mainFrameUrl,
+            ENT_QUOTES | ENT_SUBSTITUTE,
+            'UTF-8'
+        ) ?>"
+      ></iframe>
+    </main>
+    <?= estab_shell_cockpit_markup() ?>
+  </div>
   <button
     class="estab-mobile-sidebar-return"
     type="button"
@@ -125,9 +113,23 @@ $navigationFrameUrl = './vorgaben.php'
     <span aria-hidden="true">←</span>
     Menü
   </button>
-  <script data-estab-mobile-workspace-navigation>
+  <script<?= estab_csp_script_attribute() ?> data-estab-mobile-workspace-navigation>
     (function () {
-      var sidebar = document.querySelector('.estab-message-sidebar-frame');
+      /*
+       * Der Wechsel auf den Inhalt wird von den Arbeitsschritten angestossen:
+       * Wer auf einem schmalen Bildschirm einen davon waehlt, will danach den
+       * Vordruck sehen und nicht die Spalte, aus der er kam. Die Ziele im
+       * Menue brauchen das nicht -- ihre Verweise ersetzen ohnehin das ganze
+       * Fenster.
+       *
+       * Die Schritte standen im Cockpit und stehen seit 5abd596 in einem
+       * eigenen Rahmen links unter den Zielen. Beide Rahmen senden das
+       * Signal; angenommen werden muss es von beiden. Solange nur das
+       * Cockpit galt, blieb ein Griff auf dem Telefon ohne Wirkung.
+       */
+      var cockpit = document.querySelector('.estab-shell-cockpit');
+      var actions = document.querySelector('.estab-shell-actions');
+      var menu = document.querySelector('.estab-shell-menu');
       var content = document.querySelector('.estab-message-content-frame');
       var returnButton = document.querySelector(
         '[data-estab-mobile-menu-return]'
@@ -148,9 +150,11 @@ $navigationFrameUrl = './vorgaben.php'
       window.addEventListener('message', function (event) {
         if (
           event.origin === window.location.origin
-          && sidebar
-          && event.source === sidebar.contentWindow
           && event.data === 'estab:show-content'
+          && (
+            (cockpit && event.source === cockpit.contentWindow)
+            || (actions && event.source === actions.contentWindow)
+          )
         ) {
           showContent();
         }
@@ -168,9 +172,9 @@ $navigationFrameUrl = './vorgaben.php'
         returnButton.addEventListener('click', function () {
           contentRequested = false;
           returnButton.hidden = true;
-          if (sidebar) {
-            sidebar.scrollIntoView({block: 'start'});
-            sidebar.focus({preventScroll: true});
+          if (menu) {
+            menu.scrollIntoView({block: 'start'});
+            menu.focus({preventScroll: true});
           }
         });
       }

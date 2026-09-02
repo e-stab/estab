@@ -4,18 +4,20 @@ declare(strict_types=1);
 
 session_start();
 require_once __DIR__ . '/../app/session_ui.php';
-estab_session_ui_start($_SESSION, true);
+// Diese Seite ist der Inhalt der Huelle, nicht die Huelle selbst.
+// Menue und Cockpit stehen aussen; hier waeren sie ein Menue im Menue.
+estab_session_ui_start($_SESSION, true, false, false);
 
 header('Content-Type: text/html; charset=UTF-8');
 header('Cache-Control: private, no-store, max-age=0');
 
-$sessionMarkup = estab_session_ui_current_markup(
-    $_SESSION,
-    true,
-    null,
-    false,
-    true
-);
+/*
+ * Die Dokumentenliste traegt keine Sitzungsleiste und keine Navigation mehr.
+ * Sie ist die linke Haelfte des Infosammlungs-Inhalts und steht damit
+ * innerhalb der Huelle -- Menue links und Cockpit rechts kommen von dort.
+ * Frueher brachte sie beides selbst mit und stand als zweites Menue neben
+ * dem der Huelle.
+ */
 
 $documents = require __DIR__ . '/documents.php';
 
@@ -28,9 +30,8 @@ $documents = require __DIR__ . '/documents.php';
   <title>BOS-Informationen</title>
   <?= estab_session_ui_stylesheet() ?>
 </head>
-<body class="estab-navigation-frame estab-message-sidebar-page">
-  <div class="estab-message-sidebar estab-bos-sidebar" data-estab-bos-sidebar>
-    <?= $sessionMarkup ?>
+<body class="estab-navigation-frame estab-bos-list-page">
+  <div class="estab-bos-sidebar" data-estab-bos-sidebar>
     <main
       class="estab-sidebar-workflow estab-bos-document-navigation"
       data-estab-bos-document-navigation
@@ -62,7 +63,7 @@ $documents = require __DIR__ . '/documents.php';
       </nav>
     </main>
   </div>
-  <script data-estab-bos-workspace-link>
+  <script<?= estab_csp_script_attribute() ?> data-estab-bos-workspace-link>
     (function () {
       var links = Array.from(
         document.querySelectorAll('[data-estab-bos-document-link]')

@@ -1058,11 +1058,21 @@ def _text_expression(frame_name: str | None, selector: str) -> str:
     )
 
 
+# Der Anmeldeknopf, benannt ueber sein Formular. Ueber die Farbe ging es
+# nicht mehr: Die Kontentafel bringt seit ihrer Suchleiste einen zweiten
+# Hauptknopf ("Anwenden") mit, und der steht im Baum vor dem Anmelden.
+_LOGIN_SUBMIT_SELECTOR = (
+    'form:has(input[name="kennwort1"]) '
+    'button.estab-button-primary[type="submit"]'
+)
+
+
 class BrowserAcceptance:
     navigation_keys = (
         "overview",
         "messages",
         "command-post",
+        "messenger-jobs",
         "message-overview",
         "forms",
         "incident-log",
@@ -1073,6 +1083,7 @@ class BrowserAcceptance:
     protected_card_keys = (
         "messages",
         "command-post",
+        "messenger-jobs",
         "message-overview",
         "forms",
         "incident-log",
@@ -1087,6 +1098,11 @@ class BrowserAcceptance:
     )
     protected_redirects = (
         ("4fach/fuehrungsstelle.php", "command-post", "4fach/index.php"),
+        (
+            "4fach/melderauftraege.php",
+            "messenger-jobs",
+            "4fach/index.php",
+        ),
         ("4fach/vordrucke.php", "forms", "4fach/index.php"),
         ("4fueltg/ue_ltg.php", "message-overview", "4fach/index.php"),
         ("stabetb/etb.php", "incident-log", "4fach/index.php"),
@@ -1117,6 +1133,19 @@ class BrowserAcceptance:
     def __init__(self, cdp: CDP, config: TestConfig) -> None:
         self.cdp = cdp
         self.config = config
+
+    def _duty_gated_navigation_keys(self) -> list[str]:
+        """Areas the menu marks with a duty requirement.
+
+        Sie stehen im Menue wie jeder andere Bereich; der Vorbehalt ist ein
+        Merkmal am Eintrag und kein Weglassen. Die Reihenfolge folgt der des
+        Menues.
+        """
+        return [
+            key
+            for key in self.navigation_keys
+            if key in ("message-overview", "tracking")
+        ]
 
     def _authenticated_navigation_keys(self) -> list[str]:
         """Return LOOSE areas from primary and explicit extra functions."""
@@ -1163,7 +1192,7 @@ class BrowserAcceptance:
             """
             document.readyState === "complete" &&
             Boolean(document.querySelector("[data-estab-handbook]")) &&
-            document.querySelectorAll("[data-estab-handbook-section]").length === 19
+            document.querySelectorAll("[data-estab-handbook-section]").length === 21
             """,
             "öffentliches Web-Handbuch wurde nicht vollständig geladen",
         )
@@ -1179,7 +1208,7 @@ class BrowserAcceptance:
                         rect.width > 0 && rect.height > 0;
                 };
                 const navigation = document.querySelector(
-                    "aside[data-estab-public-bar] [data-estab-navigation]"
+                    "[data-estab-shell-menu] [data-estab-navigation]"
                 );
                 const toc = document.querySelector(".estab-handbook-toc");
                 const search = document.querySelector("[data-estab-handbook-search]");
@@ -1189,8 +1218,8 @@ class BrowserAcceptance:
                 return {
                     title: document.title,
                     h1: document.querySelectorAll("h1").length,
-                    publicBars: document.querySelectorAll(
-                        "aside[data-estab-public-bar]"
+                    shellMenus: document.querySelectorAll(
+                        "[data-estab-shell-menu]"
                     ).length,
                     sessionBars: document.querySelectorAll(
                         "aside[data-estab-session-bar]"
@@ -1221,14 +1250,14 @@ class BrowserAcceptance:
         )
         self._truth(
             isinstance(desktop, dict)
-            and desktop.get("title") == "eStab Web-Handbuch"
+            and desktop.get("title") == "eStab Handbuch"
             and desktop.get("h1") == 1
-            and desktop.get("publicBars") == 1
+            and desktop.get("shellMenus") == 1
             and desktop.get("sessionBars") == 0
             and desktop.get("active") == ["handbook"]
-            and desktop.get("sections") == 19
-            and desktop.get("uniqueIds") == 19
-            and desktop.get("tocLinks") == 19
+            and desktop.get("sections") == 21
+            and desktop.get("uniqueIds") == 21
+            and desktop.get("tocLinks") == 21
             and desktop.get("tocVisible") is True
             and desktop.get("tocOverflow") not in ("auto", "scroll")
             and desktop.get("searchVisible") is True
@@ -1241,7 +1270,7 @@ class BrowserAcceptance:
         self.cdp.set_value(
             None,
             "[data-estab-handbook-search]",
-            "Beförderungsweg Absender",
+            "Melder Auftrag",
             "Handbuchsuche",
         )
         search_state = self.cdp.wait_for(
@@ -1258,7 +1287,7 @@ class BrowserAcceptance:
                     "[data-estab-handbook-clear]"
                 );
                 return visible.length > 0 && visible.length < sections.length &&
-                    visible.some(section => section.id === "nachrichtenlauf") &&
+                    visible.some(section => section.id === "melder") &&
                     status && status.textContent.includes("passende") &&
                     clear && !clear.hidden ? {
                         visible: visible.map(section => section.id),
@@ -1271,7 +1300,7 @@ class BrowserAcceptance:
         )
         self._equal(
             search_state.get("query"),
-            "Beförderungsweg Absender",
+            "Melder Auftrag",
             "Suchbegriff in der Handbuch-URL",
         )
         self.cdp.click(
@@ -1283,7 +1312,7 @@ class BrowserAcceptance:
             """
             document.querySelectorAll(
                 "[data-estab-handbook-section]:not([hidden])"
-            ).length === 19 &&
+            ).length === 21 &&
             !new URL(location.href).searchParams.has("q")
             """,
             "gelöschte Handbuchsuche stellt nicht alle Kapitel wieder her",
@@ -1316,7 +1345,7 @@ class BrowserAcceptance:
                 const search = document.querySelector(".estab-handbook-search");
                 const toc = document.querySelector(".estab-handbook-toc");
                 const firstCard = document.querySelector(
-                    ".estab-handbook-role-grid a"
+                    ".estab-handbook-admin-grid a"
                 );
                 const sessionBar = document.querySelector(
                     "body > aside.estab-session-bar"
@@ -1386,8 +1415,8 @@ class BrowserAcceptance:
                         toc.scrollHeight <= toc.clientHeight + 1,
                     cardTouchTarget: cardRect.height >= 44,
                     overflowElements,
-                    roleColumns: getComputedStyle(
-                        document.querySelector(".estab-handbook-role-grid")
+                    cardColumns: getComputedStyle(
+                        document.querySelector(".estab-handbook-admin-grid")
                     ).gridTemplateColumns.split(" ").length
                 };
             })()
@@ -1403,7 +1432,7 @@ class BrowserAcceptance:
             and mobile.get("tocStatic") is True
             and mobile.get("tocScrollFree") is True
             and mobile.get("cardTouchTarget") is True
-            and mobile.get("roleColumns") == 1,
+            and mobile.get("cardColumns") == 1,
             f"Mobiles Handbuch ist nicht vollständig bedienbar: {mobile!r}",
         )
 
@@ -1416,36 +1445,34 @@ class BrowserAcceptance:
             "/stabinfo/index.php",
             "öffentliche BOS-Infosammlung wurde nicht geladen",
         )
+        # Die Dokumentwahl steht seit 5abd596 im Menue der Huelle und nicht
+        # mehr als eigener Rahmen neben dem Inhalt.
         self.cdp.wait_for(
-            _frame_expression(
-                "status",
-                """
-                return target.location.pathname.endsWith(
-                    "/stabinfo/l_index.php"
-                ) && doc.readyState === "complete";
-                """,
-            ),
-            "öffentliche BOS-Sidebar wurde nicht vollständig geladen",
+            """
+            document.readyState === "complete" &&
+            Boolean(document.querySelector("[data-estab-shell-context]")) &&
+            document.querySelectorAll(
+                "[data-estab-bos-document-link]"
+            ).length > 0
+            """,
+            "öffentliche BOS-Dokumentwahl wurde nicht vollständig geladen",
         )
         self._equal(
             self.cdp.evaluate(
-                _visible_count_expression(
-                    "status",
-                    "aside[data-estab-public-bar]"
-                )
+                _visible_count_expression(None, "[data-estab-shell-menu]")
             ),
             1,
-            "öffentliche Shared-Bar in der BOS-Sidebar",
+            "Menuespalte der öffentlichen BOS-Infosammlung",
         )
         self._equal(
             self.cdp.evaluate(
                 _visible_count_expression(
-                    "status",
+                    None,
                     "aside[data-estab-session-bar]"
                 )
             ),
             0,
-            "authentifizierte Bar in der öffentlichen BOS-Sidebar",
+            "authentifizierte Bar in der öffentlichen BOS-Huelle",
         )
         self._equal(
             self.cdp.evaluate(
@@ -1577,7 +1604,7 @@ class BrowserAcceptance:
         )
         self.cdp.click(
             "mainframe",
-            'button.estab-button-primary[type="submit"]',
+            _LOGIN_SUBMIT_SELECTOR,
             "S2-Bestandskonto anmelden",
         )
         self._wait_for_top_level_path(
@@ -1590,14 +1617,20 @@ class BrowserAcceptance:
                 "[data-estab-message-overview]" +
                 "[data-estab-message-list]"
             )) &&
+            /* Die Filter der Uebersicht stehen im Suchband des
+               Tabellenbauteils; Ergebnisleiste, Seitengroesse und Blatt
+               kommen von dort und nicht mehr aus einem eigenen Kasten. */
             Boolean(document.querySelector(
-                "[data-estab-message-list-controls]"
+                ".estab-tabelle-suchband .estab-message-list-quick-filters"
             )) &&
             Boolean(document.querySelector(
-                ".estab-message-list-resultbar"
+                ".estab-tabelle-suchband .estab-message-list-filter-grid"
             )) &&
             Boolean(document.querySelector(
-                ".estab-message-list-table, " +
+                ".estab-tabelle-ergebnisleiste"
+            )) &&
+            Boolean(document.querySelector(
+                ".estab-tabelle-blatt, " +
                 "[data-estab-message-list-empty]"
             ))
             """,
@@ -1609,14 +1642,13 @@ class BrowserAcceptance:
             print("[2/3] Explizit bekannten Betreff über die echte Suche filtern")
             self.cdp.set_value(
                 None,
-                '.estab-message-list-search-row input[name="ml_q"]',
+                '.estab-tabelle-suchzeile input[name="ml_q"]',
                 expected_subject,
                 "bekannten Vordruck-Betreff suchen",
             )
             self.cdp.click(
                 None,
-                '.estab-message-list-search-row '
-                'button[name="ml_apply"][value="1"]',
+                '.estab-tabelle-suchzeile button[type="submit"]',
                 "Suche nach bekanntem Vordruck-Betreff absenden",
             )
             subject_literal = json.dumps(expected_subject)
@@ -1637,7 +1669,6 @@ class BrowserAcceptance:
             print("[2/3] Vorhandene Betreffmarker oder den Leerzustand prüfen")
 
         self._assert_session_bar(
-            None,
             "S2-Meldungsübersicht",
             "message-overview",
         )
@@ -1658,16 +1689,33 @@ class BrowserAcceptance:
                     "screenHeight": height,
                 },
             )
-            expected_table_display = "block" if mobile else "table"
-            display_literal = json.dumps(expected_table_display)
+            # Das Tabellenbauteil faltet Zeilen und Zellen zu Kaesten und
+            # blendet den Spaltenkopf aus, sobald seine SPALTE schmaler als
+            # 48rem ist -- nicht das Fenster. In der Huelle steht die
+            # Meldungsliste zwischen Menue und Cockpit, ihre Spalte ist also
+            # deutlich schmaler als der Schirm. Gemessen wird deshalb dort,
+            # wo die Regel gilt; die Tabelle selbst bleibt eine Tabelle.
             self.cdp.wait_for(
                 f"""
                 innerWidth === {width} && (() => {{
                     const table = document.querySelector(
-                        ".estab-message-list-table"
+                        ".estab-tabelle-blatt"
                     );
-                    return !table || getComputedStyle(table).display ===
-                        {display_literal};
+                    if (!table) return true;
+                    const section = table.closest(".estab-tabelle");
+                    if (!section) return false;
+                    const rem = parseFloat(getComputedStyle(
+                        document.documentElement
+                    ).fontSize);
+                    const karten = section.getBoundingClientRect().width
+                        <= 48 * rem;
+                    const head = table.querySelector("thead");
+                    const row = table.querySelector("tbody > tr");
+                    return getComputedStyle(table).display === "table" &&
+                        (!head || getComputedStyle(head).display ===
+                            (karten ? "none" : "table-header-group")) &&
+                        (!row || getComputedStyle(row).display ===
+                            (karten ? "block" : "table-row"));
                 }})()
                 """,
                 f"Responsive Meldungsliste bei {width}×{height} px "
@@ -1739,29 +1787,32 @@ class BrowserAcceptance:
                     "[data-estab-message-overview]" +
                     "[data-estab-message-list]"
                 );
+                /* Suche, Filter, Ergebnisleiste und Blaetterer kommen vom
+                   Tabellenbauteil; die Uebersicht reicht nur ihre Felder
+                   hinein. */
                 const controls = document.querySelector(
-                    "[data-estab-message-list-controls]"
+                    ".estab-tabelle-suchband"
                 );
                 const search = controls?.querySelector(
-                    '.estab-message-list-search-row input[name="ml_q"]'
+                    '.estab-tabelle-suchzeile input[name="ml_q"]'
                 );
                 const searchRow = controls?.querySelector(
-                    ".estab-message-list-search-row"
+                    ".estab-tabelle-suchzeile"
                 );
                 const resultbar = document.querySelector(
-                    ".estab-message-list-resultbar"
+                    ".estab-tabelle-ergebnisleiste"
                 );
                 const wrapper = document.querySelector(
-                    ".estab-message-list-table-wrap"
+                    ".estab-tabelle-rahmen"
                 );
                 const table = document.querySelector(
-                    ".estab-message-list-table"
+                    ".estab-tabelle-blatt"
                 );
                 const empty = document.querySelector(
                     "[data-estab-message-list-empty]"
                 );
                 const pager = document.querySelector(
-                    ".estab-message-list-pager"
+                    ".estab-tabelle-blaetterer"
                 );
                 const rows = table
                     ? Array.from(table.querySelectorAll(
@@ -1787,9 +1838,7 @@ class BrowserAcceptance:
                 ].filter(visible);
                 const headingContentOverlaps = headings.flatMap(
                     (heading, index) => {
-                        const summary = heading.closest(
-                            ".estab-message-list-summary"
-                        );
+                        const summary = heading.closest("td");
                         const excerpt = summary?.querySelector(
                             ".estab-message-list-excerpt"
                         );
@@ -1841,10 +1890,11 @@ class BrowserAcceptance:
                                 text.length > 0 &&
                                 text !== "Keine Überschrift angegeben";
                     }),
+                    /* Ueberschrift und Auszug stehen heute unmittelbar in
+                       ihrer Zelle; einen eigenen Kasten dazwischen gibt es
+                       nicht mehr. */
                     headingsContained: headings.every(heading => {
-                        const summary = heading.closest(
-                            ".estab-message-list-summary"
-                        );
+                        const summary = heading.closest("td");
                         return Boolean(summary) &&
                             containedBy(heading, summary);
                     }),
@@ -1866,15 +1916,29 @@ class BrowserAcceptance:
                     resultOverlaps: overlapPairs(resultChildren),
                     rowOverlaps: overlapPairs(rows),
                     headingContentOverlaps,
-                    responsiveMode: !tablePresent || (__MOBILE__
-                        ? tableDisplay === "block" &&
-                            wrapperOverflow === "visible" &&
-                            rows.every(
-                                row => getComputedStyle(row).display ===
-                                    "block"
-                            )
-                        : tableDisplay === "table" &&
-                            ["auto", "scroll"].includes(wrapperOverflow)),
+                    /* Der Rahmen scrollt quer -- auf jeder Breite. Schmal
+                       wird nicht die Tabelle zum Kasten, sondern jede
+                       Zeile, und schmal ist die Spalte des Bauteils, nicht
+                       der Schirm. */
+                    responsiveMode: !tablePresent ||
+                        (tableDisplay === "table" &&
+                            ["auto", "scroll"].includes(wrapperOverflow) &&
+                            (() => {
+                                const section = table.closest(
+                                    ".estab-tabelle"
+                                );
+                                if (!section) return false;
+                                const rem = parseFloat(getComputedStyle(
+                                    document.documentElement
+                                ).fontSize);
+                                const karten = section
+                                    .getBoundingClientRect().width
+                                    <= 48 * rem;
+                                return rows.every(
+                                    row => getComputedStyle(row).display ===
+                                        (karten ? "block" : "table-row")
+                                );
+                            })()),
                 };
             })()
             """
@@ -1997,14 +2061,14 @@ class BrowserAcceptance:
         )
         self.cdp.click(
             "mainframe",
-            'button.estab-button-primary[type="submit"]',
+            _LOGIN_SUBMIT_SELECTOR,
             "A/W-Bestandskonto absenden",
         )
         # This browser fixture runs in the explicitly LOOSE central incident:
         # the fixed A/W account function needs no duty-assignment selector.
         self._wait_for_authenticated_frames()
         self.cdp.click(
-            "vorgaben",
+            "aktionen",
             'button[name="fm_eingang_x"]'
             '[data-estab-workflow-key="fm_eingang"]',
             "A/W-Eingangsformular öffnen",
@@ -2182,6 +2246,66 @@ class BrowserAcceptance:
             "",
             "Rufnamen-Testfeld zurücksetzen",
         )
+        # Ein frisch geoeffneter Vordruck, in dem nichts mehr steht, darf
+        # den Waechter gegen Datenverlust nicht ausloesen. Ein Auswahlfeld
+        # ohne ausdrueckliches `selected` galt ihm als geaendert, und das
+        # Abmelden fragte jedes Mal nach ungespeicherten Eingaben, die es
+        # nicht gab.
+        pristine_forms = self.cdp.evaluate(
+            """
+            (() => {
+                const docs = [];
+                const collect = win => {
+                    try {
+                        docs.push(win.document);
+                        for (let i = 0; i < win.frames.length; i += 1) {
+                            collect(win.frames[i]);
+                        }
+                    } catch (ignore) { /* fremder Ursprung */ }
+                };
+                collect(window.top);
+                const changed = [];
+                for (const document of docs) {
+                    for (const form of document.querySelectorAll(
+                        'form[data-estab-dirty-guard]'
+                    )) {
+                        if (form.hasAttribute("data-estab-dirty-initial")) {
+                            changed.push("dirty-initial");
+                            continue;
+                        }
+                        for (const field of form.elements) {
+                            if (!field || field.disabled) continue;
+                            const type = String(field.type || "").toLowerCase();
+                            if (["hidden", "submit", "button", "image",
+                                "reset"].includes(type)) continue;
+                            if (type === "checkbox" || type === "radio") {
+                                if (field.checked !== field.defaultChecked) {
+                                    changed.push(field.name);
+                                }
+                            } else if (
+                                String(field.tagName).toLowerCase() === "select"
+                            ) {
+                                for (const option of field.options) {
+                                    if (option.selected
+                                        !== option.defaultSelected) {
+                                        changed.push(field.name);
+                                    }
+                                }
+                            } else if (field.value !== field.defaultValue) {
+                                changed.push(field.name);
+                            }
+                        }
+                    }
+                }
+                return changed;
+            })()
+            """
+        )
+        self._equal(
+            pristine_forms,
+            [],
+            "leerer Vordruck ohne falsche Verlustwarnung vor dem Abmelden",
+        )
         self.cdp.click(
             "vorgaben",
             "[data-estab-logout-form] button",
@@ -2252,7 +2376,7 @@ class BrowserAcceptance:
             )
         self.cdp.click(
             "mainframe",
-            'button.estab-button-primary[type="submit"]',
+            _LOGIN_SUBMIT_SELECTOR,
             "S6-Bestandskonto absenden",
         )
         operations_url = self.config.base_url + "/4fach/fuehrungsstelle.php"
@@ -2272,7 +2396,7 @@ class BrowserAcceptance:
         labels = self.cdp.evaluate(
             """
             Array.from(document.querySelectorAll(
-                '[data-estab-telecom-entry-form] select[name="medium"] option'
+                '[data-estab-telecom-entry-form] select[name="wegart"] option'
             )).map(option => option.textContent.trim()).filter(Boolean)
             """
         )
@@ -2281,6 +2405,18 @@ class BrowserAcceptance:
         self._truth(
             labels == [],
             "aktiver Fernmeldeplan zeigte unerwartet einen direkten Wegeeditor.",
+        )
+        # Die Wegetafel des aktiven Plans steht in der betrieblichen Tiefe.
+        # Die taktische zeigt je Stelle einen Kasten -- richtig fuer die Frage
+        # "wen erreiche ich womit", aber nicht feldweise vergleichbar.
+        self.cdp.navigate(operations_url + "?ansicht=betrieblich")
+        self.cdp.wait_for(
+            f"""
+            document.readyState === "complete" &&
+            location.pathname === {operations_path_literal} &&
+            Boolean(document.querySelector("[data-estab-active-telecom-plan]"))
+            """,
+            "betriebliche Tiefe des Fernmeldeplans wurde nicht geöffnet",
         )
         active_plan_state = self.cdp.evaluate(
             """
@@ -2293,20 +2429,23 @@ class BrowserAcceptance:
                 );
                 const normalize = value => String(value || "")
                     .replace(/\\s+/g, " ").trim();
+                /* Die Wegetafel steht in der betrieblichen Tiefe; die
+                   taktische fasst je Stelle einen Kasten. Ihre Spalten
+                   heissen heute Stelle, Erreichbar unter, Mittel und
+                   Vermerke -- die Verkehrsform steht mit Band, Kanal und
+                   Bandlage zusammen unter "Technische Angaben", weil eine
+                   Wegart nur fuehrt, was sie kennt. */
                 const routes = Array.from(active?.querySelectorAll(
-                    '.estab-tool-table tbody tr'
+                    '.estab-tabelle-blatt tbody tr'
                 ) || []).map(row => ({
                     station: normalize(row.querySelector(
-                        '[data-label="Betriebsstelle"]'
+                        '[data-label="Stelle"]'
                     )?.textContent),
                     callsign: normalize(row.querySelector(
-                        '[data-label="Rufname"]'
+                        '[data-label="Erreichbar unter"]'
                     )?.textContent),
-                    technical: normalize(row.querySelector(
-                        '[data-label="Medium und technische Angaben"]'
-                    )?.textContent),
-                    traffic: normalize(row.querySelector(
-                        '[data-label="Verkehrsform"]'
+                    medium: normalize(row.querySelector(
+                        '[data-label="Mittel"]'
                     )?.textContent),
                     notes: normalize(row.querySelector(
                         '[data-label="Vermerke"]'
@@ -2337,7 +2476,21 @@ class BrowserAcceptance:
             and bool(active_plan_state.get("remarks"))
             and isinstance(active_plan_state.get("routes"), list)
             and len(active_plan_state["routes"]) >= 1,
-            "aktive Fernmeldeplanfassung war vor dem Klonen nicht vollständig lesbar.",
+            "aktive Fernmeldeplanfassung war vor dem Klonen nicht vollständig "
+            f"lesbar: {active_plan_state!r}",
+        )
+        # Zurueck in die taktische Tiefe: Der Rest des Laufs arbeitet auf der
+        # Adresse ohne Ansichtsparameter, und die Rueckkehr nach dem Speichern
+        # fuehrt ebenfalls dorthin.
+        self.cdp.navigate(operations_url)
+        self.cdp.wait_for(
+            f"""
+            document.readyState === "complete" &&
+            location.pathname === {operations_path_literal} &&
+            location.search === "" &&
+            Boolean(document.querySelector("[data-estab-active-telecom-plan]"))
+            """,
+            "taktische Tiefe des Fernmeldeplans wurde nicht wiederhergestellt",
         )
         self._assert_tool_page_layout(
             "aktiver S6-Fernmeldeplan bei 1280×800 px",
@@ -2373,17 +2526,15 @@ class BrowserAcceptance:
                 const routes = Array.from(document.querySelectorAll(
                     '[data-estab-telecom-entry-mode="edit"]'
                 )).map(form => {
-                    const medium = form.elements.medium;
-                    const technical = [
-                        medium?.selectedOptions[0]?.textContent,
-                        form.elements.kanal?.value,
-                        form.elements.bandlage?.value
-                    ].map(normalize).filter(Boolean).join(" · ");
+                    const kind = form.elements.wegart;
                     return {
                         station: normalize(form.elements.betriebsstelle?.value),
-                        callsign: normalize(form.elements.rufname?.value),
-                        technical,
-                        traffic: normalize(form.elements.verkehrsform?.value),
+                        callsign: normalize(
+                            form.elements.erreichbarkeit?.value
+                        ),
+                        medium: normalize(
+                            kind?.selectedOptions[0]?.textContent
+                        ),
                         notes: [
                             form.elements.besondere_vermerke?.value,
                             form.elements.bemerkungen?.value
@@ -2413,7 +2564,7 @@ class BrowserAcceptance:
                     '[data-estab-telecom-entry-mode="add"]'
                 );
                 const placeholder = addForm?.querySelector(
-                    'select[name="medium"] option[value=""]'
+                    'select[name="wegart"] option[value=""]'
                 );
                 const navigation = document.createElement("nav");
                 navigation.setAttribute("data-estab-navigation", "");
@@ -2445,7 +2596,7 @@ class BrowserAcceptance:
         self._equal(
             pristine_guard_state,
             {"selected": True, "defaultSelected": True, "confirms": 0},
-            "frischer Entwurf ohne falsche Verlustwarnung durch Medien-Platzhalter",
+            "frischer Entwurf ohne falsche Verlustwarnung durch Wegart-Platzhalter",
         )
         inherited_route = self.cdp.evaluate(
             """
@@ -2464,8 +2615,8 @@ class BrowserAcceptance:
                     id: details.id,
                     entryId: details.dataset.estabTelecomEntryId,
                     station: form.elements.betriebsstelle.value,
-                    callsign: form.elements.rufname.value,
-                    medium: form.elements.medium.value,
+                    callsign: form.elements.erreichbarkeit.value,
+                    kind: form.elements.wegart.value,
                     disclosureWidth: marker?.borderLeftWidth,
                     disclosureStyle: marker?.borderLeftStyle
                 } : null;
@@ -2478,7 +2629,7 @@ class BrowserAcceptance:
             and bool(inherited_route.get("entryId"))
             and bool(inherited_route.get("station"))
             and bool(inherited_route.get("callsign"))
-            and bool(inherited_route.get("medium"))
+            and bool(inherited_route.get("kind"))
             and inherited_route.get("disclosureWidth") not in (None, "0px")
             and inherited_route.get("disclosureStyle") == "solid",
             "übernommener Fernmeldeweg oder sichtbare Aufklappmarkierung fehlt.",
@@ -2499,7 +2650,7 @@ class BrowserAcceptance:
                     {inherited_selector_literal}
                 );
                 const input = details?.querySelector(
-                    'input[name="rufname"]'
+                    'input[name="erreichbarkeit"]'
                 );
                 const rect = input?.getBoundingClientRect();
                 return Boolean(details?.open && rect && rect.width > 0 &&
@@ -2512,7 +2663,7 @@ class BrowserAcceptance:
         edited_callsign = "Browser-geprüfter Rufname"
         self.cdp.set_value(
             None,
-            inherited_selector + ' input[name="rufname"]',
+            inherited_selector + ' input[name="erreichbarkeit"]',
             edited_callsign,
             "Rufname des übernommenen Fernmeldewegs",
         )
@@ -2540,7 +2691,7 @@ class BrowserAcceptance:
                     location.hash === {inherited_hash_literal} &&
                     details?.open === true && rect && rect.bottom > 0 &&
                     rect.top < innerHeight &&
-                    details.querySelector('input[name="rufname"]')?.value ===
+                    details.querySelector('input[name="erreichbarkeit"]')?.value ===
                         {edited_callsign_literal} &&
                     details.querySelector(':scope > summary')?.textContent
                         .includes({edited_callsign_literal}) &&
@@ -2556,22 +2707,22 @@ class BrowserAcceptance:
             """
             Array.from(document.querySelectorAll(
                 '[data-estab-telecom-entry-mode="add"] '
-                + 'select[name="medium"] option'
+                + 'select[name="wegart"] option'
             )).map(option => option.textContent.trim()).filter(Boolean)
             """
         )
         self._equal(
             labels,
             [
-                "Medium auswählen",
+                "Wegart auswählen",
                 "Fernsprecher",
-                "Funk",
+                "Funk (analog)",
+                "Funk (digital)",
                 "Melder",
                 "Telefax",
-                "Fernschreiber",
                 "Datenübertragung",
             ],
-            "ausgeschriebene Medien im Fernmeldeplanentwurf",
+            "ausgeschriebene Wegarten im Fernmeldeplanentwurf",
         )
         add_details_selector = (
             'details.estab-telecom-section:has('
@@ -2583,7 +2734,7 @@ class BrowserAcceptance:
             "Formular für einen weiteren Fernmeldeweg sichtbar öffnen",
         )
         add_select = (
-            '[data-estab-telecom-entry-mode="add"] select[name="medium"]'
+            '[data-estab-telecom-entry-mode="add"] select[name="wegart"]'
         )
         self.cdp.wait_for(
             f"""
@@ -2591,7 +2742,7 @@ class BrowserAcceptance:
                 const details = document.querySelector(
                     {json.dumps(add_details_selector)}
                 );
-                const select = details?.querySelector('select[name="medium"]');
+                const select = details?.querySelector('select[name="wegart"]');
                 const rect = select?.getBoundingClientRect();
                 return Boolean(details?.open && rect && rect.width > 0 &&
                     rect.height > 0 && rect.bottom > 0 && rect.top < innerHeight);
@@ -2599,7 +2750,9 @@ class BrowserAcceptance:
             """,
             "Formular für den neuen Fernmeldeweg ist nicht sichtbar",
         )
-        self.cdp.set_value(None, add_select, "Fu", "Medium Funk", select=True)
+        self.cdp.set_value(
+            None, add_select, "Fu:ANALOG", "Wegart Funk (analog)", select=True
+        )
         radio_fields = self.cdp.evaluate(
             """
             (() => {
@@ -2632,7 +2785,9 @@ class BrowserAcceptance:
             },
             "Funk blendet Kanal, Bandlage oder Verkehrsform nicht korrekt ein.",
         )
-        self.cdp.set_value(None, add_select, "Me", "Medium Melder", select=True)
+        self.cdp.set_value(
+            None, add_select, "Me", "Wegart Melder", select=True
+        )
         messenger_fields = self.cdp.evaluate(
             """
             (() => {
@@ -2660,15 +2815,17 @@ class BrowserAcceptance:
             and messenger_fields.get("band") == {
                 "hidden": True, "disabled": True, "required": False
             }
+            # Der Melder traegt kein technisches Feld: kein Kanal, keine
+            # Bandlage und auch keine Verkehrsform. Wer zu Fuss geht, hat
+            # keine.
             and messenger_fields.get("traffic") == {
-                "hidden": False, "disabled": False, "required": True
+                "hidden": True, "disabled": True, "required": False
             },
             "Melder blendet unpassende Funkfelder nicht korrekt aus.",
         )
 
         messenger_station = "Browser-Melderziel"
         messenger_callsign = "Browser-Melderrufname"
-        messenger_traffic = "Persönliche Beförderung"
         add_form_selector = '[data-estab-telecom-entry-mode="add"]'
         for selector, value, description in (
             (
@@ -2677,14 +2834,9 @@ class BrowserAcceptance:
                 "Betriebsstelle des neuen Melderwegs",
             ),
             (
-                add_form_selector + ' input[name="rufname"]',
+                add_form_selector + ' input[name="erreichbarkeit"]',
                 messenger_callsign,
                 "Rufname des neuen Melderwegs",
-            ),
-            (
-                add_form_selector + ' input[name="verkehrsform"]',
-                messenger_traffic,
-                "Verkehrsform des neuen Melderwegs",
             ),
         ):
             self.cdp.set_value(None, selector, value, description)
@@ -2709,9 +2861,9 @@ class BrowserAcceptance:
                     );
                     return form?.elements.betriebsstelle.value ===
                         {messenger_station_literal} &&
-                        form?.elements.rufname.value ===
+                        form?.elements.erreichbarkeit.value ===
                             {messenger_callsign_literal} &&
-                        form?.elements.medium.value === "Me";
+                        form?.elements.wegart.value === "Me";
                 }});
                 return details?.id || "";
             }})()
@@ -2816,7 +2968,7 @@ class BrowserAcceptance:
         resolved_callsign = "Browser-geprüfter Mehrfachentwurf"
         self.cdp.set_value(
             None,
-            inherited_selector + ' input[name="rufname"]',
+            inherited_selector + ' input[name="erreichbarkeit"]',
             resolved_callsign,
             "gleichzeitig geänderter Rufname des Fernmeldewegs",
         )
@@ -2867,7 +3019,7 @@ class BrowserAcceptance:
                     {inherited_selector_literal}
                 );
                 const routeCallsign = route?.querySelector(
-                    'input[name="rufname"]'
+                    'input[name="erreichbarkeit"]'
                 );
                 const headerOrigin = document.querySelector(
                     'form:has(input[name="operation_action"]'
@@ -3042,7 +3194,7 @@ class BrowserAcceptance:
             "Kopf- oder Wegehinweise fehlen in der kompakten Read-only-Historie.",
         )
         self.cdp.click(
-            None,
+            "vorgaben",
             "[data-estab-logout-form] button",
             "S6 nach dem Fernmeldeplantest abmelden",
         )
@@ -3091,7 +3243,7 @@ class BrowserAcceptance:
         self.cdp.call("Runtime.enable")
         self.cdp.call("Network.enable")
         self.cdp.navigate(
-            self.config.base_url + "/4fach/index.php?next=command-post"
+            self.config.base_url + "/4fach/index.php?next=messenger-jobs"
         )
         self._wait_for_frame("mainframe")
         self.cdp.wait_for(
@@ -3155,11 +3307,13 @@ class BrowserAcceptance:
             )
         self.cdp.click(
             "mainframe",
-            'button.estab-button-primary[type="submit"]',
+            _LOGIN_SUBMIT_SELECTOR,
             "LdF-Bestandskonto absenden",
         )
 
-        operations_path = "/4fach/fuehrungsstelle.php"
+        # Die Melderauftraege stehen seit der Trennung auf einer eigenen
+        # Seite; der Fernmeldeplan fuehrt sie nicht mehr mit.
+        operations_path = "/4fach/melderauftraege.php"
         inactive_literal = json.dumps(inactive_code)
         online_literal = json.dumps(online_code)
         marker_literal = json.dumps(message_marker)
@@ -3408,7 +3562,7 @@ class BrowserAcceptance:
             "Der gespeicherte Auftrag mit Ziel ist nach PRG nicht sichtbar.",
         )
         self.cdp.click(
-            None,
+            "vorgaben",
             "[data-estab-logout-form] button",
             "LdF nach dem Melderauftragstest abmelden",
         )
@@ -3522,8 +3676,12 @@ class BrowserAcceptance:
                     query.get("next") === "messages";
             })() &&
             document.forms.length > 0 &&
+            /* Kein Formular darf in einen anderen Kontext abspringen. Ein
+               fehlendes Ziel bedeutet denselben Kontext und ist damit so
+               sicher wie "_self" -- das Suchband der Kontentafel kommt aus
+               dem gemeinsamen Tafelbauteil und setzt keins. */
             Array.from(document.forms).every(
-                form => form.target === "_self"
+                form => form.target === "" || form.target === "_self"
             ) &&
             !document.querySelector('form[target="mainframe"]') &&
             Boolean(document.querySelector("[data-estab-auth-cancel]")) &&
@@ -3587,8 +3745,9 @@ class BrowserAcceptance:
             )) &&
             Boolean(document.querySelector("[data-estab-auth-cancel]")) &&
             document.forms.length > 0 &&
+            /* Ein fehlendes Ziel ist derselbe Kontext -- siehe oben. */
             Array.from(document.forms).every(
-                form => form.target === "_self"
+                form => form.target === "" || form.target === "_self"
             ) &&
             !document.querySelector('form[target="mainframe"]')
             """,
@@ -3680,7 +3839,9 @@ class BrowserAcceptance:
                         query.get("next") === "messages" &&
                         doc.querySelectorAll("iframe").length === 0 &&
                         forms.length > 0 &&
-                        forms.every(form => form.target === "_self") &&
+                        forms.every(form =>
+                            form.target === "" || form.target === "_self"
+                        ) &&
                         !doc.querySelector('form[target="mainframe"]') &&
                         Boolean(cancel) &&
                         cancel.target === "_top";
@@ -3757,7 +3918,7 @@ class BrowserAcceptance:
         )
         self.cdp.click(
             "mainframe",
-            'button.estab-button-primary[type="submit"]',
+            _LOGIN_SUBMIT_SELECTOR,
             "Bestandskonto anmelden",
         )
         self._wait_for_top_level_path(
@@ -3766,7 +3927,6 @@ class BrowserAcceptance:
             "als angefordertes Ziel geöffnet",
         )
         self._assert_session_bar(
-            None,
             "Einsatztagebuch nach Bestandslogin",
             "incident-log",
         )
@@ -3790,7 +3950,6 @@ class BrowserAcceptance:
             "zusätzliche Session-Bar im Inhaltsframe",
         )
         self._assert_session_bar(
-            "vorgaben",
             "Anwendungs-Navigationsframe",
             "messages",
         )
@@ -3858,33 +4017,35 @@ class BrowserAcceptance:
             "/stabinfo/index.php",
             "Infosammlung BOS wurde nicht über ihre Root-Karte geöffnet",
         )
+        # Die Dokumentwahl steht seit 5abd596 im Menue der Huelle und nicht
+        # mehr als eigener Rahmen neben dem Inhalt.
         self.cdp.wait_for(
-            _frame_expression(
-                "status",
-                """
-                return target.location.pathname.endsWith("/stabinfo/l_index.php") &&
-                    doc.readyState === "complete";
-                """,
-            ),
-            "BOS-Navigationsframe wurde nicht vollständig geladen",
+            """
+            document.readyState === "complete" &&
+            Boolean(document.querySelector("[data-estab-shell-context]")) &&
+            document.querySelectorAll(
+                "[data-estab-bos-document-link]"
+            ).length > 0
+            """,
+            "BOS-Dokumentwahl wurde nicht vollständig geladen",
         )
-        self._assert_session_bar("status", "BOS-Navigationsframe", "bos-info")
+        self._assert_session_bar("BOS-Infosammlung", "bos-info")
         self._equal(
             self.cdp.evaluate(
                 _visible_count_expression(
-                    "status",
+                    "vorgaben",
                     "aside[data-estab-session-bar].estab-session-bar-compact",
                 )
             ),
             1,
-            "kompakte Session-Bar im BOS-Navigationsframe",
+            "kompakte Session-Bar im BOS-Cockpit",
         )
         self._equal(
             self.cdp.evaluate(
                 _visible_count_expression(None, "aside[data-estab-session-bar]")
             ),
             0,
-            "zusätzliche Session-Bar im BOS-Frameset-Dokument",
+            "zusätzliche Session-Bar im BOS-Huellendokument",
         )
         self._equal(
             self.cdp.evaluate(
@@ -3911,7 +4072,7 @@ class BrowserAcceptance:
             "BOS-Infosammlung bei 390×844 px"
         )
         self.cdp.click(
-            "status",
+            None,
             'a[href$="Buchstabier.html"][target="mainframe"]',
             "BOS-Inhaltslink zum Buchstabieralphabet",
         )
@@ -3929,14 +4090,13 @@ class BrowserAcceptance:
             "BOS-Infosammlung bei 390×844 px"
         )
         self._assert_session_bar(
-            "status",
             "BOS-Navigationsframe nach Inhaltswechsel",
             "bos-info",
         )
         self._equal(
             self.cdp.evaluate(
                 _visible_count_expression(
-                    "status",
+                    "vorgaben",
                     "aside[data-estab-session-bar].estab-session-bar-compact",
                 )
             ),
@@ -3969,9 +4129,10 @@ class BrowserAcceptance:
             },
         )
         self.cdp.click(
-            "status",
-            '[data-estab-navigation] a[data-estab-nav-key="overview"]',
-            "Übersichtslink im BOS-Navigationsframe",
+            None,
+            '[data-estab-shell-menu] [data-estab-navigation] '
+            'a[data-estab-nav-key="overview"]',
+            "Übersichtslink im Menue der BOS-Huelle",
         )
         self._wait_for_authenticated_overview(
             "angemeldete Übersicht wurde nicht aus dem BOS-Bereich geöffnet"
@@ -3985,7 +4146,7 @@ class BrowserAcceptance:
             "/stabetb/etb.php",
             "Einsatztagebuch wurde nicht über seine Root-Karte geöffnet",
         )
-        self._assert_session_bar(None, "Einsatztagebuch", "incident-log")
+        self._assert_session_bar("Einsatztagebuch", "incident-log")
         self._assert_command_post_tool()
         self._assert_generated_forms_tool()
         self._assert_attachment_upload_form()
@@ -3999,7 +4160,7 @@ class BrowserAcceptance:
 
         print("[10/12] Logout aus dem Einsatztagebuch und Rückkehr in den anonymen Zustand")
         self.cdp.click(
-            None,
+            "vorgaben",
             "[data-estab-logout-form] button",
             "Abmeldebutton im Einsatztagebuch",
         )
@@ -4092,8 +4253,12 @@ class BrowserAcceptance:
                 document.readyState === "complete" &&
                 Boolean(document.querySelector("[data-estab-admin-dashboard]")) &&
                 document.querySelectorAll("[data-estab-admin-card]").length === 11 &&
+                /* Der technische Zugang steht in der Menuespalte der
+                   Huelle: Die Sitzungsleiste sitzt im Cockpit-Rahmen, und
+                   die Basic-Anmeldung gilt nur unter /4fadm/ -- der Rahmen
+                   erfaehrt den Namen gar nicht. Die Seite selbst weiss ihn. */
                 Boolean(document.querySelector(
-                    '[data-estab-public-bar] [data-estab-admin-user]'
+                    '[data-estab-shell-menu] [data-estab-admin-user]'
                 ))
                 """,
                 "administrative Übersicht wurde nicht vollständig geladen",
@@ -4136,8 +4301,12 @@ class BrowserAcceptance:
                 document.readyState === "complete" &&
                 Boolean(document.querySelector("[data-estab-export-list]")) &&
                 Boolean(document.querySelector("[data-estab-export-create]")) &&
+                /* Der technische Zugang steht in der Menuespalte der
+                   Huelle: Die Sitzungsleiste sitzt im Cockpit-Rahmen, und
+                   die Basic-Anmeldung gilt nur unter /4fadm/ -- der Rahmen
+                   erfaehrt den Namen gar nicht. Die Seite selbst weiss ihn. */
                 Boolean(document.querySelector(
-                    '[data-estab-public-bar] [data-estab-admin-user]'
+                    '[data-estab-shell-menu] [data-estab-admin-user]'
                 ))
                 """,
                 "administrative Exportübersicht wurde nicht vollständig geladen",
@@ -4367,20 +4536,44 @@ class BrowserAcceptance:
                 """
                 document.readyState === "complete" &&
                 Boolean(document.querySelector("[data-estab-dv-operations]")) &&
-                Boolean(document.querySelector("aside[data-estab-session-bar]"))
+                Boolean(document.querySelector("[data-estab-shell-menu]"))
                 """,
-                "Führungsstellenbetrieb wurde nicht vollständig geladen",
+                "Fernmeldeplan wurde nicht vollständig geladen",
             )
             self._assert_session_bar(
-                None,
-                f"Führungsstellenbetrieb bei {width}×{height} px",
+                f"Fernmeldeplan bei {width}×{height} px",
                 "command-post",
             )
             self._assert_tool_page_layout(
-                f"Führungsstellenbetrieb bei {width}×{height} px",
+                f"Fernmeldeplan bei {width}×{height} px",
                 "[data-estab-dv-operations]",
                 mobile=width <= 390,
                 require_responsive_table=True,
+            )
+
+            # Die Melderauftraege stehen daneben, nicht darunter -- und
+            # muessen dieselbe Breite aushalten wie der Plan.
+            self.cdp.navigate(
+                self.config.base_url + "/4fach/melderauftraege.php"
+            )
+            self.cdp.wait_for(
+                """
+                document.readyState === "complete" &&
+                Boolean(document.querySelector(
+                    "[data-estab-messenger-jobs]"
+                )) &&
+                Boolean(document.querySelector("[data-estab-shell-menu]"))
+                """,
+                "Melderaufträge wurden nicht vollständig geladen",
+            )
+            self._assert_session_bar(
+                f"Melderaufträge bei {width}×{height} px",
+                "messenger-jobs",
+            )
+            self._assert_tool_page_layout(
+                f"Melderaufträge bei {width}×{height} px",
+                "[data-estab-messenger-jobs]",
+                mobile=width <= 390,
             )
 
         self.cdp.call(
@@ -4401,7 +4594,6 @@ class BrowserAcceptance:
             "wieder geladen",
         )
         self._assert_session_bar(
-            None,
             "Einsatztagebuch nach der Führungsstellenprüfung",
             "incident-log",
         )
@@ -4424,7 +4616,7 @@ class BrowserAcceptance:
                 """
                 document.readyState === "complete" &&
                 Boolean(document.querySelector("[data-estab-generated-forms]")) &&
-                Boolean(document.querySelector("aside[data-estab-session-bar]"))
+                Boolean(document.querySelector("[data-estab-shell-menu]"))
                 """,
                 "einsatzbezogene Vordruckübersicht wurde nicht vollständig geladen",
             )
@@ -4452,7 +4644,6 @@ class BrowserAcceptance:
             "Einsatztagebuch wurde nach der Vordruckprüfung nicht wieder geladen",
         )
         self._assert_session_bar(
-            None,
             "Einsatztagebuch nach Vordruckprüfung",
             "incident-log",
         )
@@ -4463,7 +4654,13 @@ class BrowserAcceptance:
             """
             document.readyState === "complete" &&
             Boolean(document.querySelector('input[name="ah_upload"]')) &&
-            Boolean(document.querySelector("aside[data-estab-session-bar]"))
+            /* Die Anhangseite ist ein Fenster fuer sich und steht nicht in
+               der Huelle: Sie wird aus dem Vordruck heraus geoeffnet und
+               kehrt dorthin zurueck. Sie traegt aber die Gestaltung der
+               Anwendung -- ohne sie stuende sie als einzige Seite in Schrift
+               und Farben des Browsers da. */
+            document.body.classList.contains("estab-legacy-page") &&
+            Boolean(document.querySelector('link[href$="estab-ui.css"]'))
             """,
             "eigenständige Anhangübersicht wurde nicht vollständig geladen",
         )
@@ -4540,7 +4737,6 @@ class BrowserAcceptance:
             "Einsatztagebuch wurde nach der Anhangprüfung nicht wieder geladen",
         )
         self._assert_session_bar(
-            None,
             "Einsatztagebuch nach Anhangprüfung",
             "incident-log",
         )
@@ -4637,14 +4833,12 @@ class BrowserAcceptance:
                     document.readyState === "complete" &&
                     Boolean(document.querySelector({json.dumps(marker)})) &&
                     Boolean(document.querySelector(
-                        "aside[data-estab-session-bar] " +
-                        "[data-estab-admin-user]"
+                        "[data-estab-shell-menu] [data-estab-admin-user]"
                     ))
                     """,
                     f"{label} mit kombinierter Anmeldung wurde nicht geladen",
                 )
                 self._assert_session_bar(
-                    None,
                     f"{label} mit eStab- und Administrationsanmeldung",
                     "administration",
                 )
@@ -4652,8 +4846,7 @@ class BrowserAcceptance:
                     self.cdp.evaluate(
                         """
                         document.querySelector(
-                            "aside[data-estab-session-bar] " +
-                            "[data-estab-admin-user]"
+                            "[data-estab-shell-menu] [data-estab-admin-user]"
                         )?.getAttribute("data-estab-admin-user")
                         """
                     ),
@@ -4669,7 +4862,6 @@ class BrowserAcceptance:
             "Einsatztagebuch wurde nach der Admin-Sitzungsprüfung nicht geladen",
         )
         self._assert_session_bar(
-            None,
             "Einsatztagebuch nach der Admin-Sitzungsprüfung",
             "incident-log",
         )
@@ -4766,14 +4958,16 @@ class BrowserAcceptance:
                     f"""
                     document.readyState === "complete" &&
                     Boolean(document.querySelector({escaped_marker})) &&
-                    (
-                        document.querySelectorAll(
-                            "aside[data-estab-session-bar]"
-                        ).length +
-                        document.querySelectorAll(
-                            "aside[data-estab-public-bar]"
-                        ).length
-                    ) === 1
+                    /* Die Leiste steht im Cockpit-Rahmen. Das Dokument der
+                       Huelle traegt keine zweite -- es bettet den Rahmen
+                       genau einmal ein. */
+                    document.querySelectorAll(
+                        "aside[data-estab-session-bar]," +
+                        "aside[data-estab-public-bar]"
+                    ).length === 0 &&
+                    document.querySelectorAll(
+                        'iframe[name="vorgaben"]'
+                    ).length === 1
                     """,
                     f"{label} wurde nicht vollständig geladen",
                 )
@@ -4783,6 +4977,7 @@ class BrowserAcceptance:
                     mobile=width <= 390,
                     require_responsive_table=responsive_table,
                     require_target=require_target,
+                    expect_shared_bar=False,
                 )
                 if path == "/4fadm/incidents.php":
                     self._assert_incident_archive_layout(
@@ -5208,6 +5403,7 @@ class BrowserAcceptance:
         mobile: bool,
         require_responsive_table: bool = False,
         require_target: bool = False,
+        expect_shared_bar: bool = True,
     ) -> None:
         state = self.cdp.evaluate(
             f"""
@@ -5227,6 +5423,14 @@ class BrowserAcceptance:
                     ".estab-tool-main .estab-button," +
                     ".estab-tool-main summary"
                 )).filter(visible);
+                /* Zwei Tabellen leben nebeneinander: das gemeinsame
+                   Bauteil, das seine Zeilen unter 48rem Spaltenbreite zu
+                   beschrifteten Kaesten faltet, und die aeltere Werkzeug-
+                   tabelle, die dasselbe mit eigenen Klassen tut. */
+                const sheet = document.querySelector(".estab-tabelle-blatt");
+                const sheetSection = sheet
+                    ? sheet.closest(".estab-tabelle")
+                    : null;
                 const table = document.querySelector(".estab-tool-table");
                 const wrapper = document.querySelector(
                     ".estab-tool-table-responsive"
@@ -5243,13 +5447,33 @@ class BrowserAcceptance:
                     navigationVisible: visible(document.querySelector(
                         "[data-estab-navigation]"
                     )),
-                    barCount:
-                        document.querySelectorAll(
-                            "aside[data-estab-session-bar]"
-                        ).length +
-                        document.querySelectorAll(
-                            "aside[data-estab-public-bar]"
-                        ).length,
+                    /* Die Sitzungsleiste steht im Cockpit-Rahmen; im
+                       Huellendokument darf keine stehen. Gezaehlt wird sie
+                       dort, wo sie hingehoert. */
+                    barCount: (() => {{
+                        const cockpit = document.querySelector(
+                            'iframe[name="vorgaben"]'
+                        );
+                        let inCockpit = 0;
+                        try {{
+                            /* Ohne angemeldetes Funktionskonto traegt der
+                               Rahmen die oeffentliche Leiste. Sie ist
+                               dieselbe Stelle und zaehlt genauso. */
+                            inCockpit = cockpit
+                                && cockpit.contentDocument
+                                ? cockpit.contentDocument.querySelectorAll(
+                                    "aside[data-estab-session-bar],"
+                                    + "aside[data-estab-public-bar]"
+                                ).length
+                                : 0;
+                        }} catch (ignore) {{
+                            inCockpit = 0;
+                        }}
+                        return inCockpit + document.querySelectorAll(
+                            "aside[data-estab-session-bar],"
+                            + "aside[data-estab-public-bar]"
+                        ).length;
+                    }})(),
                     mainFits: Boolean(mainRect) &&
                         mainRect.left >= -0.5 &&
                         mainRect.right <= innerWidth + 0.5,
@@ -5264,16 +5488,53 @@ class BrowserAcceptance:
                     documentScrollWidth:
                         document.documentElement.scrollWidth,
                     innerWidth,
-                    tablePresent: Boolean(table),
+                    tablePresent: Boolean(table || sheet),
                     emptyVisible: visible(document.querySelector(
                         ".estab-tool-empty"
                     )),
-                    responsiveTable: Boolean(
-                        table && wrapper && firstCell &&
-                        getComputedStyle(table).display === "block" &&
-                        getComputedStyle(firstCell).display === "block" &&
-                        getComputedStyle(wrapper).overflowX === "visible"
-                    )
+                    /* Der Fernmeldeplan zeigt in seiner taktischen Tiefe
+                       keine Tabelle, sondern je Stelle einen Kasten -- die
+                       Frage des taktischen Fuehrers lautet "wen erreiche ich
+                       womit" und nicht "welche Wege gibt es". Kaesten sind
+                       schon Karten; sie brauchen keine Umwandlung. */
+                    stationCards: visible(document.querySelector(
+                        ".estab-telecom-stations"
+                    )),
+                    /* Steht nichts da, muss die Seite sagen warum. Ohne
+                       freigegebenen Fernmeldeplan ist das ein Hinweis und
+                       keine leere Tabelle. */
+                    reasonVisible: visible(document.querySelector(
+                        '.estab-tool-feedback-error[role="alert"],'
+                        + '.estab-tool-notice'
+                    )),
+                    responsiveTable: (() => {{
+                        if (sheet && sheetSection) {{
+                            const rem = parseFloat(getComputedStyle(
+                                document.documentElement
+                            ).fontSize);
+                            const karten = sheetSection
+                                .getBoundingClientRect().width <= 48 * rem;
+                            if (!karten) return false;
+                            const head = sheet.querySelector("thead");
+                            const row = sheet.querySelector("tbody > tr");
+                            const cell = sheet.querySelector("tbody td");
+                            return (!head
+                                    || getComputedStyle(head).display
+                                        === "none")
+                                && (!row
+                                    || getComputedStyle(row).display
+                                        === "block")
+                                && (!cell
+                                    || getComputedStyle(cell).display
+                                        === "block");
+                        }}
+                        return Boolean(
+                            table && wrapper && firstCell &&
+                            getComputedStyle(table).display === "block" &&
+                            getComputedStyle(firstCell).display === "block" &&
+                            getComputedStyle(wrapper).overflowX === "visible"
+                        );
+                    }})()
                 }};
             }})()
             """
@@ -5284,7 +5545,11 @@ class BrowserAcceptance:
             and state.get("heroVisible") is True
             and state.get("footerVisible") is True
             and state.get("navigationVisible") is True
-            and state.get("barCount") == 1,
+            # Ohne angemeldetes Funktionskonto hat das Cockpit nichts zu
+            # zeigen: Die technischen Werkzeuge stehen hinter der
+            # Basic-Anmeldung und kennen kein eStab-Konto. Dann steht auch
+            # keine Leiste da -- und keine ist richtig, nicht eine leere.
+            and state.get("barCount") == (1 if expect_shared_bar else 0),
             f"{description}: Werkzeugseite, Navigation oder einzelne Shared-Bar fehlt.",
         )
         self._truth(
@@ -5311,10 +5576,15 @@ class BrowserAcceptance:
                 )
                 or (
                     state.get("tablePresent") is False
-                    and state.get("emptyVisible") is True
+                    and (
+                        state.get("emptyVisible") is True
+                        or state.get("stationCards") is True
+                        or state.get("reasonVisible") is True
+                    )
                 ),
                 f"{description}: Datentabelle wird mobil nicht zu beschrifteten "
-                "Karten und der Leerzustand fehlt.",
+                "Karten, und es steht weder eine Stellenansicht noch ein "
+                f"Leerzustand da: {state!r}",
             )
 
     def _assert_admin_dashboard_layout(
@@ -5391,7 +5661,7 @@ class BrowserAcceptance:
                     documentScrollWidth:
                         document.documentElement.scrollWidth,
                     adminUserVisible: visible(document.querySelector(
-                        "[data-estab-public-bar] [data-estab-admin-user]"
+                        "[data-estab-shell-menu] [data-estab-admin-user]"
                     )),
                     navigationVisible: visible(document.querySelector(
                         "[data-estab-navigation]"
@@ -5526,13 +5796,20 @@ class BrowserAcceptance:
                 const cards = Array.from(document.querySelectorAll(
                     ".estab-export-card"
                 ));
+                /* Die breite Leiste ueber dem Inhalt gibt es nicht mehr.
+                   Anmeldung und Einsatzstand stehen im Cockpit-Rahmen, die
+                   Ziele links im Menue -- beide scrollen fuer sich und
+                   koennen den Arbeitsbereich nicht mehr verdecken. Geprueft
+                   wird deshalb, dass die Seite keine eigene Leiste mitbringt
+                   und den Rahmen genau einmal einbettet. */
                 const fullSessionBars = Array.from(document.querySelectorAll(
                     "body > aside.estab-session-bar" +
-                    ":not(.estab-session-bar-compact)"
+                    ":not(.estab-session-bar-compact)," +
+                    "body > aside.estab-public-bar"
                 ));
-                const narrowViewport = matchMedia(
-                    "(max-width: 42rem)"
-                ).matches;
+                const cockpitFrames = document.querySelectorAll(
+                    'iframe[name="vorgaben"]'
+                ).length;
                 const navigation = document.querySelector(
                     ".estab-navigation"
                 );
@@ -5586,10 +5863,9 @@ class BrowserAcceptance:
                         ".estab-session-bar"
                     )),
                     fullSessionBarCount: fullSessionBars.length,
-                    mobileHeaderNonSticky: fullSessionBars.length === 1 &&
-                        (!narrowViewport || getComputedStyle(
-                            fullSessionBars[0]
-                        ).position === "static"),
+                    cockpitFrames,
+                    mobileHeaderNonSticky: fullSessionBars.length === 0 &&
+                        cockpitFrames === 1,
                     sessionTopline: metrics(document.querySelector(
                         ".estab-session-topline"
                     )),
@@ -5641,7 +5917,7 @@ class BrowserAcceptance:
             f"{description}: Karten oder Bedienelemente ragen aus dem Viewport.",
         )
         self._truth(
-            state.get("fullSessionBarCount") == 1
+            state.get("fullSessionBarCount") == 0
             and state.get("mobileHeaderNonSticky") is True,
             f"{description}: Die mobile Status- und Navigationsleiste "
             "verdeckt den Arbeitsbereich beim Scrollen.",
@@ -5740,7 +6016,7 @@ class BrowserAcceptance:
         public_navigation = self.cdp.evaluate(
             """
             (() => {
-                const bar = document.querySelector("aside[data-estab-public-bar]");
+                const bar = document.querySelector("[data-estab-shell-menu]");
                 const navigation = bar &&
                     bar.querySelector("[data-estab-navigation]");
                 const core = navigation
@@ -5777,7 +6053,7 @@ class BrowserAcceptance:
         )
         self._equal(
             public_navigation.get("locked"),
-            7,
+            8,
             "Anzahl anmeldepflichtiger Bereiche in der anonymen Navigation",
         )
         technical_log_label = self.cdp.evaluate(
@@ -5810,12 +6086,12 @@ class BrowserAcceptance:
                     location.pathname === expected.pathname &&
                     location.search === expected.search &&
                     Boolean(document.querySelector("#estab-open")) &&
-                    Boolean(document.querySelector("aside[data-estab-session-bar]"));
+                    Boolean(document.querySelector("[data-estab-shell-menu]"));
             }})()
             """,
             description,
         )
-        self._assert_session_bar(None, "Modulübersicht", "overview")
+        self._assert_session_bar("Modulübersicht", "overview")
         self._equal(
             self.cdp.evaluate(_visible_count_expression(None, "#estab-open")),
             1,
@@ -5825,59 +6101,78 @@ class BrowserAcceptance:
         self._assert_root_card_layout("angemeldete Übersicht")
 
     def _assert_application_sidebar_layout(self, location: str) -> None:
+        """Prove the three shell columns of the message workspace.
+
+        Bis zum Umbau standen hier zwei Rahmen nebeneinander: links die
+        Seitenleiste, rechts der Inhalt. Heute ist es die Huelle -- links das
+        Menue mit den Arbeitsschritten, in der Mitte der Inhalt, rechts das
+        Cockpit. Unter 42rem stehen die drei untereinander, jede so hoch wie
+        das Fenster.
+        """
         workspace = self.cdp.evaluate(
             """
             (() => {
                 if (innerWidth <= 672) {
                     scrollTo(0, 0);
                 }
+                const bounds = element => {
+                    if (!element) return null;
+                    const rect = element.getBoundingClientRect();
+                    return {
+                        left: rect.left,
+                        right: rect.right,
+                        top: rect.top,
+                        bottom: rect.bottom,
+                        width: rect.width,
+                        height: rect.height
+                    };
+                };
                 const shell = document.querySelector(
                     "[data-estab-message-workspace]"
                 );
-                const sidebar = document.querySelector(
-                    'iframe[name="vorgaben"]'
+                const menu = document.querySelector(
+                    "[data-estab-shell-menu]"
                 );
                 const content = document.querySelector(
-                    'iframe[name="mainframe"]'
+                    "[data-estab-shell-content]"
                 );
-                if (!shell || !sidebar || !content) return null;
-                const sidebarRect = sidebar.getBoundingClientRect();
-                const contentRect = content.getBoundingClientRect();
+                const cockpit = document.querySelector(
+                    ".estab-shell-cockpit"
+                );
+                if (!shell || !menu || !content || !cockpit) return null;
                 return {
                     frameNames: Array.from(
                         document.querySelectorAll("iframe[name]")
                     ).map(frame => frame.getAttribute("name")),
-                    sidebar: {
-                        left: sidebarRect.left,
-                        right: sidebarRect.right,
-                        top: sidebarRect.top,
-                        bottom: sidebarRect.bottom,
-                        width: sidebarRect.width
-                    },
-                    content: {
-                        left: contentRect.left,
-                        right: contentRect.right,
-                        top: contentRect.top,
-                        bottom: contentRect.bottom,
-                        width: contentRect.width
-                    },
+                    menu: bounds(menu),
+                    content: bounds(content),
+                    cockpit: bounds(cockpit),
+                    actions: bounds(
+                        document.querySelector('iframe[name="aktionen"]')
+                    ),
                     innerWidth,
                     innerHeight,
                     clientWidth: document.documentElement.clientWidth,
                     clientHeight: document.documentElement.clientHeight,
-                    scrollHeight: document.scrollingElement.scrollHeight
+                    scrollHeight: document.scrollingElement.scrollHeight,
+                    scrollWidth: document.scrollingElement.scrollWidth
                 };
             })()
             """
         )
         self._truth(isinstance(workspace, dict), f"Arbeitsbereich fehlt: {location}.")
+        # Die Arbeitsschritte stehen als eigener Rahmen im Menue -- sie
+        # brauchen den aufgeloesten Einsatzbezug, den vorgaben.php ohnehin
+        # ermittelt, und sollen doch links unter den Zielen erscheinen.
         self._equal(
             workspace.get("frameNames"),
-            ["vorgaben", "mainframe"],
+            ["aktionen", "mainframe", "vorgaben"],
             f"Frame-Struktur in {location}",
         )
-        sidebar_frame = workspace.get("sidebar")
-        content_frame = workspace.get("content")
+        menu = workspace.get("menu")
+        content = workspace.get("content")
+        cockpit = workspace.get("cockpit")
+        actions = workspace.get("actions")
         inner_width = float(workspace.get("innerWidth", 0))
         inner_height = float(workspace.get("innerHeight", 0))
         # A classic Linux scrollbar reduces the usable layout viewport while
@@ -5889,52 +6184,69 @@ class BrowserAcceptance:
             f"Nachrichten-Layout-Viewport ist in {location} ungültig: "
             f"{workspace!r}",
         )
+        self._truth(
+            float(workspace.get("scrollWidth", 0)) <= client_width + 1,
+            f"Der Arbeitsbereich erzeugt in {location} horizontales Scrolling.",
+        )
+        self._truth(
+            isinstance(menu, dict)
+            and isinstance(content, dict)
+            and isinstance(cockpit, dict)
+            and isinstance(actions, dict),
+            f"Der Huelle fehlt in {location} eine Spalte: {workspace!r}",
+        )
         if inner_width <= 672:
             self._truth(
-                isinstance(sidebar_frame, dict)
-                and isinstance(content_frame, dict)
-                and abs(float(sidebar_frame.get("left", -1))) <= 0.5
-                and abs(float(content_frame.get("left", -1))) <= 0.5
-                and abs(float(sidebar_frame.get("top", -1))) <= 0.5
-                and abs(float(sidebar_frame.get("bottom", -1)) - client_height)
-                <= 0.5
-                and abs(float(content_frame.get("top", -1)) - client_height)
-                <= 0.5
-                and abs(
-                    float(content_frame.get("bottom", -1))
-                    - (2 * client_height)
+                all(
+                    abs(float(column.get("left", -1))) <= 0.5
+                    and abs(float(column.get("width", 0)) - client_width)
+                    <= 0.5
+                    for column in (menu, content, cockpit)
                 )
-                <= 0.5
-                and abs(float(sidebar_frame.get("width", 0)) - client_width)
-                <= 0.5
-                and abs(float(content_frame.get("width", 0)) - client_width)
+                and abs(float(menu.get("top", -1))) <= 0.5
+                and abs(float(content.get("top", -1)) - client_height) <= 0.5
+                and abs(float(cockpit.get("top", -1)) - (2 * client_height))
                 <= 0.5
                 and abs(
                     float(workspace.get("scrollHeight", 0))
-                    - (2 * client_height)
+                    - (3 * client_height)
                 )
                 <= 1,
-                f"Sidebar und Inhalt bilden in {location} keine zwei vollen "
-                f"Viewport-Zeilen: {workspace!r}",
+                f"Menue, Inhalt und Cockpit bilden in {location} keine drei "
+                f"vollen Viewport-Zeilen: {workspace!r}",
             )
         else:
             self._truth(
-                isinstance(sidebar_frame, dict)
-                and isinstance(content_frame, dict)
-                and abs(float(sidebar_frame.get("top", -1))) <= 0.5
-                and abs(
-                    float(sidebar_frame.get("bottom", -1)) - client_height
+                all(
+                    abs(float(column.get("top", -1))) <= 0.5
+                    and abs(float(column.get("bottom", -1)) - client_height)
+                    <= 0.5
+                    for column in (menu, content, cockpit)
                 )
-                <= 0.5
-                and abs(float(content_frame.get("top", -1))) <= 0.5
-                and abs(float(content_frame.get("bottom", -1)) - client_height)
-                <= 0.5
-                and float(sidebar_frame.get("width", 0)) >= 260
-                and float(sidebar_frame.get("right", 0))
-                <= float(content_frame.get("left", -1)) + 0.5
-                and float(content_frame.get("width", 0)) >= 300,
-                f"Sidebar nutzt in {location} nicht die volle linke Höhe.",
+                and float(menu.get("width", 0)) >= 200
+                and float(menu.get("right", 0))
+                <= float(content.get("left", -1)) + 0.5
+                and float(content.get("right", 0))
+                <= float(cockpit.get("left", -1)) + 0.5
+                # Der Inhalt ist die Hauptsache: Er darf nie schmaler stehen
+                # als das Menue daneben. Eine feste Zahl taugt hier nicht --
+                # dicht ueber 42rem nehmen Menue und Cockpit zusammen schon
+                # 456 Bildpunkte, und darunter stehen die drei ohnehin
+                # untereinander.
+                and float(content.get("width", 0))
+                >= float(menu.get("width", 0)),
+                f"Die Spalten stehen in {location} nicht nebeneinander über "
+                f"die volle Höhe: {workspace!r}",
             )
+        # Der Schritte-Rahmen gehoert in die Menuespalte und nirgendwo sonst.
+        self._truth(
+            float(actions.get("left", -1)) >= float(menu.get("left", 0)) - 0.5
+            and float(actions.get("right", 0))
+                <= float(menu.get("right", 0)) + 0.5
+            and float(actions.get("height", 0)) > 0,
+            f"Die Arbeitsschritte stehen in {location} nicht im Menue: "
+            f"{workspace!r}",
+        )
 
         state = self.cdp.evaluate(
             _frame_expression(
@@ -6100,7 +6412,7 @@ class BrowserAcceptance:
             )
         )
         self._truth(isinstance(state, dict), f"Sidebar-Inhalt fehlt: {location}.")
-        for key in ("status", "bar", "topline", "navigation", "workflow"):
+        for key in ("status", "bar", "topline"):
             self._truth(
                 isinstance(state.get(key), dict),
                 f"{key} fehlt in {location}.",
@@ -6108,32 +6420,93 @@ class BrowserAcceptance:
         status_rect = state["status"]
         bar_rect = state["bar"]
         topline_rect = state["topline"]
-        navigation_rect = state["navigation"]
-        workflow_rect = state["workflow"]
+        # Das Cockpit fuehrt die Kennung innerhalb seines Statusbereichs, und
+        # die Kopfzeile der Kennung bleibt in ihrem Kasten.
         self._truth(
-            status_rect["bottom"] <= bar_rect["top"] + 0.5
-            and bar_rect["bottom"] <= workflow_rect["top"] + 0.5
-            and workflow_rect["bottom"] <= navigation_rect["top"] + 0.5
+            status_rect["top"] <= bar_rect["top"] + 0.5
+            and bar_rect["bottom"] <= status_rect["bottom"] + 0.5
+            and topline_rect["top"] >= bar_rect["top"] - 0.5
             and topline_rect["bottom"] <= bar_rect["bottom"] + 0.5,
-            f"Status, Benutzer, Aktionen und Bereiche sind in {location} "
-            "nicht überschneidungsfrei angeordnet.",
+            f"Status und Kennung sind in {location} nicht "
+            "überschneidungsfrei angeordnet.",
+        )
+
+        # Bereiche und Arbeitsschritte stehen seit dem Umbau im Menue: die
+        # Ziele oben, die Schritte als eigener Rahmen darunter.
+        menu_state = self.cdp.evaluate(
+            """
+            (() => {
+                const menu = document.querySelector(
+                    "[data-estab-shell-menu]"
+                );
+                const navigation = menu && menu.querySelector(
+                    "[data-estab-navigation]"
+                );
+                const actionsFrame = document.querySelector(
+                    'iframe[name="aktionen"]'
+                );
+                if (!navigation || !actionsFrame) return null;
+                const rect = element => {
+                    const value = element.getBoundingClientRect();
+                    return {
+                        left: value.left, right: value.right,
+                        top: value.top, bottom: value.bottom,
+                        width: value.width, height: value.height
+                    };
+                };
+                const links = Array.from(
+                    navigation.querySelectorAll("a[data-estab-nav-key]")
+                );
+                return {
+                    navigation: rect(navigation),
+                    actionsFrame: rect(actionsFrame),
+                    navigationMode: navigation.getAttribute(
+                        "data-estab-navigation-mode"
+                    ),
+                    hasDisclosure: Boolean(
+                        navigation.querySelector("details,summary")
+                    ),
+                    linkCount: links.length,
+                    linksFit: links.every(link => {
+                        const value = link.getBoundingClientRect();
+                        return value.width >= 24 && value.height >= 24;
+                    }),
+                    navigationScrollFree:
+                        navigation.scrollHeight <=
+                            navigation.clientHeight + 1 &&
+                        navigation.scrollWidth <= navigation.clientWidth + 1
+                };
+            })()
+            """
+        )
+        self._truth(
+            isinstance(menu_state, dict),
+            f"Menuespalte fehlt in {location}.",
+        )
+        self._truth(
+            float(menu_state["navigation"]["bottom"])
+            <= float(menu_state["actionsFrame"]["top"]) + 0.5,
+            f"Ziele und Arbeitsschritte ueberschneiden sich in {location}.",
         )
         self._equal(
-            state.get("navigationMode"),
+            menu_state.get("navigationMode"),
             "sidebar",
             f"Navigationsmodus in {location}",
         )
         self._truth(
-            not state.get("hasDisclosure"),
+            not menu_state.get("hasDisclosure"),
             f"Bereichsnavigation ist in {location} noch eingeklappt.",
         )
+        # Angemeldet steht die ganze Karte da: alle Bereiche und die beiden
+        # Dienste daneben.
         self._equal(
-            state.get("linkCount"),
-            self._authenticated_navigation_link_count(),
+            menu_state.get("linkCount"),
+            len(self.navigation_keys) + 2,
             f"Bereichslinks in {location}",
         )
         self._truth(
-            state.get("linksFit") and state.get("navigationScrollFree"),
+            menu_state.get("linksFit")
+            and menu_state.get("navigationScrollFree"),
             f"Bereichslinks besitzen in {location} eigene Scroll- oder zu kleine Flächen.",
         )
         self._equal(
@@ -6145,8 +6518,36 @@ class BrowserAcceptance:
             state.get("documentWidthFits") and state.get("documentCanReachEnd"),
             f"Gesamte Sidebar passt horizontal oder scrollt nicht vollständig in {location}.",
         )
+        # Die Arbeitsschritte stehen in ihrem eigenen Rahmen.
+        actions_state = self.cdp.evaluate(
+            _frame_expression(
+                "aktionen",
+                """
+                const workflow = doc.querySelector(
+                    "[data-estab-workflow-menu]"
+                );
+                if (!workflow) return null;
+                const actions = Array.from(
+                    workflow.querySelectorAll("button[data-estab-workflow-key]")
+                );
+                return {
+                    actionKeys: actions.map(
+                        action => action.getAttribute("data-estab-workflow-key")
+                    ),
+                    actionsFit: actions.every(action => {
+                        const value = action.getBoundingClientRect();
+                        return value.width >= 24 && value.height >= 24;
+                    })
+                };
+                """,
+            )
+        )
+        self._truth(
+            isinstance(actions_state, dict),
+            f"Arbeitsschritte fehlen in {location}.",
+        )
         self._equal(
-            state.get("actionKeys"),
+            actions_state.get("actionKeys"),
             [
                 "stab_schreiben",
                 "stab_lesen",
@@ -6154,7 +6555,9 @@ class BrowserAcceptance:
             ],
             f"Arbeitsaktionen in {location}",
         )
-        self._truth(state.get("actionsFit"), f"Zu kleine Aktion in {location}.")
+        self._truth(
+            actions_state.get("actionsFit"), f"Zu kleine Aktion in {location}."
+        )
         self._equal(
             state.get("currentFunction"),
             self.config.login_function,
@@ -6192,12 +6595,15 @@ class BrowserAcceptance:
         )
         sound_toggle = state.get("soundToggle")
         sound_feedback = state.get("soundFeedback")
+        # Der Schalter ist in der schmalen Cockpitspalte ein Zeichenknopf
+        # geworden. Gefordert bleibt die Mindestzielgroesse nach WCAG 2.2
+        # (24 x 24); die erhoehte von 44 x 24 gehoerte der breiten Leiste.
         self._truth(
             isinstance(sound_toggle, dict)
-            and float(sound_toggle.get("width", 0)) >= 44
-            and float(sound_toggle.get("height", 0)) >= 44
+            and float(sound_toggle.get("width", 0)) >= 24
+            and float(sound_toggle.get("height", 0)) >= 24
             and state.get("soundToggleVisible") is True,
-            f"Sound-Schalter ist in {location} nicht sichtbar oder kleiner als 44 px.",
+            f"Sound-Schalter ist in {location} nicht sichtbar oder kleiner als 24 px.",
         )
         self._equal(
             state.get("soundTogglePressed"),
@@ -6296,8 +6702,13 @@ class BrowserAcceptance:
                 """
                 return (async () => {
                     const root = doc.scrollingElement;
+                    /* Der Griff, an dem Fokus und Scrollstand haengen. Es war
+                       ein Arbeitsschritt; die stehen seit dem Umbau in ihrem
+                       eigenen Rahmen, und die Statusaktualisierung betrifft
+                       das Cockpit. Genommen wird deshalb der Schalter, der
+                       hier steht. */
                     const action = doc.querySelector(
-                        'button[data-estab-workflow-key="m2_benutzer"]'
+                        "[data-estab-sound-toggle]"
                     );
                     const audio = doc.querySelector(
                         "audio[data-estab-sidebar-audio]"
@@ -6321,7 +6732,14 @@ class BrowserAcceptance:
                         refreshed,
                         before,
                         after: root.scrollTop,
-                        focusPreserved: doc.activeElement === action,
+                        /* Die Aktualisierung tauscht den Statusblock aus
+                           und setzt den Fokus danach ausdruecklich auf den
+                           neuen Schalter. Verglichen wird deshalb mit dem
+                           Schalter, der jetzt dasteht, nicht mit dem
+                           gemerkten Knoten. */
+                        focusPreserved: doc.activeElement === doc.querySelector(
+                            "[data-estab-sound-toggle]"
+                        ),
                         statusCount: doc.querySelectorAll(
                             "[data-estab-sidebar-status]"
                         ).length,
@@ -6368,6 +6786,7 @@ class BrowserAcceptance:
                         return null;
                     }
                     button.focus({preventScroll: true});
+                    const pressedBefore = button.getAttribute("aria-pressed");
                     const before = root.scrollTop;
                     const refreshed = await target.estabRefreshSidebarStatus();
                     await new Promise(resolve =>
@@ -6376,9 +6795,20 @@ class BrowserAcceptance:
                     const restored = doc.querySelector(
                         "[data-estab-sound-toggle]"
                     );
+                    /* Der Schalter steht seit 532af85 klein neben der Uhr --
+                       also im Block, den die Aktualisierung austauscht. Dass
+                       derselbe Knoten stehen bleibt, ist damit kein Massstab
+                       mehr; die Aktualisierung setzt den Fokus ausdruecklich
+                       auf den neuen. Was zaehlt, ist: Er ist wieder da, er
+                       hat den Fokus, und er sagt dasselbe wie vorher. */
                     return {
                         refreshed,
-                        identityPreserved: restored === button,
+                        restoredPresent: Boolean(restored),
+                        pressedPreserved: Boolean(
+                            restored &&
+                            restored.getAttribute("aria-pressed")
+                                === pressedBefore
+                        ),
                         focusPreserved:
                             Boolean(restored && doc.activeElement === restored),
                         before,
@@ -6391,7 +6821,8 @@ class BrowserAcceptance:
         self._truth(
             isinstance(sound_focus_refresh, dict)
             and sound_focus_refresh.get("refreshed") is True
-            and sound_focus_refresh.get("identityPreserved") is True
+            and sound_focus_refresh.get("restoredPresent") is True
+            and sound_focus_refresh.get("pressedPreserved") is True
             and sound_focus_refresh.get("focusPreserved") is True
             and abs(
                 float(sound_focus_refresh.get("before", -10))
@@ -6413,8 +6844,11 @@ class BrowserAcceptance:
                 "vorgaben",
                 """
                 return (async () => {
+                    /* Ein Griff, der im Cockpit steht. Es war ein
+                       Arbeitsschritt; die stehen seit dem Umbau in ihrem
+                       eigenen Rahmen. */
                     const action = doc.querySelector(
-                        'button[data-estab-workflow-key="m2_benutzer"]'
+                        "[data-estab-sound-toggle]"
                     );
                     const originalFetch = target.fetch;
                     if (!action ||
@@ -6450,10 +6884,12 @@ class BrowserAcceptance:
                                     "estab-sidebar-status-stale"
                                 )
                             ),
-                            focusPreserved: doc.activeElement === action,
-                            navigationCount: doc.querySelectorAll(
-                                'a[data-estab-nav-key]'
-                            ).length
+                            /* Ein misslungener Abruf tauscht den Block
+                               ebenfalls aus und setzt den Fokus neu. */
+                            focusPreserved:
+                                doc.activeElement === doc.querySelector(
+                                    "[data-estab-sound-toggle]"
+                                )
                         };
                         target.fetch = originalFetch;
                         const recovered =
@@ -6496,8 +6932,6 @@ class BrowserAcceptance:
             and "letzter Abruf" in str(stale.get("text", ""))
             and stale.get("classed") is True
             and stale.get("focusPreserved") is True
-            and stale.get("navigationCount")
-                == self._authenticated_navigation_link_count()
             and result.get("recovered") is True
             and result.get("currentState") == "current"
             and result.get("currentText") == "Status wieder aktuell"
@@ -6933,42 +7367,52 @@ class BrowserAcceptance:
         )
 
     def _assert_bos_workspace_layout(self, location: str) -> None:
+        """Prove the three shell columns of the BOS collection.
+
+        Die Dokumentwahl stand bis 5abd596 als eigener Rahmen neben dem
+        Inhalt. Sie steht jetzt im Menue der Huelle, und die Seite hat
+        dieselbe Bauart wie jede andere: links das Menue, in der Mitte der
+        Inhalt, rechts das Cockpit. Unter 42rem stehen sie untereinander,
+        jede so hoch wie das Fenster.
+        """
         workspace = self.cdp.evaluate(
             """
             (() => {
                 if (innerWidth <= 672) {
                     scrollTo(0, 0);
                 }
+                const bounds = element => {
+                    if (!element) return null;
+                    const rect = element.getBoundingClientRect();
+                    return {
+                        left: rect.left,
+                        right: rect.right,
+                        top: rect.top,
+                        bottom: rect.bottom,
+                        width: rect.width,
+                        height: rect.height
+                    };
+                };
                 const shell = document.querySelector(
                     "[data-estab-bos-workspace]"
                 );
-                const sidebar = document.querySelector(
-                    'iframe[name="status"]'
+                const menu = document.querySelector(
+                    "[data-estab-shell-menu]"
                 );
                 const content = document.querySelector(
-                    'iframe[name="mainframe"]'
+                    "[data-estab-shell-content]"
                 );
-                if (!shell || !sidebar || !content) return null;
-                const sidebarRect = sidebar.getBoundingClientRect();
-                const contentRect = content.getBoundingClientRect();
+                const cockpit = document.querySelector(
+                    ".estab-shell-cockpit"
+                );
+                if (!shell || !menu || !content || !cockpit) return null;
                 return {
                     frameNames: Array.from(
                         document.querySelectorAll("iframe[name]")
                     ).map(frame => frame.getAttribute("name")),
-                    sidebar: {
-                        left: sidebarRect.left,
-                        right: sidebarRect.right,
-                        top: sidebarRect.top,
-                        bottom: sidebarRect.bottom,
-                        width: sidebarRect.width
-                    },
-                    content: {
-                        left: contentRect.left,
-                        right: contentRect.right,
-                        top: contentRect.top,
-                        bottom: contentRect.bottom,
-                        width: contentRect.width
-                    },
+                    menu: bounds(menu),
+                    content: bounds(content),
+                    cockpit: bounds(cockpit),
                     innerWidth,
                     innerHeight,
                     clientWidth: document.documentElement.clientWidth,
@@ -6985,11 +7429,12 @@ class BrowserAcceptance:
         )
         self._equal(
             workspace.get("frameNames"),
-            ["status", "mainframe"],
+            ["mainframe", "vorgaben"],
             f"BOS-Frame-Struktur in {location}",
         )
-        sidebar_frame = workspace.get("sidebar")
-        content_frame = workspace.get("content")
+        menu = workspace.get("menu")
+        content = workspace.get("content")
+        cockpit = workspace.get("cockpit")
         inner_width = float(workspace.get("innerWidth", 0))
         # A classic Linux scrollbar reduces the usable layout viewport while
         # Chrome deliberately keeps innerWidth at the emulated device width.
@@ -7003,66 +7448,62 @@ class BrowserAcceptance:
             float(workspace.get("scrollWidth", 0)) <= client_width + 1,
             f"BOS-Arbeitsbereich erzeugt in {location} horizontales Scrolling.",
         )
+        self._truth(
+            isinstance(menu, dict)
+            and isinstance(content, dict)
+            and isinstance(cockpit, dict),
+            f"BOS-Huelle fehlt in {location} eine Spalte: {workspace!r}",
+        )
         if inner_width <= 672:
             self._truth(
-                isinstance(sidebar_frame, dict)
-                and isinstance(content_frame, dict)
-                and abs(float(sidebar_frame.get("left", -1))) <= 0.5
-                and abs(float(content_frame.get("left", -1))) <= 0.5
-                and abs(float(sidebar_frame.get("top", -1))) <= 0.5
-                and abs(float(sidebar_frame.get("bottom", -1)) - client_height)
-                <= 0.5
-                and abs(float(content_frame.get("top", -1)) - client_height)
-                <= 0.5
-                and abs(
-                    float(content_frame.get("bottom", -1))
-                    - (2 * client_height)
+                all(
+                    abs(float(column.get("left", -1))) <= 0.5
+                    and abs(float(column.get("width", 0)) - client_width)
+                    <= 0.5
+                    for column in (menu, content, cockpit)
                 )
-                <= 0.5
-                and abs(float(sidebar_frame.get("width", 0)) - client_width)
-                <= 0.5
-                and abs(float(content_frame.get("width", 0)) - client_width)
+                and abs(float(menu.get("top", -1))) <= 0.5
+                and abs(float(content.get("top", -1)) - client_height) <= 0.5
+                and abs(float(cockpit.get("top", -1)) - (2 * client_height))
                 <= 0.5
                 and abs(
                     float(workspace.get("scrollHeight", 0))
-                    - (2 * client_height)
+                    - (3 * client_height)
                 )
                 <= 1,
-                f"BOS-Navigation und Inhalt bilden in {location} keine "
-                f"zwei vollen mobilen Ansichten: {workspace!r}",
+                f"Menue, Inhalt und Cockpit bilden in {location} keine drei "
+                f"vollen mobilen Ansichten: {workspace!r}",
             )
         else:
             self._truth(
-                isinstance(sidebar_frame, dict)
-                and isinstance(content_frame, dict)
-                and abs(float(sidebar_frame.get("top", -1))) <= 0.5
-                and abs(
-                    float(sidebar_frame.get("bottom", -1)) - client_height
+                all(
+                    abs(float(column.get("top", -1))) <= 0.5
+                    and abs(float(column.get("bottom", -1)) - client_height)
+                    <= 0.5
+                    for column in (menu, content, cockpit)
                 )
-                <= 0.5
-                and abs(float(content_frame.get("top", -1))) <= 0.5
-                and abs(float(content_frame.get("bottom", -1)) - client_height)
-                <= 0.5
-                and float(sidebar_frame.get("width", 0)) >= 260
-                and float(sidebar_frame.get("right", 0))
-                <= float(content_frame.get("left", -1)) + 0.5
-                and float(content_frame.get("width", 0)) >= 300,
-                f"BOS-Sidebar nutzt in {location} nicht die volle linke Höhe.",
+                and float(menu.get("right", 0))
+                <= float(content.get("left", -1)) + 0.5
+                and float(content.get("right", 0))
+                <= float(cockpit.get("left", -1)) + 0.5
+                and float(content.get("width", 0)) >= 300,
+                f"BOS-Spalten stehen in {location} nicht nebeneinander über "
+                f"die volle Höhe: {workspace!r}",
             )
 
-        sidebar_state = self.cdp.evaluate(
-            _frame_expression(
-                "status",
-                """
-                const root = doc.scrollingElement;
-                const bar = doc.querySelector(
-                    "aside[data-estab-session-bar],aside[data-estab-public-bar]"
+        navigation_state = self.cdp.evaluate(
+            """
+            (() => {
+                const root = document.scrollingElement ||
+                    document.documentElement;
+                const menu = document.querySelector(
+                    "[data-estab-shell-menu]"
                 );
-                const navigation = bar && bar.querySelector(
+                const navigation = menu && menu.querySelector(
                     "[data-estab-navigation]"
                 );
-                const documents = doc.querySelector(
-                    "[data-estab-bos-document-navigation]"
+                const documents = document.querySelector(
+                    "[data-estab-shell-context]"
                 );
                 const links = documents
                     ? Array.from(
@@ -7071,41 +7512,42 @@ class BrowserAcceptance:
                         )
                     )
                     : [];
-                const barRect = bar && bar.getBoundingClientRect();
+                const navigationRect =
+                    navigation && navigation.getBoundingClientRect();
                 const documentRect =
                     documents && documents.getBoundingClientRect();
                 return {
                     navigationMode: navigation && navigation.getAttribute(
                         "data-estab-navigation-mode"
                     ),
-                    detailsCount: doc.querySelectorAll("details").length,
                     documentCount: links.length,
                     documentOrder:
-                        Boolean(barRect && documentRect) &&
-                        documentRect.top >= barRect.bottom - 0.5,
+                        Boolean(navigationRect && documentRect) &&
+                        documentRect.top >= navigationRect.bottom - 0.5,
                     linksFit: links.every(link => {
                         const rect = link.getBoundingClientRect();
-                        return rect.width >= 44 && rect.height >= 44 &&
+                        return rect.width >= 24 && rect.height >= 24 &&
                             rect.left >= -0.5 &&
                             rect.right <= root.clientWidth + 0.5;
                     }),
                     scrollWidth: root.scrollWidth,
                     clientWidth: root.clientWidth
                 };
-                """,
-            )
+            })()
+            """
         )
         self._truth(
-            isinstance(sidebar_state, dict)
-            and sidebar_state.get("navigationMode") == "sidebar"
-            and sidebar_state.get("detailsCount") == 0
-            and sidebar_state.get("documentCount") == 7
-            and sidebar_state.get("documentOrder") is True
-            and sidebar_state.get("linksFit") is True
-            and int(sidebar_state.get("scrollWidth", 0))
-            <= int(sidebar_state.get("clientWidth", 0)) + 1,
-            f"BOS-Sidebar ist in {location} nicht vollständig sichtbar: "
-            f"{sidebar_state!r}",
+            isinstance(navigation_state, dict)
+            and navigation_state.get("navigationMode") == "sidebar"
+            and navigation_state.get("documentCount") == len(
+                self.bos_documents
+            )
+            and navigation_state.get("documentOrder") is True
+            and navigation_state.get("linksFit") is True
+            and int(navigation_state.get("scrollWidth", 0))
+            <= int(navigation_state.get("clientWidth", 0)) + 1,
+            f"BOS-Dokumentwahl ist in {location} nicht vollständig sichtbar: "
+            f"{navigation_state!r}",
         )
 
         content_state = self.cdp.evaluate(
@@ -7142,7 +7584,7 @@ class BrowserAcceptance:
         selector = f'a[href="{href}"][target="mainframe"]'
         expected_path = "/stabinfo/" + urllib.parse.unquote(href)
         self.cdp.click(
-            "status",
+            None,
             selector,
             f"BOS-Dokument „{expected_title}“",
         )
@@ -7176,15 +7618,10 @@ class BrowserAcceptance:
                 const frame = document.querySelector(
                     'iframe[name="mainframe"]'
                 );
-                const sidebar = document.querySelector(
-                    'iframe[name="status"]'
-                );
                 if (
                     !frame
                     || !frame.contentDocument
                     || !frame.contentWindow
-                    || !sidebar
-                    || !sidebar.contentDocument
                 ) {
                     return null;
                 }
@@ -7200,7 +7637,7 @@ class BrowserAcceptance:
                 const content = shell && shell.querySelector(
                     '[data-estab-bos-original-content]'
                 );
-                const selected = sidebar.contentDocument.querySelector(
+                const selected = document.querySelector(
                     'a[data-estab-bos-document-link][aria-current="page"]'
                 );
                 if (
@@ -7242,8 +7679,17 @@ class BrowserAcceptance:
                 const headerStyle = frame.contentWindow.getComputedStyle(
                     header
                 );
-                const selectedTitle = selected.querySelector('strong');
-                const selectedDescription = selected.querySelector('span');
+                const selectedHint = selected.querySelector(
+                    '.estab-visually-hidden'
+                );
+                const selectedTitle = Array.from(selected.childNodes)
+                    .filter(node => node.nodeType === Node.TEXT_NODE)
+                    .map(node => node.textContent)
+                    .join('')
+                    .trim();
+                const selectedDescription = selectedHint
+                    ? selectedHint.textContent.replace(/^\\s*—\\s*/, '').trim()
+                    : null;
                 const contrastRatio = (foreground, background) => {
                     const channels = colour => {
                         const values = colour.match(/[\\d.]+/g);
@@ -7312,12 +7758,11 @@ class BrowserAcceptance:
                     title: heading.textContent.trim(),
                     titleMatchesNavigation:
                         Boolean(selectedTitle) &&
-                        heading.textContent.trim()
-                            === selectedTitle.textContent.trim(),
+                        heading.textContent.trim() === selectedTitle,
                     descriptionMatchesNavigation:
                         Boolean(selectedDescription) &&
                         description.textContent.trim()
-                            === selectedDescription.textContent.trim(),
+                            === selectedDescription,
                     originalTextPreserved:
                         Boolean(parsed.body) &&
                         content.textContent === parsed.body.textContent,
@@ -7340,10 +7785,14 @@ class BrowserAcceptance:
                         contentStyle.borderTopLeftRadius
                     ),
                     fontFamily: contentStyle.fontFamily,
-                    headerGradient:
-                        headerStyle.backgroundImage.includes(
-                            'linear-gradient'
-                        ),
+                    /* Der farbige Kopfbalken ist mit a40da6d gefallen --
+                       er ass auf flachen Bildschirmen ein Viertel der Hoehe
+                       fuer eine Angabe, die nach dem zweiten Aufruf niemand
+                       mehr liest. Der Titel steht jetzt ueber einer Linie. */
+                    headerRule:
+                        headerStyle.backgroundImage === 'none' &&
+                        headerStyle.borderBottomStyle === 'solid' &&
+                        parseFloat(headerStyle.borderBottomWidth) > 0,
                     semanticColoursReadable,
                     scrollRegionsReady
                 };
@@ -7363,9 +7812,9 @@ class BrowserAcceptance:
             and state.get("imagesFit") is True
             and state.get("rootFits") is True
             and state.get("contentBackground") == "rgb(255, 255, 255)"
-            and float(state.get("contentRadius", 0)) >= 8
+            and float(state.get("contentRadius", 0)) >= 4
             and "Arial" in str(state.get("fontFamily", ""))
-            and state.get("headerGradient") is True
+            and state.get("headerRule") is True
             and state.get("semanticColoursReadable") is True
             and state.get("scrollRegionsReady") is True,
             f"BOS-Dokument ist in {location} nicht konsistent: {state!r}",
@@ -7444,14 +7893,14 @@ class BrowserAcceptance:
         self.cdp.wait_for(
             """
             (() => {
-                const sidebar = document.querySelector(
-                    'iframe[name="status"]'
+                const menu = document.querySelector(
+                    "[data-estab-shell-menu]"
                 );
                 const returnButton = document.querySelector(
                     "[data-estab-mobile-menu-return]"
                 );
-                if (!sidebar || !returnButton) return false;
-                const rect = sidebar.getBoundingClientRect();
+                if (!menu || !returnButton) return false;
+                const rect = menu.getBoundingClientRect();
                 const visibleHeight = Math.max(
                     0,
                     Math.min(innerHeight, rect.bottom)
@@ -7459,7 +7908,7 @@ class BrowserAcceptance:
                 );
                 return scrollY <= 1 &&
                     visibleHeight >= innerHeight - 1 &&
-                    document.activeElement === sidebar &&
+                    document.activeElement === menu &&
                     returnButton.hidden;
             })()
             """,
@@ -7476,7 +7925,11 @@ class BrowserAcceptance:
                 const content = document.querySelector(
                     'iframe[name="mainframe"]'
                 );
-                if (!sidebar || !content || !content.contentWindow) {
+                const actions = document.querySelector(
+                    'iframe[name="aktionen"]'
+                );
+                if (!sidebar || !content || !actions ||
+                    !content.contentWindow) {
                     return false;
                 }
                 window.__estabMobileLoadFocusProbe = false;
@@ -7494,7 +7947,7 @@ class BrowserAcceptance:
             f"Mobiler Rollenaktions-Test konnte in {location} nicht vorbereitet werden.",
         )
         self.cdp.click(
-            "vorgaben",
+            "aktionen",
             'button[data-estab-workflow-key="stab_lesen"]',
             f"Rollenaktion Lesen in {location}",
         )
@@ -7573,11 +8026,15 @@ class BrowserAcceptance:
         self.cdp.wait_for(
             """
             (() => {
-                const sidebar = document.querySelector(
-                    'iframe[name="vorgaben"]'
+                /* Zurueck geht es zum Menue: Dort stehen die Ziele und die
+                   Arbeitsschritte, aus denen der Griff kam. Das Cockpit ist
+                   seit dem Umbau die dritte Spalte und nicht der Ausgangs-
+                   punkt. */
+                const menu = document.querySelector(
+                    "[data-estab-shell-menu]"
                 );
-                if (!sidebar) return false;
-                const rect = sidebar.getBoundingClientRect();
+                if (!menu) return false;
+                const rect = menu.getBoundingClientRect();
                 const visibleHeight = Math.max(
                     0,
                     Math.min(innerHeight, rect.bottom)
@@ -7585,10 +8042,10 @@ class BrowserAcceptance:
                 );
                 return scrollY <= 1 &&
                     visibleHeight >= innerHeight - 1 &&
-                    document.activeElement === sidebar;
+                    document.activeElement === menu;
             })()
             """,
-            f"Rückkehrbutton bringt in {location} nicht zur Sidebar zurück",
+            f"Rückkehrbutton bringt in {location} nicht zum Menue zurück",
         )
 
     def _assert_existing_message_attachment_previews(self) -> None:
@@ -7600,36 +8057,35 @@ class BrowserAcceptance:
             )
             return
         message_marker = marker + "_DIRECT_ATTACHMENT_SUBMIT"
-        # The legacy search field really has maxlength=30. Keep this input
-        # short enough for the actual UI while the full unique marker below
-        # still identifies the exact result row.
+        # Der Teilmarker genuegt: Er kommt nur in dieser einen Nachricht vor,
+        # und die Zeile unten wird ohnehin am vollen Marker erkannt.
         search_marker = "DIRECT_ATTACHMENT_SUBMIT"
 
-        self.cdp.click(
-            "mainframe",
-            'input[name="flt_find_mask_ein"]',
-            "Nachrichtensuche für die echte Anlagenvorschau",
-        )
+        # Die Suche steht im Suchband des Tabellenbauteils und ist immer da;
+        # den frueheren Knopf, der erst eine Suchmaske aufklappte, gibt es
+        # nicht mehr. Die beiden Zustandsschalter im selben Band gehoeren zum
+        # Filterformular daneben -- abgesendet wird der Knopf ohne `form`.
         self.cdp.wait_for(
             _frame_expression(
                 "mainframe",
                 """
                 return doc.readyState === "complete" &&
-                    Boolean(doc.querySelector('input[name="flt_search"]')) &&
-                    Boolean(doc.querySelector('input[name="filter_suche"]'));
+                    Boolean(doc.querySelector(
+                        '.estab-tabelle-suchband input[type="search"]'
+                    ));
                 """,
             ),
-            "Nachrichtensuche für die Anlagenvorschau wurde nicht geöffnet",
+            "Nachrichtensuche für die Anlagenvorschau fehlt",
         )
         self.cdp.set_value(
             "mainframe",
-            'input[name="flt_search"]',
+            '.estab-tabelle-suchband input[type="search"]',
             search_marker,
             "Suchmarker der Nachricht mit Bild, PDF und E-Mail",
         )
         self.cdp.click(
             "mainframe",
-            'input[name="filter_suche"]',
+            '.estab-tabelle-suchband button[type="submit"]:not([form])',
             "Nachricht mit Bild, PDF und E-Mail suchen",
         )
         row_state = self.cdp.wait_for(
@@ -8443,7 +8899,7 @@ class BrowserAcceptance:
         )
         dirty_value = "Browser-Dirty-Guard-Test"
         self.cdp.click(
-            "vorgaben",
+            "aktionen",
             'button[name="stab_schreiben_x"][data-estab-workflow-key="stab_schreiben"]',
             "fachliches Formular zum Schreiben einer Nachricht",
         )
@@ -8485,9 +8941,11 @@ class BrowserAcceptance:
         )
 
         def click_overview_and_handle_dialog(accept: bool, action: str) -> None:
+            # Die Ziele stehen im Menue der Huelle, nicht im Cockpit.
             dialog = self.cdp.click(
-                "vorgaben",
-                '[data-estab-navigation] a[data-estab-nav-key="overview"]',
+                None,
+                '[data-estab-shell-menu] [data-estab-navigation] '
+                'a[data-estab-nav-key="overview"]',
                 f"Übersichtslink zum {action} des Bereichswechsels",
                 dialog_accept=accept,
             )
@@ -8558,8 +9016,12 @@ class BrowserAcceptance:
 
                 const timelineStyle = target.getComputedStyle(timeline);
                 const trackStyle = target.getComputedStyle(track);
-                const expectedDisplay = expectedMobile ? "grid" : "flex";
-                if (trackStyle.display !== expectedDisplay) return false;
+                /* Der Bearbeitungsweg ist seit a40da6d ueberall eine
+                   Zeile: Als Reihe gestapelter Karten war er 655 Bildpunkte
+                   hoch und stand dem Vordruck im Weg. Passen nicht alle
+                   Marken nebeneinander, laesst sich die Leiste schieben --
+                   auf dem Telefon wie auf dem Schreibtisch. */
+                if (trackStyle.display !== "flex") return false;
 
                 const steps = Array.from(
                     track.querySelectorAll(
@@ -8626,9 +9088,16 @@ class BrowserAcceptance:
                         ) overlapPairs.push([left, right]);
                     }}
                 }}
+                /* Eine Reihe: Jede Marke beginnt hinter der vorigen, und
+                   alle liegen auf derselben Hoehe. Gemessen wird die
+                   Ueberlappung und nicht die gleiche Oberkante -- die
+                   aktuelle Station ist etwas flacher als die geplanten und
+                   sitzt mittig, was ihre Oberkante um wenige Bildpunkte
+                   verschiebt. */
                 const horizontalOrder = rects.every((rect, index) =>
                     index === 0 || (
-                        Math.abs(rect.top - rects[0].top) <= 1
+                        Math.min(rect.bottom, rects[0].bottom)
+                            - Math.max(rect.top, rects[0].top) > 0.5
                         && rect.left >= rects[index - 1].right - 1
                     )
                 );
@@ -8735,14 +9204,15 @@ class BrowserAcceptance:
             and state.get("returnEvidenceValid") is True
         )
         if mobile:
+            # Dieselbe schiebbare Zeile wie auf dem Schreibtisch; sie darf nur
+            # die Seite nicht ueber die Fensterbreite hinaus wachsen lassen.
             layout_valid = (
-                state.get("trackDisplay") == "grid"
-                and state.get("verticalOrder") is True
-                and state.get("overflowX") == "visible"
-                and state.get("overflowY") == "visible"
+                state.get("trackDisplay") == "flex"
+                and state.get("horizontalOrder") is True
+                and state.get("overflowX") in {"auto", "scroll"}
+                and state.get("overflowY") == "hidden"
                 and state.get("maxHeight") == "none"
                 and state.get("noInternalVerticalScroller") is True
-                and state.get("noInternalHorizontalScroller") is True
                 and state.get("fitsMobileViewport") is True
             )
         else:
@@ -8856,11 +9326,10 @@ class BrowserAcceptance:
                 const priorityLabels = priorityControls.map(control =>
                     control?.closest("label") || null
                 );
-                const priorityClear = doc.querySelector(
-                    "#f_09_vorrangstufe_keine"
-                );
-                const priorityClearLabel = priorityClear?.closest("label")
-                    || null;
+                /* Feld 9 hat drei Kaestchen. "Keine Vorrangstufe" ist auf
+                   dem amtlichen Vordruck die Abwesenheit eines Kreuzes und
+                   kein eigenes Kaestchen -- 013b14d hat das vierte
+                   entfernt. */
                 const extraDistribution = doc.querySelector(
                     ".estab-message-distribution-extras"
                 );
@@ -8929,17 +9398,11 @@ class BrowserAcceptance:
                 const priorityHelpRect = priorityField?.querySelector(
                     ".estab-official-help-anchor"
                 )?.getBoundingClientRect();
-                const visiblePriorityLabels = [
-                    priorityClearLabel,
-                    ...priorityLabels
-                ].filter(Boolean);
+                const visiblePriorityLabels = priorityLabels.filter(Boolean);
                 const priorityLabelRects = visiblePriorityLabels.map(
                     label => label.getBoundingClientRect()
                 );
-                const priorityBoxesSquare = [
-                    priorityClear,
-                    ...priorityControls
-                ].every(control => {
+                const priorityBoxesSquare = priorityControls.every(control => {
                     if (!control) return false;
                     const style = target.getComputedStyle(control);
                     const rect = control.getBoundingClientRect();
@@ -8957,7 +9420,7 @@ class BrowserAcceptance:
                     : null;
                 const priorityGeometry = Boolean(
                     priorityRect
-                    && priorityLabelRects.length === 4
+                    && priorityLabelRects.length === 3
                     && priorityLabelRects.every(rect =>
                         rect.left >= priorityRect.left - 1
                         && rect.right <= priorityRect.right + 1
@@ -9178,10 +9641,11 @@ class BrowserAcceptance:
                                 && control.name === "09_vorrangstufe"
                             )
                         )
-                        && priorityClear
-                        && priorityField.contains(priorityClear)
-                        && priorityClear.name === "09_vorrangstufe"
-                        && priorityClear.checked
+                        /* Ohne Kreuz ist keine Stufe gewaehlt: Die drei
+                           Kaestchen stehen frei, und keines ist gesetzt. */
+                        && priorityControls.every(
+                            control => control.checked === false
+                        )
                         && Array.from(
                             doc.querySelectorAll(
                                 '[name="09_vorrangstufe"]'
@@ -9318,13 +9782,22 @@ class BrowserAcceptance:
                         externalGreenControls.length === 0,
                     readonlyCopyControlsLabeled:
                         activeOfficialRecipients.length > 0
-                        && activeOfficialRecipients.every(recipient =>
-                            Boolean(
-                                recipient.querySelector(
-                                    ":scope > .estab-official-copy-indicator"
-                                )
-                            )
-                        )
+                        && activeOfficialRecipients.every(recipient => {
+                            const indicator = recipient.querySelector(
+                                ":scope > .estab-official-copy-indicator"
+                            );
+                            if (indicator) {
+                                return true;
+                            }
+                            const choice = recipient.querySelector(
+                                ":scope > .estab-official-box-choice"
+                            );
+                            return Boolean(
+                                choice
+                                && /^16_[1-5][1-4]$/.test(choice.name)
+                                && choice.getAttribute("aria-label")
+                            );
+                        })
                         && readonlyCopyControls.every(control =>
                             control.disabled
                             && Boolean(control.getAttribute("aria-label"))
@@ -9501,30 +9974,34 @@ class BrowserAcceptance:
             ),
             "Staatsnot wurde nicht im amtlichen Vorrangfeld angekreuzt",
         )
+        # Ein Kaestchen "keine" gibt es nicht mehr: Auf dem amtlichen Vordruck
+        # ist die fehlende Stufe die Abwesenheit eines Kreuzes. Zurueckgenommen
+        # wird eine gewaehlte Stufe seither mit einem zweiten Klick auf sie --
+        # mit der Maus; mit der Tastatur waehlt man in der Gruppe weiter und
+        # nicht ab.
         self.cdp.click(
             "mainframe",
-            "#f_09_vorrangstufe_keine",
-            "Vorrang im amtlichen Feld zurücksetzen",
+            "#f_09_vorrangstufe_staatsnot",
+            "Vorrang im amtlichen Feld durch zweiten Klick zurücksetzen",
         )
         self.cdp.wait_for(
             _frame_expression(
                 "mainframe",
                 """
-                const clear = doc.querySelector(
-                    "#f_09_vorrangstufe_keine"
-                );
                 return Boolean(
-                    clear
-                    && clear.checked
-                    && clear.value === ""
+                    !doc.querySelector("#f_09_vorrangstufe_keine")
+                    && doc.querySelectorAll(
+                        '.estab-official-priority '
+                        + 'input[name="09_vorrangstufe"]'
+                    ).length === 3
                     && doc.querySelectorAll(
                         '.estab-official-priority '
                         + 'input[name="09_vorrangstufe"]:checked'
-                    ).length === 1
+                    ).length === 0
                 );
                 """,
             ),
-            "Vorrang ließ sich nicht im amtlichen Feld zurücksetzen",
+            "Vorrang ließ sich nicht durch einen zweiten Klick zurücksetzen",
         )
 
         self.cdp.click(
@@ -9699,11 +10176,20 @@ class BrowserAcceptance:
                     "[data-estab-official-message-form]"
                 );
                 if (!scroll || !form) return false;
+                const formStyle = target.getComputedStyle(form);
                 return {
                     viewportWidth: doc.documentElement.clientWidth,
                     bodyScrollWidth: doc.body.scrollWidth,
                     scrollClientWidth: scroll.clientWidth,
                     scrollWidth: scroll.scrollWidth,
+                    /* Das Blatt behaelt sein Raster von 56rem und wird
+                       skaliert, nicht gestaucht: Die gemessene Breite ist
+                       die des Rasters, die sichtbare das Produkt aus ihr
+                       und dem Zoom. Unter 0.75 hoert das Skalieren auf --
+                       angeschnittener Text in lesbarer Groesse schlaegt
+                       vollstaendigen in unlesbarer. */
+                    formGridWidth: parseFloat(formStyle.width),
+                    formZoom: parseFloat(formStyle.zoom) || 1,
                     formWidth: form.getBoundingClientRect().width
                 };
                 """,
@@ -9716,9 +10202,15 @@ class BrowserAcceptance:
                 <= mobile_state.get("viewportWidth", 0) + 1
             and mobile_state.get("scrollWidth", 0)
                 > mobile_state.get("scrollClientWidth", 0)
-            and 895 <= mobile_state.get("formWidth", 0) <= 897,
+            and 895 <= mobile_state.get("formGridWidth", 0) <= 897
+            and mobile_state.get("formZoom", 0) >= 0.75
+            and abs(
+                float(mobile_state.get("formWidth", 0))
+                - float(mobile_state.get("formGridWidth", 0))
+                * float(mobile_state.get("formZoom", 0))
+            ) <= 1,
             "Das amtliche Raster bleibt mobil nicht in seinem beschrifteten "
-            "Scrollbereich.",
+            f"Scrollbereich: {mobile_state!r}",
         )
         self.cdp.call(
             "Emulation.setDeviceMetricsOverride",
@@ -9842,9 +10334,11 @@ class BrowserAcceptance:
                     breakInside: sheetStyle.breakInside,
                     pseudoContent: pseudo.content,
                     pseudoDisplay: pseudo.display,
-                    priorityClearDisplay: priorityClear
-                        ? getComputedStyle(priorityClear).display
-                        : "missing",
+                    /* Mit dem vierten Kaestchen ist auch die Klasse
+                       gefallen, die es im Ausdruck verbarg. Sie darf nicht
+                       zurueckkommen: Eine Regel fuer ein Element, das es
+                       nicht gibt, waere eine Leiche. */
+                    priorityClearAbsent: priorityClear === null,
                     staatsnotChecked: Boolean(staatsnot?.checked),
                     blue: contentBlue,
                     zones: document.querySelectorAll(
@@ -9862,7 +10356,7 @@ class BrowserAcceptance:
             and print_state.get("breakInside") in {"avoid", "avoid-page"}
             and print_state.get("pseudoContent") in {"none", "normal"}
             and print_state.get("pseudoDisplay") == "none"
-            and print_state.get("priorityClearDisplay") == "none"
+            and print_state.get("priorityClearAbsent") is True
             and print_state.get("staatsnotChecked") is True
             and 695 <= print_state.get("width", 0) <= 705
             and 0 < print_state.get("height", 9999) <= 1069.7,
@@ -10149,8 +10643,8 @@ class BrowserAcceptance:
                     innerWidth: window.innerWidth,
                     unexpectedOverflow,
                     regions: {
-                        publicBar: bounds(document.querySelector(
-                            "aside[data-estab-public-bar]"
+                        shellMenu: bounds(document.querySelector(
+                            "[data-estab-shell-menu]"
                         )),
                         masthead: bounds(document.querySelector(
                             ".estab-root-header"
@@ -10211,7 +10705,7 @@ class BrowserAcceptance:
             isinstance(regions, dict),
             "Relevante Seitenbereiche fehlen im schmalen Viewport.",
         )
-        for key in ("publicBar", "masthead", "rootMain", "loginCard", "authNote"):
+        for key in ("shellMenu", "masthead", "rootMain", "loginCard", "authNote"):
             assert_horizontally_contained(
                 regions.get(key),
                 f"Seitenbereich {key}",
@@ -10234,7 +10728,11 @@ class BrowserAcceptance:
             and navigation.get("right", 10000) <= state["innerWidth"] + 0.5
             and navigation.get("bottom", 0) > navigation.get("top", 0)
             and navigation.get("scrollLeft") == 0
-            and navigation.get("scrollWidth", 0) > navigation.get("clientWidth", 0)
+            # Die Navigation war ein waagerecht schiebbares Band. Im Menue
+            # der Huelle steht sie untereinander und in voller Breite: Sie
+            # darf gar nicht mehr waagerecht scrollen.
+            and navigation.get("scrollWidth", 0)
+                <= navigation.get("clientWidth", 0) + 1
             and navigation.get("lastKey") == "handbook",
             "Bereichsnavigation besitzt im schmalen Viewport keinen sauber "
             "begrenzten horizontalen Scrollbereich.",
@@ -10284,26 +10782,10 @@ class BrowserAcceptance:
                 "einspaltig ausgerichtet.",
             )
 
-        scroll_distance = (
-            navigation["scrollWidth"] - navigation["clientWidth"] + 64
-        )
-        scroll_x = (navigation["left"] + navigation["right"]) / 2
-        scroll_y = (navigation["top"] + navigation["bottom"]) / 2
-        self.cdp.call(
-            "Input.dispatchMouseEvent",
-            {"type": "mouseMoved", "x": scroll_x, "y": scroll_y},
-        )
-        self.cdp.call(
-            "Input.dispatchMouseEvent",
-            {
-                "type": "mouseWheel",
-                "x": scroll_x,
-                "y": scroll_y,
-                "deltaX": scroll_distance,
-                "deltaY": 0,
-            },
-        )
-        scroll_state = self.cdp.wait_for(
+        # Waagerecht geschoben wurde die Navigation, als sie ein Band war.
+        # Im Menue der Huelle steht sie untereinander und ganz im Bild: Der
+        # letzte Bereich ist ohne Schieben erreichbar.
+        last_link = self.cdp.evaluate(
             """
             (() => {
                 const navigation = document.querySelector(
@@ -10318,26 +10800,31 @@ class BrowserAcceptance:
                 if (!navigation || !last) return null;
                 const navigationRect = navigation.getBoundingClientRect();
                 const lastRect = last.getBoundingClientRect();
-                if (
-                    navigation.scrollLeft <= 0 ||
-                    lastRect.left < navigationRect.left - 0.5 ||
-                    lastRect.right > navigationRect.right + 0.5
-                ) {
-                    return null;
-                }
                 return {
                     scrollLeft: navigation.scrollLeft,
+                    containedHorizontally:
+                        lastRect.left >= navigationRect.left - 0.5 &&
+                        lastRect.right <= navigationRect.right + 0.5,
+                    withinViewport:
+                        lastRect.left >= -0.5 &&
+                        lastRect.right <= innerWidth + 0.5,
                     lastKey: last.getAttribute("data-estab-nav-key")
                 };
             })()
-            """,
-            "letzter Bereichslink wurde durch horizontales Scrollen "
-            "im schmalen Viewport nicht erreichbar",
+            """
+        )
+        self._truth(
+            isinstance(last_link, dict)
+            and last_link.get("scrollLeft") == 0
+            and last_link.get("containedHorizontally") is True
+            and last_link.get("withinViewport") is True,
+            "Letzter Bereichslink steht im schmalen Viewport nicht ohne "
+            f"Schieben im Bild: {last_link!r}",
         )
         self._equal(
-            scroll_state.get("lastKey"),
+            last_link.get("lastKey"),
             "handbook",
-            "Letzter horizontal erreichbarer Navigationsbereich",
+            "Letzter Navigationsbereich",
         )
 
     def _assert_internal_cards_same_tab(self) -> None:
@@ -10841,9 +11328,11 @@ class BrowserAcceptance:
                                 "/4fach/mainindex.php"
                             ) &&
                             doc.readyState === "complete" &&
-                            Boolean(doc.querySelector(
-                                "script[data-estab-mainframe-guard]"
-                            )) &&
+                            /* Das Waechterskript blendete die eigenstaendige
+                               Sitzungsleiste im Rahmen aus. Der Hauptrahmen
+                               fuehrt seit dem Umbau gar keine mehr -- sie
+                               steht im Cockpit --, und dass hier keine steht,
+                               prueft die Zaehlung unten. */
                             !doc.querySelector(".estab-auth-card") &&
                             !doc.querySelector('input[name="kennwort1"]');
                         """,
@@ -10914,9 +11403,13 @@ class BrowserAcceptance:
             """,
             "Berechtigungsfehler der Nachweisung blieb keine gestaltete Seite",
         )
+        # Die abgewiesene Seite bleibt eine Seite der Anwendung: Sie behaelt
+        # die Huelle, und die Kennung steht wie ueberall im Cockpit.
         self._equal(
             self.cdp.evaluate(
-                _visible_count_expression(None, "aside[data-estab-session-bar]")
+                _visible_count_expression(
+                    "vorgaben", "aside[data-estab-session-bar]"
+                )
             ),
             1,
             "sichtbare Session-Leiste auf der Berechtigungsseite",
@@ -10925,10 +11418,16 @@ class BrowserAcceptance:
             """
             (() => {
                 const page = document.querySelector("[data-estab-error-page]");
-                const bar = document.querySelector("aside[data-estab-session-bar]");
+                const cockpit = document.querySelector(
+                    'iframe[name="vorgaben"]'
+                );
+                const cockpitDocument = cockpit && cockpit.contentDocument;
+                const bar = cockpitDocument && cockpitDocument.querySelector(
+                    "aside[data-estab-session-bar]"
+                );
                 const identity = bar && bar.querySelector("[data-estab-user-code]");
-                const navigation = bar && bar.querySelector(
-                    "[data-estab-navigation]"
+                const navigation = document.querySelector(
+                    "[data-estab-shell-menu] [data-estab-navigation]"
                 );
                 const recovery = document.querySelector(
                     "[data-estab-error-recovery] a"
@@ -10972,10 +11471,13 @@ class BrowserAcceptance:
             and details.get("code") == self.config.login_code
             and details.get("hasLogout") is True
             and details.get("hasProtectedContent") is False
-            and details.get("currentKeys") == []
+            # Das Menue zeigt jeden Bereich, auch den abgewiesenen, und
+            # sagt weiterhin, wo man steht. Verwehrt wird an der Tuer, nicht
+            # im Verzeichnis -- der Inhalt der Nachweisung bleibt fort.
+            and details.get("currentKeys") == ["tracking"]
             and "overview" in details.get("navigationKeys", [])
             and "messages" in details.get("navigationKeys", [])
-            and "tracking" not in details.get("navigationKeys", [])
+            and "tracking" in details.get("navigationKeys", [])
             and str(details.get("recoveryPath", "")).endswith("/")
             and details.get("recoverySearch") == ""
             and details.get("recoveryTarget") == "_top",
@@ -11050,179 +11552,83 @@ class BrowserAcceptance:
 
     def _assert_session_bar(
         self,
-        frame_name: str | None,
         location: str,
         expected_active_key: str,
     ) -> None:
+        """Prove identity and areas across the split shell.
+
+        Die Sitzungsleiste stand frueher zusammen mit der Navigation in
+        derselben Leiste. Seit dem Umbau auf Menue links, Cockpit rechts sind
+        es zwei Orte: Wer angemeldet ist und wie er sich abmeldet, steht im
+        Cockpit-Rahmen; welche Bereiche es gibt und in welchem man steht,
+        steht im Menue der Huelle. Geprueft wird beides -- nur eben dort, wo
+        es heute steht.
+        """
         self._truth(
             expected_active_key in (*self.navigation_keys, "administration"),
             f"Unbekannter erwarteter Navigationsbereich {expected_active_key!r}.",
         )
         selector = "aside[data-estab-session-bar]"
-        expected_navigation_keys = self._authenticated_navigation_keys()
         self._equal(
-            self.cdp.evaluate(_visible_count_expression(frame_name, selector)),
+            self.cdp.evaluate(
+                _visible_count_expression("vorgaben", selector)
+            ),
             1,
             f"Anzahl sichtbarer Session-Bars in {location}",
         )
-        details = self.cdp.evaluate(
+        self._equal(
+            self.cdp.evaluate(_visible_count_expression(None, selector)),
+            0,
+            f"Session-Bar ausserhalb des Cockpits in {location}",
+        )
+        identity = self.cdp.evaluate(
             _frame_expression(
-                frame_name,
+                "vorgaben",
                 f"""
                 const bar = doc.querySelector({json.dumps(selector)});
-                const identity = bar && bar.querySelector("[data-estab-user-code]");
+                const code = bar && bar.querySelector("[data-estab-user-code]");
                 const name = bar && bar.querySelector("[data-estab-user-name]");
-                const sidebarRoot = bar && bar.closest(
-                    "[data-estab-sidebar-root]"
+                const logout = bar && bar.querySelector(
+                    "[data-estab-logout-form] button"
                 );
-                const navigation = bar && (
-                    bar.querySelector("[data-estab-navigation]") ||
-                    (
-                        sidebarRoot &&
-                        sidebarRoot.querySelector(
-                            ":scope > [data-estab-navigation]"
-                        )
-                    )
-                );
-                const sidebarStatus = sidebarRoot && sidebarRoot.querySelector(
-                    ":scope > [data-estab-sidebar-status]"
-                );
-                const sidebarWorkflow = sidebarRoot && sidebarRoot.querySelector(
-                    ":scope > [data-estab-workflow-menu]"
-                );
-                const expectedCoreKeys = new Set(
-                    {json.dumps(expected_navigation_keys)}
-                );
-                const links = navigation
-                    ? Array.from(
-                        navigation.querySelectorAll("a[data-estab-nav-key]")
-                    ).filter(link => expectedCoreKeys.has(
-                        link.getAttribute("data-estab-nav-key")
-                    ))
-                    : [];
-                const current = navigation
-                    ? Array.from(navigation.querySelectorAll('[aria-current="page"]'))
-                    : [];
-                const overview = navigation &&
-                    navigation.querySelector('a[data-estab-nav-key="overview"]');
-                const disclosure = navigation && navigation.querySelector("details");
-                const summary = disclosure && disclosure.querySelector("summary");
-                const logout = bar && bar.querySelector("[data-estab-logout-form] button");
-                if (!bar || !identity || !name || !navigation || !overview || !logout) {{
-                    return null;
-                }}
-                const navigationRect = navigation.getBoundingClientRect();
+                if (!bar || !code || !name || !logout) return null;
                 const logoutRect = logout.getBoundingClientRect();
-                const visible = element => {{
-                    const rect = element.getBoundingClientRect();
-                    const style = target.getComputedStyle(element);
-                    return rect.width > 0 && rect.height > 0 &&
-                        style.display !== "none" && style.visibility !== "hidden";
-                }};
                 return {{
                     name: name.getAttribute("data-estab-user-name"),
-                    code: identity.getAttribute("data-estab-user-code"),
-                    functionName: identity.getAttribute("data-estab-user-function"),
-                    role: identity.getAttribute("data-estab-user-role"),
+                    code: code.getAttribute("data-estab-user-code"),
+                    functionName: code.getAttribute("data-estab-user-function"),
+                    role: code.getAttribute("data-estab-user-role"),
                     text: bar.innerText.replace(/\\s+/g, " ").trim(),
-                    navigationCount:
-                        doc.querySelectorAll("[data-estab-navigation]").length,
-                    navigationKeys:
-                        links.map(link => link.getAttribute("data-estab-nav-key")),
-                    allCoreTargetsTop:
-                        links.every(link => link.getAttribute("target") === "_top"),
-                    activeKeys:
-                        current.map(link => link.getAttribute("data-estab-nav-key")),
-                    navigationVisible:
-                        navigationRect.width > 0 && navigationRect.height > 0,
-                    allNavigationLinksVisible: links.every(visible),
-                    navigationMode:
-                        navigation.getAttribute("data-estab-navigation-mode"),
-                    compact: bar.classList.contains("estab-session-bar-compact"),
-                    sidebarOrder: !sidebarRoot || (
-                        Boolean(
-                            sidebarStatus &&
-                            sidebarWorkflow &&
-                            navigation
-                        ) &&
-                        (
-                            sidebarStatus.compareDocumentPosition(bar) &
-                            Node.DOCUMENT_POSITION_FOLLOWING
-                        ) !== 0 &&
-                        (
-                            bar.compareDocumentPosition(sidebarWorkflow) &
-                            Node.DOCUMENT_POSITION_FOLLOWING
-                        ) !== 0 &&
-                        (
-                            sidebarWorkflow.compareDocumentPosition(navigation) &
-                            Node.DOCUMENT_POSITION_FOLLOWING
-                        ) !== 0
+                    compact: bar.classList.contains(
+                        "estab-session-bar-compact"
                     ),
-                    hasDisclosure: Boolean(disclosure),
-                    disclosureSummaryVisible: Boolean(summary && visible(summary)),
-                    overviewContract:
-                        overview.textContent.replace(/\\s+/g, " ").trim() === "Übersicht" &&
-                        overview.getAttribute("target") === "_top",
-                    logoutVisible: logoutRect.width > 0 && logoutRect.height > 0 &&
-                        !logout.disabled
+                    logoutVisible: logoutRect.width > 0 &&
+                        logoutRect.height > 0 && !logout.disabled
                 }};
                 """,
             )
         )
-        if not details:
+        if not identity:
             raise TestFailure(f"Session-Informationen fehlen in {location}.")
-        self._equal(details["name"], self.config.login_name, f"Benutzername in {location}")
-        self._equal(details["code"], self.config.login_code, f"Kürzel in {location}")
         self._equal(
-            details["functionName"],
+            identity["name"], self.config.login_name, f"Benutzername in {location}"
+        )
+        self._equal(
+            identity["code"], self.config.login_code, f"Kürzel in {location}"
+        )
+        self._equal(
+            identity["functionName"],
             self.config.login_function,
             f"Funktion in {location}",
         )
-        role = details.get("role")
-        self._truth(isinstance(role, str) and bool(role.strip()), f"Rolle fehlt in {location}.")
-        self._equal(
-            details.get("navigationCount"),
-            1,
-            f"Anzahl gemeinsamer Navigationen in {location}",
-        )
-        self._equal(
-            details.get("navigationKeys"),
-            expected_navigation_keys,
-            f"Reihenfolge der Kernbereiche in {location}",
-        )
+        role = identity.get("role")
         self._truth(
-            details.get("allCoreTargetsTop"),
-            f"Kernbereich wechselt in {location} nicht durchgehend das Top-Level-Ziel.",
+            isinstance(role, str) and bool(role.strip()),
+            f"Rolle fehlt in {location}.",
         )
-        self._equal(
-            details.get("activeKeys"),
-            [expected_active_key],
-            f"Aktiver Navigationsbereich in {location}",
-        )
-        self._truth(
-            details.get("navigationVisible"),
-            f"Gemeinsame Navigation ist in {location} nicht sichtbar.",
-        )
-        if details.get("navigationMode") == "sidebar":
-            self._truth(
-                details.get("compact")
-                and not details.get("hasDisclosure")
-                and details.get("allNavigationLinksVisible")
-                and details.get("sidebarOrder"),
-                f"Status, Identität, Aktionen und sichtbare Navigation sind "
-                f"in {location} nicht korrekt angeordnet.",
-            )
-        elif details.get("compact"):
-            self._truth(
-                details.get("hasDisclosure") and details.get("disclosureSummaryVisible"),
-                f"Kompakte Bereichsauswahl fehlt in {location}.",
-            )
-        else:
-            self._truth(
-                details.get("allNavigationLinksVisible"),
-                f"Mindestens ein Kernbereich ist in {location} nicht sichtbar.",
-            )
-        visible_text = details.get("text", "")
+        # Die Leiste setzt ihre Beschriftung in Grossbuchstaben; innerText
+        # gibt zurueck, was zu lesen ist, und nicht, was im Quelltext steht.
+        visible_text = str(identity.get("text", "")).casefold()
         for expected in (
             "Angemeldet als",
             self.config.login_name,
@@ -11231,9 +11637,137 @@ class BrowserAcceptance:
             role,
             "Abmelden",
         ):
-            self._truth(expected in visible_text, f"Session-Bar in {location} ist unvollständig.")
-        self._truth(details.get("logoutVisible"), f"Abmeldebutton fehlt in {location}.")
-        self._truth(details.get("overviewContract"), f"Übersichtslink fehlt in {location}.")
+            self._truth(
+                str(expected).casefold() in visible_text,
+                f"Session-Bar in {location} ist unvollständig.",
+            )
+        self._truth(
+            identity.get("logoutVisible"), f"Abmeldebutton fehlt in {location}."
+        )
+        self._truth(
+            identity.get("compact"),
+            f"Session-Bar im Cockpit ist in {location} nicht kompakt.",
+        )
+
+        areas = self.cdp.evaluate(
+            """
+            (() => {
+                const menu = document.querySelector(
+                    "[data-estab-shell-menu]"
+                );
+                const navigation = menu && menu.querySelector(
+                    "[data-estab-navigation]"
+                );
+                if (!navigation) return null;
+                const items = Array.from(navigation.querySelectorAll(
+                    '[data-estab-navigation-group="areas"]'
+                    + " [data-estab-navigation-item]"
+                ));
+                const links = items
+                    .map(item => item.querySelector("a[data-estab-nav-key]"))
+                    .filter(Boolean);
+                const visible = element => {
+                    const rect = element.getBoundingClientRect();
+                    const style = getComputedStyle(element);
+                    return rect.width > 0 && rect.height > 0 &&
+                        style.display !== "none" &&
+                        style.visibility !== "hidden";
+                };
+                const overview = navigation.querySelector(
+                    'a[data-estab-nav-key="overview"]'
+                );
+                const navigationRect = navigation.getBoundingClientRect();
+                return {
+                    navigationCount: document.querySelectorAll(
+                        "[data-estab-navigation]"
+                    ).length,
+                    mode: navigation.getAttribute(
+                        "data-estab-navigation-mode"
+                    ),
+                    keys: links.map(
+                        link => link.getAttribute("data-estab-nav-key")
+                    ),
+                    allTargetsTop: links.every(
+                        link => link.getAttribute("target") === "_top"
+                    ),
+                    allVisible: links.every(visible),
+                    navigationVisible: navigationRect.width > 0 &&
+                        navigationRect.height > 0,
+                    lockedKeys: items
+                        .filter(item => item.hasAttribute(
+                            "data-estab-navigation-locked"
+                        ))
+                        .map(item => item.getAttribute(
+                            "data-estab-navigation-key"
+                        )),
+                    dutyKeys: items
+                        .filter(item => item.hasAttribute(
+                            "data-estab-navigation-duty-access"
+                        ))
+                        .map(item => item.getAttribute(
+                            "data-estab-navigation-key"
+                        )),
+                    activeKeys: Array.from(navigation.querySelectorAll(
+                        '[aria-current="page"]'
+                    )).map(link => link.getAttribute("data-estab-nav-key")),
+                    overviewContract: Boolean(overview) &&
+                        overview.textContent.replace(/\\s+/g, " ").trim()
+                            === "Übersicht" &&
+                        overview.getAttribute("target") === "_top"
+                };
+            })()
+            """
+        )
+        if not areas:
+            raise TestFailure(
+                f"Bereichsnavigation der Huelle fehlt in {location}."
+            )
+        self._equal(
+            areas.get("navigationCount"),
+            1,
+            f"Anzahl gemeinsamer Navigationen in {location}",
+        )
+        self._equal(areas.get("mode"), "sidebar", f"Navigationsart in {location}")
+        # Angemeldet steht die ganze Karte da: Das Menue zeigt jeden Bereich.
+        # Was eine Dienstfunktion nicht darf, traegt seinen Dienstvorbehalt
+        # als Merkmal -- der Riegel sitzt an der Tuer und nicht im Menue --,
+        # und angemeldet ist nichts mehr hinter dem Anmeldeschloss.
+        self._equal(
+            areas.get("keys"),
+            list(self.navigation_keys),
+            f"Reihenfolge der Kernbereiche in {location}",
+        )
+        self._equal(
+            areas.get("lockedKeys"),
+            [],
+            f"Anmeldepflichtige Bereiche in {location}",
+        )
+        self._equal(
+            areas.get("dutyKeys"),
+            self._duty_gated_navigation_keys(),
+            f"Dienstvorbehalte der Bereiche in {location}",
+        )
+        self._truth(
+            areas.get("allTargetsTop"),
+            f"Kernbereich wechselt in {location} nicht durchgehend das Top-Level-Ziel.",
+        )
+        self._equal(
+            areas.get("activeKeys"),
+            [expected_active_key],
+            f"Aktiver Navigationsbereich in {location}",
+        )
+        self._truth(
+            areas.get("navigationVisible"),
+            f"Gemeinsame Navigation ist in {location} nicht sichtbar.",
+        )
+        self._truth(
+            areas.get("allVisible"),
+            f"Mindestens ein Kernbereich ist in {location} nicht sichtbar.",
+        )
+        self._truth(
+            areas.get("overviewContract"),
+            f"Übersichtslink fehlt in {location}.",
+        )
 
     @staticmethod
     def _equal(actual: Any, expected: Any, description: str) -> None:

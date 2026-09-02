@@ -84,7 +84,20 @@ $assert(
         && str_contains($markup, 'data-estab-nav-key="overview"')
         && str_contains($markup, '>Übersicht</span>')
         && str_contains($markup, 'name="logout_action" value="logout"')
-        && str_contains($markup, '>Abmelden</button>'),
+        /*
+         * Der Knopf traegt ein Zeichen statt des Wortes: eine Tuer mit
+         * Pfeil. In der schmalen Spalte neben der Anmeldung stand
+         * "Abmelden" gestaucht und nahm mehr Breite als der Name daneben.
+         * Das Wort muss bleiben -- fuer Vorleseprogramme in der Beschriftung
+         * und am Mauszeiger im Titel; ein Zeichen ohne Wort waere fuer
+         * beides nichts.
+         */
+        && str_contains($markup, 'estab-session-logout-icon')
+        && str_contains($markup, ' title="Abmelden">')
+        && str_contains(
+            $markup,
+            '<span class="estab-visually-hidden">Abmelden</span>'
+        ),
     'navigation or logout form contract incomplete'
 );
 $assert(
@@ -127,8 +140,17 @@ $assert(
             'data-estab-navigation-mode="sidebar"'
         )
         && str_contains($sidebarMarkup, '<h2>Bereiche</h2>')
-        && str_contains($sidebarMarkup, '>Führungsstelle</span>')
-        && !str_contains($sidebarMarkup, '>Nachrichten</span>')
+        && str_contains($sidebarMarkup, '>Fernmeldeplan</span>')
+        && str_contains($sidebarMarkup, '>Melder</span>')
+        /*
+         * Ohne angenommene Dienstfunktion bleibt der Nachrichtenbereich
+         * sichtbar und anklickbar -- das Menue steht still und erklaert
+         * nichts. Dass dort ohne angetretenen Dienst nicht gearbeitet wird,
+         * sagt der Bereich selbst, wenn man ihn anlaeuft.
+         */
+        && str_contains($sidebarMarkup, '>Nachrichten</span>')
+        && str_contains($sidebarMarkup, 'href="/4fach/index.php"')
+        && !str_contains($sidebarMarkup, 'data-estab-navigation-blocked')
         && str_contains($sidebarMarkup, 'data-estab-user-code="ada001"')
         && str_contains($sidebarMarkup, 'data-estab-logout-form')
         && !str_contains($sidebarMarkup, '<details')
@@ -173,7 +195,11 @@ $assert(
     'full session bar is not suppressed in the composed main frame'
 );
 $assert(
-    substr_count($markup, '<script data-estab-dirty-guard>') === 1
+    substr_count($markup, ' data-estab-dirty-guard>') === 1
+        // Jedes eingebettete Skript traegt die Nonce der Anfrage; ohne sie
+        // fuehrt der Browser es unter der Richtlinie nicht mehr aus.
+        && substr_count($markup, '<script')
+            === substr_count($markup, '<script nonce="')
         && str_contains($markup, 'form[data-estab-dirty-guard]')
         && str_contains($markup, 'data-estab-dirty-initial')
         && str_contains($markup, 'event.submitter')
@@ -261,7 +287,7 @@ $assert(
         && substr_count(
             $publicSidebarMarkup,
             'data-estab-navigation-locked'
-        ) === 7
+        ) === 8
         && !str_contains($publicSidebarMarkup, '<details')
         && !str_contains($publicSidebarMarkup, '<summary')
         && !str_contains($publicSidebarMarkup, 'data-estab-session-bar')
@@ -370,7 +396,8 @@ $assert(
 $assert(
     $scopedFrameRefresh
         === 'FramesVeraendern('
-            . '"https://example.invalid/gateway/dispatch/site/4fach/vorgaben.php",'
+            . '"https://example.invalid/gateway/dispatch/site/4fach/'
+            . 'vorgaben.php?fragment=cockpit",'
             . '"vorgaben",'
             . '"https://example.invalid/gateway/dispatch/site/4fach/mainindex.php",'
             . '"mainframe");',
@@ -389,13 +416,17 @@ if ($originalBasePath === false) {
 putenv('ESTAB_PUBLIC_URL=/');
 putenv('ESTAB_BASE_PATH=');
 $rootFrameRefresh = estab_session_ui_frame_refresh_script();
+/*
+ * Der Rahmen "vorgaben" traegt das Cockpit und wird mit seinem Fragment
+ * geladen. Ohne das Fragment kaeme die alte kombinierte Seitenleiste zurueck,
+ * die es nicht mehr gibt.
+ */
 $assert(
     $rootFrameRefresh
         === 'FramesVeraendern('
-            . '"/4fach/vorgaben.php","vorgaben",'
+            . '"/4fach/vorgaben.php?fragment=cockpit","vorgaben",'
             . '"/4fach/mainindex.php","mainframe");'
         && !str_contains($rootFrameRefresh, 'counter')
-        && !str_contains($rootFrameRefresh, 'status')
         && !str_contains($rootFrameRefresh, '"//4fach/'),
     'root frame refresh contains a stale frame or unsafe URL'
 );
@@ -684,16 +715,26 @@ $navigationStatusPosition = is_string($navigationSource)
 $navigationWorkflowPosition = is_string($navigationSource)
     ? strpos($navigationSource, 'data-estab-workflow-menu')
     : false;
-$navigationAreasPosition = is_string($navigationSource)
-    ? strrpos($navigationSource, 'estab_navigation_markup(')
+$navigationActionsPosition = is_string($navigationSource)
+    ? strpos($navigationSource, 'estab-actions-page')
     : false;
+$navigationCockpitPosition = is_string($navigationSource)
+    ? strpos($navigationSource, 'estab-cockpit-page')
+    : false;
+/*
+ * Die Bereichsnavigation steht nicht mehr im Cockpit, sondern links in der
+ * Huelle -- auf jeder Seite an derselben Stelle. Stuende sie hier weiterhin,
+ * haette der Bedienende zwei Menues nebeneinander, die dasselbe tun.
+ */
+$shellSource = file_get_contents($root . '/app/app_shell.php');
 $assert(
     is_string($navigationSource)
         && str_contains($navigationSource, 'estab_session_ui_current_markup')
-        && str_contains(
-            $navigationSource,
-            'estab_navigation_markup('
-        )
+        && !str_contains($navigationSource, 'estab_navigation_markup(')
+        && is_string($shellSource)
+        && str_contains($shellSource, 'estab_navigation_markup(')
+        && str_contains($shellSource, 'estab-shell-menu')
+        && str_contains($shellSource, 'estab-shell-cockpit')
         && str_contains($navigationSource, 'data-estab-sidebar-root')
         && str_contains($navigationSource, 'data-estab-workflow-menu')
         && str_contains($navigationSource, 'estab_sidebar_status_markup')
@@ -721,11 +762,29 @@ $assert(
             $navigationSource,
             'estab_sidebar_fetch_configured_positions'
         )
-        && is_int($navigationStatusPosition)
+        /*
+         * Die Arbeitsschritte stehen links unter den Zielen, nicht rechts
+         * unter Anmeldung, Einsatz und Besetzung. Auf einem flachen
+         * Bildschirm hiess das bisher: scrollen, um an den naechsten Schritt
+         * zu kommen.
+         *
+         * Aufgebaut werden sie weiterhin hier, denn dafuer braucht es den
+         * aufgeloesten Einsatzbezug und die wirksamen Funktionen. Sie sind
+         * ein eigenes Fragment; die Reihenfolge im Quelltext haelt fest,
+         * dass sie im Aktionsdokument stehen und nicht mehr im Cockpit --
+         * stuenden sie in beiden, saehe der Bedienende dieselben Schritte
+         * zweimal.
+         */
+        && str_contains($navigationSource, "'aktionen'")
+        && is_int($navigationActionsPosition)
+        && is_int($navigationCockpitPosition)
         && is_int($navigationWorkflowPosition)
-        && is_int($navigationAreasPosition)
-        && $navigationStatusPosition < $navigationWorkflowPosition
-        && $navigationWorkflowPosition < $navigationAreasPosition,
+        && $navigationActionsPosition < $navigationWorkflowPosition
+        && $navigationWorkflowPosition < $navigationCockpitPosition
+        && str_contains($shellSource, 'estab-shell-actions')
+        && str_contains($shellSource, 'fragment=aktionen')
+        && is_int($navigationStatusPosition)
+        && $navigationStatusPosition > $navigationCockpitPosition,
     'persistent navigation does not render a resilient unified live sidebar'
 );
 $mainSource = file_get_contents($root . '/4fach/mainindex.php');
@@ -754,12 +813,21 @@ $assert(
         ),
     'login or second-sighting UI does not use the telecommunications display alias'
 );
+/*
+ * Der Arbeitsbereich steht jetzt in der Huelle: Das Menue links und das
+ * Cockpit rechts kommen von dort, die Mitte traegt den Rahmen mit dem
+ * Vordruck. Der Rahmen fuer das Menue ist damit entfallen -- er war der
+ * Grund, weshalb der Nachrichtenbereich ein anderes Menue zeigte als jede
+ * andere Seite.
+ */
 $framesetSource = file_get_contents($root . '/4fach/index.php');
 $assert(
     is_string($framesetSource)
-        && substr_count($framesetSource, '<iframe') === 2
-        && substr_count($framesetSource, 'name="vorgaben"') === 1
+        && substr_count($framesetSource, '<iframe') === 1
         && substr_count($framesetSource, 'name="mainframe"') === 1
+        && str_contains($framesetSource, 'estab_shell_menu_markup(')
+        && str_contains($framesetSource, 'estab_shell_cockpit_markup()')
+        && str_contains($framesetSource, 'data-estab-shell')
         && str_contains($framesetSource, 'data-estab-message-workspace')
         && str_contains($framesetSource, 'data-estab-mobile-menu-return')
         && str_contains(
@@ -768,7 +836,7 @@ $assert(
         )
         && str_contains(
             $framesetSource,
-            'event.source === sidebar.contentWindow'
+            'event.source === cockpit.contentWindow'
         )
         && str_contains($framesetSource, 'content.scrollIntoView')
         && str_contains(
@@ -783,32 +851,39 @@ $assert(
         && !str_contains($framesetSource, 'counter.php')
         && !str_contains($framesetSource, 'status.php')
         && !str_contains(strtolower($framesetSource), '<frameset'),
-    'message workspace does not contain exactly its sidebar and content frames'
+    'message workspace does not stand in the shell with exactly one content frame'
 );
 $bosWorkspaceSource = file_get_contents($root . '/stabinfo/index.php');
 $bosNavigationSource = file_get_contents($root . '/stabinfo/l_index.php');
 $bosDocumentsSource = file_get_contents($root . '/stabinfo/documents.php');
 $bosWelcomeSource = file_get_contents($root . '/stabinfo/f_info.php');
 $bosStylesheetSource = file_get_contents($root . '/estab-ui.css');
+/*
+ * Die Infosammlung stellte ihre Dokumentliste als eigene Spalte in den
+ * Inhalt -- ein zweites Menue neben dem der Huelle, mit eigener Breite und
+ * eigenem Aussehen. Die Auswahl steht jetzt links unter den Zielen, im
+ * selben Bild wie sie, und in der Mitte bleibt genau ein Rahmen: das
+ * gewaehlte Dokument.
+ */
 $assert(
     is_string($bosWorkspaceSource)
-        && substr_count($bosWorkspaceSource, '<iframe') === 2
-        && substr_count($bosWorkspaceSource, 'name="status"') === 1
+        && substr_count($bosWorkspaceSource, '<iframe') === 1
         && substr_count($bosWorkspaceSource, 'name="mainframe"') === 1
+        && !str_contains($bosWorkspaceSource, 'name="status"')
+        && !str_contains($bosWorkspaceSource, 'src="./l_index.php"')
         && str_contains($bosWorkspaceSource, 'data-estab-bos-workspace')
-        && str_contains($bosWorkspaceSource, 'src="./l_index.php"')
         && str_contains($bosWorkspaceSource, 'src="./f_info.php"')
+        && str_contains(
+            $bosWorkspaceSource,
+            'estab_shell_context_markup('
+        )
         && str_contains(
             $bosWorkspaceSource,
             'data-estab-mobile-menu-return'
         )
         && str_contains(
             $bosWorkspaceSource,
-            "event.data === 'estab:show-content'"
-        )
-        && str_contains(
-            $bosWorkspaceSource,
-            'event.source === sidebar.contentWindow'
+            "querySelector('[data-estab-shell-context]')"
         )
         && str_contains(
             $bosWorkspaceSource,
@@ -819,11 +894,19 @@ $assert(
             "body.classList.add('estab-bos-embedded-content')"
         )
         && !str_contains(strtolower($bosWorkspaceSource), '<frameset'),
-    'BOS workspace is not the responsive two-frame application workspace'
+    'BOS workspace does not stand in the shell with one content frame and'
+        . ' its document choice in the menu'
 );
+/*
+ * Die Dokumentenliste der Infosammlung ist deren Inhalt, nicht deren Huelle.
+ * Sie traegt deshalb weder Sitzungsleiste noch Bereichsnavigation -- beides
+ * kommt von der Huelle, und beides ein zweites Mal waere ein zweites Menue
+ * daneben.
+ */
 $assert(
     is_string($bosNavigationSource)
-        && str_contains($bosNavigationSource, 'estab_session_ui_current_markup')
+        && !str_contains($bosNavigationSource, 'estab_session_ui_current_markup')
+        && !str_contains($bosNavigationSource, 'estab_navigation_markup')
         && str_contains($bosNavigationSource, 'data-estab-bos-sidebar')
         && str_contains(
             $bosNavigationSource,

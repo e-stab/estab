@@ -13,6 +13,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/incident.php';
 require_once __DIR__ . '/message_evidence.php';
 require_once __DIR__ . '/incident_pdf.php';
+require_once __DIR__ . '/pdf_sperre.php';
 require_once __DIR__ . '/file_access.php';
 require_once __DIR__ . '/attachment_integrity.php';
 
@@ -890,6 +891,7 @@ function estab_incident_export_operations_evidence_status(
  *   duty_handovers:list<array<string,mixed>>,
  *   s6_plans:list<array<string,mixed>>,
  *   s6_plan_entries:list<array<string,mixed>>,
+ *   s6_plan_counterparts:list<array<string,mixed>>,
  *   courier_orders:list<array<string,mixed>>,
  *   operations_events:list<array<string,mixed>>,
  *   operations_evidence_heads:list<array<string,mixed>>,
@@ -940,6 +942,15 @@ function estab_incident_export_load(
                 . ' entry_row.`estab_recorded_at`,'
                 . ' entry_row.`estab_event_type`,'
                 . ' entry_row.`estab_message_id`,'
+                . ' (SELECT ttb_row.`estab_book_lfd`'
+                . ' FROM `nv_tbb` AS ttb_row'
+                . ' WHERE ttb_row.`einsatz_id` = entry_row.`einsatz_id`'
+                . ' AND ttb_row.`estab_message_id` ='
+                . ' entry_row.`estab_message_id`'
+                . " AND BINARY ttb_row.`estab_entry_type` = BINARY 'nachricht'"
+                . ' ORDER BY ttb_row.`estab_book_lfd`,'
+                . ' ttb_row.`tbb_lfd-nr` LIMIT 1)'
+                . ' AS `estab_message_ttb_lfd`,'
                 . ' entry_row.`estab_attachment_id`,'
                 . ' entry_row.`estab_reference`,'
                 . ' entry_row.`estab_correction_of`,'
@@ -1343,6 +1354,7 @@ function estab_incident_export_load(
 
     $s6Plans = [];
     $s6PlanEntries = [];
+    $s6PlanCounterparts = [];
     if (in_array('s6_plans', $sections, true)) {
         $s6Plans = estab_incident_export_rows(
             $connection,
@@ -1360,17 +1372,59 @@ function estab_incident_export_load(
             $connection,
             'SELECT e.`fernmeldeplan_eintrag_id`, e.`fernmeldeplan_id`,'
                 . ' p.`version` AS `plan_version`, e.`sortierung`,'
-                . ' e.`betriebsstelle`, e.`rufname`, e.`medium`,'
+                . ' w.`weg_nummer`, zu.`weg_id`,'
+                . ' e.`rueckfallebene_fuer_weg`,'
+                . ' e.`betriebsstelle`, e.`stellenart`, e.`erreichbarkeit`,'
+                . ' e.`medium`, e.`funkart`, e.`band`, e.`relaisstelle`,'
+                . ' e.`betriebsart`, e.`rufgruppe`, e.`anschlussart`,'
+                . ' e.`datenart`,'
                 . ' e.`kanal`, e.`bandlage`, e.`verkehrsform`,'
                 . ' e.`besondere_vermerke`, e.`bemerkungen`'
                 . ' FROM `nv_fernmeldeplan_eintraege` AS e'
                 . ' JOIN `nv_fernmeldeplaene` AS p'
                 . ' ON p.`fernmeldeplan_id` = e.`fernmeldeplan_id`'
+                // Die dauerhafte Wegkennung haengt an der Zuordnung, nicht am
+                // Eintrag -- der geschuetzte Bestand wird gelesen, nie
+                // angefasst. LEFT JOIN, weil ein Eintrag ohne Kennung ein
+                // Befund ist und keine fehlende Zeile.
+                . ' LEFT JOIN `nv_fernmeldeweg_zuordnung` AS zu'
+                . ' ON zu.`fernmeldeplan_eintrag_id`'
+                . ' = e.`fernmeldeplan_eintrag_id`'
+                . ' LEFT JOIN `nv_fernmeldewege` AS w'
+                . ' ON w.`weg_id` = zu.`weg_id`'
                 . ' WHERE p.`einsatz_id` = ?'
                 . ' ORDER BY p.`version`, e.`sortierung`,'
                 . ' e.`fernmeldeplan_eintrag_id`',
             $incidentId,
             'Die S6-Fernmeldeplaneinträge konnten nicht gelesen werden.'
+        );
+        /*
+         * Die Gegenstellen kommen als eigene Liste, nicht eingebettet.
+         *
+         * Eine Ausleitung ist ein Nachweis, kein Bildschirm: sie fuehrt jede
+         * Tabelle so, wie sie in der Datenbank steht, damit sich jede Zeile
+         * zurueckverfolgen laesst. Verschachtelt waere die Zuordnung nur noch
+         * aus der Verschachtelung ablesbar und nicht mehr aus einem Schluessel.
+         */
+        $s6PlanCounterparts = estab_incident_export_rows(
+            $connection,
+            'SELECT g.`gegenstelle_id`, g.`fernmeldeplan_eintrag_id`,'
+                . ' e.`fernmeldeplan_id`, p.`version` AS `plan_version`,'
+                . ' g.`sortierung`, g.`name`, g.`stellenart`,'
+                . ' g.`erreichbarkeit`,'
+                . ' g.`bemerkungen`'
+                . ' FROM `nv_fernmeldeplan_gegenstellen` AS g'
+                . ' JOIN `nv_fernmeldeplan_eintraege` AS e'
+                . ' ON e.`fernmeldeplan_eintrag_id`'
+                . ' = g.`fernmeldeplan_eintrag_id`'
+                . ' JOIN `nv_fernmeldeplaene` AS p'
+                . ' ON p.`fernmeldeplan_id` = e.`fernmeldeplan_id`'
+                . ' WHERE p.`einsatz_id` = ?'
+                . ' ORDER BY p.`version`, e.`sortierung`, g.`sortierung`,'
+                . ' g.`gegenstelle_id`',
+            $incidentId,
+            'Die Gegenstellen des S6-Fernmeldeplans konnten nicht gelesen '
+                . 'werden.'
         );
     }
 
@@ -1438,6 +1492,7 @@ function estab_incident_export_load(
         'duty_handover_requests' => $dutyHandoverRequests,
         's6_plans' => $s6Plans,
         's6_plan_entries' => $s6PlanEntries,
+        's6_plan_counterparts' => $s6PlanCounterparts,
         'courier_orders' => $courierOrders,
         'operations_events' => $operationsEvents,
         'operations_evidence_heads' => $operationsEvidenceHeads,
@@ -1477,6 +1532,7 @@ function estab_incident_export_load(
             'access_shift_memberships' => count($accessShiftMemberships),
             's6_plans' => count($s6Plans),
             's6_plan_entries' => count($s6PlanEntries),
+            's6_plan_counterparts' => count($s6PlanCounterparts),
             'courier' => count($courierOrders),
             'operations_evidence' => count($operationsEvents),
         ],
@@ -1522,6 +1578,26 @@ function estab_incident_export_pdf(
             'Die Empfängermatrix des PDF-Exports fehlt.'
         );
     }
+    /*
+     * Ab hier wird gebaut, und ab hier kostet es Speicher.
+     *
+     * FPDF haelt das ganze Dokument im Speicher; gemessen 65 MB Spitze, mit
+     * Rasteranlagen rund 90 MB. Der Container hat 448 MB -- eine Ausgabe
+     * plus gewoehnliche Seitenaufbauten passt, drei Ausgaben nicht.
+     *
+     * Die Pruefungen oben stehen ausserhalb der Sperre: Wer unvollstaendige
+     * Daten schickt, soll das erfahren, auch waehrend jemand anders ein
+     * Dossier zieht.
+     */
+    return estab_pdf_sperre_halten(static function () use (
+        $bundle,
+        $incident,
+        $sections,
+        $actor,
+        $attachmentByteLimit,
+        $generatedAt,
+        $recipientMatrix
+    ): array {
     $pdf = new EstabIncidentPdf(
         $incident,
         $attachmentByteLimit,
@@ -1657,6 +1733,9 @@ function estab_incident_export_pdf(
                 : [],
             is_array($bundle['s6_plan_entries'] ?? null)
                 ? $bundle['s6_plan_entries']
+                : [],
+            is_array($bundle['s6_plan_counterparts'] ?? null)
+                ? $bundle['s6_plan_counterparts']
                 : []
         );
     }
@@ -1699,4 +1778,5 @@ function estab_incident_export_pdf(
         'attachment_bytes' => $pdf->embeddedAttachmentBytes(),
         'sha256' => hash('sha256', $bytes),
     ], $attachmentVisibility);
+    });
 }

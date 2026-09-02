@@ -580,6 +580,7 @@ $assert(
         )
         && str_contains($markup, '>Status aktuell</span>')
         && str_contains($markup, '<h2>Aktivität nach Primärfunktion</h2>')
+        && str_contains($markup, 'data-estab-sidebar-presence')
         && str_contains(
             $markup,
             'aria-label="Anmeldeaktivität nach Primärfunktion"'
@@ -753,9 +754,31 @@ $assert(
             'data-estab-sound-url="/4fach/audio/notify_aw.wav"'
         )
         && str_contains($notificationMarkup, 'aria-pressed="false"')
+        /*
+         * Der Knopf zeigt eine Glocke: offen heisst hoerbar, durchgestrichen
+         * heisst stumm. Sie wird gezeichnet und nicht als Sonderzeichen
+         * gesetzt -- ein Sonderzeichen sieht auf jedem Geraet anders aus und
+         * behaelt seine eigene Farbe. Der Schraegstrich muss im Bild stecken,
+         * sonst gibt es den stummen Zustand nur in der Beschriftung. Die
+         * bleibt fuer Vorleseprogramme erhalten, der Titel fuer den Mauszeiger.
+         */
         && str_contains(
             $notificationMarkup,
-            '<span data-estab-sound-label>Hinweistöne aktivieren</span>'
+            '<svg class="estab-sidebar-sound-bell"'
+        )
+        && str_contains($notificationMarkup, 'aria-hidden="true"')
+        && str_contains(
+            $notificationMarkup,
+            'class="estab-sidebar-sound-bell-slash"'
+        )
+        && str_contains(
+            $notificationMarkup,
+            'title="Hinweistöne aktivieren"'
+        )
+        && str_contains(
+            $notificationMarkup,
+            '<span class="estab-visually-hidden" data-estab-sound-label>'
+                . 'Hinweistöne aktivieren</span>'
         ),
     'notification status omitted its signal or accessible sound toggle'
 );
@@ -1401,7 +1424,14 @@ $assert(
             'estab_additional_functions' => [
                 ['rolle' => 'Stab', 'funktion' => 'ETB'],
             ],
-        ], 'ROLLE')) === ['ldf_nachrichten', 'm2_benutzer'],
+        // Die Fernmelderschritte stehen dem LdF offen: Er vertritt den
+        // Annahme- und Weitergabeplatz, wenn es klemmt. Geprueft wird hier,
+        // dass die ETB-Zusatzfunktion daneben **keine** Stabsaktionen
+        // aufmacht -- darum geht es in dieser Zusicherung.
+        ], 'ROLLE')) === [
+            'ldf_nachrichten', 'fm_eingang', 'fm_ausgang', 'fm_admin',
+            'fm_anhang', 'm2_benutzer',
+        ],
     'ETB exposed normal Stab/FB message actions in STRICT or LOOSE'
 );
 
@@ -1458,8 +1488,18 @@ $assert(
             'm2_benutzer',
         ]
         && $looseAdminKeys === ['m2_benutzer']
+        // Der LdF traegt seine Dispositionsschritte und die des Annahme-
+        // und Weitergabeplatzes, den er vertritt -- dazu hier die Schritte
+        // der ausdruecklich zugewiesenen Zusatzfunktion S6. Die Zusicherung
+        // prueft die Vereinigung, nicht die Laenge: Es darf nichts
+        // hinzukommen, was weder aus der Grundfunktion noch aus einer
+        // zugewiesenen stammt.
         && $looseLdfWithS6Keys === [
             'ldf_nachrichten',
+            'fm_eingang',
+            'fm_ausgang',
+            'fm_admin',
+            'fm_anhang',
             'stab_schreiben',
             'stab_lesen',
             'm2_benutzer',
@@ -1620,8 +1660,12 @@ $assert(
             $stylesheet,
             '.estab-sidebar-queue.has-work strong'
         )
-        && str_contains($stylesheet, 'border-color: #e5b247')
-        && str_contains($stylesheet, 'color: #ffd36b'),
+        // Stand als Literalpaar #e5b247/#ffd36b hier. Beides ist jetzt die
+        // Standortmarke, und die ist gegen jeden Grund der dunklen Spalte
+        // gerechnet -- geprueft wird deshalb, dass die Warnung die Marke
+        // traegt, nicht dass sie einen bestimmten Farbwert abschreibt.
+        && str_contains($stylesheet, 'border-color: var(--marke-standort)')
+        && str_contains($stylesheet, 'color: var(--marke-standort)'),
     'non-empty queue has no persistent high-contrast warning style'
 );
 $assert(

@@ -96,10 +96,9 @@ assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --data-urlencode "funktion=$test_function" \
     --data-urlencode "kennwort1@$password_file" \
     "$base_url/4fach/mainindex.php"
-assert_body 'data-estab-session-bar'
-assert_body "data-estab-user-name=\"$test_name\""
-assert_body "data-estab-user-code=\"$test_code\""
-assert_body "data-estab-user-function=\"$test_function\""
+# The successful historical login answers the frameset POST with the handover
+# sheet that puts the selected area in place of the frameset. It carries no
+# session bar yet; who is logged in is proven by the next request.
 assert_body 'Der gewählte eStab-Bereich wird geöffnet'
 assert_body '4fach/index.php'
 
@@ -108,10 +107,28 @@ assert_body '4fach/index.php'
 # receives exactly the fixed function and role stored on the account. Optional
 # access shifts do not assign fachliche rights, and no formal duty assignment
 # is selected or fabricated in the session.
+# The session bar lives in the cockpit frame; the pages embed it rather than
+# carrying it themselves. Who is logged in is therefore read where it stands.
 assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
-    "$base_url/4fach/fuehrungsstelle.php"
+    "$base_url/4fach/vorgaben.php?fragment=cockpit"
 assert_body 'data-estab-session-bar'
 assert_body "data-estab-user-name=\"$test_name\""
+assert_body "data-estab-user-code=\"$test_code\""
+assert_body "data-estab-user-function=\"$test_function\""
+
+logout_csrf=$(sed -n \
+    's/.*name="csrf_token" value="\([a-f0-9][a-f0-9]*\)".*/\1/p' \
+    "$body" | head -n 1)
+if ! printf '%s' "$logout_csrf" | grep -Eq '^[a-f0-9]{64}$'; then
+    printf 'Legacy login HTTP: logout CSRF token is missing\n' >&2
+    exit 1
+fi
+
+assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+    "$base_url/4fach/fuehrungsstelle.php"
+assert_body 'vorgaben.php?fragment=cockpit'
+assert_body "data-estab-user-code=\"$test_code\""
+assert_body "data-estab-user-function=\"$test_function\""
 assert_body 'data-estab-dv-operations'
 assert_body 'Kontofunktion'
 assert_body 'Wirksame Funktionen'
@@ -123,21 +140,13 @@ if grep -Eq 'operation_action[^>]*select_hat|name="dienstbesetzung_id"' \
     exit 1
 fi
 
-logout_csrf=$(sed -n \
-    's/.*name="csrf_token" value="\([a-f0-9][a-f0-9]*\)".*/\1/p' \
-    "$body" | head -n 1)
-if ! printf '%s' "$logout_csrf" | grep -Eq '^[a-f0-9]{64}$'; then
-    printf 'Legacy login HTTP: logout CSRF token is missing\n' >&2
-    exit 1
-fi
-
 # In LOOSE, generated forms are available immediately to the authenticated
 # fixed account while the incident is active; a formal duty shift is not a
 # prerequisite.
 assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     "$base_url/4fach/vordrucke.php"
 assert_body 'Generierte Vordrucke'
-assert_body 'data-estab-session-bar'
+assert_body 'vorgaben.php?fragment=cockpit'
 
 assert_status 303 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --request POST \

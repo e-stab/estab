@@ -425,7 +425,7 @@ if (is_array($policy)) {
     </footer>
   </main>
   <?php if ($statusRefreshMilliseconds !== null): ?>
-    <script data-estab-self-registration-expiry-refresh>
+    <script<?= estab_csp_script_attribute() ?> data-estab-self-registration-expiry-refresh>
       (() => {
         const root = document.querySelector(
           '[data-estab-self-registration-refresh-ms]'

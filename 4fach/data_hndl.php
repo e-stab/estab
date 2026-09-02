@@ -23,6 +23,7 @@ require_once __DIR__ . "/tools.php";
 require_once __DIR__ . "/../app/auth.php";
 require_once __DIR__ . "/../app/assignment.php";
 require_once __DIR__ . "/../app/dynamic_schema.php";
+require_once __DIR__ . "/../app/message_list_ui.php";
 require_once __DIR__ . "/../app/message_repository.php";
 require_once __DIR__ . "/../app/message_transport.php";
 require_once __DIR__ . "/../app/password_policy.php";
@@ -537,6 +538,7 @@ function estab_rehydrate_authoritative_message_form (
 ): array {
   $editableFields = match ($task) {
     "Stab_korrigieren" => array (
+      "06_befwegausw",
       "07_durchspruch",
       "09_vorrangstufe",
       "10_anschrift",
@@ -551,13 +553,22 @@ function estab_rehydrate_authoritative_message_form (
       "01_medium",
       "02_zeit",
       "13_abseinheit",
+      // Der LdF PRUEFT den Weg und darf ihn richtigstellen.
+      "fernmeldeplan_eintrag_id",
       "incoming_transport_confirmed",
       "incoming_transport_correction_reason",
       "estab_route_error",
     ),
+    // "estab_eingangsweg_bemerkung" steht mit Absicht NICHT in dieser Liste.
+    // Sie ist die Aussage des Fernmelders; koennte der Pruefer sie
+    // umschreiben, waere die Pruefung wertlos und der Nachweis koennte nicht
+    // mehr sagen, wer was behauptet hat. Der LdF traegt seine eigene
+    // Bemerkung in Feld 20 ein, wie bisher.
     "LdF-Ausgang" => array (
+      "01_medium",
       "02_zeit",
       "05_gegenstelle",
+      "06_befweg",
       "fernmeldeplan_eintrag_id",
       "ldf_rueckgabegrund",
       "estab_route_error",
@@ -666,7 +677,8 @@ function estab_rehydrate_staff_correction_form (
   string $table,
   array $actor,
   string $commandPostName,
-  array $submitted
+  array $submitted,
+  ?string $distribution = null
 ): ?array {
   $message = estab_message_fetch_by_id (
     $connection,
@@ -687,18 +699,27 @@ function estab_rehydrate_staff_correction_form (
     return null;
   }
 
+  $serverValues = array (
+    // The type is immutable during a correction, but a returned
+    // conversation note must keep its original marker.
+    "11_gesprnotiz" => (string) ($message ["11_gesprnotiz"] ?? "f"),
+    "13_abseinheit" => $commandPostName,
+    "14_zeichen" => (string) ($actor ["kuerzel"] ?? ""),
+    "14_funktion" => (string) ($actor ["funktion"] ?? ""),
+  );
+  if ($distribution !== null) {
+    // Feld 19 der Korrektur leitet der Server aus der Empfängermatrix ab,
+    // er übernimmt es nicht aus dem Browser. Nur deshalb darf es den
+    // autoritativen Datensatz überschreiben, damit die Auswahl des
+    // Verfassers bei einer Fehleranzeige erhalten bleibt.
+    $serverValues ["16_empf"] = $distribution;
+  }
+
   return estab_rehydrate_authoritative_message_form (
     $message,
     $submitted,
     "Stab_korrigieren",
-    array (
-      // The type is immutable during a correction, but a returned
-      // conversation note must keep its original marker.
-      "11_gesprnotiz" => (string) ($message ["11_gesprnotiz"] ?? "f"),
-      "13_abseinheit" => $commandPostName,
-      "14_zeichen" => (string) ($actor ["kuerzel"] ?? ""),
-      "14_funktion" => (string) ($actor ["funktion"] ?? ""),
-    )
+    $serverValues
   );
 }
 
@@ -746,6 +767,8 @@ function check_and_save ($data, $activeCommandPostName, $expectedIncidentId){
     "02_zeit", "02_zeichen", "03_datum", "03_zeichen",
     "05_gegenstelle", "06_befweg", "06_befwegausw",
     "fernmeldeplan_eintrag_id",
+    "estab_eingangsweg_bemerkung",
+    "estab_gegenstelle_id",
     "transportweg_bestaetigt",
     "transport_rueckgabegrund",
     "ldf_rueckgabegrund",
@@ -845,6 +868,10 @@ function check_and_save ($data, $activeCommandPostName, $expectedIncidentId){
 
   // Local marks and the local sender identity are signed account attributes.
   // The browser may display them, but it can neither choose nor forge them.
+  // Feld 19 des Ausgangs entsteht in diesem Vorbereitungsschritt und wird im
+  // Speicherschritt weiter unten erneut gesetzt. Die Vorbelegung haelt beide
+  // Schritte nachweisbar zusammen.
+  $authorDistribution = null;
   switch ($data ["task"]) {
     case "FM-Eingang":
     case "FM-Eingang_Anhang":
@@ -856,6 +883,42 @@ function check_and_save ($data, $activeCommandPostName, $expectedIncidentId){
       $data ["13_abseinheit"] = $activeCommandPostName;
       $data ["14_zeichen"] = $sessionCode;
       $data ["14_funktion"] = $sessionFunction;
+      // Feld 19, Laufweg Ausgang: Der Verteiler gilt für ein- und ausgehende
+      // Nachrichten. Der Verfasser kreuzt die blauen Durchschriften selbst
+      // an; die rote Lage-/Dokumentationsdurchschrift und seine eigene grüne
+      // Durchschrift setzt der Server als vorgeschriebene Token dazu, genau
+      // wie im Eingangspfad. Der Browser überträgt nur Matrixkoordinaten,
+      // niemals Funktionsnamen oder Durchschriftfarben.
+      if (estab_workflow_distribution_has_selection ($browserData)) {
+        // Nur Koordinaten werden über die Matrix aufgelöst. Ohne Auswahl
+        // besteht der Verteiler ausschließlich aus den serverseitig
+        // gesetzten Durchschriften; eine zwischenzeitlich geänderte Matrix
+        // kann dann nichts fehlleiten. So verliert eine kleine
+        // Führungsstelle, die ihre Besetzung im laufenden Einsatz nachträgt,
+        // keinen Entwurf, dessen Verfasser Feld 19 gar nicht angefasst hat.
+        try {
+          estab_workflow_require_recipient_matrix_revision (
+            $browserData,
+            $empf_matrix,
+            (string) $redcopy2
+          );
+        } catch (InvalidArgumentException $exception) {
+          estab_render_message_stage_conflict ("Die Empfängermatrix");
+        }
+      }
+      try {
+        $authorDistribution = estab_workflow_distribution_tokens (
+          $browserData,
+          $empf_matrix,
+          array ($redcopy2."_rt", $sessionFunction."_gn")
+        );
+      } catch (InvalidArgumentException $exception) {
+        estab_workflow_forbid ();
+      }
+      // Eine abgewiesene Eingabe zeigt den Vordruck erneut. Der bereits
+      // abgeleitete Verteiler gehört dann in die Anzeige, damit die Auswahl
+      // des Verfassers nicht stillschweigend verloren geht.
+      $data ["16_empf"] = $authorDistribution;
     break;
 
     case "Stab_gesprnoti":
@@ -956,6 +1019,19 @@ function check_and_save ($data, $activeCommandPostName, $expectedIncidentId){
         return;
       }
     }
+  // Der Verteiler des Ausgangs muss den Vorbereitungsschritt ueberlebt haben.
+  // Fehlt er hier, liegt ein Programmfehler vor; der Vordruck darf dann nicht
+  // gespeichert werden, weil Feld 19 sonst leer in den Nachweis ginge.
+  if (
+    in_array (
+      $data ["task"],
+      array ("Stab_schreiben", "Stab_korrigieren"),
+      true
+    )
+    && !is_string ($authorDistribution)
+  ) {
+    estab_workflow_forbid ();
+  }
 	switch ($data["task"]){
 		case "FM-Eingang":
     	case "FM-Eingang_Anhang":
@@ -974,7 +1050,12 @@ function check_and_save ($data, $activeCommandPostName, $expectedIncidentId){
 			// Lage/Dokumentation red copy exists. Never append browser data.
 			$data ["16_empf"] = $redcopy2."_rt,";
 			if ($data ["01_datum"] == "" ) { $data ["01_datum"] = date ("Hi") ; }
-			if ($data ["12_abfzeit"] == "" ) { $data ["12_abfzeit"] = date ("Hi") ; }
+			// Feld 16 trägt die Abfassungszeit des Verfassers. Bei einem Eingang
+			// steht sie im Spruchkopf und wird von der Gegenstelle übernommen;
+			// die Anwendung kennt sie nicht. Die Eingangszeit in Feld 1 darf sie
+			// vorbelegen, weil sie den Eingang selbst beobachtet. Die
+			// Abfassungszeit beobachtet sie nicht, deshalb bleibt Feld 16 leer
+			// und die Pflichtprüfung in vali_data.php fordert es beim A/W an.
 			if (validate){
          		/*----------------------------------------------------*/
 				if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b>"; var_dump ($data); echo "<br>\n";}         	
@@ -1017,6 +1098,16 @@ function check_and_save ($data, $activeCommandPostName, $expectedIncidentId){
           "01_datum" => konv_taktime_datetime ($data ["01_datum"]),
           "01_zeichen" => $data ["01_zeichen"],
           "05_gegenstelle" => $data ["05_gegenstelle"],
+          // Der Weg steht neben dem Vordruck, nicht darin. Geprueft wird er
+          // im Repository, in derselben Transaktion, in der die Zeile
+          // entsteht; hier wird nur weitergereicht, was der Browser sagt.
+          "estab_fernmeldeplan_eintrag_id" =>
+            trim ((string) $data ["fernmeldeplan_eintrag_id"]),
+          "estab_gegenstelle_id" =>
+            trim ((string) $data ["estab_gegenstelle_id"]),
+          "estab_eingangsweg_bemerkung" => estab_message_incoming_route_note (
+            $data ["estab_eingangsweg_bemerkung"]
+          ),
           "07_durchspruch" => $data ["07_durchspruch"],
           "09_vorrangstufe" => $data ["09_vorrangstufe"],
           "10_anschrift" => $data ["10_anschrift"],
@@ -1071,7 +1162,10 @@ function check_and_save ($data, $activeCommandPostName, $expectedIncidentId){
 */
 
 
-      if ($data ["12_abfzeit"] == "" ) { $data ["12_abfzeit"] = date ("Hi") ; }
+      // Feld 16 bleibt Sache des Verfassers. Der Zeitpunkt des Absendens
+      // dieses Formulars ist nicht die Abfassungszeit der Nachricht;
+      // vali_data.php weist einen leeren Eintrag zurück und der Vordruck
+      // fordert ihn sichtbar nach.
 
       if (validate){
          /*----------------------------------------------------*/
@@ -1095,7 +1189,11 @@ function check_and_save ($data, $activeCommandPostName, $expectedIncidentId){
          /*----------------------------------------------------*/
       }
 
-       $data ["16_empf"] = $redcopy2."_rt,".$data ["14_funktion"]."_gn"; // Der Verfasser bekommt den gruenen
+       // Re-assert the server-derived distribution after legacy validation
+       // as a defense-in-depth boundary against hidden 16_* fields. Feld 19
+       // keeps the mandatory red Lage/Dokumentation copy and the author's
+       // own green copy in every case.
+       $data ["16_empf"] = $authorDistribution;
        $storedMessage = estab_message_insert_numbered (
          $messageConnection,
          $conf_4f_db ["datenbank"],
@@ -1106,6 +1204,12 @@ function check_and_save ($data, $activeCommandPostName, $expectedIncidentId){
            // The acceptance mark belongs to LdF, not to the author.
            "02_zeit" => null,
            "02_zeichen" => "",
+           // Feld 7 is the wish of the author. Nobody rewrites it after the
+           // message was written; LdF disposes the actually used means in
+           // Feld 1 and the way in Feld 6.
+           "06_befwegausw" => estab_message_medium_storage_value (
+             $data ["06_befwegausw"]
+           ) ?? "",
            "07_durchspruch" => $data ["07_durchspruch"],
            "09_vorrangstufe" => $data ["09_vorrangstufe"],
            "10_anschrift" => $data ["10_anschrift"],
@@ -1151,9 +1255,9 @@ function check_and_save ($data, $activeCommandPostName, $expectedIncidentId){
     break;
 
     case "Stab_korrigieren":
-      if ($data ["12_abfzeit"] == "") {
-        $data ["12_abfzeit"] = date ("Hi");
-      }
+      // Eine formal zurückgegebene Nachricht behält ihre Abfassungszeit.
+      // Der Zeitpunkt der Korrektur ist nicht die Abfassungszeit, deshalb
+      // setzt die Anwendung hier nichts ein.
       if (validate) {
         $vali = new vali_data_form ($data);
         $result = $vali->validatethis ();
@@ -1168,7 +1272,8 @@ function check_and_save ($data, $activeCommandPostName, $expectedIncidentId){
             (string) $conf_4f_tbl ["nachrichten"],
             $messageActor,
             $activeCommandPostName,
-            $data
+            $data,
+            $authorDistribution
           );
           if (!is_array ($rehydratedCorrection)) {
             estab_render_message_stage_conflict (
@@ -1192,6 +1297,9 @@ function check_and_save ($data, $activeCommandPostName, $expectedIncidentId){
           $sessionCode,
           $sessionFunction,
           array (
+          "06_befwegausw" => estab_message_medium_storage_value (
+            $data ["06_befwegausw"]
+          ) ?? "",
           "07_durchspruch" => $data ["07_durchspruch"],
           "09_vorrangstufe" => $data ["09_vorrangstufe"],
           "10_anschrift" => $data ["10_anschrift"],
@@ -1203,6 +1311,8 @@ function check_and_save ($data, $activeCommandPostName, $expectedIncidentId){
           "13_abseinheit" => $activeCommandPostName,
           "14_zeichen" => $sessionCode,
           "14_funktion" => $sessionFunction,
+          // Feld 19 bleibt auch in der Korrektur Sache des Verfassers.
+          "16_empf" => $authorDistribution,
           "15_quitdatum" => null,
           "15_quitzeichen" => "",
           "x00_status" => 4,
@@ -1238,7 +1348,8 @@ function check_and_save ($data, $activeCommandPostName, $expectedIncidentId){
           (string) $conf_4f_tbl ["nachrichten"],
           $messageActor,
           $activeCommandPostName,
-          $data
+          $data,
+          $authorDistribution
         );
         if (!is_array ($rehydratedCorrection)) {
           estab_render_message_stage_conflict (
@@ -1259,7 +1370,8 @@ function check_and_save ($data, $activeCommandPostName, $expectedIncidentId){
           (string) $conf_4f_tbl ["nachrichten"],
           $messageActor,
           $activeCommandPostName,
-          $data
+          $data,
+          $authorDistribution
         );
         if (!is_array ($rehydratedCorrection)) {
           estab_render_message_stage_conflict (
@@ -1295,7 +1407,10 @@ function check_and_save ($data, $activeCommandPostName, $expectedIncidentId){
     case "Stab_gesprnoti":
 		if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><big>Stab_gesprnoti</big><br>\n";}
       if ($data ["01_datum"] == "" )     { $data ["01_datum"]     = date ("Hi") ; }
-      if ($data ["12_abfzeit"] == "" )   { $data ["12_abfzeit"]   = date ("Hi") ; }
+      // Auch bei der Gesprächsnotiz ist die Abfassungszeit eine Angabe des
+      // Verfassers. Die Eingangszeit in Feld 1 beobachtet die Anwendung
+      // selbst und belegt sie deshalb vor; wann die Notiz abgefasst wurde,
+      // weiß nur der Bearbeiter.
 
       try {
         estab_workflow_require_recipient_matrix_revision (
@@ -1378,8 +1493,10 @@ function check_and_save ($data, $activeCommandPostName, $expectedIncidentId){
            "01_medium" => $data ["01_medium"],
            "01_datum" => konv_taktime_datetime ($data ["01_datum"]),
            "01_zeichen" => $data ["01_zeichen"],
-           // Acceptance, disposition and transport belong to Si, LdF and
-           // A/W. Creating the note must not pre-populate their evidence.
+           // Acceptance belongs to Si, and there it ends: a conversation
+           // note records a talk that already happened, so no disposition
+           // and no transport follow. Creating it must not pre-populate
+           // the reviewer's evidence either.
            "02_zeit" => null,
            "02_zeichen" => "",
            "03_datum" => null,
@@ -1418,8 +1535,6 @@ function check_and_save ($data, $activeCommandPostName, $expectedIncidentId){
                "author_function" => $sessionFunction,
                "original_conversation_medium" => $data ["01_medium"],
                "review_required" => true,
-               "ldf_disposition_required" => true,
-               "transport_evidence_required" => true,
                "content_sha256" => hash ("sha256", $data ["12_inhalt"]),
              ),
              $messageActionToken,
@@ -1562,6 +1677,13 @@ function check_and_save ($data, $activeCommandPostName, $expectedIncidentId){
         $ldfFields ["13_abseinheit"] = trim (
           (string) $data ["13_abseinheit"]
         );
+        // Der vom LdF bestaetigte oder richtiggestellte Weg. Das Repository
+        // loest ihn erneut gegen den aktiven Plan auf und weist ihn zurueck,
+        // wenn er nicht zum Mittel in Feld 1 passt. Die Bemerkung des
+        // Fernmelders wird hier NICHT uebernommen -- sie bleibt, wie sie war.
+        $ldfFields ["estab_fernmeldeplan_eintrag_id"] = trim (
+          (string) $data ["fernmeldeplan_eintrag_id"]
+        );
         // Missing Si staffing never closes or bypasses the viewer queue.
         $ldfFields ["x00_status"] = 4;
         $ldfFields ["x01_abschluss"] = "f";
@@ -1569,11 +1691,23 @@ function check_and_save ($data, $activeCommandPostName, $expectedIncidentId){
         $ldfFields ["05_gegenstelle"] = trim (
           (string) $data ["05_gegenstelle"]
         );
-        // The repository resolves this immutable ID again while holding the
-        // active incident transaction and derives medium/route from the
-        // currently valid S6 plan. Browser-supplied 06_* values are ignored.
-        $ldfFields ["estab_fernmeldeplan_eintrag_id"] =
-          estab_message_positive_id ($data ["fernmeldeplan_eintrag_id"]);
+        // Feld 1 nimmt die Disposition des LdF auf. Waehlt LdF einen Weg aus
+        // dem S6-Plan, ersetzt das Repository das Mittel unveraenderbar durch
+        // das Medium dieses Weges; Feld 7 bleibt der Wunsch des Verfassers.
+        $ldfFields ["01_medium"] = (string) $data ["01_medium"];
+        $ldfRouteEntry = trim ((string) $data ["fernmeldeplan_eintrag_id"]);
+        if ($ldfRouteEntry !== "") {
+          // The repository resolves this immutable ID again while holding the
+          // active incident transaction and derives medium/route from the
+          // currently valid S6 plan. Browser-supplied 06_* values are ignored.
+          $ldfFields ["estab_fernmeldeplan_eintrag_id"] =
+            estab_message_positive_id ($ldfRouteEntry);
+        } else {
+          // FUEST-KLEIN-BEFOERDERUNG: Ohne veroeffentlichten Fernmeldeplan
+          // benennt LdF den Befoerderungsweg selbst. Das Repository prueft
+          // Mittel und Weg erneut und weist sie im Modus STRENG zurueck.
+          $ldfFields ["06_befweg"] = trim ((string) $data ["06_befweg"]);
+        }
         $ldfFields ["x00_status"] = 2;
         $ldfFields ["x01_abschluss"] = "f";
       }
@@ -1612,7 +1746,10 @@ function check_and_save ($data, $activeCommandPostName, $expectedIncidentId){
                 "direction" => "A",
                 "remote_callsign" => $ldfFields ["05_gegenstelle"],
                 "requested_telecom_plan_entry_id" =>
-                  $ldfFields ["estab_fernmeldeplan_eintrag_id"],
+                  $ldfFields ["estab_fernmeldeplan_eintrag_id"] ?? null,
+                "requested_transport_medium" => $ldfFields ["01_medium"],
+                "requested_transport_route" =>
+                  $ldfFields ["06_befweg"] ?? "",
                 "accepted_by" => $sessionCode,
               ),
             "occurred_at" => $ldfFields ["02_zeit"],
@@ -1635,7 +1772,15 @@ function check_and_save ($data, $activeCommandPostName, $expectedIncidentId){
         $data = $rehydratedLead;
         $routeValidation = $vali->validate;
         if ($ldfDirection === "A") {
-          $routeValidation ["fernmeldeplan_eintrag_id"] = false;
+          if ($ldfRouteEntry === "") {
+            // Ohne veroeffentlichten Fernmeldeplan gibt es keinen
+            // Auswahlkasten. Die Ablehnung muss dann die Felder markieren,
+            // die der LdF ueberhaupt sieht: Mittel und Befoerderungsweg.
+            $routeValidation ["01_medium"] = false;
+            $routeValidation ["06_befweg"] = false;
+          } else {
+            $routeValidation ["fernmeldeplan_eintrag_id"] = false;
+          }
         }
         $form = new nachrichten4fach (
           $data,
@@ -1854,6 +1999,9 @@ function check_and_save ($data, $activeCommandPostName, $expectedIncidentId){
        $isFormalReturn =
          isset ($data ["zurueckweisen_x"])
          || isset ($data ["zurueckweisen_y"]);
+       // Die Art steht unveraenderlich am Datensatz, nicht im Browser.
+       $isConversationNote =
+         (string) ($reviewMessage ["11_gesprnotiz"] ?? "f") === "t";
        if ($isFormalReturn && $reviewDirection !== "A") {
          throw new InvalidArgumentException (
            "Nur Ausgangsnachrichten können formal zurückgegeben werden"
@@ -1911,6 +2059,7 @@ function check_and_save ($data, $activeCommandPostName, $expectedIncidentId){
          "x02_sperre" => "f",
          "x03_sperruser" => "",
        );
+       $reviewRecipients = "";
        if ($reviewDirection === "E") {
          try {
            estab_workflow_require_recipient_matrix_revision (
@@ -1927,13 +2076,58 @@ function check_and_save ($data, $activeCommandPostName, $expectedIncidentId){
            $empf_matrix,
            array ($redcopy2."_rt")
          );
+         if (!estab_workflow_distribution_has_processor ($data ["16_empf"])) {
+           // Feld 19, Laufweg Eingang: Die Sichtung schliesst den Nachweis
+           // ab. Die rote Lage-/Dokumentationsdurchschrift steht hier immer,
+           // sie ist kein Empfaenger im Sinne des Laufwegs. Ohne blaue
+           // Durchschrift bliebe die Nachricht ohne Bearbeiter liegen.
+           $validationErrors = array_fill_keys (array (
+             "01_medium", "01_datum", "01_zeichen", "02_zeit", "02_zeichen",
+             "03_datum", "03_zeichen", "05_gegenstelle", "06_befweg",
+             "06_befwegausw", "07_durchspruch", "08_befhinweis",
+             "08_befhinwausw", "10_anschrift", "11_rufnummer",
+             "12_betreff", "12_inhalt", "12_abfzeit",
+             "13_abseinheit", "14_zeichen", "14_funktion", "15_quitdatum",
+             "15_quitzeichen", "17_vermerke"
+           ), true);
+           $validationErrors ["16_empf"] = false;
+           $form = new nachrichten4fach (
+             array_replace ($reviewMessage, array (
+               "15_quitdatum" => $data ["15_quitdatum"],
+               "15_quitzeichen" => $sessionCode,
+               "16_empf" => $data ["16_empf"],
+               "17_vermerke" => $data ["17_vermerke"],
+               "estab_route_error" =>
+                 estab_workflow_missing_processor_message (),
+             )),
+             "Stab_sichten",
+             $validationErrors
+           );
+           exit;
+         }
          $reviewFields ["16_empf"] = $data ["16_empf"];
+         // Field 16 keeps internal matrix tokens. The official TBB quittance
+         // column receives the readable recipient names instead, through the
+         // translation the message list already uses.
+         $reviewRecipients = implode (", ", estab_message_list_recipient_labels (
+           $data ["16_empf"]
+         ));
+         $reviewFields ["x00_status"] = 8;
+         $reviewFields ["x01_abschluss"] = "t";
+       } elseif ($isFormalReturn) {
+         // Outgoing review is formal only: address, author mark and function.
+         // Neither content nor recipient routing is accepted from the browser.
+         $reviewFields ["x00_status"] = 10;
+         $reviewFields ["x01_abschluss"] = "f";
+       } elseif ($isConversationNote) {
+         // Eine Gespraechsnotiz dokumentiert ein bereits gefuehrtes Gespraech.
+         // Es gibt nichts zu disponieren und nichts zu befoerdern: mit der
+         // Sichtung ist der Nachweis abgeschlossen. LdF und A/W sehen sie
+         // deshalb nie in ihrer Warteschlange.
          $reviewFields ["x00_status"] = 8;
          $reviewFields ["x01_abschluss"] = "t";
        } else {
-         // Outgoing review is formal only: address, author mark and function.
-         // Neither content nor recipient routing is accepted from the browser.
-         $reviewFields ["x00_status"] = $isFormalReturn ? 10 : 1;
+         $reviewFields ["x00_status"] = 1;
          $reviewFields ["x01_abschluss"] = "f";
        }
 
@@ -1945,7 +2139,11 @@ function check_and_save ($data, $activeCommandPostName, $expectedIncidentId){
          array (
            "event_type" => $reviewDirection === "E"
              ? "incoming_routed"
-             : ($isFormalReturn ? "si_returned" : "si_approved"),
+             : ($isFormalReturn
+               ? "si_returned"
+               : ($isConversationNote
+                 ? "conversation_note_closed"
+                 : "si_approved")),
            "actor" => $messageActor,
            "from_status" => 4,
            "to_status" => (int) $reviewFields ["x00_status"],
@@ -1968,16 +2166,22 @@ function check_and_save ($data, $activeCommandPostName, $expectedIncidentId){
              ),
            "occurred_at" => $reviewFields ["15_quitdatum"],
          ),
-         $expectedIncidentId
+         $expectedIncidentId,
+         $reviewRecipients
        );
        if (!$reviewSaved) {
          throw new RuntimeException ("Message review status changed");
        }
+       // Die Gespraechsnotiz endet hier. "Freigegeben" hiesse an den
+       // LdF uebergeben -- diesen Schritt gibt es in ihrem Laufweg
+       // nicht, und das Protokoll darf ihn nicht behaupten.
        $reviewEvent = $reviewDirection === "E"
          ? "Stab-sichten-Eingang"
          : ($isFormalReturn
            ? "Stab-formal-zurueckgewiesen"
-           : "Stab-formal-freigegeben");
+           : ($isConversationNote
+             ? "Stab-gesprnoti-abgeschlossen"
+             : "Stab-formal-freigegeben"));
        protokolleintrag (
          $reviewEvent,
          "message_id=".estab_message_positive_id ($data ["00_lfd"])

@@ -18,45 +18,201 @@ require_once __DIR__ . '/incident.php';
 require_once __DIR__ . '/logbook_lifecycle.php';
 
 const ESTAB_DV_REQUIRED_HATS = ['S2', 'Si', 'S6', 'LdF', 'A/W'];
+/**
+ * Stations of the message run, in the order a message passes them.
+ *
+ * ESTAB_DV_REQUIRED_HATS names the complete roster of a command post with a
+ * staff. This list is deliberately narrower: it holds only the stations that a
+ * message has to pass to reach or leave the command post, together with the
+ * role the authoritative assignment policy binds to each of them. S6 plans the
+ * telecommunications and is therefore no station of the run itself.
+ */
+const ESTAB_DV_MESSAGE_RUN_STATIONS = [
+    'Si' => [
+        'rolle' => 'Stab',
+        'station' => 'Sichtung eingehender Nachrichten',
+    ],
+    'S2' => [
+        'rolle' => 'Stab',
+        'station' => 'Einsatztagebuch',
+    ],
+    'A/W' => [
+        'rolle' => 'Fernmelder',
+        'station' => 'Annahme und Weitergabe',
+    ],
+    'LdF' => [
+        'rolle' => 'Fernmelder',
+        'station' => 'Leitung des Fernmeldebetriebs',
+    ],
+];
 const ESTAB_DV_MEDIA = ['Fe', 'Fu', 'Me', 'FAX', 'FS', '@'];
 const ESTAB_DV_LEGACY_AUDIT_MAX_BYTES = 60000;
-const ESTAB_DV_MEDIA_DEFINITIONS = [
+
+/**
+ * The transmission media a plan may still offer.
+ *
+ * One short of the message form: the telex network is switched off, so no
+ * station is reachable by `FS` any more. The form keeps its printed tick box
+ * and old messages keep their value -- a plan lists what is actually operated,
+ * and a medium without a device is not a route.
+ */
+const ESTAB_DV_PLAN_MEDIA = ['Fe', 'Fu', 'Me', 'FAX', '@'];
+
+/**
+ * The kinds of route a plan can carry, with the fields each one owns.
+ *
+ * "Analogfunk nutzt Kanäle. Digitalfunk nutzt Rufgruppen." Both travel under
+ * the medium `Fu`, because that is what Feld 1 of the message form prints; the
+ * distinction lives beside the medium in `funkart`, never inside it. A route
+ * therefore carries exactly the technical fields of its own technology: an
+ * analogue one has a band position, a digital one cannot have one at all.
+ *
+ * `erreichbarkeit` is the word the operator sees while filling the field in.
+ * The generic heading "Erreichbar unter" appears only where a table puts every
+ * medium into one column -- the paper never needed a generic word because it
+ * prints one line per medium.
+ */
+const ESTAB_DV_TELECOM_ROUTE_KINDS = [
     'Fe' => [
+        'medium' => 'Fe',
+        'funkart' => null,
         'label' => 'Fernsprecher',
-        'kanal' => null,
-        'bandlage' => null,
-        'verkehrsform' => 'Verkehrsform oder besondere Behandlung',
+        'erreichbarkeit' => 'Rufnummer',
+        'felder' => ['anschlussart' => 'Anschlussart'],
+        'pflicht' => [],
     ],
-    'Fu' => [
-        'label' => 'Funk',
-        'kanal' => 'Kanal oder Rufgruppe',
-        'bandlage' => 'Bandlage',
-        'verkehrsform' => 'Verkehrsform',
+    'Fu:ANALOG' => [
+        'medium' => 'Fu',
+        'funkart' => 'ANALOG',
+        'label' => 'Funk (analog)',
+        'erreichbarkeit' => 'Funkrufname',
+        'felder' => [
+            'band' => 'Band',
+            'kanal' => 'Kanal',
+            'bandlage' => 'Bandlage',
+            'verkehrsform' => 'Verkehrsform',
+            'relaisstelle' => 'Relaisstelle',
+        ],
+        'pflicht' => ['band', 'kanal', 'bandlage', 'verkehrsform'],
+    ],
+    'Fu:DIGITAL' => [
+        'medium' => 'Fu',
+        'funkart' => 'DIGITAL',
+        'label' => 'Funk (digital)',
+        'erreichbarkeit' => 'Funkrufname',
+        'felder' => [
+            'betriebsart' => 'Betriebsart',
+            'rufgruppe' => 'Rufgruppe',
+        ],
+        'pflicht' => ['betriebsart', 'rufgruppe'],
     ],
     'Me' => [
+        'medium' => 'Me',
+        'funkart' => null,
         'label' => 'Melder',
-        'kanal' => null,
-        'bandlage' => null,
-        'verkehrsform' => 'Verkehrsform oder besondere Behandlung',
+        'erreichbarkeit' => 'Meldekopf oder Sammelstelle',
+        'felder' => [],
+        'pflicht' => [],
     ],
     'FAX' => [
+        'medium' => 'FAX',
+        'funkart' => null,
         'label' => 'Telefax',
-        'kanal' => null,
-        'bandlage' => null,
-        'verkehrsform' => 'Verkehrsform oder besondere Behandlung',
-    ],
-    'FS' => [
-        'label' => 'Fernschreiber',
-        'kanal' => null,
-        'bandlage' => null,
-        'verkehrsform' => 'Verkehrsform oder besondere Behandlung',
+        'erreichbarkeit' => 'Faxnummer',
+        'felder' => ['anschlussart' => 'Anschlussart'],
+        'pflicht' => [],
     ],
     '@' => [
+        'medium' => '@',
+        'funkart' => null,
         'label' => 'Datenübertragung',
-        'kanal' => null,
-        'bandlage' => null,
-        'verkehrsform' => 'Verkehrsform oder besondere Behandlung',
+        'erreichbarkeit' => 'Adresse oder Kennung',
+        'felder' => ['datenart' => 'Art der Datenübertragung'],
+        'pflicht' => ['datenart'],
     ],
+];
+
+/**
+ * Which way a connection points -- Q4 Kapitel 6.1.2, vertikal und horizontal.
+ *
+ * `EIGEN` steht hier nur noch fuer den Altbestand: bis Migration 129 trug der
+ * eigene Weg eine Stellenart, und eine freigegebene Fassung muss weiter sagen
+ * koennen, was sie gesagt hat. Neu gepflegt wird die Angabe an der
+ * Gegenstelle, und dort ist `EIGEN` ausgeschlossen.
+ */
+const ESTAB_DV_TELECOM_STATION_KINDS = [
+    'EIGEN' => 'eigene Führungsstelle',
+    'UEBER' => 'übergeordnete Stelle',
+    'UNTER' => 'nachgeordnete Stelle',
+    'NEBEN' => 'benachbarte Stelle oder Partnerorganisation',
+];
+
+/**
+ * Die Technik einer Nebenstelle der eigenen Führungsstelle.
+ *
+ * Fb Fü 77 druckt die Zeilen der Nebenstellentafel vor: C Wähl, Mobilfunk,
+ * zweimal ISDN S0, zweimal Analog a/b. eStab führt dieselben Arten, aber
+ * nicht in fester Zeilenzahl -- eine Führungsstelle hat so viele
+ * Nebenstellen, wie sie hat, und ein Vordruck mit sechs Zeilen ist eine
+ * Eigenschaft des Papiers, nicht der Sache.
+ *
+ * `IP` und `SONDER` stehen dazu, weil eine Führungsstelle von 2026 eine
+ * IP-Nebenstelle hat und Fb Fü 77 von 2003 sie nicht kennen konnte.
+ */
+const ESTAB_DV_TELECOM_EXTENSION_KINDS = [
+    'WAEHL' => 'C Wähl',
+    'MOBILFUNK' => 'Mobilfunk',
+    'ISDN' => 'ISDN S0',
+    'ANALOG' => 'Analog a/b',
+    'IP' => 'IP-Nebenstelle',
+    'SONDER' => 'Sonderanschluss',
+];
+
+/**
+ * Die Richtungen, die eine GEGENSTELLE annehmen kann.
+ *
+ * Abgeleitet und nicht zweitgeschrieben: zwei Listen derselben Werte laufen
+ * auseinander, sobald eine von beiden ergaenzt wird. Weggenommen wird genau
+ * eine -- die eigene Stelle ist keine Gegenstelle.
+ *
+ * @return array<string,string>
+ */
+function estab_dv_telecom_counterpart_kinds(): array
+{
+    $arten = ESTAB_DV_TELECOM_STATION_KINDS;
+    unset($arten['EIGEN']);
+    return $arten;
+}
+
+/** The closed value lists. Everything absent here is free text on purpose. */
+const ESTAB_DV_TELECOM_FIELD_CHOICES = [
+    'band' => ['2m' => '2 m', '4m' => '4 m'],
+    'betriebsart' => [
+        'TMO' => 'TMO — Netzbetrieb',
+        'DMO' => 'DMO — Direktbetrieb',
+    ],
+    'anschlussart' => [
+        'AMT' => 'Amtsanschluss',
+        'NST' => 'Nebenstelle',
+        'MOBIL' => 'Mobilfunk',
+        'SONDER' => 'Sondernetz',
+    ],
+    'datenart' => [
+        'MAIL' => 'E-Mail',
+        'MESSENGER' => 'Messenger',
+        'FACHANW' => 'Fachanwendung',
+        'INTERNET' => 'Internet',
+    ],
+];
+
+/**
+ * The technical columns a route row carries, in schema order.
+ *
+ * Named once so the statements below cannot drift apart from each other.
+ */
+const ESTAB_DV_TELECOM_TECHNICAL_COLUMNS = [
+    'funkart', 'band', 'kanal', 'bandlage', 'verkehrsform',
+    'relaisstelle', 'betriebsart', 'rufgruppe', 'anschlussart', 'datenart',
 ];
 
 final class EstabDvInputException extends InvalidArgumentException
@@ -89,27 +245,112 @@ function estab_dv_require_strict_incident_snapshot(
     }
 }
 
-/** @return array{label:string,kanal:?string,bandlage:?string,verkehrsform:?string} */
-function estab_dv_telecom_medium_definition(mixed $medium): array
+/**
+ * Resolve one route kind, the key that decides which fields a route owns.
+ *
+ * @return array{medium:string,funkart:?string,label:string,erreichbarkeit:string,felder:array<string,string>,pflicht:list<string>}
+ */
+function estab_dv_telecom_route_definition(mixed $kind): array
 {
     if (
-        !is_string($medium)
-        || !isset(ESTAB_DV_MEDIA_DEFINITIONS[$medium])
+        !is_string($kind)
+        || !isset(ESTAB_DV_TELECOM_ROUTE_KINDS[$kind])
     ) {
-        throw new EstabDvInputException('Medium ist ungültig.');
+        throw new EstabDvInputException('Wegart ist ungültig.');
     }
-    return ESTAB_DV_MEDIA_DEFINITIONS[$medium];
+    return ESTAB_DV_TELECOM_ROUTE_KINDS[$kind];
 }
 
+/**
+ * Name the route kind of a stored row.
+ *
+ * A radio route from before the separation carries no `funkart`. It resolves
+ * to no kind at all, and the application shows it as legacy instead of
+ * guessing: a plan of last year does not say whether it meant analogue or
+ * digital, and inventing the answer would put it into a released document.
+ */
+function estab_dv_telecom_route_kind(mixed $medium, mixed $funkart): ?string
+{
+    if (!is_string($medium) || $medium === '') {
+        return null;
+    }
+    $candidate = is_string($funkart) && $funkart !== ''
+        ? $medium . ':' . $funkart
+        : $medium;
+    return isset(ESTAB_DV_TELECOM_ROUTE_KINDS[$candidate])
+        ? $candidate
+        : null;
+}
+
+/** The plain medium label, also for media a plan no longer offers. */
 function estab_dv_telecom_medium_label(mixed $medium): string
 {
     if (!is_string($medium)) {
         return 'Unbekannt';
     }
-    $definition = ESTAB_DV_MEDIA_DEFINITIONS[$medium] ?? null;
-    return is_array($definition)
-        ? (string) $definition['label']
-        : 'Unbekannt (' . $medium . ')';
+    return match ($medium) {
+        'Fe' => 'Fernsprecher',
+        'Fu' => 'Funk',
+        'Me' => 'Melder',
+        'FAX' => 'Telefax',
+        'FS' => 'Fernschreiber',
+        '@' => 'Datenübertragung',
+        default => 'Unbekannt (' . $medium . ')',
+    };
+}
+
+/** The label a bediener reads for one route: "Funk (digital)". */
+function estab_dv_telecom_route_label(mixed $medium, mixed $funkart): string
+{
+    $kind = estab_dv_telecom_route_kind($medium, $funkart);
+    if ($kind === null) {
+        return estab_dv_telecom_medium_label($medium);
+    }
+    return (string) ESTAB_DV_TELECOM_ROUTE_KINDS[$kind]['label'];
+}
+
+/**
+ * Woran ein Weg zu erkennen ist, wenn Mittel und Erreichbarkeit nicht reichen.
+ *
+ * Eine Führungsstelle hat mehrere Digitalfunkwege unter EINEM eigenen
+ * Funkrufnamen -- nach oben wird in einer anderen Rufgruppe gesprochen als
+ * nach unten. „Funk (digital) · Heros Übungsplatz 10" steht dann zweimal da,
+ * und die Zeilen sind nicht auseinanderzuhalten.
+ *
+ * Zurück kommt genau das, was sie unterscheidet: beim Digitalfunk die
+ * Rufgruppe (und die Betriebsart, wo sie gesetzt ist), beim Analogfunk Band,
+ * Kanal und Bandlage, beim Fernsprecher die Anschlussart. Nicht die ganze
+ * Technik -- die steht in der betrieblichen Ansicht; nur das Kennzeichen.
+ */
+function estab_dv_telecom_route_key(array $entry): string
+{
+    $medium = (string) ($entry['medium'] ?? '');
+    $funkart = $entry['funkart'] ?? null;
+    if ($medium === 'Fu' && $funkart === 'DIGITAL') {
+        $teile = [
+            trim((string) ($entry['rufgruppe'] ?? '')),
+            trim((string) ($entry['betriebsart'] ?? '')),
+        ];
+    } elseif ($medium === 'Fu') {
+        $band = trim((string) ($entry['band'] ?? ''));
+        $kanal = trim((string) ($entry['kanal'] ?? ''));
+        $teile = [
+            $band === '' ? '' : $band,
+            $kanal === '' ? '' : 'Kanal ' . $kanal,
+            trim((string) ($entry['bandlage'] ?? '')),
+        ];
+    } elseif ($medium === 'Fe') {
+        $teile = [trim((string) ($entry['anschlussart'] ?? ''))];
+    } else {
+        $teile = [trim((string) ($entry['datenart'] ?? ''))];
+    }
+    return implode(
+        ' · ',
+        array_values(array_filter(
+            $teile,
+            static fn (string $teil): bool => $teil !== ''
+        ))
+    );
 }
 
 function estab_dv_positive_id(mixed $value, string $label): int
@@ -156,6 +397,39 @@ function estab_dv_text(
         || preg_match('//u', $value) !== 1
         || preg_match('/[\p{C}<>]/u', $value) === 1
     ) {
+        throw new EstabDvInputException($label . ' ist ungültig.');
+    }
+    $text = trim($value);
+    $length = estab_auth_text_length($text);
+    if ($length > $maximum || (!$allowEmpty && $length < 1)) {
+        throw new EstabDvInputException($label . ' ist ungültig.');
+    }
+    return $text;
+}
+
+/**
+ * Freitext, der Zeilen kennen darf.
+ *
+ * Die Kopie einer Planfassung fuehrt beide Vermerkfelder mit einer Leerzeile
+ * zusammen -- siehe die Kopieranweisung weiter unten. Ein Feld, das jeden
+ * Zeilenumbruch zurueckweist, koennte genau diesen Wert danach nie wieder
+ * speichern: Der Weg waere in seinem eigenen Entwurf unveraenderlich, und der
+ * Bedienende bekaeme nur "Bemerkungen ist ungueltig" zu lesen. Deshalb kennt
+ * der Freitext hinter den Vermerkfeldern die Zeile; alles andere an
+ * Steuerzeichen bleibt verboten wie im uebrigen Plan.
+ */
+function estab_dv_multiline_text(
+    mixed $value,
+    string $label,
+    int $maximum,
+    bool $allowEmpty = false
+): string {
+    if (!is_string($value) || preg_match('//u', $value) !== 1) {
+        throw new EstabDvInputException($label . ' ist ungültig.');
+    }
+    // Die Browser schicken drei Zeilenenden; gespeichert wird eines.
+    $value = str_replace(["\r\n", "\r"], "\n", $value);
+    if (preg_match('/[^\P{C}\n]|[<>]/u', $value) === 1) {
         throw new EstabDvInputException($label . ' ist ungültig.');
     }
     $text = trim($value);
@@ -1137,6 +1411,392 @@ function estab_dv_assign_hat(
     );
 }
 
+/**
+ * Replace one accepted duty function while its shift keeps running.
+ *
+ * DV 1-101 expects a command post to stay able to work when a single person
+ * drops out. Relieving one function is therefore not a shift handover: the
+ * shift, its books and every other function continue unchanged, and only the
+ * named function changes hands. What relief and handover share is their
+ * evidence. Both name the outgoing and the incoming person, both append the
+ * event to the ETB and to the tamper-evident event chain, and both refuse
+ * while the outgoing person still owes the command post an open messenger job
+ * or a message they hold locked. The successor is assigned here, never
+ * accepted: like every other assignment it becomes operative only when that
+ * person accepts it personally, while the relieved person loses every
+ * operational right the moment this transaction commits.
+ */
+function estab_dv_relieve_hat(
+    mysqli $connection,
+    int $incidentId,
+    int $assignmentId,
+    mixed $successorCodeValue,
+    mixed $reasonValue,
+    string $actor,
+    string $protocolTable = 'nv_protokoll'
+): array {
+    $incidentId = estab_incident_positive_id($incidentId);
+    $assignmentId = estab_dv_positive_id($assignmentId, 'Dienstbesetzung');
+    $successorCode = estab_dv_code($successorCodeValue);
+    $reason = estab_dv_text($reasonValue, 'Ablösungsgrund', 10000);
+    $actor = estab_dv_actor($actor);
+
+    return estab_incident_with_active_write(
+        $connection,
+        static function (array $incident) use (
+            $connection,
+            $incidentId,
+            $assignmentId,
+            $successorCode,
+            $reason,
+            $actor,
+            $protocolTable
+        ): array {
+            estab_dv_require_strict_incident_snapshot($incident, $incidentId);
+            $select = $connection->prepare(
+                'SELECT b.`dienstschicht_id`, b.`benutzer_kuerzel`,'
+                . ' b.`funktion`, b.`rolle`, b.`status`,'
+                . ' s.`status` AS `schicht_status`,'
+                . ' s.`nummer` AS `schicht_nummer`,'
+                . ' s.`bezeichnung` AS `schicht_bezeichnung`,'
+                . ' u.`benutzer` AS `benutzer_name`'
+                . ' FROM `nv_dienstbesetzungen` AS b'
+                . ' JOIN `nv_dienstschichten` AS s'
+                . ' ON s.`dienstschicht_id` = b.`dienstschicht_id`'
+                . ' JOIN `nv_benutzer` AS u'
+                . ' ON BINARY u.`kuerzel` = BINARY b.`benutzer_kuerzel`'
+                . ' WHERE b.`dienstbesetzung_id` = ?'
+                . ' AND s.`einsatz_id` = ? FOR UPDATE'
+            );
+            if (!$select) {
+                throw new RuntimeException(
+                    'Abzulösende Funktionsbesetzung konnte nicht gesperrt '
+                    . 'werden.'
+                );
+            }
+            try {
+                $select->bind_param('ii', $assignmentId, $incidentId);
+                $select->execute();
+                $row = $select->get_result()->fetch_assoc();
+            } finally {
+                $select->close();
+            }
+            if (!is_array($row)) {
+                throw new EstabDvConflictException(
+                    'Diese Funktionsbesetzung gehört nicht zum aktiven '
+                    . 'Einsatz.'
+                );
+            }
+            if ((string) $row['schicht_status'] !== 'AKTIV') {
+                throw new EstabDvConflictException(
+                    'Nur eine Besetzung der aktiven Schicht kann einzeln '
+                    . 'abgelöst werden.'
+                );
+            }
+            if ((string) $row['status'] !== 'ANGENOMMEN') {
+                throw new EstabDvConflictException(
+                    'Nur eine persönlich angenommene Funktion kann abgelöst '
+                    . 'werden. Eine noch nicht angenommene Zuweisung bindet '
+                    . 'die Station nicht.'
+                );
+            }
+            $outgoingCode = (string) $row['benutzer_kuerzel'];
+            if ($outgoingCode === $successorCode) {
+                throw new EstabDvInputException(
+                    'Die Ablösung braucht eine andere Person als die bisher '
+                    . 'besetzende.'
+                );
+            }
+            $shiftId = (int) $row['dienstschicht_id'];
+            $function = (string) $row['funktion'];
+            $role = (string) $row['rolle'];
+            // The determined logbook writer is the one station a relief may
+            // not touch: the ETB must not change hands without the confirmed
+            // handover that closes and reopens the book. The acceptance rule
+            // of the duty-assignment trigger enforces the same, so relieving
+            // ETB here would strand the station with nobody able to accept.
+            //
+            // Which assignment carries the book is decided by the shift, not
+            // by the name of a function: without a separate ETB station the
+            // accepted S2 keeps it. The same order the logbook uses is read
+            // here under the lock, so the common shift without an own ETB is
+            // protected as well.
+            $designated = $connection->prepare(
+                'SELECT assignment.`dienstbesetzung_id`'
+                . ' FROM `nv_dienstbesetzungen` AS assignment'
+                . ' WHERE assignment.`dienstschicht_id` = ?'
+                . " AND assignment.`status` = 'ANGENOMMEN'"
+                . " AND assignment.`funktion` IN ('ETB','S2')"
+                . ' ORDER BY CASE assignment.`funktion`'
+                . " WHEN 'ETB' THEN 0 ELSE 1 END,"
+                . ' assignment.`dienstbesetzung_id` LIMIT 1 FOR UPDATE'
+            );
+            if (!$designated) {
+                throw new RuntimeException(
+                    'Bestimmte ETB-Führung konnte nicht geprüft werden.'
+                );
+            }
+            try {
+                $designated->bind_param('i', $shiftId);
+                $designated->execute();
+                $designatedRow = $designated->get_result()->fetch_row();
+            } finally {
+                $designated->close();
+            }
+            $designatedId = $designatedRow === null
+                ? 0
+                : (int) $designatedRow[0];
+            if ($function === 'ETB' || $designatedId === $assignmentId) {
+                throw new EstabDvConflictException(
+                    'Die bestimmte ETB-Führung wechselt ausschließlich über '
+                    . 'eine dokumentierte und bestätigte Schichtübergabe. '
+                    . 'Eine Einzelablösung würde die Buchführung ohne '
+                    . 'Übergabe unterbrechen.'
+                );
+            }
+
+            // A relief hands over a station, never an unfinished errand: the
+            // successor cannot report a transport they never made. The shift
+            // handover applies the same yardstick to the whole shift; here it
+            // is narrowed to the person who leaves.
+            $openMessenger = $connection->prepare(
+                'SELECT `melderauftrag_id`, `status`'
+                . ' FROM `nv_melderauftraege`'
+                . ' WHERE `einsatz_id` = ?'
+                . ' AND BINARY `melder_kuerzel` = BINARY ?'
+                . " AND `status` NOT IN ('GEMELDET','ABGEBROCHEN')"
+                . ' ORDER BY `melderauftrag_id` LIMIT 1 FOR UPDATE'
+            );
+            if (!$openMessenger) {
+                throw new RuntimeException(
+                    'Offene Melderaufträge konnten nicht geprüft werden.'
+                );
+            }
+            try {
+                $openMessenger->bind_param('is', $incidentId, $outgoingCode);
+                $openMessenger->execute();
+                $openJob = $openMessenger->get_result()->fetch_assoc();
+            } finally {
+                $openMessenger->close();
+            }
+            if (is_array($openJob)) {
+                throw new EstabDvConflictException(
+                    'Die abgebende Person hat den Melderauftrag #'
+                    . (int) $openJob['melderauftrag_id'] . ' im Status '
+                    . (string) $openJob['status'] . ' noch nicht '
+                    . 'abgeschlossen. Erst nach Rückmeldung oder '
+                    . 'nachvollziehbarem Abbruch kann die Funktion abgelöst '
+                    . 'werden.'
+                );
+            }
+
+            // A locked message is an unfinished Vordruck in this person's
+            // hand. The lock is personal, so relieving the station now would
+            // strand the message between two bearbeitenden Personen.
+            $lockedMessage = $connection->prepare(
+                'SELECT `00_lfd` FROM `nv_nachrichten`'
+                . ' WHERE `einsatz_id` = ?'
+                . " AND `x02_sperre` IN ('t','1')"
+                . ' AND BINARY `x03_sperruser` = BINARY ?'
+                . ' ORDER BY `00_lfd` LIMIT 1 FOR UPDATE'
+            );
+            if (!$lockedMessage) {
+                throw new RuntimeException(
+                    'Nachrichten in Bearbeitung konnten nicht geprüft werden.'
+                );
+            }
+            try {
+                $lockedMessage->bind_param('is', $incidentId, $outgoingCode);
+                $lockedMessage->execute();
+                $lockedRow = $lockedMessage->get_result()->fetch_assoc();
+            } finally {
+                $lockedMessage->close();
+            }
+            if (is_array($lockedRow)) {
+                throw new EstabDvConflictException(
+                    'Die abgebende Person bearbeitet noch die Nachricht mit '
+                    . 'der laufenden Nummer ' . (int) $lockedRow['00_lfd']
+                    . '. Der Vordruck muss zuerst abgeschlossen oder '
+                    . 'freigegeben werden.'
+                );
+            }
+
+            $successor = $connection->prepare(
+                'SELECT `benutzer`, `estab_gesperrt` FROM `nv_benutzer`'
+                . ' WHERE BINARY `kuerzel` = BINARY ? FOR UPDATE'
+            );
+            if (!$successor) {
+                throw new RuntimeException(
+                    'Übernehmendes Benutzerkonto konnte nicht geprüft werden.'
+                );
+            }
+            try {
+                $successor->bind_param('s', $successorCode);
+                $successor->execute();
+                $successorRow = $successor->get_result()->fetch_assoc();
+            } finally {
+                $successor->close();
+            }
+            if (
+                !is_array($successorRow)
+                || (int) $successorRow['estab_gesperrt'] === 1
+            ) {
+                throw new EstabDvConflictException(
+                    'Das übernehmende Benutzerkonto ist nicht verfügbar.'
+                );
+            }
+
+            $relievedAt = estab_dv_database_now($connection);
+            $relieve = $connection->prepare(
+                "UPDATE `nv_dienstbesetzungen` SET `status` = 'ABGELOEST',"
+                . ' `abgeloest_am` = ?'
+                . ' WHERE `dienstbesetzung_id` = ?'
+                . " AND `status` = 'ANGENOMMEN'"
+            );
+            if (!$relieve) {
+                throw new RuntimeException(
+                    'Ablösung konnte nicht vorbereitet werden.'
+                );
+            }
+            try {
+                $relieve->bind_param('si', $relievedAt, $assignmentId);
+                if (!$relieve->execute() || $relieve->affected_rows !== 1) {
+                    throw new EstabDvConflictException(
+                        'Die Besetzung wurde zwischenzeitlich geändert.'
+                    );
+                }
+            } finally {
+                $relieve->close();
+            }
+
+            $insert = $connection->prepare(
+                'INSERT INTO `nv_dienstbesetzungen`'
+                . ' (`dienstschicht_id`, `benutzer_kuerzel`, `funktion`,'
+                . ' `rolle`, `zugewiesen_von`) VALUES (?, ?, ?, ?, ?)'
+            );
+            if (!$insert) {
+                throw new RuntimeException(
+                    'Nachbesetzung konnte nicht vorbereitet werden.'
+                );
+            }
+            try {
+                $insert->bind_param(
+                    'issss',
+                    $shiftId,
+                    $successorCode,
+                    $function,
+                    $role,
+                    $actor
+                );
+                try {
+                    $executed = $insert->execute();
+                } catch (mysqli_sql_exception $exception) {
+                    $code = (int) $exception->getCode();
+                    if ($code === 1062) {
+                        throw new EstabDvConflictException(
+                            'Diese Person ist der Funktion in dieser Schicht '
+                            . 'bereits zugewiesen.'
+                        );
+                    }
+                    if ($code === 1644) {
+                        throw new EstabDvConflictException(
+                            'Der Betrieb hat die Nachbesetzung dieser '
+                            . 'Funktion in der laufenden Schicht abgelehnt; '
+                            . 'die Schicht bleibt unverändert. Für diese '
+                            . 'Funktion bleibt dann nur die geordnete '
+                            . 'Schichtübergabe.'
+                        );
+                    }
+                    throw new RuntimeException(
+                        'Nachbesetzung konnte nicht gespeichert werden.',
+                        0,
+                        $exception
+                    );
+                }
+                if (!$executed) {
+                    if ($insert->errno === 1062) {
+                        throw new EstabDvConflictException(
+                            'Diese Person ist der Funktion in dieser Schicht '
+                            . 'bereits zugewiesen.'
+                        );
+                    }
+                    throw new RuntimeException(
+                        'Nachbesetzung konnte nicht gespeichert werden.'
+                    );
+                }
+                $successorAssignmentId = (int) $connection->insert_id;
+            } finally {
+                $insert->close();
+            }
+
+            estab_logbook_lifecycle_relief(
+                $connection,
+                $incidentId,
+                $shiftId,
+                (int) $row['schicht_nummer'],
+                (string) $row['schicht_bezeichnung'],
+                $relievedAt,
+                (string) $row['benutzer_name'],
+                $outgoingCode,
+                (string) ($successorRow['benutzer'] ?? ''),
+                $successorCode,
+                $function,
+                $role,
+                $reason
+            );
+            estab_dv_audit(
+                $connection,
+                $protocolTable,
+                $incidentId,
+                'DV Besetzung',
+                [
+                    'action' => 'hat_relieved_in_shift',
+                    'assignment_id' => $assignmentId,
+                    'shift_id' => $shiftId,
+                    'target' => $outgoingCode,
+                    'function' => $function,
+                    'role' => $role,
+                    'actor' => $actor,
+                    'successor' => $successorCode,
+                    'successor_assignment_id' => $successorAssignmentId,
+                    'reason' => $reason,
+                    'relieved_at' => $relievedAt,
+                    'shift_status' => 'AKTIV',
+                ]
+            );
+            estab_dv_audit(
+                $connection,
+                $protocolTable,
+                $incidentId,
+                'DV Besetzung',
+                [
+                    'action' => 'hat_assigned_as_relief',
+                    'assignment_id' => $successorAssignmentId,
+                    'shift_id' => $shiftId,
+                    'target' => $successorCode,
+                    'function' => $function,
+                    'role' => $role,
+                    'actor' => $actor,
+                    'predecessor' => $outgoingCode,
+                    'relieved_assignment_id' => $assignmentId,
+                    'reason' => $reason,
+                    'shift_status' => 'AKTIV',
+                    'active_shift_extension' => true,
+                ]
+            );
+            return [
+                'dienstbesetzung_id' => $successorAssignmentId,
+                'abgeloeste_dienstbesetzung_id' => $assignmentId,
+                'funktion' => $function,
+                'rolle' => $role,
+                'abgebend' => $outgoingCode,
+                'uebernehmend' => $successorCode,
+                'schicht_status' => 'AKTIV',
+            ];
+        }
+    );
+}
+
 function estab_dv_accept_hat(
     mysqli $connection,
     int $incidentId,
@@ -1392,6 +2052,158 @@ function estab_dv_shift_required_hats(
     return array_values(array_diff(ESTAB_DV_REQUIRED_HATS, $accepted));
 }
 
+/**
+ * Build the operator-facing report from the per-station staffing answers.
+ *
+ * Keeping the wording apart from the two database queries makes the naming
+ * rule provable without a database and states the fail-closed default: a
+ * station without an answer counts as unstaffed and is named.
+ *
+ * @param array<string,bool> $bearers Station function => at least one
+ *     unblocked account can serve this station
+ * @return array{
+ *   modus:string,
+ *   stationen:list<array{funktion:string,rolle:string,station:string,
+ *     bezeichnung:string,besetzt:bool}>,
+ *   unbesetzt:list<string>
+ * }
+ */
+function estab_dv_message_run_report(string $mode, array $bearers): array
+{
+    $mode = estab_permission_mode($mode);
+    $stations = [];
+    $unstaffed = [];
+    foreach (ESTAB_DV_MESSAGE_RUN_STATIONS as $function => $definition) {
+        $staffed = ($bearers[$function] ?? false) === true;
+        $label = $definition['station'] . ' ('
+            . estab_function_display_name($function) . ')';
+        $stations[] = [
+            'funktion' => $function,
+            'rolle' => $definition['rolle'],
+            'station' => $definition['station'],
+            'bezeichnung' => $label,
+            'besetzt' => $staffed,
+        ];
+        if (!$staffed) {
+            $unstaffed[] = $label;
+        }
+    }
+    return [
+        'modus' => $mode,
+        'stationen' => $stations,
+        'unbesetzt' => $unstaffed,
+    ];
+}
+
+/**
+ * Name the stations of the message run that no account can currently serve.
+ *
+ * DV 1-101 does not force a small command post into a complete roster; it
+ * requires that the gaps are named before the incident is released. This
+ * report therefore only reports: it refuses no activation, disables no
+ * control and is deliberately not consulted by the activation domain.
+ *
+ * STRICT asks the same question the write gate asks: is the station held in
+ * the active duty shift by a personally accepted assignment. LOOSE resolves a
+ * station from the fixed account function and the explicitly granted
+ * additional functions. An administratively blocked account carries nothing
+ * in either mode.
+ *
+ * @param array<string,mixed> $incident One incident row carrying
+ *     `estab_permission_mode`, from estab_incident_list(),
+ *     estab_incident_find() or the active-status row
+ * @return array{
+ *   modus:string,
+ *   stationen:list<array{funktion:string,rolle:string,station:string,
+ *     bezeichnung:string,besetzt:bool}>,
+ *   unbesetzt:list<string>
+ * }
+ */
+function estab_dv_message_run_staffing(
+    mysqli $connection,
+    array $incident,
+    int $incidentId
+): array {
+    $incidentId = estab_incident_positive_id($incidentId);
+    $strictMode = estab_incident_duty_shift_required($incident);
+    $statement = $strictMode
+        ? $connection->prepare(
+            'SELECT 1 FROM `nv_dienstbesetzungen` AS assignment'
+            . ' JOIN `nv_dienstschichten` AS duty_shift'
+            . ' ON duty_shift.`dienstschicht_id` ='
+            . ' assignment.`dienstschicht_id`'
+            . ' JOIN `nv_benutzer` AS account'
+            . ' ON BINARY account.`kuerzel` ='
+            . ' BINARY assignment.`benutzer_kuerzel`'
+            . ' WHERE duty_shift.`einsatz_id` = ?'
+            . " AND duty_shift.`status` = 'AKTIV'"
+            . " AND assignment.`status` = 'ANGENOMMEN'"
+            . ' AND BINARY assignment.`funktion` = BINARY ?'
+            . ' AND BINARY assignment.`rolle` = BINARY ?'
+            . ' AND account.`estab_gesperrt` = 0 LIMIT 1'
+        )
+        : $connection->prepare(
+            'SELECT 1 FROM `nv_benutzer` AS account'
+            . ' WHERE account.`estab_gesperrt` = 0'
+            . ' AND ((BINARY account.`funktion` = BINARY ?'
+            . ' AND BINARY account.`rolle` = BINARY ?)'
+            . ' OR EXISTS (SELECT 1'
+            . ' FROM `nv_benutzer_zusatzfunktionen` AS extra'
+            . ' WHERE BINARY extra.`benutzer_kuerzel` ='
+            . ' BINARY account.`kuerzel`'
+            . ' AND BINARY extra.`funktion` = BINARY ?'
+            . ' AND BINARY extra.`rolle` = BINARY ?)) LIMIT 1'
+        );
+    if (!$statement) {
+        throw new RuntimeException(
+            'Besetzung des Nachrichtenlaufs konnte nicht vorbereitet werden.'
+        );
+    }
+    // One prepared statement answers all four stations: the bound variables
+    // are assigned per station, the statement itself never changes.
+    $function = '';
+    $role = '';
+    $extraFunction = '';
+    $extraRole = '';
+    $bearers = [];
+    try {
+        if ($strictMode) {
+            $statement->bind_param('iss', $incidentId, $function, $role);
+        } else {
+            $statement->bind_param(
+                'ssss',
+                $function,
+                $role,
+                $extraFunction,
+                $extraRole
+            );
+        }
+        foreach (ESTAB_DV_MESSAGE_RUN_STATIONS as $station => $definition) {
+            $function = $station;
+            $role = $definition['rolle'];
+            $extraFunction = $station;
+            $extraRole = $definition['rolle'];
+            if (!$statement->execute()) {
+                throw new RuntimeException(
+                    'Besetzung des Nachrichtenlaufs konnte nicht gelesen '
+                    . 'werden.'
+                );
+            }
+            $result = $statement->get_result();
+            $bearers[$station] = $result->fetch_row() !== null;
+            $result->free();
+        }
+    } finally {
+        $statement->close();
+    }
+    return estab_dv_message_run_report(
+        $strictMode
+            ? ESTAB_PERMISSION_MODE_STRICT
+            : ESTAB_PERMISSION_MODE_LOOSE,
+        $bearers
+    );
+}
+
 function estab_dv_activate_initial_shift(
     mysqli $connection,
     int $incidentId,
@@ -1475,13 +2287,44 @@ function estab_dv_activate_initial_shift(
                 $update->close();
             }
             // STRICT restores the binding pre-efbc lifecycle: the first
-            // accepted duty roster must atomically create both empty books
-            // with its exact shift id. Existing rows make activation fail.
-            estab_logbook_lifecycle_open_books(
+            // accepted duty roster atomically creates both empty books with
+            // its exact shift id. Existing rows make activation fail, damit
+            // ein unerklärter Altbestand nicht überschrieben wird. Nur nach
+            // einem im Einsatzprotokoll nachgewiesenen Aufwuchs von Locker
+            // auf Streng sind die Bücher bereits rechtmäßig eröffnet; dann
+            // bleibt ihre Beweiskette unangetastet und die Übernahme durch
+            // die erste Dienstschicht wird im Einsatztagebuch ausgewiesen.
+            if (!estab_incident_grew_to_strict($connection, $incidentId)) {
+                estab_logbook_lifecycle_open_books(
+                    $connection,
+                    $incident,
+                    $shiftId
+                );
+            } elseif (!estab_logbook_lifecycle_open_books_if_empty(
                 $connection,
                 $incident,
                 $shiftId
-            );
+            )) {
+                estab_logbook_lifecycle_insert_etb(
+                    $connection,
+                    $incidentId,
+                    date('Y-m-d H:i:s'),
+                    'Erste Dienstschicht der Führungsstelle mit Stab '
+                    . 'aktiviert. Führungsstellenbesetzung: '
+                    . estab_logbook_lifecycle_roster_text(
+                        estab_logbook_lifecycle_roster(
+                            $connection,
+                            $shiftId,
+                            'ANGENOMMEN'
+                        )
+                    ) . '.',
+                    'Automatisch und atomar mit der Schichtaktivierung nach '
+                    . 'dem Aufwuchs auf den strengen Berechtigungsmodus '
+                    . 'erzeugt.',
+                    'ohne',
+                    $shiftId
+                );
+            }
             estab_dv_audit(
                 $connection,
                 $protocolTable,
@@ -2774,6 +3617,70 @@ function estab_dv_user_hats(
     }
 }
 
+/**
+ * Return the accepted duty functions of the active shift, by account.
+ *
+ * The occupancy overview must name the station a person actually took over,
+ * never the function stored on their account. One person may have accepted
+ * several stations in a small command post, so every account maps to a list.
+ * One statement answers for the complete shift.
+ *
+ * @return array<string, list<array{funktion: string, rolle: string}>>
+ */
+function estab_dv_active_duty_functions(
+    mysqli $connection,
+    int $incidentId
+): array {
+    $incidentId = estab_incident_positive_id($incidentId);
+    $statement = $connection->prepare(
+        'SELECT b.`benutzer_kuerzel`, b.`funktion`, b.`rolle`'
+        . ' FROM `nv_dienstbesetzungen` AS b'
+        . ' JOIN `nv_dienstschichten` AS s'
+        . ' ON s.`dienstschicht_id` = b.`dienstschicht_id`'
+        . " WHERE s.`einsatz_id` = ? AND s.`status` = 'AKTIV'"
+        . " AND b.`status` = 'ANGENOMMEN'"
+        . ' ORDER BY b.`benutzer_kuerzel`, b.`funktion`'
+    );
+    if (!$statement) {
+        throw new RuntimeException(
+            'Angenommene Dienstfunktionen konnten nicht vorbereitet werden.'
+        );
+    }
+    try {
+        $statement->bind_param('i', $incidentId);
+        if (!$statement->execute()) {
+            throw new RuntimeException(
+                'Angenommene Dienstfunktionen konnten nicht gelesen werden.'
+            );
+        }
+        $result = $statement->get_result();
+        $occupancies = [];
+        while (($row = $result->fetch_assoc()) !== null) {
+            $code = strtolower(trim((string) ($row['benutzer_kuerzel'] ?? '')));
+            $function = trim((string) ($row['funktion'] ?? ''));
+            $role = trim((string) ($row['rolle'] ?? ''));
+            if (
+                preg_match('/\A[a-z0-9_]{1,6}\z/D', $code) !== 1
+                || preg_match(
+                    '/\A(?:A\/W|[A-Za-z0-9_]{1,10})\z/D',
+                    $function
+                ) !== 1
+                || !in_array($role, ['Stab', 'FB', 'Fernmelder'], true)
+            ) {
+                continue;
+            }
+            $occupancies[$code][] = [
+                'funktion' => $function,
+                'rolle' => $role,
+            ];
+        }
+        $result->free();
+        return $occupancies;
+    } finally {
+        $statement->close();
+    }
+}
+
 function estab_dv_user_has_active_hat(
     mysqli $connection,
     int $incidentId,
@@ -3654,15 +4561,42 @@ function estab_dv_telecom_plan_header_values(array $input): array
     return [
         'herkunft' => estab_dv_text(
             $input['herkunft'] ?? null,
-            'Herkunft',
+            'Herausgebende Dienststelle',
             255
+        ),
+        /*
+         * Die drei Angaben der Kopfleiste nach Fb Fü 76.
+         *
+         * Alle drei sind freiwillig, und zwar nicht aus Bequemlichkeit: ein
+         * Pflichtfeld zwänge jeden Entwurf zu einer Angabe, auch dort, wo der
+         * Vordruck sie leer lässt. Der Verschlusssachenvermerk wird in der
+         * Maske mit "NfD" vorbelegt -- das ist ein Vorschlag an den S6, keine
+         * Setzung der Anwendung.
+         */
+        'verfasser_funktion' => estab_dv_text(
+            $input['verfasser_funktion'] ?? '',
+            'Funktion des Verfassers',
+            120,
+            true
         ),
         'gueltig_ab' => $validFrom,
         'gueltig_bis' => $validUntil,
+        'vs_vermerk' => estab_dv_text(
+            $input['vs_vermerk'] ?? '',
+            'Verschlusssachenvermerk',
+            40,
+            true
+        ),
         'betriebsleitung' => estab_dv_text(
             $input['betriebsleitung'] ?? null,
             'Betriebsleitung',
             255
+        ),
+        'freigabe_dienststellung' => estab_dv_text(
+            $input['freigabe_dienststellung'] ?? '',
+            'Dienststellung für die Freigabe',
+            120,
+            true
         ),
         'bemerkungen' => estab_dv_text(
             $input['bemerkungen'] ?? '',
@@ -3692,66 +4626,140 @@ function estab_dv_telecom_plan_header_audit_state(array $plan): array
         'gueltig_bis' => ($plan['gueltig_bis'] ?? null) === null
             ? null
             : (string) $plan['gueltig_bis'],
+        'verfasser_funktion' => ($plan['verfasser_funktion'] ?? null) === null
+            ? null
+            : (string) $plan['verfasser_funktion'],
+        'vs_vermerk' => ($plan['vs_vermerk'] ?? null) === null
+            ? null
+            : (string) $plan['vs_vermerk'],
         'betriebsleitung' => (string) ($plan['betriebsleitung'] ?? ''),
+        'freigabe_dienststellung' =>
+            ($plan['freigabe_dienststellung'] ?? null) === null
+                ? null
+                : (string) $plan['freigabe_dienststellung'],
         'bemerkungen' => ($plan['bemerkungen'] ?? null) === null
             ? null
             : (string) $plan['bemerkungen'],
     ];
 }
 
-/** @return array{betriebsstelle:string,rufname:string,medium:string,kanal:string,bandlage:string,verkehrsform:string,besondere_vermerke:string,bemerkungen:string} */
+/**
+ * Validate one route and return exactly the fields its own technology owns.
+ *
+ * The caller sends a route kind, not a medium: "Funk (analog)" and "Funk
+ * (digital)" are two kinds under one medium. Whatever a kind does not own is
+ * cleared rather than kept -- a digital route must not carry a band position,
+ * and a route that was analogue yesterday must not keep its channel in a
+ * column nobody reads any more.
+ *
+ * `bandlage` and `verkehrsform` are checked for presence, never for their
+ * value: the operator decided both are free text. The regulation that would
+ * carry the value lists is classified and not available, and a list invented
+ * here would reject what an operation actually used.
+ *
+ * `rueckfallebene_fuer_weg` faellt aus der Reihe: es traegt eine Wegkennung,
+ * also eine Zahl, waehrend alle uebrigen Werte Text sind.
+ *
+ * @return array<string, int|string|null>
+ */
 function estab_dv_telecom_entry_values(array $input): array
 {
-    $medium = $input['medium'] ?? null;
-    $definition = estab_dv_telecom_medium_definition($medium);
-    $technicalValue = static function (
-        array $source,
+    $definition = estab_dv_telecom_route_definition($input['wegart'] ?? null);
+    $owned = $definition['felder'];
+    $required = $definition['pflicht'];
+    /*
+     * Die Stellenart sagt, in welche Richtung die Verbindung zeigt: nach
+     * oben, nach unten, zur Seite oder auf die eigene Stelle. Q4 Kapitel
+     * 6.1.2 verlangt Verbindungen vertikal UND horizontal; ohne die Angabe
+     * fuehrt ein Plan Stellen, aber keine Ordnung.
+     */
+    /*
+     * Die Rueckfallebene zeigt auf die dauerhafte Kennung eines anderen Wegs
+     * desselben Plans. NULL heisst "keine" -- ein zweites Wahrheitsfeld gaebe
+     * es nur, damit es dem Verweis widersprechen kann.
+     */
+    $fallback = $input['rueckfallebene_fuer_weg'] ?? null;
+    $fallback = is_string($fallback) ? trim($fallback) : $fallback;
+    if ($fallback === null || $fallback === '') {
+        $fallback = null;
+    } else {
+        $fallback = estab_dv_positive_id($fallback, 'Rückfallebene');
+    }
+    $stellenart = $input['stellenart'] ?? null;
+    $stellenart = is_string($stellenart) ? trim($stellenart) : '';
+    if ($stellenart === '') {
+        $stellenart = null;
+    } elseif (!isset(ESTAB_DV_TELECOM_STATION_KINDS[$stellenart])) {
+        throw new EstabDvInputException('Stellenart ist ungültig.');
+    }
+
+    $field = static function (
         string $name,
-        ?string $label,
+        string $label,
         int $maximum
-    ): string {
-        if ($label === null) {
+    ) use ($input, $owned, $required): string {
+        if (!isset($owned[$name])) {
             return '';
         }
-        return estab_dv_text($source[$name] ?? null, $label, $maximum);
+        return estab_dv_text(
+            $input[$name] ?? '',
+            $label,
+            $maximum,
+            !in_array($name, $required, true)
+        );
     };
+    $choice = static function (
+        string $name,
+        string $label
+    ) use ($input, $owned, $required): ?string {
+        if (!isset($owned[$name])) {
+            return null;
+        }
+        $value = $input[$name] ?? null;
+        $value = is_string($value) ? trim($value) : '';
+        if ($value === '') {
+            if (in_array($name, $required, true)) {
+                throw new EstabDvInputException($label . ' ist erforderlich.');
+            }
+            return null;
+        }
+        if (!isset(ESTAB_DV_TELECOM_FIELD_CHOICES[$name][$value])) {
+            throw new EstabDvInputException($label . ' ist ungültig.');
+        }
+        return $value;
+    };
+
     return [
         'betriebsstelle' => estab_dv_text(
             $input['betriebsstelle'] ?? null,
-            'Betriebsstelle',
+            'Stelle',
             255
         ),
-        'rufname' => estab_dv_text(
-            $input['rufname'] ?? null,
-            'Rufname',
-            128
+        'stellenart' => $stellenart,
+        'rueckfallebene_fuer_weg' => $fallback,
+        'erreichbarkeit' => estab_dv_text(
+            $input['erreichbarkeit'] ?? null,
+            $definition['erreichbarkeit'],
+            255
         ),
-        'medium' => $medium,
-        'kanal' => $technicalValue(
-            $input,
-            'kanal',
-            $definition['kanal'],
-            64
-        ),
-        'bandlage' => $technicalValue(
-            $input,
-            'bandlage',
-            $definition['bandlage'],
-            64
-        ),
-        'verkehrsform' => $technicalValue(
-            $input,
-            'verkehrsform',
-            $definition['verkehrsform'],
-            128
-        ),
-        'besondere_vermerke' => estab_dv_text(
+        'medium' => $definition['medium'],
+        'funkart' => $definition['funkart'],
+        'band' => $choice('band', 'Band'),
+        'kanal' => $field('kanal', 'Kanal', 64),
+        'bandlage' => $field('bandlage', 'Bandlage', 64),
+        'verkehrsform' => $field('verkehrsform', 'Verkehrsform', 128),
+        'relaisstelle' => $field('relaisstelle', 'Relaisstelle', 64),
+        'betriebsart' => $choice('betriebsart', 'Betriebsart'),
+        'rufgruppe' => $field('rufgruppe', 'Rufgruppe', 64),
+        'anschlussart' => $choice('anschlussart', 'Anschlussart'),
+        'datenart' => $choice('datenart', 'Art der Datenübertragung'),
+        'besondere_vermerke' => estab_dv_multiline_text(
             $input['besondere_vermerke'] ?? '',
             'Besondere Vermerke',
             10000,
             true
         ),
-        'bemerkungen' => estab_dv_text(
+        'bemerkungen' => estab_dv_multiline_text(
             $input['bemerkungen'] ?? '',
             'Bemerkungen',
             10000,
@@ -3770,8 +4778,9 @@ function estab_dv_lock_telecom_draft(
 ): array {
     $statement = $connection->prepare(
         'SELECT `status`, `version`, `einsatzbezeichnung`, `herkunft`,'
-        . ' `gueltig_ab`, `gueltig_bis`, `betriebsleitung`, `bemerkungen`'
-        . ' FROM `nv_fernmeldeplaene`'
+        . ' `verfasser_funktion`, `gueltig_ab`, `gueltig_bis`,'
+        . ' `vs_vermerk`, `betriebsleitung`, `freigabe_dienststellung`,'
+        . ' `bemerkungen` FROM `nv_fernmeldeplaene`'
         . ' WHERE `fernmeldeplan_id` = ? AND `einsatz_id` = ? FOR UPDATE'
     );
     if (!$statement) {
@@ -3794,11 +4803,20 @@ function estab_dv_lock_telecom_draft(
         'version' => (int) $row['version'],
         'einsatzbezeichnung' => (string) $row['einsatzbezeichnung'],
         'herkunft' => (string) $row['herkunft'],
+        'verfasser_funktion' => $row['verfasser_funktion'] === null
+            ? null
+            : (string) $row['verfasser_funktion'],
         'gueltig_ab' => (string) $row['gueltig_ab'],
         'gueltig_bis' => $row['gueltig_bis'] === null
             ? null
             : (string) $row['gueltig_bis'],
+        'vs_vermerk' => $row['vs_vermerk'] === null
+            ? null
+            : (string) $row['vs_vermerk'],
         'betriebsleitung' => (string) $row['betriebsleitung'],
+        'freigabe_dienststellung' => $row['freigabe_dienststellung'] === null
+            ? null
+            : (string) $row['freigabe_dienststellung'],
         'bemerkungen' => $row['bemerkungen'] === null
             ? null
             : (string) $row['bemerkungen'],
@@ -3856,11 +4874,32 @@ function estab_dv_telecom_plan_revision(array $plan): string
             'id' => (int) ($entry['fernmeldeplan_eintrag_id'] ?? 0),
             'sortierung' => (int) ($entry['sortierung'] ?? 0),
             'betriebsstelle' => (string) ($entry['betriebsstelle'] ?? ''),
-            'rufname' => (string) ($entry['rufname'] ?? ''),
+            'stellenart' => $entry['stellenart'] ?? null,
+            'rueckfallebene_fuer_weg' =>
+                $entry['rueckfallebene_fuer_weg'] ?? null,
+            'gegenstellen' => array_map(
+                static fn (array $gegenstelle): array => [
+                    'name' => (string) ($gegenstelle['name'] ?? ''),
+                    'stellenart' => $gegenstelle['stellenart'] ?? null,
+                    'erreichbarkeit' =>
+                        (string) ($gegenstelle['erreichbarkeit'] ?? ''),
+                    'bemerkungen' =>
+                        (string) ($gegenstelle['bemerkungen'] ?? ''),
+                ],
+                $entry['gegenstellen'] ?? []
+            ),
+            'erreichbarkeit' => (string) ($entry['erreichbarkeit'] ?? ''),
             'medium' => (string) ($entry['medium'] ?? ''),
+            'funkart' => $entry['funkart'] ?? null,
+            'band' => $entry['band'] ?? null,
             'kanal' => (string) ($entry['kanal'] ?? ''),
             'bandlage' => (string) ($entry['bandlage'] ?? ''),
             'verkehrsform' => (string) ($entry['verkehrsform'] ?? ''),
+            'relaisstelle' => (string) ($entry['relaisstelle'] ?? ''),
+            'betriebsart' => $entry['betriebsart'] ?? null,
+            'rufgruppe' => (string) ($entry['rufgruppe'] ?? ''),
+            'anschlussart' => $entry['anschlussart'] ?? null,
+            'datenart' => $entry['datenart'] ?? null,
             'besondere_vermerke' =>
                 (string) ($entry['besondere_vermerke'] ?? ''),
             'bemerkungen' => (string) ($entry['bemerkungen'] ?? ''),
@@ -3874,11 +4913,31 @@ function estab_dv_telecom_plan_revision(array $plan): string
             'einsatzbezeichnung' =>
                 (string) ($plan['einsatzbezeichnung'] ?? ''),
             'herkunft' => (string) ($plan['herkunft'] ?? ''),
+            // Auch die Kopfleiste gehoert in den Stand. Ein Plan, dessen
+            // Verschlusssachenvermerk sich unbemerkt aendert, ist genauso
+            // gefaehrlich wie einer mit unbemerkt geaendertem Kanal.
+            'verfasser_funktion' => $plan['verfasser_funktion'] ?? null,
             'gueltig_ab' => (string) ($plan['gueltig_ab'] ?? ''),
             'gueltig_bis' => $plan['gueltig_bis'] ?? null,
+            'vs_vermerk' => $plan['vs_vermerk'] ?? null,
             'betriebsleitung' =>
                 (string) ($plan['betriebsleitung'] ?? ''),
+            'freigabe_dienststellung' =>
+                $plan['freigabe_dienststellung'] ?? null,
             'bemerkungen' => (string) ($plan['bemerkungen'] ?? ''),
+            // Auch die Nebenstellen gehoeren in den Stand: eine Nummer, die
+            // sich unbemerkt aendert, fuehrt beim naechsten Ruf ins Leere.
+            'nebenstellen' => array_map(
+                static fn (array $nebenstelle): array => [
+                    'technik' => (string) ($nebenstelle['technik'] ?? ''),
+                    'nummer' => (string) ($nebenstelle['nummer'] ?? ''),
+                    'teilnehmer' =>
+                        (string) ($nebenstelle['teilnehmer'] ?? ''),
+                    'bemerkungen' =>
+                        (string) ($nebenstelle['bemerkungen'] ?? ''),
+                ],
+                $plan['nebenstellen'] ?? []
+            ),
             'eintraege' => $entries,
         ],
         JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE
@@ -3979,23 +5038,28 @@ function estab_dv_create_telecom_plan(
             $insert = $connection->prepare(
                 'INSERT INTO `nv_fernmeldeplaene`'
                 . ' (`einsatz_id`, `version`, `einsatzbezeichnung`, `herkunft`,'
-                . ' `gueltig_ab`, `gueltig_bis`, `betriebsleitung`,'
+                . ' `verfasser_funktion`, `gueltig_ab`, `gueltig_bis`,'
+                . ' `vs_vermerk`, `betriebsleitung`,'
+                . ' `freigabe_dienststellung`,'
                 . ' `bemerkungen`, `erstellt_von`)'
-                . ' VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+                . ' VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
             );
             if (!$insert) {
                 throw new RuntimeException('Fernmeldeplan konnte nicht vorbereitet werden.');
             }
             try {
                 $insert->bind_param(
-                    'iisssssss',
+                    'iissssssssss',
                     $incidentId,
                     $version,
                     $incidentLabel,
                     $header['herkunft'],
+                    $header['verfasser_funktion'],
                     $header['gueltig_ab'],
                     $header['gueltig_bis'],
+                    $header['vs_vermerk'],
                     $header['betriebsleitung'],
+                    $header['freigabe_dienststellung'],
                     $header['bemerkungen'],
                     $userCode
                 );
@@ -4077,7 +5141,9 @@ function estab_dv_start_telecom_plan_revision(
             estab_dv_require_no_telecom_draft($connection, $incidentId);
             $sourceStatement = $connection->prepare(
                 'SELECT `version`, `einsatzbezeichnung`, `herkunft`,'
-                . ' `gueltig_ab`, `gueltig_bis`, `betriebsleitung`,'
+                . ' `verfasser_funktion`, `gueltig_ab`, `gueltig_bis`,'
+                . ' `vs_vermerk`, `betriebsleitung`,'
+                . ' `freigabe_dienststellung`,'
                 . ' `bemerkungen` FROM `nv_fernmeldeplaene`'
                 . ' WHERE `fernmeldeplan_id` = ? AND `einsatz_id` = ?'
                 . " AND `status` = 'AKTIV' FOR UPDATE"
@@ -4119,9 +5185,11 @@ function estab_dv_start_telecom_plan_revision(
             $insertPlan = $connection->prepare(
                 'INSERT INTO `nv_fernmeldeplaene`'
                 . ' (`einsatz_id`, `version`, `einsatzbezeichnung`, `herkunft`,'
-                . ' `gueltig_ab`, `gueltig_bis`, `betriebsleitung`,'
+                . ' `verfasser_funktion`, `gueltig_ab`, `gueltig_bis`,'
+                . ' `vs_vermerk`, `betriebsleitung`,'
+                . ' `freigabe_dienststellung`,'
                 . ' `bemerkungen`, `erstellt_von`)'
-                . ' VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+                . ' VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
             );
             if (!$insertPlan) {
                 throw new RuntimeException(
@@ -4131,14 +5199,17 @@ function estab_dv_start_telecom_plan_revision(
             $userCode = (string) $selected['kuerzel'];
             try {
                 $insertPlan->bind_param(
-                    'iisssssss',
+                    'iissssssssss',
                     $incidentId,
                     $version,
                     $source['einsatzbezeichnung'],
                     $source['herkunft'],
+                    $source['verfasser_funktion'],
                     $source['gueltig_ab'],
                     $source['gueltig_bis'],
+                    $source['vs_vermerk'],
                     $source['betriebsleitung'],
+                    $source['freigabe_dienststellung'],
                     $source['bemerkungen'],
                     $userCode
                 );
@@ -4169,11 +5240,36 @@ function estab_dv_start_telecom_plan_revision(
             $copyEntries = $connection->prepare(
                 'INSERT INTO `nv_fernmeldeplan_eintraege`'
                 . ' (`fernmeldeplan_id`, `sortierung`, `betriebsstelle`,'
-                . ' `rufname`, `medium`, `kanal`, `bandlage`, `verkehrsform`,'
+                . ' `stellenart`, `erreichbarkeit`, `rueckfallebene_fuer_weg`,'
+                . ' `medium`, `funkart`, `band`, `kanal`, `bandlage`, `verkehrsform`, `relaisstelle`, `betriebsart`, `rufgruppe`, `anschlussart`, `datenart`,'
                 . ' `besondere_vermerke`, `bemerkungen`)'
-                . ' SELECT ?, `sortierung`, `betriebsstelle`, `rufname`,'
-                . ' `medium`, `kanal`, `bandlage`, `verkehrsform`,'
-                . ' `besondere_vermerke`, `bemerkungen`'
+                /*
+                 * Die Rueckfallebene kommt hier als NULL und wird unten
+                 * nachgetragen.
+                 *
+                 * Sie verweist ueber einen zusammengesetzten Fremdschluessel
+                 * auf die Wegzuordnung DIESES Plans -- und die entsteht erst
+                 * nach den Zeilen. Wer sie gleich mitkopiert, laesst die
+                 * Kopie am Fremdschluessel scheitern, und zwar erst dann,
+                 * wenn ein Plan zum ersten Mal eine Rueckfallebene hat.
+                 * Genau so ist es aufgefallen.
+                 */
+                . ' SELECT ?, `sortierung`, `betriebsstelle`, `stellenart`,'
+                . ' `erreichbarkeit`, NULL,'
+                . ' `medium`, `funkart`, `band`, `kanal`, `bandlage`, `verkehrsform`, `relaisstelle`, `betriebsart`, `rufgruppe`, `anschlussart`, `datenart`,'
+                /*
+                 * Hier verschwindet die Zweiteilung der Vermerke.
+                 *
+                 * Weder Fb Fue 76 noch PDV 800 kennt zwei Vermerkfelder; der
+                 * Plan fuehrt kuenftig eines. Eine freigegebene Fassung darf
+                 * aber nicht nachtraeglich anders lauten, also wird nichts
+                 * umgeschrieben: Die KOPIE fuehrt beide Werte zusammen, die
+                 * alte Version behaelt ihre beiden. Die Trennung verschwindet
+                 * mit der naechsten Version von selbst.
+                 */
+                . " '', CONCAT_WS('\n\n',"
+                . ' NULLIF(`besondere_vermerke`, \'\'),'
+                . ' NULLIF(`bemerkungen`, \'\'))'
                 . ' FROM `nv_fernmeldeplan_eintraege`'
                 . ' WHERE `fernmeldeplan_id` = ? ORDER BY `sortierung`'
             );
@@ -4192,6 +5288,163 @@ function estab_dv_start_telecom_plan_revision(
                 $copiedEntries = $copyEntries->affected_rows;
             } finally {
                 $copyEntries->close();
+            }
+            /*
+             * Die Kopie behaelt die Kennung -- das ist der ganze Zweck: Ein
+             * Weg ist in Version 4 derselbe wie in Version 3.
+             *
+             * Alt und neu werden ueber die `sortierung` gepaart, und das ist
+             * hier zulaessig, obwohl sie ausdruecklich KEINE Identitaet ist:
+             * Die neuen Zeilen sind soeben in derselben Transaktion aus den
+             * alten entstanden und haben deren Sortierung uebernommen. Die
+             * Zuordnung ist damit oertlich eindeutig. Wer sie spaeter global
+             * benutzt, baut den Fehler ein, den Migration 122 beschreibt.
+             */
+            $copyIdentities = $connection->prepare(
+                'INSERT INTO `nv_fernmeldeweg_zuordnung`'
+                . ' (`fernmeldeplan_eintrag_id`, `fernmeldeplan_id`,'
+                . ' `weg_id`)'
+                . ' SELECT neu.`fernmeldeplan_eintrag_id`,'
+                . ' neu.`fernmeldeplan_id`, quelle.`weg_id`'
+                . ' FROM `nv_fernmeldeplan_eintraege` AS neu'
+                . ' JOIN `nv_fernmeldeplan_eintraege` AS alt'
+                . ' ON alt.`fernmeldeplan_id` = ?'
+                . ' AND alt.`sortierung` = neu.`sortierung`'
+                . ' JOIN `nv_fernmeldeweg_zuordnung` AS quelle'
+                . ' ON quelle.`fernmeldeplan_eintrag_id`'
+                . ' = alt.`fernmeldeplan_eintrag_id`'
+                . ' WHERE neu.`fernmeldeplan_id` = ?'
+            );
+            if (!$copyIdentities) {
+                throw new RuntimeException(
+                    'Wegkennungen konnten nicht zum Entwurf kopiert werden.'
+                );
+            }
+            try {
+                $copyIdentities->bind_param('ii', $sourcePlanId, $planId);
+                if (!$copyIdentities->execute()) {
+                    throw new RuntimeException(
+                        'Wegkennungen konnten nicht zum Entwurf kopiert '
+                        . 'werden.'
+                    );
+                }
+                $copiedIdentities = $copyIdentities->affected_rows;
+            } finally {
+                $copyIdentities->close();
+            }
+            /*
+             * Jetzt erst die Rueckfallebenen -- die Wegzuordnung des neuen
+             * Plans steht.
+             *
+             * Der Verweis bleibt derselbe WERT: Er zeigt auf eine dauerhafte
+             * Wegkennung, und die ueberlebt den Versionswechsel. Genau dafuer
+             * gibt es sie (Migration 122). Uebernommen wird nur, was im neuen
+             * Plan auch ankommt -- ein Ersatzweg, dessen Hauptweg
+             * zwischenzeitlich gestrichen wurde, bliebe sonst ein Verweis ins
+             * Leere.
+             */
+            $copyFallbacks = $connection->prepare(
+                'UPDATE `nv_fernmeldeplan_eintraege` AS neu'
+                . ' JOIN `nv_fernmeldeplan_eintraege` AS alt'
+                . ' ON alt.`fernmeldeplan_id` = ?'
+                . ' AND alt.`sortierung` = neu.`sortierung`'
+                . ' JOIN `nv_fernmeldeweg_zuordnung` AS ziel'
+                . ' ON ziel.`fernmeldeplan_id` = neu.`fernmeldeplan_id`'
+                . ' AND ziel.`weg_id` = alt.`rueckfallebene_fuer_weg`'
+                . ' SET neu.`rueckfallebene_fuer_weg` = ziel.`weg_id`'
+                . ' WHERE neu.`fernmeldeplan_id` = ?'
+                . ' AND alt.`rueckfallebene_fuer_weg` IS NOT NULL'
+            );
+            if (!$copyFallbacks) {
+                throw new RuntimeException(
+                    'Rückfallebenen konnten nicht zum Entwurf kopiert werden.'
+                );
+            }
+            try {
+                $copyFallbacks->bind_param('ii', $sourcePlanId, $planId);
+                if (!$copyFallbacks->execute()) {
+                    throw new RuntimeException(
+                        'Rückfallebenen konnten nicht zum Entwurf kopiert '
+                        . 'werden.'
+                    );
+                }
+            } finally {
+                $copyFallbacks->close();
+            }
+            /*
+             * Die Gegenstellen ziehen mit. Alt und neu werden ueber die
+             * `sortierung` gepaart -- oertlich eindeutig, weil die neuen
+             * Zeilen soeben in derselben Transaktion aus den alten entstanden
+             * sind (siehe die Kennungen oben).
+             */
+            $copyCounterparts = $connection->prepare(
+                'INSERT INTO `nv_fernmeldeplan_gegenstellen`'
+                . ' (`fernmeldeplan_eintrag_id`, `sortierung`, `name`,'
+                . ' `stellenart`, `erreichbarkeit`, `bemerkungen`)'
+                . ' SELECT neu.`fernmeldeplan_eintrag_id`, g.`sortierung`,'
+                . ' g.`name`, g.`stellenart`, g.`erreichbarkeit`,'
+                . ' g.`bemerkungen`'
+                . ' FROM `nv_fernmeldeplan_eintraege` AS neu'
+                . ' JOIN `nv_fernmeldeplan_eintraege` AS alt'
+                . ' ON alt.`fernmeldeplan_id` = ?'
+                . ' AND alt.`sortierung` = neu.`sortierung`'
+                . ' JOIN `nv_fernmeldeplan_gegenstellen` AS g'
+                . ' ON g.`fernmeldeplan_eintrag_id`'
+                . ' = alt.`fernmeldeplan_eintrag_id`'
+                . ' WHERE neu.`fernmeldeplan_id` = ?'
+            );
+            if (!$copyCounterparts) {
+                throw new RuntimeException(
+                    'Gegenstellen konnten nicht zum Entwurf kopiert werden.'
+                );
+            }
+            try {
+                $copyCounterparts->bind_param('ii', $sourcePlanId, $planId);
+                if (!$copyCounterparts->execute()) {
+                    throw new RuntimeException(
+                        'Gegenstellen konnten nicht zum Entwurf kopiert '
+                        . 'werden.'
+                    );
+                }
+            } finally {
+                $copyCounterparts->close();
+            }
+            if ($copiedIdentities !== $copiedEntries) {
+                // Ein Weg ohne Kennung waere ein Weg, auf den keine
+                // Rueckfallebene mehr zeigen kann. Lieber laut abbrechen.
+                throw new RuntimeException(
+                    'Der Entwurf haette Wege ohne Kennung erhalten.'
+                );
+            }
+            /*
+             * Die Nebenstellen ziehen mit. Sie haengen am Plan, also braucht
+             * die Kopie keine Paarung ueber die Sortierung -- ein schlichtes
+             * INSERT ... SELECT mit der neuen Plankennung genuegt.
+             */
+            $copyExtensions = $connection->prepare(
+                'INSERT INTO `nv_fernmeldeplan_nebenstellen`'
+                . ' (`fernmeldeplan_id`, `sortierung`, `technik`,'
+                . ' `nummer`, `teilnehmer`, `bemerkungen`)'
+                . ' SELECT ?, `sortierung`, `technik`, `nummer`,'
+                . ' `teilnehmer`, `bemerkungen`'
+                . ' FROM `nv_fernmeldeplan_nebenstellen`'
+                . ' WHERE `fernmeldeplan_id` = ? ORDER BY `sortierung`'
+            );
+            if (!$copyExtensions) {
+                throw new RuntimeException(
+                    'Nebenstellen konnten nicht zum Entwurf kopiert werden.'
+                );
+            }
+            try {
+                $copyExtensions->bind_param('ii', $planId, $sourcePlanId);
+                if (!$copyExtensions->execute()) {
+                    throw new RuntimeException(
+                        'Nebenstellen konnten nicht zum Entwurf kopiert '
+                        . 'werden.'
+                    );
+                }
+            } finally {
+                $copyExtensions->close();
             }
             estab_dv_audit(
                 $connection,
@@ -4269,8 +5522,10 @@ function estab_dv_update_telecom_plan_draft(
             );
             $update = $connection->prepare(
                 'UPDATE `nv_fernmeldeplaene` SET `herkunft` = ?,'
-                . ' `gueltig_ab` = ?, `gueltig_bis` = ?,'
-                . ' `betriebsleitung` = ?, `bemerkungen` = ?'
+                . ' `verfasser_funktion` = ?,'
+                . ' `gueltig_ab` = ?, `gueltig_bis` = ?, `vs_vermerk` = ?,'
+                . ' `betriebsleitung` = ?, `freigabe_dienststellung` = ?,'
+                . ' `bemerkungen` = ?'
                 . ' WHERE `fernmeldeplan_id` = ? AND `einsatz_id` = ?'
                 . " AND `status` = 'ENTWURF'"
             );
@@ -4281,11 +5536,14 @@ function estab_dv_update_telecom_plan_draft(
             }
             try {
                 $update->bind_param(
-                    'sssssii',
+                    'ssssssssii',
                     $header['herkunft'],
+                    $header['verfasser_funktion'],
                     $header['gueltig_ab'],
                     $header['gueltig_bis'],
+                    $header['vs_vermerk'],
                     $header['betriebsleitung'],
+                    $header['freigabe_dienststellung'],
                     $header['bemerkungen'],
                     $planId,
                     $incidentId
@@ -4372,6 +5630,17 @@ function estab_dv_add_telecom_entry(
                     $expectedRevision
                 );
             }
+            /*
+             * `sortierung` ist Anzeigereihenfolge und sonst nichts.
+             *
+             * Sie sah lange wie eine Identitaet aus, weil die Versionskopie
+             * sie erhaelt und niemand umsortieren kann. Beides ist Zufall:
+             * `MAX + 1` wird je Planversion gerechnet, wer also im Entwurf
+             * den letzten Weg loescht und einen neuen anlegt, bekommt
+             * dieselbe Nummer fuer einen anderen Weg. Die Identitaet traegt
+             * seit Migration 122 `nv_fernmeldewege`. Umsortieren ist damit
+             * gefahrlos moeglich -- es ist nur noch nicht gebaut.
+             */
             $next = $connection->prepare(
                 'SELECT COALESCE(MAX(`sortierung`), 0) + 1 AS `sortierung`'
                 . ' FROM `nv_fernmeldeplan_eintraege`'
@@ -4387,27 +5656,45 @@ function estab_dv_add_telecom_entry(
             } finally {
                 $next->close();
             }
+            $fallbackTarget = $values['rueckfallebene_fuer_weg'];
+            estab_dv_telecom_assert_fallback(
+                $connection,
+                $planId,
+                null,
+                is_int($fallbackTarget) ? $fallbackTarget : null
+            );
             $insert = $connection->prepare(
                 'INSERT INTO `nv_fernmeldeplan_eintraege`'
                 . ' (`fernmeldeplan_id`, `sortierung`, `betriebsstelle`,'
-                . ' `rufname`, `medium`, `kanal`, `bandlage`, `verkehrsform`,'
+                . ' `stellenart`, `erreichbarkeit`, `rueckfallebene_fuer_weg`,'
+                . ' `medium`, `funkart`, `band`, `kanal`, `bandlage`, `verkehrsform`, `relaisstelle`, `betriebsart`, `rufgruppe`, `anschlussart`, `datenart`,'
                 . ' `besondere_vermerke`, `bemerkungen`)'
-                . ' VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+                . ' VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,'
+                . ' ?, ?, ?)'
             );
             if (!$insert) {
                 throw new RuntimeException('Planposition konnte nicht vorbereitet werden.');
             }
             try {
                 $insert->bind_param(
-                    'iissssssss',
+                    'iisssisssssssssssss',
                     $planId,
                     $sort,
                     $values['betriebsstelle'],
-                    $values['rufname'],
+                    $values['stellenart'],
+                    $values['erreichbarkeit'],
+                    $values['rueckfallebene_fuer_weg'],
                     $values['medium'],
+                    $values['funkart'],
+                    $values['band'],
                     $values['kanal'],
                     $values['bandlage'],
                     $values['verkehrsform'],
+                    $values['relaisstelle'],
+                    $values['betriebsart'],
+                    $values['rufgruppe'],
+                    $values['anschlussart'],
+                    $values['datenart'],
                     $values['besondere_vermerke'],
                     $values['bemerkungen']
                 );
@@ -4418,6 +5705,13 @@ function estab_dv_add_telecom_entry(
             } finally {
                 $insert->close();
             }
+            $wegId = estab_dv_telecom_assign_route_identity(
+                $connection,
+                $incidentId,
+                $planId,
+                $entryId,
+                $userCode
+            );
             estab_dv_audit(
                 $connection,
                 $protocolTable,
@@ -4427,11 +5721,681 @@ function estab_dv_add_telecom_entry(
                     'action' => 'plan_entry_added',
                     'plan_id' => $planId,
                     'entry_id' => $entryId,
+                    'weg_id' => $wegId,
                     'actor' => $userCode,
                     'actor_function' => (string) $selected['funktion'],
                 ]
             );
             return $entryId;
+        }
+    );
+}
+
+/**
+ * Validate one counterpart of a route.
+ *
+ * A counterpart carries two things, because the message form needs two: the
+ * plain name of the station, which fills Feld 15 on an incoming message and
+ * Feld 10 on an outgoing one, and the address it answers at, which fills
+ * Feld 6 or Feld 11 depending on the medium of its route.
+ *
+ * It carries no medium of its own. That is the whole point -- the medium is
+ * the route's, and the sentence the plan states is "over THIS way, THAT
+ * station answers at THIS address".
+ *
+ * @return array{
+ *     name:string,
+ *     stellenart:string|null,
+ *     erreichbarkeit:string,
+ *     bemerkungen:string
+ * }
+ */
+function estab_dv_telecom_counterpart_values(array $input): array
+{
+    /*
+     * Die Stellenart gehoert der GEGENSTELLE.
+     *
+     * Sie sagt, in welcher Richtung die andere Seite steht -- ueber uns,
+     * unter uns oder daneben. Fb Fue 77 zeichnet genau das: die eigene
+     * Fuehrungsstelle in der Mitte, uebergeordnete links, nachgeordnete
+     * rechts. Am eigenen Weg waere die Angabe sinnlos; die eigene Stelle ist
+     * immer die eigene.
+     *
+     * "EIGEN" gibt es hier deshalb nicht. Eine Gegenstelle ist per Begriff
+     * die andere Seite.
+     */
+    $stellenart = $input['stellenart'] ?? null;
+    $stellenart = is_string($stellenart) ? trim($stellenart) : '';
+    if ($stellenart === '') {
+        $stellenart = null;
+    } elseif (!isset(estab_dv_telecom_counterpart_kinds()[$stellenart])) {
+        throw new EstabDvInputException(
+            'Die Stellenart der Gegenstelle ist ungültig.'
+        );
+    }
+    return [
+        'name' => estab_dv_text(
+            $input['name'] ?? null,
+            'Name der Gegenstelle',
+            255
+        ),
+        'stellenart' => $stellenart,
+        'erreichbarkeit' => estab_dv_text(
+            $input['erreichbarkeit'] ?? null,
+            'Erreichbarkeit der Gegenstelle',
+            255
+        ),
+        'bemerkungen' => estab_dv_text(
+            $input['bemerkungen'] ?? '',
+            'Bemerkungen',
+            10000,
+            true
+        ),
+    ];
+}
+
+/**
+ * Validate one extension of the own command post.
+ *
+ * Drei Angaben, weil der Vordruck drei druckt: Technik, Nummer, Teilnehmer.
+ * Die Nummer ist Text und wird NICHT auf eine Form geprüft -- eine
+ * Nebenstelle heißt "23", "0228 940-1523" oder "Apparat Lagedienst", und eine
+ * erfundene Form wiese zurück, was eine Führungsstelle tatsächlich benutzt.
+ *
+ * @return array{technik:string,nummer:string,teilnehmer:string,bemerkungen:string}
+ */
+function estab_dv_telecom_extension_values(array $input): array
+{
+    $technik = $input['technik'] ?? null;
+    $technik = is_string($technik) ? trim($technik) : '';
+    if (!isset(ESTAB_DV_TELECOM_EXTENSION_KINDS[$technik])) {
+        throw new EstabDvInputException(
+            'Die Technik der Nebenstelle ist ungültig.'
+        );
+    }
+    return [
+        'technik' => $technik,
+        'nummer' => estab_dv_text(
+            $input['nummer'] ?? null,
+            'Nummer der Nebenstelle',
+            40
+        ),
+        'teilnehmer' => estab_dv_text(
+            $input['teilnehmer'] ?? null,
+            'Teilnehmer',
+            255
+        ),
+        'bemerkungen' => estab_dv_text(
+            $input['bemerkungen'] ?? '',
+            'Bemerkungen',
+            10000,
+            true
+        ),
+    ];
+}
+
+/**
+ * Refuse a fallback that points at itself or closes a ring.
+ *
+ * The database already guarantees that a fallback stays inside its own plan
+ * version -- the composite foreign key carries `fernmeldeplan_id`. What it
+ * cannot see is the entry's own identity: that lives in the mapping table, so
+ * a column CHECK has nothing to compare against. The walk below does it.
+ *
+ * Chains stay allowed on purpose. A substitute may have a substitute; only a
+ * ring is refused, because a ring answers "what takes the place of this one"
+ * with itself.
+ */
+function estab_dv_telecom_assert_fallback(
+    mysqli $connection,
+    int $planId,
+    ?int $ownRouteId,
+    ?int $target
+): void {
+    if ($target === null) {
+        return;
+    }
+    if ($ownRouteId !== null && $ownRouteId === $target) {
+        throw new EstabDvInputException(
+            'Ein Weg kann nicht seine eigene Rückfallebene sein.'
+        );
+    }
+    $step = $connection->prepare(
+        'SELECT e.`rueckfallebene_fuer_weg`'
+        . ' FROM `nv_fernmeldeweg_zuordnung` AS z'
+        . ' JOIN `nv_fernmeldeplan_eintraege` AS e'
+        . ' ON e.`fernmeldeplan_eintrag_id` = z.`fernmeldeplan_eintrag_id`'
+        . ' WHERE z.`fernmeldeplan_id` = ? AND z.`weg_id` = ?'
+    );
+    if (!$step) {
+        throw new RuntimeException(
+            'Die Rückfallebene konnte nicht geprüft werden.'
+        );
+    }
+    try {
+        $seen = [];
+        $current = $target;
+        while ($current !== null) {
+            if (isset($seen[$current])) {
+                throw new EstabDvInputException(
+                    'Die Rückfallebenen bilden einen Ring.'
+                );
+            }
+            $seen[$current] = true;
+            if ($ownRouteId !== null && $current === $ownRouteId) {
+                throw new EstabDvInputException(
+                    'Die Rückfallebenen bilden einen Ring.'
+                );
+            }
+            $step->bind_param('ii', $planId, $current);
+            $step->execute();
+            $row = $step->get_result()->fetch_assoc();
+            if (!is_array($row)) {
+                // Der Fremdschluessel laesst nur Ziele desselben Plans zu;
+                // fehlt die Zeile trotzdem, ist der Verweis nicht tragfaehig.
+                throw new EstabDvInputException(
+                    'Die Rückfallebene benennt keinen Weg dieses Plans.'
+                );
+            }
+            $next = $row['rueckfallebene_fuer_weg'];
+            $current = $next === null ? null : (int) $next;
+        }
+    } finally {
+        $step->close();
+    }
+}
+
+/**
+ * Give one newly created route its durable identity.
+ *
+ * The identity lives beside the plan entries, never inside them. Filling a
+ * column on `nv_fernmeldeplan_eintraege` would collide with
+ * `estab_dv94_fernmeldeplan_entry_update` the moment a released plan is
+ * involved; migration 122 carries the full reasoning. The number is allocated
+ * per incident and never reused, so a plan can print "Weg 3" and mean the
+ * same route in every version.
+ */
+function estab_dv_telecom_assign_route_identity(
+    mysqli $connection,
+    int $incidentId,
+    int $planId,
+    int $entryId,
+    string $userCode
+): int {
+    $next = $connection->prepare(
+        'SELECT COALESCE(MAX(`weg_nummer`), 0) + 1 AS `weg_nummer`'
+        . ' FROM `nv_fernmeldewege` WHERE `einsatz_id` = ? FOR UPDATE'
+    );
+    if (!$next) {
+        throw new RuntimeException(
+            'Wegnummer konnte nicht reserviert werden.'
+        );
+    }
+    try {
+        $next->bind_param('i', $incidentId);
+        $next->execute();
+        $number = (int) (
+            $next->get_result()->fetch_assoc()['weg_nummer'] ?? 0
+        );
+    } finally {
+        $next->close();
+    }
+    if ($number < 1) {
+        throw new RuntimeException(
+            'Wegnummer konnte nicht reserviert werden.'
+        );
+    }
+    $identity = $connection->prepare(
+        'INSERT INTO `nv_fernmeldewege`'
+        . ' (`einsatz_id`, `weg_nummer`, `angelegt_von`)'
+        . ' VALUES (?, ?, ?)'
+    );
+    if (!$identity) {
+        throw new RuntimeException(
+            'Wegkennung konnte nicht vorbereitet werden.'
+        );
+    }
+    try {
+        $identity->bind_param('iis', $incidentId, $number, $userCode);
+        if (!$identity->execute()) {
+            throw new RuntimeException(
+                'Wegkennung konnte nicht gespeichert werden.'
+            );
+        }
+        $wegId = (int) $connection->insert_id;
+    } finally {
+        $identity->close();
+    }
+    $mapping = $connection->prepare(
+        'INSERT INTO `nv_fernmeldeweg_zuordnung`'
+        . ' (`fernmeldeplan_eintrag_id`, `fernmeldeplan_id`, `weg_id`)'
+        . ' VALUES (?, ?, ?)'
+    );
+    if (!$mapping) {
+        throw new RuntimeException(
+            'Wegzuordnung konnte nicht vorbereitet werden.'
+        );
+    }
+    try {
+        $mapping->bind_param('iii', $entryId, $planId, $wegId);
+        if (!$mapping->execute()) {
+            throw new RuntimeException(
+                'Wegzuordnung konnte nicht gespeichert werden.'
+            );
+        }
+    } finally {
+        $mapping->close();
+    }
+    return $wegId;
+}
+
+/** Add one counterpart to a route of an editable draft. */
+function estab_dv_add_telecom_counterpart(
+    mysqli $connection,
+    int $incidentId,
+    int $planId,
+    int $entryId,
+    array $identity,
+    array $input,
+    string $expectedRevision,
+    string $protocolTable = 'nv_protokoll'
+): int {
+    $incidentId = estab_incident_positive_id($incidentId);
+    $planId = estab_dv_positive_id($planId, 'Fernmeldeplan');
+    $entryId = estab_dv_positive_id($entryId, 'Fernmeldeweg');
+    $values = estab_dv_telecom_counterpart_values($input);
+    $expectedRevision = estab_dv_telecom_revision_token($expectedRevision);
+    return estab_incident_with_active_write(
+        $connection,
+        static function (array $incident) use (
+            $connection,
+            $incidentId,
+            $planId,
+            $entryId,
+            $identity,
+            $values,
+            $expectedRevision,
+            $protocolTable
+        ): int {
+            /*
+             * KEINE Pruefung auf den strengen Berechtigungsmodus.
+             *
+             * Die stand hier zuerst, aus der falschen Vorlage uebernommen:
+             * Sie gehoert zu den foermlichen Dienstschichten, nicht zur
+             * Fernmeldeplanung. Eine Gegenstelle muss dort bearbeitbar sein,
+             * wo ihr Weg es ist -- alles andere waere eine Sperre, die den
+             * Entwurf halb bedienbar macht.
+             */
+            $selected = estab_dv_require_write_capability(
+                $connection,
+                $incidentId,
+                $identity,
+                'FERNMELDEPLANUNG'
+            );
+            $userCode = $selected['kuerzel'];
+            estab_dv_lock_telecom_draft($connection, $incidentId, $planId);
+            estab_dv_require_telecom_plan_revision(
+                $connection,
+                $incidentId,
+                $planId,
+                $expectedRevision
+            );
+            $next = $connection->prepare(
+                'SELECT COALESCE(MAX(g.`sortierung`), 0) + 1 AS `sortierung`'
+                . ' FROM `nv_fernmeldeplan_gegenstellen` AS g'
+                . ' JOIN `nv_fernmeldeplan_eintraege` AS e'
+                . ' ON e.`fernmeldeplan_eintrag_id`'
+                . ' = g.`fernmeldeplan_eintrag_id`'
+                . ' WHERE g.`fernmeldeplan_eintrag_id` = ?'
+                . ' AND e.`fernmeldeplan_id` = ? FOR UPDATE'
+            );
+            if (!$next) {
+                throw new RuntimeException(
+                    'Gegenstelle konnte nicht vorbereitet werden.'
+                );
+            }
+            try {
+                $next->bind_param('ii', $entryId, $planId);
+                $next->execute();
+                $sort = (int) (
+                    $next->get_result()->fetch_assoc()['sortierung'] ?? 0
+                );
+            } finally {
+                $next->close();
+            }
+            $insert = $connection->prepare(
+                'INSERT INTO `nv_fernmeldeplan_gegenstellen`'
+                . ' (`fernmeldeplan_eintrag_id`, `sortierung`, `name`,'
+                . ' `stellenart`, `erreichbarkeit`, `bemerkungen`)'
+                . ' SELECT ?, ?, ?, ?, ?, ?'
+                . ' FROM `nv_fernmeldeplan_eintraege`'
+                . ' WHERE `fernmeldeplan_eintrag_id` = ?'
+                . ' AND `fernmeldeplan_id` = ?'
+            );
+            if (!$insert) {
+                throw new RuntimeException(
+                    'Gegenstelle konnte nicht vorbereitet werden.'
+                );
+            }
+            try {
+                $insert->bind_param(
+                    'iissssii',
+                    $entryId,
+                    $sort,
+                    $values['name'],
+                    $values['stellenart'],
+                    $values['erreichbarkeit'],
+                    $values['bemerkungen'],
+                    $entryId,
+                    $planId
+                );
+                if (!$insert->execute() || $insert->affected_rows !== 1) {
+                    throw new EstabDvConflictException(
+                        'Der Fernmeldeweg gehört nicht zu diesem Entwurf.'
+                    );
+                }
+                $counterpartId = (int) $connection->insert_id;
+            } finally {
+                $insert->close();
+            }
+            estab_dv_audit(
+                $connection,
+                $protocolTable,
+                $incidentId,
+                'DV Fernmeldeplan',
+                [
+                    'action' => 'plan_counterpart_added',
+                    'plan_id' => $planId,
+                    'entry_id' => $entryId,
+                    'counterpart_id' => $counterpartId,
+                    'name' => $values['name'],
+                    'actor' => $userCode,
+                    'actor_function' => (string) $selected['funktion'],
+                ]
+            );
+            return $counterpartId;
+        }
+    );
+}
+
+/**
+ * Add one extension of the own command post to an editable draft.
+ *
+ * Sie hängt am PLAN, nicht an einem Weg. Ein Weg ist ein Mittel mit einer
+ * Erreichbarkeit; eine Nebenstelle gehört der Vermittlung als Ganzem und
+ * müsste sonst willkürlich an einem der Wege hängen. Fb Fü 77 zeichnet die
+ * Tafel neben den Geräten, nicht unter einem davon.
+ */
+function estab_dv_add_telecom_extension(
+    mysqli $connection,
+    int $incidentId,
+    int $planId,
+    array $identity,
+    array $input,
+    string $expectedRevision,
+    string $protocolTable = 'nv_protokoll'
+): int {
+    $incidentId = estab_incident_positive_id($incidentId);
+    $planId = estab_dv_positive_id($planId, 'Fernmeldeplan');
+    $values = estab_dv_telecom_extension_values($input);
+    $expectedRevision = estab_dv_telecom_revision_token($expectedRevision);
+    return estab_incident_with_active_write(
+        $connection,
+        static function (array $incident) use (
+            $connection,
+            $incidentId,
+            $planId,
+            $identity,
+            $values,
+            $expectedRevision,
+            $protocolTable
+        ): int {
+            $selected = estab_dv_require_write_capability(
+                $connection,
+                $incidentId,
+                $identity,
+                'FERNMELDEPLANUNG'
+            );
+            $userCode = $selected['kuerzel'];
+            estab_dv_lock_telecom_draft($connection, $incidentId, $planId);
+            estab_dv_require_telecom_plan_revision(
+                $connection,
+                $incidentId,
+                $planId,
+                $expectedRevision
+            );
+            $next = $connection->prepare(
+                'SELECT COALESCE(MAX(`sortierung`), 0) + 1 AS `sortierung`'
+                . ' FROM `nv_fernmeldeplan_nebenstellen`'
+                . ' WHERE `fernmeldeplan_id` = ? FOR UPDATE'
+            );
+            if (!$next) {
+                throw new RuntimeException(
+                    'Nebenstelle konnte nicht vorbereitet werden.'
+                );
+            }
+            try {
+                $next->bind_param('i', $planId);
+                $next->execute();
+                $sort = (int) (
+                    $next->get_result()->fetch_assoc()['sortierung'] ?? 0
+                );
+            } finally {
+                $next->close();
+            }
+            $insert = $connection->prepare(
+                'INSERT INTO `nv_fernmeldeplan_nebenstellen`'
+                . ' (`fernmeldeplan_id`, `sortierung`, `technik`,'
+                . ' `nummer`, `teilnehmer`, `bemerkungen`)'
+                . ' VALUES (?, ?, ?, ?, ?, ?)'
+            );
+            if (!$insert) {
+                throw new RuntimeException(
+                    'Nebenstelle konnte nicht vorbereitet werden.'
+                );
+            }
+            try {
+                $insert->bind_param(
+                    'iissss',
+                    $planId,
+                    $sort,
+                    $values['technik'],
+                    $values['nummer'],
+                    $values['teilnehmer'],
+                    $values['bemerkungen']
+                );
+                if (!$insert->execute() || $insert->affected_rows !== 1) {
+                    throw new EstabDvConflictException(
+                        'Die Nebenstelle konnte nicht angelegt werden.'
+                    );
+                }
+                $extensionId = (int) $connection->insert_id;
+            } finally {
+                $insert->close();
+            }
+            estab_dv_audit(
+                $connection,
+                $protocolTable,
+                $incidentId,
+                'DV Fernmeldeplan',
+                [
+                    'action' => 'plan_extension_added',
+                    'plan_id' => $planId,
+                    'extension_id' => $extensionId,
+                    'technik' => $values['technik'],
+                    'nummer' => $values['nummer'],
+                    'actor' => $userCode,
+                    'actor_function' => (string) $selected['funktion'],
+                ]
+            );
+            return $extensionId;
+        }
+    );
+}
+
+/** Remove one extension of the own command post from an editable draft. */
+function estab_dv_remove_telecom_extension(
+    mysqli $connection,
+    int $incidentId,
+    int $planId,
+    int $extensionId,
+    array $identity,
+    string $expectedRevision,
+    string $protocolTable = 'nv_protokoll'
+): void {
+    $incidentId = estab_incident_positive_id($incidentId);
+    $planId = estab_dv_positive_id($planId, 'Fernmeldeplan');
+    $extensionId = estab_dv_positive_id($extensionId, 'Nebenstelle');
+    $expectedRevision = estab_dv_telecom_revision_token($expectedRevision);
+    estab_incident_with_active_write(
+        $connection,
+        static function (array $incident) use (
+            $connection,
+            $incidentId,
+            $planId,
+            $extensionId,
+            $identity,
+            $expectedRevision,
+            $protocolTable
+        ): bool {
+            $selected = estab_dv_require_write_capability(
+                $connection,
+                $incidentId,
+                $identity,
+                'FERNMELDEPLANUNG'
+            );
+            $userCode = $selected['kuerzel'];
+            estab_dv_lock_telecom_draft($connection, $incidentId, $planId);
+            estab_dv_require_telecom_plan_revision(
+                $connection,
+                $incidentId,
+                $planId,
+                $expectedRevision
+            );
+            $delete = $connection->prepare(
+                'DELETE FROM `nv_fernmeldeplan_nebenstellen`'
+                . ' WHERE `nebenstelle_id` = ? AND `fernmeldeplan_id` = ?'
+            );
+            if (!$delete) {
+                throw new RuntimeException(
+                    'Nebenstelle konnte nicht zum Entfernen vorbereitet '
+                    . 'werden.'
+                );
+            }
+            try {
+                $delete->bind_param('ii', $extensionId, $planId);
+                if (!$delete->execute() || $delete->affected_rows !== 1) {
+                    throw new EstabDvConflictException(
+                        'Die Nebenstelle wurde zwischenzeitlich geändert.'
+                    );
+                }
+            } finally {
+                $delete->close();
+            }
+            estab_dv_audit(
+                $connection,
+                $protocolTable,
+                $incidentId,
+                'DV Fernmeldeplan',
+                [
+                    'action' => 'plan_extension_removed',
+                    'plan_id' => $planId,
+                    'extension_id' => $extensionId,
+                    'actor' => $userCode,
+                    'actor_function' => (string) $selected['funktion'],
+                ]
+            );
+            return true;
+        }
+    );
+}
+
+/** Remove one counterpart from a route of an editable draft. */
+function estab_dv_remove_telecom_counterpart(
+    mysqli $connection,
+    int $incidentId,
+    int $planId,
+    int $counterpartId,
+    array $identity,
+    string $expectedRevision,
+    string $protocolTable = 'nv_protokoll'
+): void {
+    $incidentId = estab_incident_positive_id($incidentId);
+    $planId = estab_dv_positive_id($planId, 'Fernmeldeplan');
+    $counterpartId = estab_dv_positive_id($counterpartId, 'Gegenstelle');
+    $expectedRevision = estab_dv_telecom_revision_token($expectedRevision);
+    estab_incident_with_active_write(
+        $connection,
+        static function (array $incident) use (
+            $connection,
+            $incidentId,
+            $planId,
+            $counterpartId,
+            $identity,
+            $expectedRevision,
+            $protocolTable
+        ): bool {
+            /*
+             * KEINE Pruefung auf den strengen Berechtigungsmodus.
+             *
+             * Die stand hier zuerst, aus der falschen Vorlage uebernommen:
+             * Sie gehoert zu den foermlichen Dienstschichten, nicht zur
+             * Fernmeldeplanung. Eine Gegenstelle muss dort bearbeitbar sein,
+             * wo ihr Weg es ist -- alles andere waere eine Sperre, die den
+             * Entwurf halb bedienbar macht.
+             */
+            $selected = estab_dv_require_write_capability(
+                $connection,
+                $incidentId,
+                $identity,
+                'FERNMELDEPLANUNG'
+            );
+            $userCode = $selected['kuerzel'];
+            estab_dv_lock_telecom_draft($connection, $incidentId, $planId);
+            estab_dv_require_telecom_plan_revision(
+                $connection,
+                $incidentId,
+                $planId,
+                $expectedRevision
+            );
+            $delete = $connection->prepare(
+                'DELETE g FROM `nv_fernmeldeplan_gegenstellen` AS g'
+                . ' JOIN `nv_fernmeldeplan_eintraege` AS e'
+                . ' ON e.`fernmeldeplan_eintrag_id`'
+                . ' = g.`fernmeldeplan_eintrag_id`'
+                . ' WHERE g.`gegenstelle_id` = ?'
+                . ' AND e.`fernmeldeplan_id` = ?'
+            );
+            if (!$delete) {
+                throw new RuntimeException(
+                    'Gegenstelle konnte nicht zum Entfernen vorbereitet '
+                    . 'werden.'
+                );
+            }
+            try {
+                $delete->bind_param('ii', $counterpartId, $planId);
+                if (!$delete->execute() || $delete->affected_rows !== 1) {
+                    throw new EstabDvConflictException(
+                        'Die Gegenstelle wurde zwischenzeitlich geändert.'
+                    );
+                }
+            } finally {
+                $delete->close();
+            }
+            estab_dv_audit(
+                $connection,
+                $protocolTable,
+                $incidentId,
+                'DV Fernmeldeplan',
+                [
+                    'action' => 'plan_counterpart_removed',
+                    'plan_id' => $planId,
+                    'counterpart_id' => $counterpartId,
+                    'actor' => $userCode,
+                    'actor_function' => (string) $selected['funktion'],
+                ]
+            );
+            return true;
         }
     );
 }
@@ -4486,8 +6450,9 @@ function estab_dv_update_telecom_entry(
                 $expectedRevision
             );
             $select = $connection->prepare(
-                'SELECT `sortierung`, `betriebsstelle`, `rufname`, `medium`,'
-                . ' `kanal`, `bandlage`, `verkehrsform`,'
+                'SELECT `sortierung`, `betriebsstelle`, `stellenart`,'
+                . ' `erreichbarkeit`, `rueckfallebene_fuer_weg`, `medium`,'
+                . ' `funkart`, `band`, `kanal`, `bandlage`, `verkehrsform`, `relaisstelle`, `betriebsart`, `rufgruppe`, `anschlussart`, `datenart`,'
                 . ' `besondere_vermerke`, `bemerkungen`'
                 . ' FROM `nv_fernmeldeplan_eintraege`'
                 . ' WHERE `fernmeldeplan_eintrag_id` = ?'
@@ -4510,10 +6475,39 @@ function estab_dv_update_telecom_entry(
                     'Der Fernmeldeweg gehört nicht zu diesem Entwurf.'
                 );
             }
+            $ownRoute = null;
+            $ownStatement = $connection->prepare(
+                'SELECT `weg_id` FROM `nv_fernmeldeweg_zuordnung`'
+                . ' WHERE `fernmeldeplan_eintrag_id` = ?'
+            );
+            if ($ownStatement) {
+                try {
+                    $ownStatement->bind_param('i', $entryId);
+                    $ownStatement->execute();
+                    $ownRow = $ownStatement->get_result()->fetch_assoc();
+                    $ownRoute = is_array($ownRow) && $ownRow['weg_id'] !== null
+                        ? (int) $ownRow['weg_id']
+                        : null;
+                } finally {
+                    $ownStatement->close();
+                }
+            }
+            $fallbackTarget = $values['rueckfallebene_fuer_weg'];
+            estab_dv_telecom_assert_fallback(
+                $connection,
+                $planId,
+                $ownRoute,
+                is_int($fallbackTarget) ? $fallbackTarget : null
+            );
             $update = $connection->prepare(
                 'UPDATE `nv_fernmeldeplan_eintraege`'
-                . ' SET `betriebsstelle` = ?, `rufname` = ?, `medium` = ?,'
-                . ' `kanal` = ?, `bandlage` = ?, `verkehrsform` = ?,'
+                . ' SET `betriebsstelle` = ?, `stellenart` = ?,'
+                . ' `erreichbarkeit` = ?, `rueckfallebene_fuer_weg` = ?,'
+                . ' `medium` = ?,'
+                . ' `funkart` = ?, `band` = ?, `kanal` = ?, `bandlage` = ?,'
+                . ' `verkehrsform` = ?, `relaisstelle` = ?,'
+                . ' `betriebsart` = ?, `rufgruppe` = ?, `anschlussart` = ?,'
+                . ' `datenart` = ?,'
                 . ' `besondere_vermerke` = ?, `bemerkungen` = ?'
                 . ' WHERE `fernmeldeplan_eintrag_id` = ?'
                 . ' AND `fernmeldeplan_id` = ?'
@@ -4525,18 +6519,27 @@ function estab_dv_update_telecom_entry(
             }
             try {
                 $update->bind_param(
-                    'ssssssssii',
+                    'sssisssssssssssssii',
                     $values['betriebsstelle'],
-                    $values['rufname'],
+                    $values['stellenart'],
+                    $values['erreichbarkeit'],
+                    $values['rueckfallebene_fuer_weg'],
                     $values['medium'],
+                    $values['funkart'],
+                    $values['band'],
                     $values['kanal'],
                     $values['bandlage'],
                     $values['verkehrsform'],
+                    $values['relaisstelle'],
+                    $values['betriebsart'],
+                    $values['rufgruppe'],
+                    $values['anschlussart'],
+                    $values['datenart'],
                     $values['besondere_vermerke'],
                     $values['bemerkungen'],
                     $entryId,
                     $planId
-                );
+);
                 if (!$update->execute() || $update->affected_rows > 1) {
                     throw new RuntimeException(
                         'Fernmeldeweg konnte nicht gespeichert werden.'
@@ -4611,8 +6614,9 @@ function estab_dv_delete_telecom_entry(
                 $expectedRevision
             );
             $select = $connection->prepare(
-                'SELECT `sortierung`, `betriebsstelle`, `rufname`, `medium`,'
-                . ' `kanal`, `bandlage`, `verkehrsform`,'
+                'SELECT `sortierung`, `betriebsstelle`, `stellenart`,'
+                . ' `erreichbarkeit`, `rueckfallebene_fuer_weg`, `medium`,'
+                . ' `funkart`, `band`, `kanal`, `bandlage`, `verkehrsform`, `relaisstelle`, `betriebsart`, `rufgruppe`, `anschlussart`, `datenart`,'
                 . ' `besondere_vermerke`, `bemerkungen`'
                 . ' FROM `nv_fernmeldeplan_eintraege`'
                 . ' WHERE `fernmeldeplan_eintrag_id` = ?'
@@ -5074,18 +7078,75 @@ function estab_dv_activate_telecom_plan(
     );
 }
 
+/**
+ * Ausgangsnachrichten, die auf einen Melder warten.
+ *
+ * Disponiert auf das Mittel „Melder", vom LdF freigegeben, noch nicht
+ * befördert und noch ohne laufenden Auftrag. Ein abgebrochener Auftrag zählt
+ * nicht -- die Nachricht wartet dann wieder.
+ *
+ * @return list<array<string,mixed>>
+ */
+function estab_dv_messenger_eligible_messages(
+    mysqli $connection,
+    int $incidentId,
+    string $messageTable = 'nv_nachrichten'
+): array {
+    $statement = $connection->prepare(
+        'SELECT n.`00_lfd`, n.`04_nummer`, n.`10_anschrift`,'
+        . ' n.`12_inhalt` FROM ' . estab_message_table($messageTable) . ' AS n'
+        . ' WHERE n.`einsatz_id` = ?'
+        . " AND n.`04_richtung` = 'A'"
+        . " AND n.`01_medium` = 'Me'"
+        . ' AND n.`x00_status` = 2'
+        . " AND n.`x01_abschluss` = 'f'"
+        . ' AND NOT EXISTS ('
+        . '   SELECT 1 FROM `nv_melderauftraege` AS m'
+        . '   WHERE m.`einsatz_id` = n.`einsatz_id`'
+        . '     AND m.`nachricht_id` = n.`00_lfd`'
+        . "     AND m.`status` <> 'ABGEBROCHEN'"
+        . ' )'
+        . ' ORDER BY n.`04_nummer`, n.`00_lfd`'
+    );
+    if (!$statement) {
+        throw new RuntimeException(
+            'Melderfähige Nachrichten konnten nicht vorbereitet werden.'
+        );
+    }
+    try {
+        $statement->bind_param('i', $incidentId);
+        $statement->execute();
+        $result = $statement->get_result();
+        $rows = $result->fetch_all(MYSQLI_ASSOC);
+        $result->free();
+        return $rows;
+    } finally {
+        $statement->close();
+    }
+}
+
 /** Return plan headers with their immutable structured routes. */
 function estab_dv_telecom_plans(mysqli $connection, int $incidentId): array
 {
     $incidentId = estab_incident_positive_id($incidentId);
     $statement = $connection->prepare(
         'SELECT p.*, e.`fernmeldeplan_eintrag_id`, e.`sortierung`,'
-        . ' e.`betriebsstelle`, e.`rufname`, e.`medium`, e.`kanal`,'
-        . ' e.`bandlage`, e.`verkehrsform`, e.`besondere_vermerke`,'
-        . ' e.`bemerkungen` AS `eintrag_bemerkungen`'
+        . ' e.`betriebsstelle`, e.`stellenart`, e.`erreichbarkeit`,'
+        . ' e.`rueckfallebene_fuer_weg`,'
+        . ' e.`medium`, e.`kanal`,'
+        . ' e.`bandlage`, e.`verkehrsform`, e.`funkart`, e.`band`,'
+        . ' e.`relaisstelle`, e.`betriebsart`, e.`rufgruppe`,'
+        . ' e.`anschlussart`, e.`datenart`, e.`besondere_vermerke`,'
+        . ' e.`bemerkungen` AS `eintrag_bemerkungen`,'
+        . ' zu.`weg_id`, w.`weg_nummer`'
         . ' FROM `nv_fernmeldeplaene` AS p'
         . ' LEFT JOIN `nv_fernmeldeplan_eintraege` AS e'
         . ' ON e.`fernmeldeplan_id` = p.`fernmeldeplan_id`'
+        . ' LEFT JOIN `nv_fernmeldeweg_zuordnung` AS zu'
+        . ' ON zu.`fernmeldeplan_eintrag_id`'
+        . ' = e.`fernmeldeplan_eintrag_id`'
+        . ' LEFT JOIN `nv_fernmeldewege` AS w'
+        . ' ON w.`weg_id` = zu.`weg_id`'
         . ' WHERE p.`einsatz_id` = ?'
         . ' ORDER BY p.`version` DESC, e.`sortierung`'
     );
@@ -5106,8 +7167,10 @@ function estab_dv_telecom_plans(mysqli $connection, int $incidentId): array
                     'status' => (string) $row['status'],
                     'einsatzbezeichnung' => (string) $row['einsatzbezeichnung'],
                     'herkunft' => (string) $row['herkunft'],
+                    'verfasser_funktion' => $row['verfasser_funktion'],
                     'gueltig_ab' => (string) $row['gueltig_ab'],
                     'gueltig_bis' => $row['gueltig_bis'],
+                    'vs_vermerk' => $row['vs_vermerk'],
                     'betriebsleitung' => (string) $row['betriebsleitung'],
                     'bemerkungen' => $row['bemerkungen'],
                     'erstellt_am' => (string) $row['erstellt_am'],
@@ -5116,6 +7179,9 @@ function estab_dv_telecom_plans(mysqli $connection, int $incidentId): array
                         ? null
                         : (string) $row['freigegeben_am'],
                     'freigegeben_von' => $row['freigegeben_von'],
+                    'freigabe_dienststellung' =>
+                        $row['freigabe_dienststellung'],
+                    'nebenstellen' => [],
                     'eintraege' => [],
                 ];
             }
@@ -5124,18 +7190,144 @@ function estab_dv_telecom_plans(mysqli $connection, int $incidentId): array
                     'fernmeldeplan_eintrag_id' =>
                         (int) $row['fernmeldeplan_eintrag_id'],
                     'sortierung' => (int) $row['sortierung'],
+                    'weg_id' => $row['weg_id'] === null
+                        ? null
+                        : (int) $row['weg_id'],
+                    'weg_nummer' => $row['weg_nummer'] === null
+                        ? null
+                        : (int) $row['weg_nummer'],
                     'betriebsstelle' => (string) $row['betriebsstelle'],
-                    'rufname' => (string) $row['rufname'],
+                    'stellenart' => $row['stellenart'],
+                    'rueckfallebene_fuer_weg' =>
+                        $row['rueckfallebene_fuer_weg'] === null
+                            ? null
+                            : (int) $row['rueckfallebene_fuer_weg'],
+                    'erreichbarkeit' => (string) $row['erreichbarkeit'],
                     'medium' => (string) $row['medium'],
+                    'funkart' => $row['funkart'],
+                    'band' => $row['band'],
                     'kanal' => (string) $row['kanal'],
                     'bandlage' => (string) $row['bandlage'],
                     'verkehrsform' => (string) $row['verkehrsform'],
+                    'relaisstelle' => (string) ($row['relaisstelle'] ?? ''),
+                    'betriebsart' => $row['betriebsart'],
+                    'rufgruppe' => (string) ($row['rufgruppe'] ?? ''),
+                    'anschlussart' => $row['anschlussart'],
+                    'datenart' => $row['datenart'],
                     'besondere_vermerke' => $row['besondere_vermerke'],
                     'bemerkungen' => $row['eintrag_bemerkungen'],
                 ];
             }
         }
         $result->free();
+        /*
+         * Die Gegenstellen kommen in einem zweiten Zug. Ein Verbund in der
+         * Hauptabfrage vervielfachte jede Wegzeile je Gegenstelle, und der
+         * Aufbau oben zaehlt Wege.
+         */
+        if ($plans !== []) {
+            $counterpartStatement = $connection->prepare(
+                'SELECT g.`gegenstelle_id`, g.`fernmeldeplan_eintrag_id`,'
+                . ' g.`sortierung`, g.`name`, g.`stellenart`,'
+                . ' g.`erreichbarkeit`,'
+                . ' g.`bemerkungen`'
+                . ' FROM `nv_fernmeldeplan_gegenstellen` AS g'
+                . ' JOIN `nv_fernmeldeplan_eintraege` AS e'
+                . ' ON e.`fernmeldeplan_eintrag_id`'
+                . ' = g.`fernmeldeplan_eintrag_id`'
+                . ' JOIN `nv_fernmeldeplaene` AS p'
+                . ' ON p.`fernmeldeplan_id` = e.`fernmeldeplan_id`'
+                . ' WHERE p.`einsatz_id` = ?'
+                . ' ORDER BY g.`fernmeldeplan_eintrag_id`, g.`sortierung`'
+            );
+            if (!$counterpartStatement) {
+                throw new RuntimeException(
+                    'Gegenstellen konnten nicht gelesen werden.'
+                );
+            }
+            try {
+                $counterpartStatement->bind_param('i', $incidentId);
+                $counterpartStatement->execute();
+                $counterpartResult = $counterpartStatement->get_result();
+                $counterparts = [];
+                while (
+                    ($counterpartRow = $counterpartResult->fetch_assoc())
+                    !== null
+                ) {
+                    $counterparts[
+                        (int) $counterpartRow['fernmeldeplan_eintrag_id']
+                    ][] = [
+                        'gegenstelle_id' =>
+                            (int) $counterpartRow['gegenstelle_id'],
+                        'sortierung' => (int) $counterpartRow['sortierung'],
+                        'name' => (string) $counterpartRow['name'],
+                        'stellenart' => $counterpartRow['stellenart'],
+                        'erreichbarkeit' =>
+                            (string) $counterpartRow['erreichbarkeit'],
+                        'bemerkungen' => $counterpartRow['bemerkungen'],
+                    ];
+                }
+                $counterpartResult->free();
+            } finally {
+                $counterpartStatement->close();
+            }
+            foreach ($plans as &$planWithCounterparts) {
+                foreach (
+                    $planWithCounterparts['eintraege'] as &$entryReference
+                ) {
+                    $entryReference['gegenstellen'] = $counterparts[
+                        (int) $entryReference['fernmeldeplan_eintrag_id']
+                    ] ?? [];
+                }
+                unset($entryReference);
+            }
+            unset($planWithCounterparts);
+            /*
+             * Die Nebenstellen im dritten Zug -- aus demselben Grund wie die
+             * Gegenstellen: sie haengen am Plan, nicht am Weg, und ein
+             * Verbund in der Hauptabfrage vervielfachte jede Wegzeile.
+             */
+            $extensionStatement = $connection->prepare(
+                'SELECT n.`nebenstelle_id`, n.`fernmeldeplan_id`,'
+                . ' n.`sortierung`, n.`technik`, n.`nummer`,'
+                . ' n.`teilnehmer`, n.`bemerkungen`'
+                . ' FROM `nv_fernmeldeplan_nebenstellen` AS n'
+                . ' JOIN `nv_fernmeldeplaene` AS p'
+                . ' ON p.`fernmeldeplan_id` = n.`fernmeldeplan_id`'
+                . ' WHERE p.`einsatz_id` = ?'
+                . ' ORDER BY n.`fernmeldeplan_id`, n.`sortierung`'
+            );
+            if (!$extensionStatement) {
+                throw new RuntimeException(
+                    'Nebenstellen konnten nicht gelesen werden.'
+                );
+            }
+            try {
+                $extensionStatement->bind_param('i', $incidentId);
+                $extensionStatement->execute();
+                $extensionResult = $extensionStatement->get_result();
+                while (
+                    ($extensionRow = $extensionResult->fetch_assoc()) !== null
+                ) {
+                    $extensionPlan = (int) $extensionRow['fernmeldeplan_id'];
+                    if (!isset($plans[$extensionPlan])) {
+                        continue;
+                    }
+                    $plans[$extensionPlan]['nebenstellen'][] = [
+                        'nebenstelle_id' =>
+                            (int) $extensionRow['nebenstelle_id'],
+                        'sortierung' => (int) $extensionRow['sortierung'],
+                        'technik' => (string) $extensionRow['technik'],
+                        'nummer' => (string) $extensionRow['nummer'],
+                        'teilnehmer' => (string) $extensionRow['teilnehmer'],
+                        'bemerkungen' => $extensionRow['bemerkungen'],
+                    ];
+                }
+                $extensionResult->free();
+            } finally {
+                $extensionStatement->close();
+            }
+        }
         foreach ($plans as &$plan) {
             $plan['revision'] = estab_dv_telecom_plan_revision($plan);
         }
@@ -5687,7 +7879,7 @@ function estab_dv_assign_messenger(
             );
             $actorCode = $selected['kuerzel'];
             $message = $connection->prepare(
-                'SELECT `04_richtung`, `06_befwegausw`, `einsatz_id`,'
+                'SELECT `04_richtung`, `01_medium`, `einsatz_id`,'
                 . ' `estab_fernmeldeplan_eintrag_id`,'
                 . ' `x00_status`, `x01_abschluss`'
                 . ' FROM `nv_nachrichten` WHERE `00_lfd` = ? FOR UPDATE'
@@ -5706,8 +7898,11 @@ function estab_dv_assign_messenger(
                 !is_array($messageRow)
                 || (int) $messageRow['einsatz_id'] !== $incidentId
                 || $messageRow['04_richtung'] !== 'A'
-                || $messageRow['06_befwegausw'] !== 'Me'
-                || (int) ($messageRow['estab_fernmeldeplan_eintrag_id'] ?? 0) < 1
+                || $messageRow['01_medium'] !== 'Me'
+                || (
+                    (int) ($messageRow['estab_fernmeldeplan_eintrag_id'] ?? 0) < 1
+                    && estab_permission_telecom_plan_required()
+                )
                 || (int) $messageRow['x00_status'] !== 2
                 || !in_array(
                     (string) $messageRow['x01_abschluss'],
@@ -5717,7 +7912,8 @@ function estab_dv_assign_messenger(
             ) {
                 throw new EstabDvConflictException(
                     'Ein Melderauftrag benötigt einen Ausgang mit '
-                    . 'disponiertem Medium Me und nachgewiesenem S6-Weg.'
+                    . 'disponiertem Medium Me und nachgewiesenem '
+                    . 'Beförderungsweg.'
                 );
             }
             estab_dv_require_no_open_messenger_for_redispatch(

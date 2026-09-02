@@ -5,6 +5,14 @@ declare(strict_types=1);
 header('Content-Type: text/html; charset=UTF-8');
 header('Cache-Control: private, no-store, max-age=0');
 
+require_once __DIR__ . '/../app/app_shell.php';
+
+// Die Infosammlung steht auch ohne Anmeldung offen. Das Menue links soll
+// aber wissen, ob jemand angemeldet ist -- sonst zeigt es einer angemeldeten
+// Kraft lauter gesperrte Ziele.
+if (session_status() !== PHP_SESSION_ACTIVE) {
+    session_start();
+}
 $documents = require __DIR__ . '/documents.php';
 $documentMetadata = [];
 foreach ($documents as $document) {
@@ -24,34 +32,35 @@ $documentMetadataJson = json_encode(
 );
 
 ?>
-<!doctype html>
-<html lang="de" class="estab-message-workspace-document">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="author" content="Hajo Landmesser">
-  <link rel="shortcut icon" href="../favicon.ico">
-  <link rel="stylesheet" href="../estab-ui.css">
-  <title>Infosammlung BOS</title>
-</head>
-<body class="estab-message-workspace">
-  <main
-    class="estab-message-workspace-grid"
-    data-estab-bos-workspace
-  >
-    <iframe
-      class="estab-message-sidebar-frame"
-      name="status"
-      title="eStab Navigation und BOS-Dokumente"
-      src="./l_index.php"
-    ></iframe>
-    <iframe
-      class="estab-message-content-frame"
-      name="mainframe"
-      title="BOS-Informationsbereich"
-      src="./f_info.php"
-    ></iframe>
-  </main>
+<?= estab_shell_head('Infosammlung BOS') ?>
+<body class="estab-shell-body">
+  <div class="estab-shell" data-estab-shell>
+    <?= estab_shell_menu_markup(
+        estab_auth_session_identity($_SESSION),
+        $_SERVER,
+        null,
+        false,
+        estab_shell_context_markup('Info-Bereiche', $documents)
+    ) ?>
+    <main class="estab-shell-content estab-shell-content--frame"
+      data-estab-shell-content>
+      <!--
+        Die Auswahl der Dokumente stand hier als eigene Spalte -- ein zweites
+        Menue neben dem der Huelle, das noch einmal Breite kostete. Sie steht
+        jetzt links unter den Zielen. In der Mitte bleibt das gewaehlte
+        Dokument, und das ist der Inhalt dieser Seite.
+      -->
+      <div class="estab-bos-panes" data-estab-bos-workspace>
+        <iframe
+          class="estab-bos-content-frame"
+          name="mainframe"
+          title="BOS-Informationsbereich"
+          src="./f_info.php"
+        ></iframe>
+      </div>
+    </main>
+    <?= estab_shell_cockpit_markup() ?>
+  </div>
   <button
     class="estab-mobile-sidebar-return"
     type="button"
@@ -61,10 +70,10 @@ $documentMetadataJson = json_encode(
     <span aria-hidden="true">←</span>
     Info-Menü
   </button>
-  <script data-estab-mobile-workspace-navigation>
+  <script<?= estab_csp_script_attribute() ?> data-estab-mobile-workspace-navigation>
     (function () {
-      var sidebar = document.querySelector('.estab-message-sidebar-frame');
-      var content = document.querySelector('.estab-message-content-frame');
+      var sidebar = document.querySelector('[data-estab-shell-context]');
+      var content = document.querySelector('.estab-bos-content-frame');
       var returnButton = document.querySelector(
         '[data-estab-mobile-menu-return]'
       );
@@ -166,14 +175,12 @@ $documentMetadataJson = json_encode(
       }
 
       function syncSidebarSelection(documentName) {
-        if (!sidebar || !sidebar.contentDocument) {
+        if (!sidebar) {
           return;
         }
         try {
           Array.from(
-            sidebar.contentDocument.querySelectorAll(
-              '[data-estab-bos-document-link]'
-            )
+            sidebar.querySelectorAll('[data-estab-bos-document-link]')
           ).forEach(function (link) {
             var linkName = decodeURIComponent(
               new URL(link.href).pathname.split('/').pop() || ''
@@ -298,16 +305,16 @@ $documentMetadataJson = json_encode(
         content.focus({preventScroll: true});
       }
 
-      window.addEventListener('message', function (event) {
-        if (
-          event.origin === window.location.origin
-          && sidebar
-          && event.source === sidebar.contentWindow
-          && event.data === 'estab:show-content'
-        ) {
-          showContent();
-        }
-      });
+      if (sidebar) {
+        sidebar.addEventListener('click', function (event) {
+          if (
+            event.target
+            && event.target.closest('[data-estab-bos-document-link]')
+          ) {
+            showContent();
+          }
+        });
+      }
 
       if (content) {
         content.addEventListener('load', function () {
@@ -323,9 +330,10 @@ $documentMetadataJson = json_encode(
         returnButton.addEventListener('click', function () {
           contentRequested = false;
           returnButton.hidden = true;
-          if (sidebar) {
-            sidebar.scrollIntoView({block: 'start'});
-            sidebar.focus({preventScroll: true});
+          var menu = document.querySelector('.estab-shell-menu');
+          if (menu) {
+            menu.scrollIntoView({block: 'start'});
+            menu.focus({preventScroll: true});
           }
         });
       }

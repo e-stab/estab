@@ -257,3 +257,30 @@ if (!function_exists('mysql_connect')) {
             : addslashes($unescapedString);
     }
 }
+
+
+/**
+ * Fail a legacy database operation without telling the browser why.
+ *
+ * The legacy layer used to end the request with die() and print the failing
+ * SQL statement together with the MySQL error text and number. That path is
+ * reachable in production, so the details now go to the server log and the
+ * browser sees a message it can act on.
+ */
+function estab_legacy_database_failure(
+    string $context,
+    ?string $query = null
+): never {
+    $details = '[' . $context . '] ' . mysql_errno() . ' ' . mysql_error();
+    if ($query !== null && $query !== '') {
+        $details .= ' | statement: ' . $query;
+    }
+    error_log('eStab legacy database failure: ' . $details);
+    if (!headers_sent()) {
+        http_response_code(500);
+    }
+    exit(
+        'Die Datenbankabfrage ist fehlgeschlagen. '
+        . 'Die Einzelheiten stehen im Serverprotokoll.'
+    );
+}

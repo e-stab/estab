@@ -220,8 +220,13 @@ $assert(
 );
 $assert(
     !str_contains($apache, "'unsafe-eval'")
-        && str_contains($apache, "script-src 'self' 'unsafe-inline'"),
-    'Content Security Policy still permits eval or lost the documented inline compatibility'
+        // Die Fassung des Webservers gilt nur fuer Antworten ohne eigene
+        // Richtlinie: statische Auslieferungen und Apache-Fehlerseiten. Sie
+        // fuehren kein Skript aus. Jede PHP-Seite setzt ihre eigene Fassung
+        // mit einer Nonce je Anfrage (app/csp.php).
+        && str_contains($apache, "script-src 'none'")
+        && !str_contains($apache, "script-src 'self' 'unsafe-inline'"),
+    'Content Security Policy permits eval or still admits inline script'
 );
 $assert(
     !str_contains($tools, 'eval(')
@@ -267,6 +272,7 @@ $integrationCoverage = $httpSurface . $httpSmoke . $logbookHttp;
 foreach ([
     './4fach/index.php' => '/4fach/index.php',
     './4fach/fuehrungsstelle.php' => '/4fach/fuehrungsstelle.php',
+    './4fach/melderauftraege.php' => '/4fach/melderauftraege.php',
     './4fach/vordrucke.php' => '/4fach/vordrucke.php',
     './4fueltg/ue_ltg.php' => '/4fueltg/ue_ltg.php',
     './stabinfo/index.php' => '/stabinfo/index.php',

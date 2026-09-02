@@ -66,3 +66,31 @@ vulnerabilities:
     paths: [usr/local/bin/gosu]
     expired_at: 2026-10-31
     statement: Affected MIME parsing is unreachable in gosu.
+  - id: CVE-2026-33818
+    paths: [usr/local/bin/gosu]
+    expired_at: 2026-10-31
+    statement: Affected encoding/asn1 decoding is unreachable in gosu.
+  - id: CVE-2026-39821
+    paths: [usr/local/bin/gosu]
+    expired_at: 2026-10-31
+    statement: Affected Punycode label processing is unreachable in gosu.
+  - id: CVE-2026-56853
+    paths: [usr/local/bin/gosu]
+    expired_at: 2026-10-31
+    statement: Affected HTTP/2 server code is unreachable in gosu.
+  - id: CVE-2026-56858
+    paths: [usr/local/bin/gosu]
+    expired_at: 2026-10-31
+    statement: Affected html/template code is unreachable in gosu.
+  - id: CVE-2026-56859
+    paths: [usr/local/bin/gosu]
+    expired_at: 2026-10-31
+    statement: Affected encoding/xml decoding is unreachable in gosu.
+  - id: CVE-2026-56860
+    paths: [usr/local/bin/gosu]
+    expired_at: 2026-10-31
+    statement: Affected net/url path resolution is unreachable in gosu.
+  - id: CVE-2026-56862
+    paths: [usr/local/bin/gosu]
+    expired_at: 2026-10-31
+    statement: Affected crypto/tls code is unreachable in gosu.

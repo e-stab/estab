@@ -14,6 +14,7 @@ declare(strict_types=1);
  */
 
 require_once __DIR__ . '/legacy_php.php';
+require_once __DIR__ . '/anlage_darstellbar.php';
 require_once __DIR__ . '/incident.php';
 require_once __DIR__ . '/email_attachment.php';
 require_once __DIR__ . '/logbook_numbering.php';
@@ -664,11 +665,15 @@ final class EstabIncidentPdf extends vordruckaspdf
     private function configureMessageFormLayout(): void
     {
         $this->nextPageLayout = self::LAYOUT_MESSAGE_FORM;
-        $this->SetMargins(10, 10, 10);
-        $this->SetAutoPageBreak(
-            true,
-            $this->bottom - $this->point[38][1]
+        // Der Vordruck bringt seinen eigenen Rand mit: das Blatt liegt
+        // mittig auf der Seite, und die Zeichenbefehle rechnen von seiner
+        // linken oberen Ecke aus.
+        $this->SetMargins(
+            $this->border['left'],
+            $this->border['top'],
+            $this->border['right']
         );
+        $this->SetAutoPageBreak(true, $this->message_form_break_margin());
     }
 
     private function configureEtbFormLayout(string $pageDate): void
@@ -1131,7 +1136,10 @@ final class EstabIncidentPdf extends vordruckaspdf
         if (!$this->isMessageFormPage()) {
             return $this->AutoPageBreak;
         }
-        if ($this->GetY() >= $this->point[38][1] - 10) {
+        if (
+            $this->GetY() >= $this->message_form_text_bottom()
+                - $this->raster['zeilenhoehe']
+        ) {
             $this->configureMessageFormLayout();
             $this->AddPage();
             $this->set_message_content_continuation_position();
@@ -1798,6 +1806,24 @@ final class EstabIncidentPdf extends vordruckaspdf
             $row,
             ['etb_bemerk', 'comment']
         );
+
+        // Fb Fü 2 names the linked message form in its remarks column. The
+        // number printed on that form is the incident-local TBB evidence
+        // number of field 4, never the global message key, so an entry
+        // whose message has no TBB proof yet states exactly that.
+        if ($this->logbookRowValue($row, 'estab_message_id') !== '') {
+            $messageNumber = $this->logbookRowValue(
+                $row,
+                'estab_message_ttb_lfd'
+            );
+            $remarks = $this->appendLogbookLine(
+                $remarks,
+                preg_match('/\A[1-9][0-9]*\z/D', $messageNumber) === 1
+                    ? 'TBB-Nachweis ' . $messageNumber
+                    : 'noch kein TBB-Nachweis',
+                'Nachricht: '
+            );
+        }
 
         $attachmentId = $this->logbookRowValue(
             $row,
@@ -2563,8 +2589,33 @@ final class EstabIncidentPdf extends vordruckaspdf
      * @param list<array<string,mixed>> $plans
      * @param list<array<string,mixed>> $entries
      */
-    public function addS6Plans(array $plans, array $entries): void
-    {
+    /**
+     * @param list<array<string,mixed>> $plans
+     * @param list<array<string,mixed>> $entries
+     * @param list<array<string,mixed>> $counterparts
+     */
+    public function addS6Plans(
+        array $plans,
+        array $entries,
+        array $counterparts = []
+    ): void {
+        $counterpartsByEntry = [];
+        foreach ($counterparts as $counterpart) {
+            if (!is_array($counterpart)) {
+                throw new EstabIncidentPdfInputException(
+                    'S6 plan counterparts must be arrays.'
+                );
+            }
+            $entryId = (int) (
+                $counterpart['fernmeldeplan_eintrag_id'] ?? 0
+            );
+            if ($entryId < 1) {
+                throw new EstabIncidentPdfInputException(
+                    'S6 plan counterparts require a plan entry ID.'
+                );
+            }
+            $counterpartsByEntry[$entryId][] = $counterpart;
+        }
         $entriesByPlan = [];
         foreach ($entries as $entry) {
             if (!is_array($entry)) {
@@ -2649,24 +2700,67 @@ final class EstabIncidentPdf extends vordruckaspdf
                             $entry['fernmeldeplan_eintrag_id'] ?? ''
                         )
                         . ' · '
-                        . (string) ($entry['rufname'] ?? '')
+                        . (string) ($entry['erreichbarkeit'] ?? '')
                 );
                 foreach ([
                     'Planeintrag-ID' => 'fernmeldeplan_eintrag_id',
                     'Fernmeldeplan-ID' => 'fernmeldeplan_id',
                     'Planversion' => 'plan_version',
                     'Sortierung' => 'sortierung',
-                    'Betriebsstelle' => 'betriebsstelle',
-                    'Rufname' => 'rufname',
+                    // Die dauerhafte Kennung des Weges. Sie ueberlebt den
+                    // Versionswechsel und ist damit das Einzige, worueber
+                    // sich zwei Fassungen desselben Weges verbinden lassen.
+                    'Weg' => 'weg_nummer',
+                    'Rückfallebene für Weg' => 'rueckfallebene_fuer_weg',
+                    'Stelle' => 'betriebsstelle',
+                    'Stellenart' => 'stellenart',
+                    'Erreichbar unter' => 'erreichbarkeit',
                     'Medium' => 'medium',
+                    'Funkart' => 'funkart',
+                    'Band' => 'band',
                     'Kanal' => 'kanal',
                     'Bandlage' => 'bandlage',
                     'Verkehrsform' => 'verkehrsform',
+                    'Relaisstelle' => 'relaisstelle',
+                    'Betriebsart' => 'betriebsart',
+                    'Rufgruppe' => 'rufgruppe',
+                    'Anschlussart' => 'anschlussart',
+                    'Art der Datenübertragung' => 'datenart',
                     'Besondere Vermerke' => 'besondere_vermerke',
                     'Bemerkungen' => 'bemerkungen',
                 ] as $label => $field) {
                     $this->definition($label, $entry[$field] ?? '');
                 }
+                $entryId = (int) (
+                    $entry['fernmeldeplan_eintrag_id'] ?? 0
+                );
+                foreach (
+                    $counterpartsByEntry[$entryId] ?? [] as $counterpart
+                ) {
+                    $this->definition(
+                        'Erreicht',
+                        trim(
+                            (string) ($counterpart['name'] ?? '')
+                            . ' · '
+                            . (string) ($counterpart['erreichbarkeit'] ?? '')
+                        )
+                    );
+                    if (($counterpart['stellenart'] ?? null) !== null) {
+                        $this->definition(
+                            'Stellenart der Gegenstelle',
+                            (string) $counterpart['stellenart']
+                        );
+                    }
+                    if (
+                        trim((string) ($counterpart['bemerkungen'] ?? '')) !== ''
+                    ) {
+                        $this->definition(
+                            'Vermerk zur Gegenstelle',
+                            (string) $counterpart['bemerkungen']
+                        );
+                    }
+                }
+                unset($counterpartsByEntry[$entryId]);
                 $this->Ln(2);
             }
             unset($entriesByPlan[$planId]);
@@ -2675,6 +2769,11 @@ final class EstabIncidentPdf extends vordruckaspdf
         if ($entriesByPlan !== []) {
             throw new EstabIncidentPdfInputException(
                 'S6 plan entries refer to a missing incident plan.'
+            );
+        }
+        if ($counterpartsByEntry !== []) {
+            throw new EstabIncidentPdfInputException(
+                'S6 plan counterparts refer to a missing plan entry.'
             );
         }
     }
@@ -2986,7 +3085,24 @@ final class EstabIncidentPdf extends vordruckaspdf
 
         $arguments = [
             ESTAB_INCIDENT_PDF_PRLIMIT,
-            '--as=402653184',
+            /*
+             * Adressraum je Anlagenseite.
+             *
+             * Das ist eine Schranke gegen bösartige Vorlagen, keine
+             * Bedarfsangabe. Bei den früheren 384 MB konnte ein einziger
+             * Aufruf das gesamte Gerätebudget sprengen -- die Schranke war
+             * damit größer als das, wovor sie schützen soll.
+             *
+             * Gemessen: Die Rastergröße ist durch `-scale-to 2000` fest
+             * gedeckelt, unabhängig von der Komplexität der Vorlage. Ein
+             * Testdokument mit 20.000 gefüllten Pfaden, Transparenz und
+             * Multiply-Mischmodus rendert innerhalb von 48 MB. 128 MB
+             * lassen das Zweieinhalbfache an Luft.
+             *
+             * Eine abgewiesene Anlage meldet die Anwendung verständlich;
+             * ein neu gestarteter Container mitten im Einsatz nicht.
+             */
+            '--as=134217728',
             '--cpu=30',
             '--fsize=' . ESTAB_INCIDENT_PDF_MAX_RASTER_PAGE_BYTES,
             '--nofile=64',
@@ -3015,7 +3131,11 @@ final class EstabIncidentPdf extends vordruckaspdf
         // The executable is selected from the two fixed Poppler constants
         // above, absolute path arguments stay inside the private workspace,
         // and proc_open receives an argv array with shell expansion disabled.
-        // nosemgrep: semgrep.php-dangerous-dynamic-exec
+        // Die Regel heisst in .semgrep/suspicious.yml php-dangerous-
+        // dynamic-exec; das Praefix semgrep. haengt erst die Anzeige
+        // davor. Beide Schreibweisen stehen hier, damit die Ausnahme
+        // greift, egal wie der Bericht die Regel benennt.
+        // nosemgrep: php-dangerous-dynamic-exec,semgrep.php-dangerous-dynamic-exec
         $process = @proc_open(
             $arguments,
             $descriptors,
@@ -4170,16 +4290,36 @@ final class EstabIncidentPdf extends vordruckaspdf
                     default => null,
                 };
 
-                if (is_array($imageFormat)) {
-                    if (!in_array(
-                        $extension,
-                        $imageFormat['extensions'],
-                        true
-                    )) {
-                        throw new EstabIncidentPdfInputException(
-                            'Dateiendung und erkannter Inhaltstyp einer Bildanlage stimmen nicht überein.'
-                        );
-                    }
+                if (
+                    is_array($imageFormat)
+                    && !in_array($extension, $imageFormat['extensions'], true)
+                ) {
+                    /*
+                     * Name und Inhalt widersprechen einander.
+                     *
+                     * Bis hierher brach das ganze Dossier ab -- wegen einer
+                     * von vierzig Anlagen, und mit einer Meldung, die nicht
+                     * sagte, welche. Wer ein Dossier braucht, braucht es
+                     * meist sofort.
+                     *
+                     * Dargestellt wird sie trotzdem nicht: Ein Nachweis zeigt
+                     * keinen Inhalt, den der Dateiname nicht ankuendigt. Sie
+                     * bekommt die Hinweisseite, die jede nicht darstellbare
+                     * Anlage bekommt -- und darauf steht im Klartext, woran
+                     * es liegt. Die Datei selbst liegt bytegleich im Dossier.
+                     */
+                    $this->drawAttachmentInformationPage(
+                        $attachment,
+                        $position,
+                        $total,
+                        estab_anlage_widerspruch_satz(
+                            (string) ($attachment['display_name'] ?? $archiveName),
+                            $extension,
+                            $mime
+                        )
+                    );
+                    $stats['attachment_information_pages']++;
+                } elseif (is_array($imageFormat)) {
                     $image = self::attachmentImageInfo(
                         $embedded['data'],
                         (int) $imageFormat['type']
@@ -4357,19 +4497,32 @@ final class EstabIncidentPdf extends vordruckaspdf
                             true
                         )
                     ) {
-                        throw new EstabIncidentPdfInputException(
-                            'Dateiendung und erkannter Inhaltstyp einer darstellbaren Anlage stimmen nicht überein.'
+                        // Widerspruch zwischen Name und Inhalt: nicht
+                        // dargestellt, aber auch kein Grund, das ganze
+                        // Dossier zu verweigern. Der Grund steht auf der
+                        // Seite, mit Namen, Endung und erkanntem Inhalt.
+                        $this->drawAttachmentInformationPage(
+                            $attachment,
+                            $position,
+                            $total,
+                            estab_anlage_widerspruch_satz(
+                                (string) ($attachment['display_name'] ?? $archiveName),
+                                $extension,
+                                $mime
+                            )
                         );
+                        $stats['attachment_information_pages']++;
+                    } else {
+                        $this->drawAttachmentInformationPage(
+                            $attachment,
+                            $position,
+                            $total,
+                            'Archive, Office-Dateien, Videos und andere binäre '
+                                . 'Formate lassen sich nicht vollständig und '
+                                . 'verlässlich auf statische PDF-Seiten abbilden.'
+                        );
+                        $stats['attachment_information_pages']++;
                     }
-                    $this->drawAttachmentInformationPage(
-                        $attachment,
-                        $position,
-                        $total,
-                        'Archive, Office-Dateien, Videos und andere binäre '
-                            . 'Formate lassen sich nicht vollständig und '
-                            . 'verlässlich auf statische PDF-Seiten abbilden.'
-                    );
-                    $stats['attachment_information_pages']++;
                 }
 
                 if (microtime(true) >= $renderDeadline) {

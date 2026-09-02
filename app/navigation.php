@@ -42,11 +42,28 @@ function estab_navigation_areas(): array
         ],
         [
             'key' => 'command-post',
-            'label' => 'Führungsstellenbetrieb',
-            'short_label' => 'Führungsstelle',
+            'label' => 'Fernmeldeplan',
+            'short_label' => 'Fernmeldeplan',
             'path' => '4fach/fuehrungsstelle.php',
             'access' => 'protected',
-            'hint' => 'S6 · Fernmeldeplan · Melder',
+            'hint' => 'S6 · Fb Fü 76 · Fb Fü 77',
+        ],
+        /*
+         * Melderaufträge stehen neben dem Plan, nicht unter ihm.
+         *
+         * Der Plan ist eine Unterlage, die tagelang gilt; ein Melderauftrag
+         * ist ein einzelner Botengang, der in einer Stunde erledigt ist. Wer
+         * einen Melder losschicken will, soll dafür keine Planseite
+         * durchblättern -- und wer den Plan liest, keine fremden Formulare
+         * darunter finden.
+         */
+        [
+            'key' => 'messenger-jobs',
+            'label' => 'Melderaufträge',
+            'short_label' => 'Melder',
+            'path' => '4fach/melderauftraege.php',
+            'access' => 'protected',
+            'hint' => 'LdF · Kurier/Melder',
         ],
         [
             'key' => 'message-overview',
@@ -536,42 +553,76 @@ function estab_navigation_validated_item(array $item): array
  * the fixed/additional LOOSE functions. Access-shift membership never grants
  * operational permissions.
  */
-function estab_navigation_duty_access_allowed(
+/**
+ * Why this destination is closed to the signed-in identity right now.
+ *
+ * An empty string means it is open. Anything else is shown at the entry, in
+ * words the person in front of the screen can act on: a destination that
+ * silently disappears is indistinguishable from one that never existed, and
+ * whoever saw it yesterday will look for it instead of working.
+ *
+ * This is a reason, not a barrier. Navigation has never been a security
+ * boundary and does not become one here -- every endpoint checks its own
+ * authorization, which is what keeps a typed-in address from being an open
+ * door.
+ */
+function estab_navigation_duty_access_reason(
     array $item,
     ?array $identity
-): bool {
+): string {
     $item = estab_navigation_validated_item($item);
     if ($item['access'] === 'public') {
-        return true;
+        return '';
     }
     if ($identity === null) {
-        return false;
+        return '';
     }
     if (estab_navigation_strict_duty_selection_required($identity)) {
-        return $item['key'] === 'command-post';
+        return $item['key'] === 'command-post'
+            ? ''
+            : 'Erst am Fernmeldeplan eine Funktion annehmen; '
+                . 'in der Betriebsart „streng“ arbeitet nur, wer im '
+                . 'Dienst steht.';
     }
     if ($item['duty_access'] === '') {
-        return true;
+        return '';
     }
     return match ($item['duty_access']) {
         'LAGE_DOKUMENTATION' => estab_auth_identity_has_function(
             $identity,
             'S2',
             'Stab'
-        ),
+        )
+            ? ''
+            : 'Dieser Bereich gehört zur Lage und Dokumentation und steht '
+                . 'der Funktion S 2 offen.',
         'FERNMELDE_NACHWEIS' =>
-            estab_auth_identity_has_function(
-                $identity,
-                'LdF',
-                'Fernmelder'
-            )
-            || estab_auth_identity_has_function(
-                $identity,
-                'A/W',
-                'Fernmelder'
-            ),
-        default => false,
+            estab_auth_identity_has_function($identity, 'LdF', 'Fernmelder')
+            || estab_auth_identity_has_function($identity, 'A/W', 'Fernmelder')
+                ? ''
+                : 'Dieser Bereich gehört zum Fernmeldebetrieb und steht dem '
+                    . 'LdF und der Fernmeldezentrale offen.',
+        default => 'Für diesen Bereich ist keine Zuständigkeit hinterlegt; '
+            . 'bitte an die Administration wenden.',
     };
+}
+
+/**
+ * May the signed-in identity steer this destination right now?
+ *
+ * The answer is derived from the reason, so the two can never disagree: an
+ * entry that is closed always has something to say, and an entry that says
+ * nothing is open.
+ */
+function estab_navigation_duty_access_allowed(
+    array $item,
+    ?array $identity
+): bool {
+    $item = estab_navigation_validated_item($item);
+    if ($item['access'] !== 'public' && $identity === null) {
+        return false;
+    }
+    return estab_navigation_duty_access_reason($item, $identity) === '';
 }
 
 /**
@@ -638,7 +689,7 @@ function estab_navigation_relative_request_path(mixed $candidate): ?string
 /**
  * Resolve a repository-relative request path to one navigation key.
  *
- * The two specialist 4fach controllers deliberately precede the general
+ * The specialist 4fach controllers deliberately precede the general
  * 4fach module match. Directory-boundary comparisons prevent partial-name
  * false positives such as /4fachish or /stabetb-old.
  */
@@ -656,6 +707,9 @@ function estab_navigation_key_for_path(string $relativePath): ?string
     }
     if ($relativePath === '4fach/fuehrungsstelle.php') {
         return 'command-post';
+    }
+    if ($relativePath === '4fach/melderauftraege.php') {
+        return 'messenger-jobs';
     }
     if ($relativePath === '4fach/resetpic.php') {
         return 'administration';
@@ -721,12 +775,6 @@ function estab_navigation_item_markup(
     ?array $identity = null
 ): string {
     $item = estab_navigation_validated_item($item);
-    if (
-        $authenticated
-        && !estab_navigation_duty_access_allowed($item, $identity)
-    ) {
-        return '';
-    }
     $locked = $item['access'] === 'protected' && !$authenticated;
     $url = $locked
         ? estab_navigation_login_url($item['key'])
@@ -757,6 +805,22 @@ function estab_navigation_item_markup(
             . ' title="' . estab_auth_html($item['label']) . '"'
         : '';
 
+    /*
+     * Jeder Eintrag ist anklickbar -- auch der, den die eigene Funktion
+     * gerade nicht ansteuern darf.
+     *
+     * Vorher stand der Grund im Menue, und der Eintrag fuehrte nirgendwohin.
+     * Das hatte zwei Fehler. Der sichtbare: Ein erklaerender Satz passt nicht
+     * in eine schmale Menuespalte, er zerlegte sie. Der tiefere: Ein Menue
+     * ist zum Hingehen da, nicht zum Erklaeren. Wer wissen will, warum ein
+     * Bereich ihm verschlossen ist, klickt ihn an und liest es dort -- an
+     * der Stelle, an der es ihn betrifft und wo Platz fuer einen ganzen Satz
+     * ist.
+     *
+     * Die Sicherheitslage bleibt unveraendert. Die Navigation war nie eine
+     * Sicherheitsgrenze; jeder Endpunkt prueft Anmeldung, angetretenen
+     * Dienst und Bereichsberechtigung selbst und weist ohne sie ab.
+     */
     return '<li class="estab-navigation-item"'
         . ' data-estab-navigation-item'
         . ' data-estab-navigation-key="' . estab_auth_html($item['key']) . '"'
@@ -772,7 +836,8 @@ function estab_navigation_item_markup(
         . '<span class="estab-navigation-label">'
         . estab_auth_html($label) . '</span>'
         . $hint . $loginHint
-        . '</a></li>';
+        . '</a>'
+        . '</li>';
 }
 
 /** Render an escaped list while enforcing unique keys in one group. */

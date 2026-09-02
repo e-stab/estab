@@ -1,0 +1,629 @@
+<?php
+
+declare(strict_types=1);
+
+/**
+ * Catalogue of the service-regulation rules this application must uphold.
+ *
+ * Every rule carries the document it comes from, so a test failure names the
+ * regulation instead of an implementation detail. Tests state the rule they
+ * cover by passing its identifier to estab_dv_requirement(); unknown
+ * identifiers fail loudly, and tests/php/dv_rule_registry.php proves that no
+ * rule sits in this table without a test behind it.
+ */
+
+const ESTAB_DV_SOURCE_AUSFUELLANLEITUNG =
+    'Ausfüllanleitung Nachrichtenvordruck, Stand April 2022';
+const ESTAB_DV_SOURCE_UNTERLAGE =
+    'Unterlage Nachrichtenvordruck, Ausfüllanweisungen für den Stab';
+const ESTAB_DV_SOURCE_HANDBUCH =
+    'Handbuch ETB/TBB, Führung in der THW-Führungsstelle, Stand März 2022';
+const ESTAB_DV_SOURCE_DV_1_101 =
+    'Dienstvorschrift 1-101 Führen im THW, Stand 01.01.2006';
+const ESTAB_DV_SOURCE_MELDEWESEN =
+    'Grundlagen des Meldewesens, THW-Ausbildungszentrum, Stand Mai 2024';
+const ESTAB_DV_SOURCE_PDV_800 =
+    'PDV 800, Informations- und Kommunikationstechnik im Einsatz, '
+    . 'Ausgabe 2017';
+const ESTAB_DV_SOURCE_DV_1_820 =
+    'THW-DV 1-820, Dienstvorschrift für den Digitalfunk BOS in der '
+    . 'Bundesanstalt Technisches Hilfswerk, Stand 01.08.2016';
+const ESTAB_DV_SOURCE_NBHB_THW =
+    'NBHB THW, Nutzungs- und Betriebshandbuch für den Digitalfunk BOS in '
+    . 'der Bundesanstalt Technisches Hilfswerk, Stand 09.01.2025';
+
+/**
+ * Every document a rule may cite, keyed by its short name.
+ *
+ * The registry validates rule sources against this list. It used to keep its
+ * own copy, so a newly declared document was rejected until someone repeated
+ * it there, and the error named the innocent rule rather than the missing
+ * entry. Naming the documents here makes adding one a single edit.
+ *
+ * Where the documents contradict each other, the more recent one governs its
+ * own subject: the training material of 2024 and the form instructions of
+ * 2022 precede the service regulation of 2006, which applies wherever they
+ * are silent.
+ *
+ * PDV 800 (2017) is a special case: DV 1-101 chapter 6 names it as its own
+ * basis "in the currently valid version or a successor of this regulation",
+ * so it displaces that chapter wherever both regulate the same question.
+ * THW-DV 1-820 and the NBHB THW govern the digital radio, which the 2006
+ * regulation could not yet know.
+ *
+ * @return array<string, string>
+ */
+function estab_dv_sources(): array
+{
+    return [
+        'ausfuellanleitung' => ESTAB_DV_SOURCE_AUSFUELLANLEITUNG,
+        'unterlage' => ESTAB_DV_SOURCE_UNTERLAGE,
+        'handbuch' => ESTAB_DV_SOURCE_HANDBUCH,
+        'dv-1-101' => ESTAB_DV_SOURCE_DV_1_101,
+        'meldewesen' => ESTAB_DV_SOURCE_MELDEWESEN,
+        'pdv-800' => ESTAB_DV_SOURCE_PDV_800,
+        'dv-1-820' => ESTAB_DV_SOURCE_DV_1_820,
+        'nbhb-thw' => ESTAB_DV_SOURCE_NBHB_THW,
+    ];
+}
+
+/**
+ * @return array<string, array{source:string,reference:string,requirement:string}>
+ */
+function estab_dv_rules(): array
+{
+    return [
+        'NV-FELDNUMMERN' => [
+            'source' => ESTAB_DV_SOURCE_AUSFUELLANLEITUNG,
+            'reference' => 'Felder 1 bis 20',
+            'requirement' => 'Der Vordruck beziffert seine Felder nach der '
+                . 'geltenden Ausfüllanleitung. Die am Feld sichtbare Nummer '
+                . 'und die Nummer der zugehörigen Ausfüllhilfe sind gleich, '
+                . 'und jedes der zwanzig Felder trägt eine Nummer.',
+        ],
+        'NV-NUMMERNBRUECKE' => [
+            'source' => ESTAB_DV_SOURCE_AUSFUELLANLEITUNG,
+            'reference' => 'Feldnummern gegenüber der Stab-Unterlage',
+            'requirement' => 'Die Übersetzung zwischen der gedruckten '
+                . 'Zählung und den übrigen Zählungen des Vordrucks liegt an '
+                . 'genau einer Stelle. Kein Kommentar nennt eine Nummer der '
+                . 'einen Zählung neben einem Bezeichner der anderen.',
+        ],
+        'NV-PFLICHTFELDER' => [
+            'source' => ESTAB_DV_SOURCE_AUSFUELLANLEITUNG,
+            'reference' => 'Felder 10 und 13 bis 17',
+            'requirement' => 'Die Ausfüllanleitung bezeichnet Felder, die '
+                . 'immer auszufüllen sind. Der Vordruck weist die Felder aus, '
+                . 'die der jeweilige Arbeitsschritt verlangt, und benennt bei '
+                . 'einer Rückweisung das Feld und den Grund.',
+        ],
+        'NV-01-TKM-TATSAECHLICH' => [
+            'source' => ESTAB_DV_SOURCE_AUSFUELLANLEITUNG,
+            'reference' => 'Feld 1',
+            'requirement' => 'Feld 1 nimmt das tatsächlich benutzte '
+                . 'Übermittlungsmittel auf und wird von der Fernmeldezentrale '
+                . 'gesetzt. Es ist von Feld 7 getrennt, das nur den Wunsch des '
+                . 'Verfassers trägt.',
+        ],
+        'NV-02-AUFNAHMEVERMERK' => [
+            'source' => ESTAB_DV_SOURCE_AUSFUELLANLEITUNG,
+            'reference' => 'Feld 2',
+            'requirement' => 'Die Fernmeldezentrale bestätigt die Aufnahme '
+                . 'einer eingehenden Nachricht mit der Uhrzeit und ihrem '
+                . 'Namenszeichen. Ohne beides ist die Aufnahme nicht '
+                . 'abschließbar.',
+        ],
+        'NV-03-ANNAHMEVERMERK' => [
+            'source' => ESTAB_DV_SOURCE_AUSFUELLANLEITUNG,
+            'reference' => 'Feld 3',
+            'requirement' => 'Eine zur Beförderung angenommene Nachricht '
+                . 'erhält von der Fernmeldezentrale Uhrzeit und '
+                . 'Namenszeichen. Ohne beides ist die Annahme nicht '
+                . 'abschließbar.',
+        ],
+        'NV-04-BEFOERDERUNGSVERMERK' => [
+            'source' => ESTAB_DV_SOURCE_AUSFUELLANLEITUNG,
+            'reference' => 'Feld 4',
+            'requirement' => 'Die Beförderung wird mit der Quittungszeit der '
+                . 'Gegenstelle und einem Namenszeichen bestätigt. Ohne beides '
+                . 'ist die Beförderung nicht abschließbar.',
+        ],
+        'NV-05-TBB-NUMMER' => [
+            'source' => ESTAB_DV_SOURCE_AUSFUELLANLEITUNG,
+            'reference' => 'Feld 5',
+            'requirement' => 'Feld 5 kennzeichnet die Nachricht als Eingang '
+                . 'oder Ausgang und trägt die laufende Nummer aus dem '
+                . 'Technischen Betriebsbuch. Eine anwendungsinterne Nummer '
+                . 'tritt nicht an ihre Stelle.',
+        ],
+        'NV-06-RUFNAME' => [
+            'source' => ESTAB_DV_SOURCE_AUSFUELLANLEITUNG,
+            'reference' => 'Feld 6',
+            'requirement' => 'Feld 6 trägt den Funkrufnamen der Gegenstelle. '
+                . 'Ein Eigenname oder die Anschrift tritt nicht an seine '
+                . 'Stelle.',
+        ],
+        'NV-07-TKM-WUNSCH' => [
+            'source' => ESTAB_DV_SOURCE_AUSFUELLANLEITUNG,
+            'reference' => 'Feld 7',
+            'requirement' => 'Feld 7 nimmt das gewünschte Übermittlungsmittel '
+                . 'auf. Wer die Nachricht verfasst, muss es ausfüllen können.',
+        ],
+        'NV-08-DURCHSAGE-SPRUCH' => [
+            'source' => ESTAB_DV_SOURCE_AUSFUELLANLEITUNG,
+            'reference' => 'Feld 8',
+            'requirement' => 'Der Verfasser bestimmt die Form der Nachricht. '
+                . 'Ein Spruch ist 1:1 im selben Wortlaut aufzuschreiben; eine '
+                . 'Durchsage geht an eine Gruppe von Empfängern statt an '
+                . 'jeden einzeln. Beides sind Sonderfälle: Sie sind wählbar, '
+                . 'aber keines ist vorbelegt.',
+        ],
+        'NV-09-VORRANGSTUFE' => [
+            'source' => ESTAB_DV_SOURCE_AUSFUELLANLEITUNG,
+            'reference' => 'Feld 9',
+            'requirement' => 'Feld 9 nimmt die gewünschte oder erhaltene '
+                . 'Vorrangstufe auf und bleibt ohne besondere Stufe frei. '
+                . 'Eine Stufe, für die der amtliche Vordruck kein Kästchen '
+                . 'hat, wird im Ausdruck als Vermerk geführt.',
+        ],
+        'NV-10-ANSCHRIFT-DIENSTSTELLE' => [
+            'source' => ESTAB_DV_SOURCE_AUSFUELLANLEITUNG,
+            'reference' => 'Feld 10',
+            'requirement' => 'Die Anschrift nennt eine Dienststellen-, '
+                . 'Teileinheits- oder Einheitsbezeichnung, keinen '
+                . 'Eigennamen. Beschriftung, Ausfüllhilfe und '
+                . 'Rückweisungsgrund benennen diese Bezeichnungsart.',
+        ],
+        'NV-11-RUFNUMMER' => [
+            'source' => ESTAB_DV_SOURCE_AUSFUELLANLEITUNG,
+            'reference' => 'Feld 11',
+            'requirement' => 'Feld 11 trägt die Rufnummer der Gegenstelle und '
+                . 'wird in der Regel bei Gesprächsnotizen verwendet. Die '
+                . 'Anwendung macht das Feld nicht zur Pflicht.',
+        ],
+        'NV-13-INHALT-BETREFF' => [
+            'source' => ESTAB_DV_SOURCE_AUSFUELLANLEITUNG,
+            'reference' => 'Felder 13 und 14',
+            'requirement' => 'Feld 13 trägt den kurzen Betreff, Feld 14 den '
+                . 'ausführlichen Text. Beide sind eigene Felder und werden '
+                . 'dort verlangt, wo die Nachricht abgefasst oder aufgenommen '
+                . 'wird.',
+        ],
+        'MW-MELDEART' => [
+            'source' => ESTAB_DV_SOURCE_MELDEWESEN,
+            'reference' => 'Kapitel 1 und 2, Arten der Nachricht',
+            'requirement' => 'Eine Nachricht ist Meldung, Orientierung oder '
+                . 'Antrag. Der Vordruck nennt am Nachrichtentext, was die '
+                . 'drei unterscheidet -- auch dort, wo Fernmeldezentrale und '
+                . 'Leiter des Fernmeldebetriebes rückfragen können.',
+        ],
+        'MW-MELDEWEG-RICHTUNG' => [
+            'source' => ESTAB_DV_SOURCE_MELDEWESEN,
+            'reference' => 'Kapitel 1, Meldeweg',
+            'requirement' => 'Der Meldeweg führt von unten nach oben. Der '
+                . 'Vordruck erinnert daran; er hindert niemanden, weil im '
+                . 'Einsatz eine verweigerte Nachricht teurer ist als eine '
+                . 'falsch benannte.',
+        ],
+        'MW-ORIENTIERUNG-RICHTUNG' => [
+            'source' => ESTAB_DV_SOURCE_MELDEWESEN,
+            'reference' => 'Kapitel 2, Orientierung',
+            'requirement' => 'Die Orientierung unterrichtet nachgeordnete '
+                . 'und gleichgestellte Stellen. Der Vordruck nennt beide '
+                . 'Richtungen; der Verteiler sperrt kein Ziel deswegen.',
+            'verdraengt' => [
+                'source' => ESTAB_DV_SOURCE_DV_1_101,
+                'reference' => 'Kapitel 8.2.2',
+            ],
+        ],
+        'MW-ANTRAG-RICHTUNG' => [
+            'source' => ESTAB_DV_SOURCE_MELDEWESEN,
+            'reference' => 'Kapitel 2, Antrag',
+            'requirement' => 'Der Antrag geht an die vorgesetzte '
+                . 'Führungsstelle oder an einen Nachbarn, der aushelfen '
+                . 'kann. Der Vordruck nennt beide Wege.',
+            'verdraengt' => [
+                'source' => ESTAB_DV_SOURCE_DV_1_101,
+                'reference' => 'Kapitel 8.2.3',
+            ],
+        ],
+        'MW-ANTRAG-SCHEMA' => [
+            'source' => ESTAB_DV_SOURCE_MELDEWESEN,
+            'reference' => 'Kapitel 3, Aufbau eines Antrags',
+            'requirement' => 'Ein Antrag beantwortet wo, wann, was und '
+                . 'warum, wie viele beziehungsweise wie beschaffen und wer '
+                . 'anfordert. Die Ausfüllhilfe nennt diese Leitfragen.',
+        ],
+        'MW-SOFORTMELDUNG' => [
+            'source' => ESTAB_DV_SOURCE_MELDEWESEN,
+            'reference' => 'Kapitel 3, sofort zu meldende Sachverhalte',
+            'requirement' => 'Sofort und ohne Aufforderung zu melden sind '
+                . 'Gefahrstoffe und Gefahrgüter, der Abschluss des Auftrages '
+                . 'und jede Abweichung vom Auftrag. Die Ausfüllhilfe nennt '
+                . 'die drei Anlässe und verweist auf die Vorrangstufe.',
+            'verdraengt' => [
+                'source' => ESTAB_DV_SOURCE_DV_1_101,
+                'reference' => 'Kapitel 8.2.1.1',
+            ],
+        ],
+        'LM-AUFBAU' => [
+            'source' => ESTAB_DV_SOURCE_MELDEWESEN,
+            'reference' => 'Kapitel 4, Aufbau der Lagemeldung',
+            'requirement' => 'Die Lagemeldung folgt acht Punkten: allgemeine '
+                . 'Lage, Schaden- und Gefahrenlage, eigene Lage, '
+                . 'Lageentwicklung, Presse- und Öffentlichkeitsarbeit, '
+                . 'besondere Vorkommnisse, Anforderungen, Sonstiges. Angaben '
+                . 'gehören nur zu zutreffenden Punkten.',
+            'verdraengt' => [
+                'source' => ESTAB_DV_SOURCE_DV_1_101,
+                'reference' => 'Kapitel 4.3.1.4',
+            ],
+        ],
+        'LM-MELDEWEG' => [
+            'source' => ESTAB_DV_SOURCE_MELDEWESEN,
+            'reference' => 'Kapitel 4, Meldeweg der Lagemeldung',
+            'requirement' => 'Die Lagemeldung folgt denselben Meldewegen wie '
+                . 'jede andere Meldung und durchläuft denselben Laufweg.',
+        ],
+        'LM-ANLASS' => [
+            'source' => ESTAB_DV_SOURCE_MELDEWESEN,
+            'reference' => 'Kapitel 4, Anlässe der Lagemeldung',
+            'requirement' => 'Eine Lagemeldung ergeht auf Anforderung, '
+                . 'regelmäßig auf Anordnung, bei umfassender Lageänderung, '
+                . 'als Lageinformation nach unten und als Lageorientierung '
+                . 'zur Seite. Die Ausfüllhilfe nennt die fünf Anlässe.',
+        ],
+        'NV-14-5W' => [
+            'source' => ESTAB_DV_SOURCE_MELDEWESEN,
+            'reference' => 'Kapitel 3, Aufbau einer Meldung',
+            'requirement' => 'Der Vordruck trägt die Leitfragen Wo, Wann, '
+                . 'Was, Wie und Wer sichtbar am Nachrichtentext, so wie der '
+                . 'gedruckte Vordruck sie als Merke ausweist.',
+            'verdraengt' => [
+                'source' => ESTAB_DV_SOURCE_DV_1_101,
+                'reference' => 'Kapitel 8.2.1.1',
+            ],
+        ],
+        'NV-14-TATSACHE-VERMUTUNG' => [
+            'source' => ESTAB_DV_SOURCE_MELDEWESEN,
+            'reference' => 'Kapitel 3, Tatsachen und Vermutungen',
+            'requirement' => 'Die Nachricht macht unterscheidbar, was selbst '
+                . 'festgestellt, was von anderen gemeldet und was vermutet '
+                . 'ist. Der Vordruck weist am Nachrichtentext darauf hin.',
+            'verdraengt' => [
+                'source' => ESTAB_DV_SOURCE_DV_1_101,
+                'reference' => 'Kapitel 8.2.1',
+            ],
+        ],
+        'NV-15-ABSENDER' => [
+            'source' => ESTAB_DV_SOURCE_AUSFUELLANLEITUNG,
+            'reference' => 'Feld 15',
+            'requirement' => 'Der Absender nennt eine Dienststellen-, '
+                . 'Teileinheits- oder Einheitsbezeichnung, keinen '
+                . 'Eigennamen. Beschriftung, Ausfüllhilfe und '
+                . 'Rückweisungsgrund benennen diese Bezeichnungsart.',
+        ],
+        'NV-16-ABFASSUNGSZEIT' => [
+            'source' => ESTAB_DV_SOURCE_AUSFUELLANLEITUNG,
+            'reference' => 'Feld 16',
+            'requirement' => 'Feld 16 trägt die Abfassungszeit der Nachricht. '
+                . 'Der Server setzt an ihrer Stelle keine Erfassungszeit ein, '
+                . 'ohne dies am Vordruck auszuweisen.',
+        ],
+        'NV-17-ZEICHEN-FUNKTION' => [
+            'source' => ESTAB_DV_SOURCE_AUSFUELLANLEITUNG,
+            'reference' => 'Feld 17',
+            'requirement' => 'Der Verfasser beglaubigt die Nachricht mit '
+                . 'seinem Namenszeichen und der Funktion, in der er handelt. '
+                . 'Beides zusammen macht die Nachricht zurechenbar.',
+        ],
+        'NV-18-QUITTUNG' => [
+            'source' => ESTAB_DV_SOURCE_AUSFUELLANLEITUNG,
+            'reference' => 'Feld 18',
+            'requirement' => 'Der Sichter quittiert den Erhalt der Nachricht '
+                . 'mit vierstelliger Uhrzeit und Namenszeichen. Ohne Quittung '
+                . 'ist die Sichtung nicht abschließbar.',
+        ],
+        'NV-19-VERTEILER-EINGANG' => [
+            'source' => ESTAB_DV_SOURCE_UNTERLAGE,
+            'reference' => 'Feld 19, Laufweg Eingang',
+            'requirement' => 'Die Sichtung einer eingehenden Nachricht benennt '
+                . 'mindestens einen Empfänger im Verteiler. Ohne Empfänger '
+                . 'lässt sich die Sichtung nicht abschließen.',
+        ],
+        'NV-19-VERTEILER-AUSGANG' => [
+            'source' => ESTAB_DV_SOURCE_UNTERLAGE,
+            'reference' => 'Feld 19, Laufweg Ausgang',
+            'requirement' => 'Der Verteiler gilt für ein- und ausgehende '
+                . 'Nachrichten. Wer eine ausgehende Nachricht verfasst, muss '
+                . 'den Verteiler ausfüllen können.',
+        ],
+        'NV-20-VERMERKE-ERHALT' => [
+            'source' => ESTAB_DV_SOURCE_UNTERLAGE,
+            'reference' => 'Feld 20',
+            'requirement' => 'Feld 20 sammelt die Bearbeitungsvermerke des '
+                . 'Laufwegs. Eine spätere Eintragung ergänzt die vorhandenen '
+                . 'Vermerke und löscht sie nicht.',
+        ],
+        'NV-4FACH-VERTEILUNG' => [
+            'source' => ESTAB_DV_SOURCE_UNTERLAGE,
+            'reference' => 'Durchschriften des Vordrucks',
+            'requirement' => 'Der Vordruck wird vierfach geführt: Die blaue '
+                . 'Durchschrift geht an den Bearbeiter, die grüne an den '
+                . 'Verfasser, die rote an S 2 für Einsatztagebuch und Lage, '
+                . 'die gelbe in das Technische Betriebsbuch. Die rote und '
+                . 'die grüne Durchschrift sind nicht abwählbar.',
+        ],
+        'NV-DATUM-MONATSKUERZEL' => [
+            'source' => ESTAB_DV_SOURCE_DV_1_101,
+            'reference' => 'Kapitel 8.2.1.3',
+            'requirement' => 'Droht eine Verwechslung des Datums, wird die '
+                . 'zweistellige Tagesangabe mit dem Monatskürzel verbunden. '
+                . 'Die Kürzel folgen der englischen Schreibweise.',
+        ],
+        'NV-ZEIT-FORMAT' => [
+            'source' => ESTAB_DV_SOURCE_AUSFUELLANLEITUNG,
+            'reference' => 'Felder 2, 3, 4, 16 und 18',
+            'requirement' => 'Uhrzeiten werden vierstellig geführt, Datumsangaben '
+                . 'mindestens zweistellig.',
+        ],
+        'ETB-ENTSCHEIDUNGEN' => [
+            'source' => ESTAB_DV_SOURCE_DV_1_101,
+            'reference' => 'Kapitel 4.3.1.4',
+            'requirement' => 'Entscheidungen werden als Eintrag oder als '
+                . 'Anlage zum Einsatztagebuch dokumentiert. Jede '
+                . 'Entscheidung des Nachrichtenlaufs wird mit ihrem Urheber '
+                . 'und dem Stand davor und danach festgehalten und ist im '
+                . 'Einsatztagebuch auffindbar.',
+        ],
+        'ETB-APPEND-ONLY' => [
+            'source' => ESTAB_DV_SOURCE_DV_1_101,
+            'reference' => 'Kapitel 8.4',
+            'requirement' => 'Einsatztagebuch und Technisches Betriebsbuch '
+                . 'werden fortschreibend geführt. Ein gebuchter Eintrag wird '
+                . 'weder geändert noch gelöscht; eine Korrektur entsteht als '
+                . 'neuer Eintrag, der den berichtigten benennt.',
+        ],
+        'ETB-AUFBEWAHRUNG' => [
+            'source' => ESTAB_DV_SOURCE_DV_1_101,
+            'reference' => 'Kapitel 4.3.1.4',
+            'requirement' => 'Das Einsatztagebuch ist mindestens ein Jahr '
+                . 'lang aufzubewahren. Vor Ablauf der Frist darf der Bestand '
+                . 'nicht gelöscht werden.',
+        ],
+        'ETB-FBFUE2-NACHRICHTENBEZUG' => [
+            'source' => ESTAB_DV_SOURCE_HANDBUCH,
+            'reference' => 'Fb Fü 2',
+            'requirement' => 'Der Ausdruck des Einsatztagebuchs weist zu jedem '
+                . 'Eintrag den zugehörigen Nachrichtenvordruck aus.',
+        ],
+        'TBB-QUITTUNG-AUSHAENDIGUNG' => [
+            'source' => ESTAB_DV_SOURCE_HANDBUCH,
+            'reference' => 'Fb Fü 44, Spalte 7',
+            'requirement' => 'Die Spalte Quittung/Empfänger/Ausgehändigt wird '
+                . 'mit der Aushändigung der eingegangenen Nachricht ergänzt und '
+                . 'enthält keine anwendungsinternen Kennungen.',
+        ],
+        'LW-EINGANG-STATIONEN' => [
+            'source' => ESTAB_DV_SOURCE_UNTERLAGE,
+            'reference' => 'Laufweg der eingehenden Nachricht',
+            'requirement' => 'Eine eingehende Nachricht wird von der '
+                . 'Fernmeldezentrale aufgenommen, vom Leiter des '
+                . 'Fernmeldebetriebes weitergegeben und vom Sichter '
+                . 'quittiert und abgeschlossen. Keine dieser Stationen '
+                . 'darf übersprungen werden.',
+        ],
+        'LW-AUSGANG-STATIONEN' => [
+            'source' => ESTAB_DV_SOURCE_UNTERLAGE,
+            'reference' => 'Laufweg der ausgehenden Nachricht',
+            'requirement' => 'Eine ausgehende Nachricht wird im Stab '
+                . 'abgefasst, vom Sichter geprüft, vom Leiter des '
+                . 'Fernmeldebetriebes zur Beförderung freigegeben und von '
+                . 'der Fernmeldezentrale befördert und abgeschlossen. Keine '
+                . 'dieser Stationen darf übersprungen werden.',
+        ],
+        'LW-NUR-BLAUER-TEIL' => [
+            'source' => ESTAB_DV_SOURCE_UNTERLAGE,
+            'reference' => 'Hinweis „Nur den blauen Teil ausfüllen!“',
+            'requirement' => 'Die Felder 1 bis 5 gehören dem '
+                . 'Fernmeldebetrieb; der Stab füllt allein den '
+                . 'Nachrichtenteil aus. Wer eine Nachricht abfasst, erhält '
+                . 'diese Felder nicht zur Eingabe.',
+        ],
+        'LW-KORREKTURSCHLEIFE' => [
+            'source' => ESTAB_DV_SOURCE_UNTERLAGE,
+            'reference' => 'Laufweg, Rückgabe zur Korrektur',
+            'requirement' => 'Eine zurückgewiesene Nachricht kehrt zu ihrem '
+                . 'Verfasser zurück und bleibt dabei dieselbe Nachricht. '
+                . 'Bei der Korrektur darf ihr Gegenstand nicht gewechselt '
+                . 'werden.',
+        ],
+        'NV-GESPRAECHSNOTIZ-LAUFWEG' => [
+            'source' => ESTAB_DV_SOURCE_UNTERLAGE,
+            'reference' => 'Feld 12, Gesprächsnotiz',
+            'requirement' => 'Eine Gesprächsnotiz hält ein bereits geführtes '
+                . 'Gespräch fest. Sie durchläuft die Sichtung und ist damit '
+                . 'abgeschlossen; eine Disposition und eine Beförderung finden '
+                . 'nicht statt.',
+        ],
+        'FUEST-SICHTER-AUSGANG-FORMAL' => [
+            'source' => ESTAB_DV_SOURCE_DV_1_101,
+            'reference' => 'Kapitel 4.3.1.10',
+            'requirement' => 'Die Prüfung des Sichters bei ausgehenden '
+                . 'Nachrichten erstreckt sich auf Anschrift, Absender sowie '
+                . 'Zeichen und Funktion des Verfassers. Eine inhaltliche '
+                . 'Prüfung der Nachricht entfällt; der Vordruck weist darauf '
+                . 'hin.',
+        ],
+        'FUEST-SICHTER-BINDEGLIED' => [
+            'source' => ESTAB_DV_SOURCE_DV_1_101,
+            'reference' => 'Kapitel 4.3.1.10',
+            'requirement' => 'Der Sichter ist Bindeglied zwischen Stab und '
+                . 'Fernmeldezentrale und dem Leiter des Stabes unterstellt. '
+                . 'Die Aufgabe darf in Doppelfunktion mit der Führung des '
+                . 'Einsatztagebuchs wahrgenommen werden.',
+        ],
+        'FUEST-LDF-BETRIEB' => [
+            'source' => ESTAB_DV_SOURCE_DV_1_101,
+            'reference' => 'Kapitel 4.3.1.12',
+            'requirement' => 'Der Leiter des Fernmeldebetriebes verantwortet '
+                . 'den Fernmeldebetrieb und die nachgeordnete '
+                . 'Betriebsleitung. Beförderung und Melderauftrag laufen '
+                . 'über ihn.',
+        ],
+        'TKM-KATALOG' => [
+            'source' => ESTAB_DV_SOURCE_MELDEWESEN,
+            'reference' => 'Kapitel 5.1, Übermittlungsmittel',
+            'requirement' => 'Der Katalog der Übermittlungsmittel umfasst '
+                . 'Funk, Telefon, Telefax, Datenübertragung und Melder sowie '
+                . 'Internet, E-Mail und Messenger. Die Ausfüllhilfe nennt '
+                . 'alle; der Vordruck kreuzt nur an, wofür er ein Kästchen '
+                . 'hat, und der genaue Weg wird benannt.',
+        ],
+        'TKM-MELDER-KURIER' => [
+            'source' => ESTAB_DV_SOURCE_MELDEWESEN,
+            'reference' => 'Kapitel 5.2, Melder und Kurier',
+            'requirement' => 'Melder und Kurier werden unterschieden: Der '
+                . 'Melder kennt den Inhalt und kann Rückfragen beantworten, '
+                . 'der Kurier kennt ihn nicht. Die Beauftragung nennt den '
+                . 'Unterschied.',
+            'verdraengt' => [
+                'source' => ESTAB_DV_SOURCE_DV_1_101,
+                'reference' => 'Kapitel 4.3.1.11',
+            ],
+        ],
+        'TKM-MELDER-PFLICHTEN' => [
+            'source' => ESTAB_DV_SOURCE_MELDEWESEN,
+            'reference' => 'Kapitel 5.2, Pflichten des Melders',
+            'requirement' => 'Der Melder ändert den Inhalt nicht, überbringt '
+                . 'schnellstmöglich, meldet sich beim Auftraggeber zurück und '
+                . 'teilt mit, wem er übergeben hat. Bis zur Rückkehr nimmt er '
+                . 'keinen weiteren Auftrag an.',
+        ],
+        'TKM-FERNMELDEPLAN' => [
+            'source' => ESTAB_DV_SOURCE_DV_1_101,
+            'reference' => 'Kapitel 6.1.1',
+            'requirement' => 'Führungskräfte müssen über die zur Verfügung '
+                . 'stehenden Verbindungen unterrichtet sein. Der '
+                . 'Fernmeldeplan trägt deshalb einen erkennbaren Stand und '
+                . 'ist dort einsehbar, wo ein Weg ausgewählt wird.',
+        ],
+        'FUEST-KLEIN-BEFOERDERUNG' => [
+            'source' => ESTAB_DV_SOURCE_DV_1_101,
+            'reference' => 'Führungsstelle ohne Stab',
+            'requirement' => 'Eine Führungsstelle ohne eigenes Sachgebiet S6 '
+                . 'befördert ausgehende Nachrichten auch ohne veröffentlichten '
+                . 'Fernmeldeplan.',
+        ],
+        'FUEST-KLEIN-ABLOESUNG' => [
+            'source' => ESTAB_DV_SOURCE_DV_1_101,
+            'reference' => 'Besetzung der Führungsstelle',
+            'requirement' => 'Fällt eine Kraft aus, lässt sich ihre Funktion '
+                . 'einzeln neu besetzen, ohne die gesamte Dienstschicht zu '
+                . 'übergeben.',
+        ],
+        'FUEST-AUFWUCHS' => [
+            'source' => ESTAB_DV_SOURCE_DV_1_101,
+            'reference' => 'Führungsstufen A bis D',
+            'requirement' => 'Eine Führungsstelle wächst im laufenden Einsatz '
+                . 'von der Führungsstelle ohne Stab zur Führungsstelle mit Stab '
+                . 'auf. Der Berechtigungsmodus folgt diesem Aufwuchs.',
+        ],
+        'FUEST-BESETZUNG-VOLLSTAENDIG' => [
+            'source' => ESTAB_DV_SOURCE_DV_1_101,
+            'reference' => 'Besetzung der Führungsstelle',
+            'requirement' => 'Vor der Freigabe des Einsatzes benennt die '
+                . 'Anwendung die Stationen des Nachrichtenlaufs, die nicht '
+                . 'besetzt sind.',
+        ],
+        'FUEST-DOPPELFUNKTION' => [
+            'source' => ESTAB_DV_SOURCE_DV_1_101,
+            'reference' => 'Mehrfachbesetzung',
+            'requirement' => 'Trägt eine Person mehrere Funktionen, weist die '
+                . 'Anwendung die Warteschlange jeder getragenen Funktion aus.',
+        ],
+    ];
+}
+
+/**
+ * Read the displacement note of a rule, failing loudly on a malformed one.
+ *
+ * Where the sources contradict each other the more recent one governs, and
+ * the rule that follows it departs from a sentence that is still printed in
+ * an older document. Naming that sentence keeps the departure reviewable:
+ * whoever reads the rule later can check the decision instead of rediscovering
+ * the contradiction.
+ *
+ * The note is optional. A malformed one is rejected rather than ignored,
+ * because a half-filled note looks like provenance and carries none.
+ *
+ * @param array<string, mixed> $rule
+ * @return array{source:string,reference:string}|null
+ */
+function estab_dv_rule_displacement(array $rule): ?array
+{
+    if (!array_key_exists('verdraengt', $rule)) {
+        return null;
+    }
+
+    $note = $rule['verdraengt'];
+    if (!is_array($note)) {
+        throw new InvalidArgumentException(
+            'A displacement note must name a source and a reference'
+        );
+    }
+
+    $displaced = [];
+    foreach (['source', 'reference'] as $field) {
+        $value = $note[$field] ?? null;
+        if (!is_string($value) || trim($value) === '') {
+            throw new InvalidArgumentException(
+                'A displacement note has no ' . $field
+            );
+        }
+        $displaced[$field] = $value;
+    }
+
+    if (!in_array($displaced['source'], estab_dv_sources(), true)) {
+        throw new InvalidArgumentException(
+            'A displacement note cites a document outside the catalogue: '
+                . $displaced['source']
+        );
+    }
+
+    return $displaced;
+}
+
+/**
+ * Resolve one rule, failing loudly on an identifier that does not exist.
+ *
+ * @return array{source:string,reference:string,requirement:string}
+ */
+function estab_dv_rule(string $id): array
+{
+    $rules = estab_dv_rules();
+    if (!array_key_exists($id, $rules)) {
+        throw new InvalidArgumentException(
+            'Unknown service-regulation rule: ' . $id
+        );
+    }
+    return $rules[$id];
+}
+
+/**
+ * Message for a test that covers one rule.
+ *
+ * Calling this records the identifier when ESTAB_DV_COVERAGE names a file, so
+ * the registry test can prove that every catalogued rule has a test.
+ */
+function estab_dv_requirement(string $id, string $detail = ''): string
+{
+    $rule = estab_dv_rule($id);
+    $coverage = getenv('ESTAB_DV_COVERAGE');
+    if (is_string($coverage) && $coverage !== '') {
+        file_put_contents($coverage, $id . "\n", FILE_APPEND | LOCK_EX);
+    }
+    return '[' . $id . '] ' . $rule['source'] . ', ' . $rule['reference']
+        . ': ' . $rule['requirement']
+        . ($detail === '' ? '' : ' — ' . $detail);
+}

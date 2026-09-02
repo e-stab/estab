@@ -165,6 +165,7 @@ $csrf = $read('app/csrf.php');
 $logbook = $read('app/logbook.php');
 $logbookLifecycle = $read('app/logbook_lifecycle.php');
 $operationsUi = $read('4fach/fuehrungsstelle.php');
+$messengerUi = $read('4fach/melderauftraege.php');
 $adminUi = $read('4fadm/fuehrungsstelle.php');
 $browserAcceptance = $read('tests/browser/headless_ui.py');
 $integrationCi = $read('tests/integration/ci.sh');
@@ -414,7 +415,7 @@ $assert(
         && str_contains($messageStageActor, 'estab_dv_require_write_capability(')
         && str_contains($messageStageActor, "'FERNMELDEBETRIEB'")
         && str_contains($messageStageActor, "'BEFOERDERUNG'")
-        && str_contains($messageStageActor, "\$requiredFunction = \$status === 1 ? 'LdF' : 'A/W'")
+        && str_contains($messageStageActor, "\$requiredFunction = \$status === ESTAB_MESSAGE_STATUS_LDF ? 'LdF' : 'A/W'")
         && str_contains($messageStageActor, "'Fernmelder'")
         && !str_contains(
             $messageStageActor,
@@ -902,7 +903,7 @@ $assert(
         )
         && !str_contains($messengerCandidates, 'AND u.`aktiv` = 1')
         && !str_contains($messengerCandidates, "\$row['sid']")
-        && str_contains($operationsUi, '$users = estab_dv_messenger_candidates('),
+        && str_contains($messengerUi, '$users = estab_dv_messenger_candidates('),
     'messenger candidates do not retain fachliche gates while exposing only '
         . 'server-derived, non-sensitive presence state'
 );
@@ -1016,31 +1017,31 @@ $assert(
     'messenger dispatch loses actor or target authority provenance'
 );
 $assert(
-    str_contains($operationsUi, 'data-estab-messenger-select')
+    str_contains($messengerUi, 'data-estab-messenger-select')
         && str_contains(
-            $operationsUi,
+            $messengerUi,
             'data-estab-notification-required'
         )
         && str_contains(
-            $operationsUi,
+            $messengerUi,
             'data-estab-messenger-presence-warning'
         )
         && str_contains(
-            $operationsUi,
+            $messengerUi,
             'Der LdF muss ihn separat über den Auftrag informieren.'
         )
-        && str_contains($operationsUi, 'Bitte Fernmelder auswählen')
-        && str_contains($operationsUi, '$flashWarning =')
+        && str_contains($messengerUi, 'Bitte Fernmelder auswählen')
+        && str_contains($messengerUi, '$flashWarning =')
         && str_contains(
-            $operationsUi,
+            $messengerUi,
             'estab-tool-feedback-warning'
         )
-        && str_contains($operationsUi, 'Status des Fernmelders: ')
+        && str_contains($messengerUi, 'Status des Fernmelders: ')
         && str_contains(
-            $operationsUi,
+            $messengerUi,
             "'messenger_assigned_notification_required'"
         )
-        && str_contains($operationsUi, "['presence' => \$presenceState]"),
+        && str_contains($messengerUi, "['presence' => \$presenceState]"),
     'messenger assignment UI does not label presence and preserve the '
         . 'separate-notification warning across PRG'
 );
@@ -1166,7 +1167,9 @@ $assert(
             "\$function = (string) (\$writerIdentity['funktion'] ?? '');"
         )
         && str_contains($logbook, "'EINSATZTAGEBUCH'")
-        && str_contains($logbook, "'BEFOERDERUNG'")
+        // Das TBB haengt an FERNMELDEBETRIEB, der Fachzustaendigkeit des
+        // LdF. BEFOERDERUNG traegt der A/W, und der fuehrt kein Buch.
+        && str_contains($logbook, "'FERNMELDEBETRIEB'")
         && str_contains(
             $logbook,
             'estab_incident_duty_shift_required($incident)'
@@ -1187,7 +1190,7 @@ $assert(
             $logbook,
             "estab_auth_identity_has_function(\$selected, 'S2', 'Stab')"
         )
-        && str_contains($logbook, "'A/W'")
+        && str_contains($logbook, "'LdF'")
         && str_contains($logbook, "'Fernmelder'"),
     'ETB/TBB authorship does not enforce STRICT writers and exact LOOSE effective functions'
 );

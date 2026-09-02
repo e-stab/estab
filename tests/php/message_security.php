@@ -215,7 +215,10 @@ $incoming = [
 $outgoing = $incoming + [];
 $outgoing['04_richtung'] = 'A';
 $outgoing['x00_status'] = 2;
-$outgoing['06_befwegausw'] = 'Fu';
+// Feld 7 bleibt der Wunsch des Verfassers. Die A/W-Stufe hängt an der
+// Disposition des LdF: Mittel in Feld 1, Weg in Feld 6.
+$outgoing['01_medium'] = 'Fu';
+$outgoing['06_befweg'] = 'FuKrs 1 · Kanal 31';
 $outgoing['15_quitdatum'] = '2026-07-23 11:58:00';
 $outgoing['15_quitzeichen'] = 'si0001';
 $outgoing['x02_sperre'] = 't';
@@ -557,14 +560,32 @@ $assert(
 );
 
 $assert(
-    substr_count(
+/*
+ * Die Durchschriftenfarbe und der fehlende Empfaenger.
+ *
+ * Beide standen in einem auskommentierten Block von 126 Zeilen, der
+ * geloescht ist (eine zweite Sichterliste, deren Abfrage `WHERE 1` las --
+ * also die Nachrichten aller Einsaetze). Die Aussage bleibt: Eine
+ * Funktion ohne eigene Durchschrift darf die Zelle nicht sprengen.
+ *
+ * Sie steht jetzt an der lebenden Stelle: "Stab lesen" sucht die Farbe
+ * der wirksamen Funktion heraus und leitet Grund *und* Tinte daraus ab --
+ * eine feste weisse Schrift machte jede Zeile ohne eigene Durchschrift
+ * unsichtbar.
+ *
+ * estab_recipient_copy_cell_html hat seit der Umstellung der Uebersicht
+ * keinen Aufrufer mehr; die einzige verbliebene Verwendung stand in einer
+ * Funktion, die selbst keinen hatte. Beide sind geloescht.
+ */
+    str_contains(
         $listSource,
-        'estab_recipient_copy_cell_html ('
-    ) === 1
-        && substr_count(
+        'estab_recipient_copy_background ('
+    )
+        && str_contains($listSource, 'estab_recipient_copy_ink (')
+        && str_contains(
             $listSource,
-            '$empfcolor [$recipientFunction] ?? ""'
-        ) === 1
+            '] ?? ""; // Empfänger dieser wirksamen Funktion'
+        )
         && str_contains(
             $listSource,
             'estab_message_list_render_table ('
@@ -579,16 +600,53 @@ $assert(
     'message lists do not handle missing/multicolour recipients or timestamp/status keys safely'
 );
 $assert(
-    substr_count($listSource, 'data-estab-list-filter') === 2
-        && substr_count($listSource, '<form') === 4
-        && substr_count($listSource, '</form>') === 4
-        && substr_count($listSource, 'echo "<tr".$priorityStyle') === 2
+    /*
+     * Eine Filterleiste, nicht zwei. Die zweite gehoerte zu den beiden
+     * Administrationssichten und war unerreichbar: darstellungs_art()
+     * hat einen einzigen Aufrufer, im Zweig "Stab lesen". Mit ihr
+     * gingen zwei Formulare -- ihres und das der zweiten Suche.
+     */
+    substr_count($listSource, 'data-estab-list-filter') === 1
+        && substr_count($listSource, '<form') === 3
+        && substr_count($listSource, '</form>') === 3
+        /*
+         * Keine handgeschriebene Vorrangzeile mehr. Ausgang und Sichtung
+         * zeichnen ihre Zeilen nicht mehr selbst; was dort hervorhebt, ist
+         * dieselbe Marke am Bauteil -- unten eigens geprueft, damit die
+         * gesunkene Zahl kein stiller Verlust ist.
+         */
+        && substr_count($listSource, 'echo "<tr".$priorityStyle') === 0
+        && str_contains($listSource, 'estab-tabelle-zeile--achtung')
+        && str_contains(
+            $listSource,
+            'estab_message_priority_requires_attention ('
+        )
         && str_contains(
             $listSource,
             'estab_message_list_render_controls ('
         )
-        && substr_count($listSource, 'echo "<tr>\n";') >= 3
-        && substr_count($listSource, 'echo "</th>\n";') >= 3,
+        /*
+         * Und jetzt gar keine handgeschriebene Zeile mehr. Die Zahl stand
+         * zuletzt bei sechs; das waren die Zeilen der beiden alten
+         * Filterleisten, die ihre Bedienelemente mit <table> nebeneinander
+         * stellten. Beide sind fort -- die eine unerreichbar, die andere
+         * durch einen umbrechenden Streifen ersetzt. Die Zahl darf nicht
+         * wieder wachsen: Die Datei zeichnet keine Tabelle mehr.
+         */
+        && substr_count($listSource, 'echo "<tr') === 0
+        && substr_count($listSource, '<table') === 0
+        // Die Kopfzellen der Liste "Stab lesen" kommen aus dem
+        // Tabellenbauteil; die Seite schreibt sie nicht mehr selbst. Dass
+        // die Zeile dort vollstaendig ist, prueft das Bauteil haerter als
+        // eine Zaehlung: estab_tabelle_zeile_zerlegen bricht ab, wenn eine
+        // Zeile nicht genau so viele Zellen hat wie die Tabelle Spalten --
+        // eine Zeile mit verrutschten Zellen zeigt die Angaben der falschen
+        // Spalte, und das ist schlimmer als eine Fehlermeldung.
+        && str_contains($listSource, 'estab_tabelle_zeile_zerlegen (')
+        && str_contains(
+            (string) file_get_contents(__DIR__ . '/../../app/tabelle.php'),
+            'Die Tabellenzeile hat '
+        ),
     'message lists contain nested filters or structurally incomplete table rows'
 );
 $assert(

@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . "/../app/legacy_mysql.php";
 require_once __DIR__ . "/../app/dynamic_schema.php";
 //if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><big>DB-Operationen</big><br>";  }
 /*****************************************************************************\
@@ -44,7 +45,6 @@ class db_access {
   function db_connection_check (){
     $db = mysql_connect($this->db_server,$this->db_user, $this->db_pw)
        or die ("[table_exist] Konnte keine Verbindung zur Datenbank herstellen");
-    mysql_query('SET NAMES utf8');
     $result = mysql_ping  ($db);
 
     return ($result);
@@ -55,16 +55,13 @@ class db_access {
   function table_exist ($tablename) {
     $db = mysql_connect($this->db_server,$this->db_user, $this->db_pw)
        or die ("[table_exist] Konnte keine Verbindung zur Datenbank herstellen");
-    mysql_query('SET NAMES utf8');
     $db_check = mysql_select_db ($this->db_name)
        or die ("[read_table] Auswahl der Datenbank fehlgeschlagen");
 
     $result = mysql_list_tables($this->db_name);
 
     if (!$result) {
-      echo "DB-Fehler: Tabellen können nicht angezeigt werden.\n";
-      echo 'MySQL Fehler: ' . mysql_error();
-      exit;
+      estab_legacy_database_failure ("table_exist");
     }
     $table_exist = FALSE;
     while ($row = mysql_fetch_row($result)) {
@@ -114,14 +111,13 @@ class db_access {
     $this->result = array ();
     $db = mysql_connect($this->db_server,$this->db_user, $this->db_pw)
        or die ("[read_table] Konnte keine Verbindung zur Datenbank herstellen");
-    mysql_query('SET NAMES utf8');
     $db_check = mysql_select_db ($this->db_name)
        or die ("[read_table] Auswahl der Datenbank fehlgeschlagen");
 
     $this->sqlquery = "SELECT * FROM $this->db_table WHERE 1" ;
 
     $query_result = mysql_query ($this->sqlquery, $db) or
-       die("[read_table]  103-".mysql_error()." ".mysql_errno());
+       estab_legacy_database_failure ("read_table");
 
     $this->resultcount = mysql_num_rows($query_result);
 
@@ -138,13 +134,12 @@ class db_access {
     $this->result = array ();
     $this->sqlquery = $query ;
     $db = mysql_connect($this->db_server,$this->db_user, $this->db_pw)
-       or die ("[query_table196] Konnte keine Verbindung zur Datenbank herstellen" . mysql_error());
-    mysql_query('SET NAMES utf8');
+       or estab_legacy_database_failure ("query_table_connect");
     $db_check = mysql_select_db ($this->db_name)
-       or die ("[query_table199] Auswahl der Datenbank fehlgeschlagen" . mysql_error());
+       or estab_legacy_database_failure ("query_table_select_db");
 
     $query_result = mysql_query ($this->sqlquery, $db) or
-       die("[query_table202] <br>$query<br>103-".mysql_error()." ".mysql_errno());
+       estab_legacy_database_failure ("query_table", $query);
 
     $this->resultcount = mysql_num_rows($query_result);
 
@@ -162,12 +157,11 @@ class db_access {
     $this->sqlquery = $query ;
     $db = mysql_connect($this->db_server,$this->db_user, $this->db_pw)
        or die ("[query_table_wert] Konnte keine Verbindung zur Datenbank herstellen");
-    mysql_query('SET NAMES utf8');
     $db_check = mysql_select_db ($this->db_name)
        or die ("[query_table_wert] Auswahl der Datenbank fehlgeschlagen");
 
     $query_result = mysql_query ($this->sqlquery, $db) or
-       die("[query_table_wert] 103-".mysql_error()." ".mysql_errno());
+       estab_legacy_database_failure ("query_table_wert", $query);
 
     $this->resultcount = mysql_num_rows($query_result);
 
@@ -183,12 +177,11 @@ class db_access {
     $this->sqlquery = $query ;
     $db = mysql_connect($this->db_server,$this->db_user, $this->db_pw)
        or die ("[query_table_iu] Konnte keine Verbindung zur Datenbank herstellen");
-    mysql_query('SET NAMES utf8');
     $db_check = mysql_select_db ($this->db_name)
        or die ("[query_table_iu] Auswahl der Datenbank fehlgeschlagen");
 
     $query_result = mysql_query ($this->sqlquery, $db) or
-       die("[query_table_iu] ".mysql_error()." ".mysql_errno()."<br> Query=".$query);
+       estab_legacy_database_failure ("query_table_iu", $query);
     mysql_close ($db);
     return ($query_result);
   } // function query_table_iu
@@ -199,13 +192,12 @@ class db_access {
     $this->result = array ();
     $this->sqlquery = $query ;
     $db = mysql_connect($this->db_server,$this->db_user, $this->db_pw)
-       or die ("[query_table257] Konnte keine Verbindung zur Datenbank herstellen".mysql_error()." ".mysql_errno());
-    mysql_query('SET NAMES utf8');
+       or estab_legacy_database_failure ("query_table_count_connect");
     $db_check = mysql_select_db ($this->db_name)
-       or die ("[query_table250] Auswahl der Datenbank fehlgeschlagen".mysql_error()." ".mysql_errno());
+       or estab_legacy_database_failure ("query_table_count_select_db");
 
     $query_result = mysql_query ($this->sqlquery, $db) or
-       die("[query_table263] 103-".mysql_error()." ".mysql_errno().mysql_error()." ".mysql_errno());
+       estab_legacy_database_failure ("query_table_count", $query);
 
     $this->resultcount = mysql_num_rows($query_result);
 

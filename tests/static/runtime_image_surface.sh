@@ -74,6 +74,7 @@ assert_dockerfile_contains 'COPY 4fadm/admin.php'
 assert_dockerfile_contains 'estab-password-policy.js'
 assert_dockerfile_contains '4fach/activity.php'
 assert_dockerfile_contains '4fach/fuehrungsstelle.php'
+assert_dockerfile_contains '4fach/melderauftraege.php'
 assert_dockerfile_contains '4fadm/fuehrungsstelle.php'
 assert_dockerfile_contains '4fadm/incident_export.php'
 assert_dockerfile_contains '4fadm/incidents.php'
@@ -122,6 +123,7 @@ for required_runtime_path in \
     estab-password-policy.js \
     4fach/activity.php \
     4fach/fuehrungsstelle.php \
+    4fach/melderauftraege.php \
     4fadm/fuehrungsstelle.php \
     4fadm/self_registration.php \
     4fbak/thw.png \

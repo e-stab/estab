@@ -62,6 +62,7 @@ $expectedControllers = [
     '4fach/katgoedt.php',
     '4fach/logout.php',
     '4fach/mainindex.php',
+    '4fach/melderauftraege.php',
     '4fach/resetpic.php',
     '4fadm/export.php',
     '4fadm/fuehrungsstelle.php',

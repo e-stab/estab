@@ -592,7 +592,10 @@ $assert(
             $helper,
             "estab_auth_identity_has_function(\$selected, 'S2', 'Stab')"
         )
-        && str_contains($helper, "'A/W'")
+        // Das TBB fuehrt der LdF, nicht der A/W. Gesichert bleibt, dass die
+        // Buchfuehrung an eine benannte Funktion gebunden ist -- welche das
+        // ist, entscheidet die Fachlichkeit, und sie hat entschieden.
+        && str_contains($helper, "'LdF'")
         && str_contains($helper, "'Fernmelder'")
         && str_contains($helper, "\$orderSql = '`estab_book_lfd` DESC';")
         && str_contains($helper, '`estab_personnel_duty`')
@@ -706,7 +709,11 @@ $assert(
             $operationsDomain,
             'estab_logbook_lifecycle_open_books('
         )
-        && !str_contains(
+        && str_contains(
+            $operationsDomain,
+            'estab_incident_grew_to_strict($connection, $incidentId)'
+        )
+        && str_contains(
             $operationsDomain,
             'estab_logbook_lifecycle_open_books_if_empty('
         )
@@ -923,10 +930,13 @@ $assert(
 );
 $assert(
     str_contains($tbb, 'estab_dv_has_write_capability (')
-        && str_contains($tbb, '"BEFOERDERUNG"')
+        // Fest heisst: aus der Zustaendigkeit, nicht aus der Anfrage. Welche
+        // Zustaendigkeit das ist, entscheidet die Fachlichkeit -- das TBB
+        // fuehrt der LdF, und der traegt FERNMELDEBETRIEB.
+        && str_contains($tbb, '"FERNMELDEBETRIEB"')
         && !str_contains($tbb, '$readonly')
         && !str_contains($tbb, 'Keine Berechtigung für das technische Betriebsbuch'),
-    'TBB readers must remain writable only by fixed Beförderung capability'
+    'TBB readers must remain writable only by fixed Fernmeldebetrieb capability'
 );
 $assert(
     str_contains($etb, 'ETB durchsuchen und filtern')

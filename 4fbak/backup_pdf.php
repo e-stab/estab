@@ -19,6 +19,8 @@ if (!defined('FPDF_FONTPATH')) {
 
 require_once __DIR__ . "/fpdf.php";
 require_once __DIR__ . "/../app/message_repository.php";
+require_once __DIR__ . "/../app/nv_raster.php";
+require_once __DIR__ . "/../app/nv_verteiler.php";
 require_once __DIR__ . "/../app/message_transport.php";
 require_once __DIR__ . "/../app/generated_form.php";
 require_once __DIR__ . "/../app/message_priority.php";
@@ -168,10 +170,6 @@ class vordruckaspdf extends PDF_Ellipse {
   var $paperform = "P" ;  // für Portrait
   var $papertyp  = "A4" ; // DIN A4 2100 mm x 2970 mm
 
-// Trennungslinie FM / Stab bzw Stab / Sichter
-  var $fm_stab_line = 60 ; // 300 px von oben
-  var $stab_sichter_line = 200 ; // 400 px für den Sichter
-
 // Bildbereich Formulardaten
   var $fleft ;
   var $fright ;
@@ -186,20 +184,19 @@ class vordruckaspdf extends PDF_Ellipse {
 // Farben
   var $color_sw ;
   var $color_rd ;
-  var $color_bl ;
+  // Die Tinte der Eintragungen. Sie ist schwarz wie am Bildschirm: der
+  // Vordruck und das Eingetragene stehen dort in derselben Farbe, und drei
+  // Ausgaben desselben Blattes sollen sich nicht in der Farbe unterscheiden.
+  var $color_eintrag ;
 
 // Schrift und Schriftgrössen
   var $font ;
   var $fontsize00 = 8 ;
-  var $fontsize01 = 10 ;
-  var $fontsize02 = 12 ;
   var $fontsize03 = 16 ;
   var $fontsize04 = 21 ;
   var $fontsize30 = 30 ;
-  var $fontsize35 = 35 ;
   var $fontsize50 = 60 ;
 
-  var $fkt_size = 11 ;
 
 // Das Bild
   var $image ;
@@ -230,7 +227,7 @@ class vordruckaspdf extends PDF_Ellipse {
       $this->border['top'],
       $this->border['right']
     );
-    $this->SetAutoPageBreak(true, $this->bottom - $this->point[38][1]) ;
+    $this->SetAutoPageBreak (true, $this->message_form_break_margin ()) ;
 
     $this->fleft   = $this->left   + $this->border['left'] ;
     $this->fright  = $this->right  - $this->border['right'] ;
@@ -238,7 +235,7 @@ class vordruckaspdf extends PDF_Ellipse {
     $this->fbottom = $this->bottom - $this->border['bottom'] ;
     $this->color_sw = array ( "r" =>   0, "g" =>   0, "b" =>   0 );
     $this->color_rd = array ( "r" => 255, "g" =>   0, "b" =>   0 );
-    $this->color_bl = array ( "r" =>   0, "g" =>   0, "b" => 255 );
+    $this->color_eintrag = array ( "r" =>   0, "g" =>   0, "b" =>   0 );
     $this->recipientMatrix = is_array ($recipientMatrix) ? $recipientMatrix : null;
     $this->db_dataset = array ();
     $this->messageNumber = null;
@@ -329,82 +326,43 @@ class vordruckaspdf extends PDF_Ellipse {
 
   }
 
-  var $point ;
+  var $raster ;
 
-  function init_pkts(){
-    $this->point [ 1] = array (   0,   0);
-    $this->point [ 2] = array (  55,   0);
-    $this->point [ 3] = array ( 144,   0);
-    $this->point [ 4] = array ( 190,   0);
+  /**
+   * Legt das Raster fest und setzt das Blatt mittig auf die Seite.
+   *
+   * Der Rand ist kein Gestaltungswert, sondern das, was von A4 uebrig
+   * bleibt, wenn das Blatt in seinem gemessenen Mass daraufliegt. Damit
+   * gelten fuer alle Zeichenbefehle Blattkoordinaten: Ursprung ist die
+   * linke obere Ecke des Vordrucks, nicht die der Seite.
+   */
+  function init_pkts (){
+    $this->raster = estab_nv_raster ();
+    $this->border ['left']   = round (
+      ($this->right - $this->raster ['breite']) / 2,
+      2
+    );
+    $this->border ['right']  = $this->border ['left'];
+    $this->border ['top']    = 9.0;
+    $this->border ['bottom'] = round (
+      $this->bottom - $this->border ['top'] - $this->raster ['hoehe'],
+      2
+    );
+  }
 
-    $this->point [ 5] = array (   0,   5);
-    $this->point [ 6] = array (  55,   5);
-    $this->point [ 7] = array (  97,   5);
-    $this->point [ 8] = array ( 144,   5);
+  /** Unterkante des Nachrichtentextes (Feld 14) in Seitenkoordinaten. */
+  function message_form_text_bottom (){
+    return $this->border ['top'] + $this->raster ['y']['text_ende'];
+  }
 
-    $this->point [ 9] = array (   0,  24);
-    $this->point [10] = array (  55,  24);
-    $this->point [11] = array (  97,  24);
-    $this->point [12] = array ( 144,  24);
-
-    $this->point [13] = array (   0,  29);
-    $this->point [14] = array (  55,  29);
-    $this->point [15] = array (  97,  29);
-    $this->point [16] = array ( 144,  29);
-    $this->point [17] = array ( 190,  29);
-
-    $this->point [18] = array (   0,  38);
-    $this->point [19] = array (  55,  38);
-    $this->point [20] = array ( 135,  38);
-    $this->point [21] = array ( 190,  38);
-
-    $this->point [22] = array (   0,  46);
-    $this->point [23] = array (  25,  46);
-    $this->point [24] = array (  34,  38);
-    $this->point [25] = array (  34,  46);
-    $this->point [26] = array (  55,  46);
-    $this->point [27] = array ( 135,  46);
-    $this->point [28] = array ( 190,  46);
-
-    $this->point [29] = array (   0,  59);
-    $this->point [30] = array (  25,  59);
-    $this->point [31] = array (  34,  59);
-    $this->point [57] = array (  55,  59);
-    $this->point [58] = array ( 116,  46);
-    $this->point [59] = array ( 116,  59);
-    $this->point [32] = array ( 135,  59);
-    $this->point [33] = array ( 190,  59);
-
-    $this->point [34] = array (   0,  76);
-    $this->point [35] = array (  34,  76);
-    $this->point [36] = array ( 135,  76);
-    $this->point [37] = array ( 190,  76);
-
-    $this->point [38] = array (   0, 160+27);
-    $this->point [39] = array (  25, 160+27);
-    $this->point [40] = array ( 190, 160+27);
-
-    $this->point [41] = array (   0, 169+27);
-    $this->point [42] = array (  25, 169+27);
-    $this->point [43] = array (  92, 169+27);
-    $this->point [44] = array ( 134, 169+27);
-    $this->point [45] = array ( 190, 169+27);
-
-    $this->point [46] = array (   0, 182+27);
-    $this->point [47] = array (  25, 182+27);
-    $this->point [48] = array (  92, 182+27);
-    $this->point [49] = array ( 100, 182+27);
-    $this->point [50] = array ( 134, 182+27);
-    $this->point [51] = array ( 190, 182+27);
-
-    $this->point [52] = array (   0, 194+27);
-    $this->point [53] = array ( 100, 194+27);
-
-    $this->point [54] = array (   0, 248+30);
-    $this->point [55] = array ( 100, 248+30);
-    $this->point [56] = array ( 190, 248+30);
-
-    $this->point [60] = array ( 190-25, 248+30-25);
+  /**
+   * Abstand vom unteren Seitenrand, ab dem der Nachrichtentext umbricht.
+   *
+   * Der Vordruck bricht nicht dort um, wo die Seite endet, sondern dort, wo
+   * das Feld endet. Alles darunter gehoert schon wieder dem Vordruck.
+   */
+  function message_form_break_margin (){
+    return $this->bottom - $this->message_form_text_bottom ();
   }
 
 
@@ -461,7 +419,7 @@ class vordruckaspdf extends PDF_Ellipse {
         }
         $this->draw_text_with_link ($x,
                                     $y, 0,
-                                    $this->color_bl, $this->fontsize00, "b", "o", "l", $anhang."   ", $link) ;
+                                    $this->color_eintrag, $this->fontsize00, "b", "o", "l", $anhang."   ", $link) ;
         $x = $this->GetX() ;
         $y = $this->GetY() ;
 
@@ -481,199 +439,187 @@ class vordruckaspdf extends PDF_Ellipse {
     $this->line( $x1, $y1, $x2, $y2 );
   }
 
-  function draw_linebypoint ( $p1, $p2, $pixel, $color){
-    $bl = $this->border ['left'];
-    $bt = $this->border ['top'];
-    $br = $this->border ['right'];
-    $bb = $this->border ['bottom'];
-
-    $this->SetLineWidth($pixel);
-    $this->SetDrawColor ($color['r'],$color['g'],$color['b']);
-    $this->line( $bl+$this->point[$p1][0],
-                 $bt+$this->point[$p1][1],
-                 $bl+$this->point[$p2][0],
-                 $bt+$this->point[$p2][1] );
-  }
-
-
-
-
-  function draw_rb_select ($x, $y, $color){
-    $this->draw_line ( $x-2, $y+2, $x+2, $y-2, 0.5 ,$color);
-    $this->draw_line ( $x+2, $y+2, $x-2, $y-2, 0.5 ,$color);
-  }
-
-  /*******************************************************************************
-    Linie x1y1 x2y2 dicke farbe
-  ********************************************************************************/
-
-  function draw_rectagle ($x1, $y1, $x2, $y2, $pixel, $color){
-    $this->SetDrawColor ($color['r'],$color['g'],$color['b']);
-    $this->SetLineWidth ($pixel);
-    $this->line($x1, $y1, $x1, $y2 );
-    $this->line($x1, $y2, $x2, $y2 );
-    $this->line($x2, $y2, $x2, $y1 );
-    $this->line($x2, $y1, $x1, $y1 );
-  }
-
-
-
-  function draw_rectaglebypoints ($x1, $y1, $x2, $y2, $pixel, $color){
-    $bl = $this->border ['left'];
-    $bt = $this->border ['top'];
-    $br = $this->border ['right'];
-    $bb = $this->border ['bottom'];
-    $x1 += $bl; $x2 += $bl; $y1 += $bt; $y2 += $bt;
-    $this->SetDrawColor ($color['r'],$color['g'],$color['b']);
-    $this->SetLineWidth ($pixel);
-    $this->line($x1, $y1, $x1, $y2 );
-    $this->line($x1, $y2, $x2, $y2 );
-    $this->line($x2, $y2, $x2, $y1 );
-    $this->line($x2, $y1, $x1, $y1 );
-  }
-
-  function draw_radiobutton ( $x, $y, $select, $size, $text ){
-    $this->SetLineWidth (0.5);
-    $this->SetDrawColor ($this->color_sw['r'],$this->color_sw['g'],$this->color_sw['b']);
-    $this->draw_text ($x+2, $y, 0, $this->color_sw, $size, "n", "o", "l", $text);
-    $x += $this->border ['left'];
-    $y += $this->border ['top'];
-    $this->Circle ($x, $y, 1.5);
-    if ( $select ){ $this->draw_rb_select ($x, $y, $this->color_bl); }
-  }
-
-  function draw_checkbox ( $x, $y, $select, $size, $text ){
-    $this->draw_text ($x+2.4, $y, 0, $this->color_sw, $size, "n", "o", "l", $text);
-    $center_x = $x + $this->border ['left'];
-    $center_y = $y + $this->border ['top'];
-    $this->SetLineWidth (0.5);
-    $this->SetDrawColor ($this->color_sw['r'],$this->color_sw['g'],$this->color_sw['b']);
-    $this->Rect ($center_x-1.5, $center_y-1.5, 3, 3);
-    if ( $select ){
-      // Das Kreuz bleibt einschliesslich seiner Strichstaerke innerhalb des
-      // 3-mm-Kaestchens. draw_rb_select() ist fuer die groesseren runden
-      // Auswahlmarken gedacht und wuerde hier ueber den Rahmen hinausragen.
-      $mark_radius = 1.1;
-      $this->draw_line (
-        $center_x-$mark_radius,
-        $center_y+$mark_radius,
-        $center_x+$mark_radius,
-        $center_y-$mark_radius,
-        0.5,
-        $this->color_bl
-      );
-      $this->draw_line (
-        $center_x+$mark_radius,
-        $center_y+$mark_radius,
-        $center_x-$mark_radius,
-        $center_y-$mark_radius,
-        0.5,
-        $this->color_bl
-      );
-    }
-  }
-
-  function draw_mediumselect ($x, $y, $selectvalue){
-    // Database values and visible labels are deliberately separate. In
-    // particular FAX is uppercase in the schema, while both the current @
-    // value and the historic FS value share the visible DFÜ option.
-    $selected_medium = estab_message_medium_storage_value ($selectvalue);
-    $medium_spacing = 11;
-    $media = array (
-      array ("values" => array ("Fu"), "label" => "Fu"),
-      array ("values" => array ("Fe"), "label" => "Fe"),
-      array ("values" => array ("FAX"), "label" => "Fax"),
-      array ("values" => array ("FS", "@"), "label" => "DFÜ"),
-      array ("values" => array ("Me"), "label" => "Me")
-    );
-    foreach ($media as $o => $medium){
-      $select = $selected_medium !== null
-        && in_array ($selected_medium, $medium ["values"], true);
-      $this->draw_checkbox (
-        $x+$o*$medium_spacing,
-        $y,
-        $select,
-        $this->fontsize00,
-        $medium ["label"]
-      );
-    }
-  }
-
-
   /*****************************************************************************
-      function draw_text
-        $x                : Position x
-        $y                : Position y
-        $angle            : Ausrichtungswinkel
-        $color            : Farbe
-        $fontauszeichnung : n = normal
-                            b = fett
-                            i = kursiv
-                            z =
-        $posv             : vertikal o = oben
-                                     m = mitte
-                                     u = unten
-        $posh             : horizontal l = links
-                                       z = zentriert
-                                       r = rechts
-        $text             : Text
+     Zeichnen auf dem Blatt.
+
+     Alle Masse sind Blattkoordinaten in Millimetern. Die Umrechnung auf die
+     Seite macht ausschliesslich dieser Abschnitt; wer weiter unten ein Feld
+     setzt, rechnet nicht.
   ******************************************************************************/
-  function draw_text ($x, $y, $angle, $color, $size, $fontaz, $posv, $posh, $text){
-    $x += $this->border ['left'];
-    $y += $this->border ['top'];
-     // Linienfarbe auf Blau einstellen
-    $this->SetTextColor($color['r'],$color['g'],$color['b']);
-    switch ($fontaz){
-      case "n": //links
-        $az = "";
-      break;
-      case "i": // mitte
-        $az = "I";
-      break;
-      case "b": // rechts
-        $az = "B";
-      break;
-      default: // nothing
-    }
-    // Schriftart definieren
-    $this->SetFont('helvetica', $az, $size );
-    switch ($posv){
-      case "o": //links
-      break;
-      case "m": // mitte
-        $y -= $size/2 ;
-      break;
-      case "u": // rechts
-        $y -= $size ;
-      break;
-      default: // nothing
-    }
-    switch ($posh){
-      case "l": //links
-        $align = "L";
-      break;
-      case "z": // mitte
-        $align = "C";
-      break;
-      case "r": // rechts
-        $align = "R";
-      break;
-      default: $align = "L"; // nothing
-    }
-    $this->SetXY ($x, $y);
-    $this->Cell(
-      1,
-      1,
-      estab_fpdf_text(estab_message_plain_text($text)),
-      0,
-      0,
-      $align,
-      0
+
+  function nv_linie ($x1, $y1, $x2, $y2, $staerke = null){
+    $this->draw_line (
+      $this->border ['left'] + $x1,
+      $this->border ['top'] + $y1,
+      $this->border ['left'] + $x2,
+      $this->border ['top'] + $y2,
+      $staerke === null ? $this->raster ['strich']['zelle'] : $staerke,
+      $this->color_sw
     );
   }
 
+  function nv_rahmen ($x1, $y1, $x2, $y2, $staerke = null){
+    $this->nv_linie ($x1, $y1, $x2, $y1, $staerke);
+    $this->nv_linie ($x2, $y1, $x2, $y2, $staerke);
+    $this->nv_linie ($x2, $y2, $x1, $y2, $staerke);
+    $this->nv_linie ($x1, $y2, $x1, $y1, $staerke);
+  }
 
-/*******************************************************************************/
+  function nv_flaeche ($x1, $y1, $x2, $y2, $farbe){
+    $this->SetFillColor ($farbe ['r'], $farbe ['g'], $farbe ['b']);
+    $this->Rect (
+      $this->border ['left'] + $x1,
+      $this->border ['top'] + $y1,
+      $x2 - $x1,
+      $y2 - $y1,
+      "F"
+    );
+  }
+
+  /** Millimeter in die Punktzaehlung der Schriftgroesse. */
+  function nv_punkt ($millimeter){
+    return $millimeter * 72 / 25.4;
+  }
+
+  /**
+   * Setzt eine Zeile mit ihrer Oberkante auf $y.
+   *
+   * Mit $breite und $aus laesst sich in einer Zelle zentrieren oder rechts
+   * ausrichten; ohne Breite steht der Text linksbuendig ab $x.
+   */
+  function nv_text (
+    $x, $y, $groesse, $stil, $text,
+    $breite = 0, $aus = "L", $farbe = null
+  ){
+    $farbe = $farbe === null ? $this->color_sw : $farbe;
+    $this->SetTextColor ($farbe ['r'], $farbe ['g'], $farbe ['b']);
+    $this->SetFont ("helvetica", $stil, $this->nv_punkt ($groesse));
+    $this->SetXY (
+      $this->border ['left'] + $x,
+      $this->border ['top'] + $y
+    );
+    $this->Cell (
+      $breite > 0 ? $breite : 1,
+      $groesse,
+      estab_fpdf_text (estab_message_plain_text ($text)),
+      0,
+      0,
+      $aus
+    );
+  }
+
+  /**
+   * Setzt einen eingetragenen Wert einzeilig in sein Feld.
+   *
+   * Was nicht hineinpasst, wird gekuerzt statt in das Nachbarfeld zu laufen.
+   * Die Kernschriften von FPDF rechnen in Windows-1252, deshalb ist das
+   * byteweise Kuerzen nach der Umwandlung eindeutig.
+   */
+  function nv_wert (
+    $x, $y, $breite, $text, $groesse = null, $aus = "L"
+  ){
+    $groesse = $groesse === null ? $this->raster ['schrift']['wert'] : $groesse;
+    $klartext = preg_replace (
+      "/[\\r\\n]+/",
+      " ",
+      estab_message_plain_text ((string) $text)
+    );
+    $text = estab_fpdf_text ($klartext === null ? "" : $klartext);
+    $this->SetFont ("helvetica", "B", $this->nv_punkt ($groesse));
+    if ($text !== "" && $this->GetStringWidth ($text) > $breite) {
+      $suffix = "...";
+      $platz = max (0, $breite - $this->GetStringWidth ($suffix));
+      while ($text !== "" && $this->GetStringWidth ($text) > $platz) {
+        $text = rtrim (substr ($text, 0, -1));
+      }
+      $text .= $suffix;
+    }
+    $this->SetTextColor (
+      $this->color_eintrag ['r'],
+      $this->color_eintrag ['g'],
+      $this->color_eintrag ['b']
+    );
+    $this->SetXY (
+      $this->border ['left'] + $x,
+      $this->border ['top'] + $y
+    );
+    $this->Cell ($breite, $groesse, $text, 0, 0, $aus);
+  }
+
+  /**
+   * Ein Ankreuzfeld des Vordrucks.
+   *
+   * $x und $y sind die linke obere Ecke, $kante die Kantenlaenge. Gesetzt
+   * ist es als ausgefuellte Flaeche im Kaestchen -- so, wie die Oberflaeche
+   * es zeigt, und nicht als Kreuz, das ueber den Rahmen hinausragt.
+   */
+  function nv_ankreuzfeld ($x, $y, $kante, $gesetzt){
+    $px = $this->border ['left'] + $x;
+    $py = $this->border ['top'] + $y;
+    $this->SetLineWidth (0.4);
+    $this->SetDrawColor (
+      $this->color_sw ['r'],
+      $this->color_sw ['g'],
+      $this->color_sw ['b']
+    );
+    $this->SetFillColor (255, 255, 255);
+    $this->Rect ($px, $py, $kante, $kante, "FD");
+    if (!$gesetzt) {
+      return;
+    }
+    $rand = $kante * 0.24;
+    $this->SetFillColor (
+      $this->color_eintrag ['r'],
+      $this->color_eintrag ['g'],
+      $this->color_eintrag ['b']
+    );
+    $this->Rect (
+      $px + $rand,
+      $py + $rand,
+      $kante - 2 * $rand,
+      $kante - 2 * $rand,
+      "F"
+    );
+  }
+
+  /** Hochkant von unten nach oben, wie die Zonentitel am linken Rand. */
+  function nv_gedrehter_text ($x, $y, $groesse, $stil, $text){
+    $this->SetTextColor (
+      $this->color_sw ['r'],
+      $this->color_sw ['g'],
+      $this->color_sw ['b']
+    );
+    $this->SetFont ("helvetica", $stil, $this->nv_punkt ($groesse));
+    $this->RotatedText (
+      $this->border ['left'] + $x,
+      $this->border ['top'] + $y,
+      estab_fpdf_text (estab_message_plain_text ($text)),
+      90
+    );
+  }
+
+  /** Die gedruckte Feldnummer der Ausfuellanleitung in der Feldecke. */
+  function nv_nummer ($x, $y, $nummer){
+    $this->nv_text (
+      $x,
+      $y,
+      $this->raster ['schrift']['nummer'],
+      "",
+      (string) $nummer
+    );
+  }
+
+  /** Die Linie, auf der ein eingetragener Wert steht. */
+  function nv_schreiblinie ($x1, $x2, $y){
+    $this->nv_linie ($x1, $y, $x2, $y, 0.25);
+  }
+
+  /** Ist dieses Kaestchen der Uebermittlungsmittel angekreuzt? */
+  function nv_mittel_gewaehlt (array $mittel, $gespeichert){
+    $wert = estab_message_medium_storage_value ($gespeichert);
+    return $wert !== null && in_array ($wert, $mittel ['werte'], true);
+  }
+
 
   function draw_text_with_link ($x, $y, $angle, $color, $size, $fontaz, $posv, $posh, $text, $link){
 //    $x += $this->border [left];
@@ -727,195 +673,529 @@ class vordruckaspdf extends PDF_Ellipse {
 /*******************************************************************************/
 /*******************************************************************************/
 /*******************************************************************************/
-  function gesamtrahmenbypoints (){
+  /*****************************************************************************
+     Das Blatt.
 
-//  print_r ($this->border);
+     Gezeichnet wird der Vordruck selbst: Rahmen, feste Beschriftungen,
+     Ankreuzfelder und die Feldnummern der Ausfuellanleitung. Die
+     eingetragenen Angaben setzt writedata_without_inhalt() darueber.
+  ******************************************************************************/
 
-    $this->draw_rectagle ( $this->left + $this->border ['left'],
-                           $this->top + $this->border ['top'],
-                           $this->right - $this->border ['right'],
-                           $this->bottom - $this->border ['bottom'],
-                           $this->fline01,
-                           $this->color_sw );
-    $this->draw_rectaglebypoints ( $this->point[22][0],
-                           $this->point[22][1],
-                           $this->point[51][0],
-                           $this->point[51][1],
-                           $this->fline02,
-                           $this->color_sw );
-
-  }
-
-  function linesbypoints (){
-
-    $this->draw_linebypoint (   5,  8, $this->fline00, $this->color_sw);
-    $this->draw_linebypoint (   2, 19, $this->fline00, $this->color_sw);
-    $this->draw_linebypoint (   7, 15, $this->fline00, $this->color_sw);
-    $this->draw_linebypoint (   3, 16, $this->fline00, $this->color_sw);
-    $this->draw_linebypoint (   9, 12, $this->fline00, $this->color_sw);
-    $this->draw_linebypoint (  13, 17, $this->fline00, $this->color_sw);
-    $this->draw_linebypoint (  18, 21, $this->fline00, $this->color_sw);
-    $this->draw_linebypoint (  24, 25, $this->fline00, $this->color_sw);
-    $this->draw_linebypoint (  20, 27, $this->fline00, $this->color_sw);
-    $this->draw_linebypoint (  32, 36, $this->fline00, $this->color_sw);
-    // Nachrichtenform und Vorrang teilen sich wie im Bildschirmvordruck eine
-    // Zeile im amtlichen 61/39-Schnitt. Die frueheren Zusatzfelder werden
-    // nicht mehr gezeichnet.
-    $this->draw_linebypoint (  58, 59, $this->fline00, $this->color_sw);
-    $this->draw_linebypoint (  29, 33, $this->fline00, $this->color_sw);
-    $this->draw_linebypoint (  34, 37, $this->fline00, $this->color_sw);
-
-    // Der Betreff belegt die amtliche Inhalts-Kopfzeile. Der eigentliche
-    // Nachrichtentext beginnt darunter und bleibt über Folgeseiten identisch
-    // eingerückt.
-    $subjectBottom = $this->border ['top'] + $this->point [34][1] + 10;
-    $this->draw_line (
-      $this->border ['left'] + $this->point [34][0],
-      $subjectBottom,
-      $this->border ['left'] + $this->point [37][0],
-      $subjectBottom,
-      $this->fline00,
-      $this->color_sw
+  function nv_blatt (){
+    $this->ziele ();
+    // Blatt 1 des Vordrucks ist blau. Oberflaeche und Browserdruck zeigen
+    // denselben Ton; ein weisses PDF waere wieder ein anderes Blatt.
+    $this->nv_flaeche (
+      0,
+      0,
+      $this->raster ['breite'],
+      $this->raster ['hoehe'],
+      $this->raster ['papier']
     );
-    $this->draw_line (
-      $this->border ['left'] + $this->point [34][0] + 34,
-      $this->border ['top'] + $this->point [34][1],
-      $this->border ['left'] + $this->point [34][0] + 34,
-      $subjectBottom,
-      $this->fline00,
-      $this->color_sw
+    $this->nv_rand ();
+    $this->nv_zone_fernmeldezentrale ();
+    $this->nv_zone_verfasser ();
+    $this->nv_zone_sichter ();
+  }
+
+  /** Die linke Randspalte: Zonentitel, Durchschriften, Lochmarken. */
+  function nv_rand (){
+    $r = $this->raster;
+    $this->nv_gedrehter_text (
+      10.6, 37.4, $r ['schrift']['zonentitel'], "", "Fm-Zentrale"
+    );
+    $this->nv_gedrehter_text (
+      10.6, 261.9, $r ['schrift']['zonentitel'], "", "Sichter"
+    );
+    foreach ($r ['durchschriften'] as $durchschrift) {
+      $this->nv_gedrehter_text (
+        $durchschrift ['x'],
+        $durchschrift ['unten'],
+        $r ['schrift']['durchschrift'],
+        "",
+        $durchschrift ['text']
+      );
+    }
+    $this->SetLineWidth (0.25);
+    $this->SetDrawColor (
+      $this->color_sw ['r'],
+      $this->color_sw ['g'],
+      $this->color_sw ['b']
+    );
+    $this->SetFillColor (255, 255, 255);
+    foreach ($r ['lochmarken']['y'] as $mitte) {
+      $this->Circle (
+        $this->border ['left'] + $r ['lochmarken']['x'],
+        $this->border ['top'] + $mitte,
+        $r ['lochmarken']['radius'],
+        "FD"
+      );
+    }
+    // Die beiden Balken trennen Fernmeldezentrale, Verfasser und Sichter.
+    // Sie sind das einzige, was man auf Armlaenge noch erkennt.
+    foreach (
+      array ($r ['y']['fmz_ende'], $r ['y']['inhalt_ende']) as $balken
+    ) {
+      $this->nv_flaeche (
+        11.2,
+        $balken,
+        11.2 + 173.7,
+        $balken + $r ['strich']['balken'],
+        $this->color_sw
+      );
+    }
+  }
+
+  /** Felder 1 bis 6: was die Fernmeldezentrale traegt. */
+  function nv_zone_fernmeldezentrale (){
+    $r = $this->raster;
+    $x = $r ['x'];
+    $y = $r ['y'];
+    $schrift = $r ['schrift'];
+
+    $this->nv_rahmen (
+      $x ['randspalte'], $y ['fmz_oben'], $x ['blatt'], $y ['fmz_ende'],
+      $r ['strich']['rahmen']
     );
 
-    $this->draw_linebypoint (  38, 40, $this->fline00, $this->color_sw);
-    $this->draw_linebypoint (  41, 45, $this->fline00, $this->color_sw);
-    $this->draw_linebypoint (  39, 47, $this->fline00, $this->color_sw);
-    $this->draw_linebypoint (  43, 48, $this->fline00, $this->color_sw);
-    $this->draw_linebypoint (  44, 50, $this->fline00, $this->color_sw);
-    $this->draw_linebypoint (  52, 53, $this->fline00, $this->color_sw);
-    $this->draw_linebypoint (  49, 55, $this->fline00, $this->color_sw);
+    // Feld 1: das tatsaechlich benutzte Uebermittlungsmittel.
+    $this->nv_linie (
+      $x ['randspalte'], $y ['medium_ende'], $x ['ttb'], $y ['medium_ende']
+    );
+    foreach ($r ['mittel'] as $spalte => $mittel) {
+      $links = $r ['mittelspalten']['feld1'][$spalte];
+      $this->nv_ankreuzfeld (
+        $links,
+        1.3,
+        $r ['kaestchen']['mittel'],
+        $this->nv_mittel_gewaehlt ($mittel, $this->db_dataset ["01_medium"])
+      );
+      $this->nv_text (
+        $links + $r ['kaestchen']['mittel'] + 1.0,
+        2.1,
+        $schrift ['mittel'],
+        "",
+        $mittel ['name']
+      );
+    }
+    $this->nv_nummer (18.3, 5.1, 1);
+
+    // Feld 5: das Technische Betriebsbuch fuehrt Richtung und Nummer.
+    $this->nv_linie (
+      $x ['ttb'], $y ['fmz_oben'], $x ['ttb'], $y ['stempel_ende']
+    );
+    $this->nv_text (152.4, 1.1, $schrift ['feld'], "", "Technisches");
+    $this->nv_text (152.4, 5.4, $schrift ['feld'], "", "Betriebsbuch");
+    $this->nv_text (152.4, 13.2, $schrift ['feld'], "", "Nr.");
+    $this->nv_rahmen (159.8, 11.4, 183.5, 18.7);
+    $richtung = (string) $this->db_dataset ["04_richtung"];
+    $this->nv_ankreuzfeld (
+      158.2, 20.0, $r ['kaestchen']['ttb'], $richtung === "E"
+    );
+    $this->nv_text (164.3, 20.5, $schrift ['feld'], "", "Eingang");
+    $this->nv_ankreuzfeld (
+      158.2, 27.3, $r ['kaestchen']['ttb'], $richtung === "A"
+    );
+    $this->nv_text (164.3, 27.9, $schrift ['feld'], "", "Ausgang");
+    $this->nv_nummer (152.0, 31.5, 5);
+
+    // Eingang und Ausgang teilen die drei Bearbeitungsvermerke.
+    $this->nv_linie (
+      $x ['randspalte'], $y ['richtung_ende'],
+      $x ['ttb'], $y ['richtung_ende']
+    );
+    $this->nv_text (
+      $x ['raster'], 7.8, $schrift ['feld'], "", "Eingang",
+      $x ['eingang_ende'] - $x ['raster'], "C"
+    );
+    $this->nv_text (
+      $x ['eingang_ende'], 7.8, $schrift ['feld'], "", "Ausgang",
+      $x ['ttb'] - $x ['eingang_ende'], "C"
+    );
+    $this->nv_linie (
+      $x ['eingang_ende'], $y ['medium_ende'],
+      $x ['eingang_ende'], $y ['richtung_ende']
+    );
+
+    // Felder 2 bis 4: Aufnahme-, Annahme- und Befoerderungsvermerk.
+    $this->nv_linie (
+      $x ['randspalte'], $y ['stempel_ende'],
+      $x ['ttb'], $y ['stempel_ende']
+    );
+    foreach ($r ['vermerke'] as $vermerk) {
+      if ($vermerk ['links'] > $x ['raster']) {
+        $this->nv_linie (
+          $vermerk ['links'], $y ['richtung_ende'],
+          $vermerk ['links'], $y ['stempel_ende']
+        );
+      }
+      $this->nv_text (
+        $vermerk ['links'], 13.2, $schrift ['feld'], "B", $vermerk ['titel'],
+        $vermerk ['rechts'] - $vermerk ['links'], "C"
+      );
+      foreach (
+        array ($vermerk ['datum'], $vermerk ['zeit']) as $teiler
+      ) {
+        $this->nv_linie (
+          $teiler, $y ['stempel_kopf'], $teiler, $y ['stempel_ende']
+        );
+      }
+      $this->nv_linie (
+        $vermerk ['links'], $y ['stempel_fuss'],
+        $vermerk ['rechts'], $y ['stempel_fuss']
+      );
+      $spalten = array (
+        array ($vermerk ['links'], $vermerk ['datum'], "Datum"),
+        array ($vermerk ['datum'], $vermerk ['zeit'], "Uhrzeit"),
+        array ($vermerk ['zeichen'], $vermerk ['rechts'], "Hdz."),
+      );
+      foreach ($spalten as $spalte) {
+        $this->nv_text (
+          $spalte [0], 29.2, $schrift ['klein'], "", $spalte [2],
+          $spalte [1] - $spalte [0], "C"
+        );
+        $this->nv_schreiblinie ($spalte [0] + 1.2, $spalte [1] - 1.2, 26.9);
+      }
+      $this->nv_nummer (
+        $vermerk ['links'] + 0.7, 31.2, $vermerk ['nummer']
+      );
+    }
+
+    // Feld 6: Rufname der Gegenstelle.
+    $this->nv_linie (72.7, $y ['stempel_ende'], 72.7, $y ['fmz_ende']);
+    $this->nv_text (
+      18.5, 34.4, $schrift ['feld'], "", "Rufname der Gegenstelle"
+    );
+    $this->nv_text (19.4, 38.5, $schrift ['mittel'], "", "Spruchkopf");
+    $this->nv_schreiblinie (74.2, 183.2, 43.1);
+    $this->nv_nummer (18.3, 44.2, 6);
   }
 
-/*******************************************************************************/
-  function fixtext (){
-    // Feld 1
-    $this->draw_text (  27,   2.5,  0, $this->color_sw, $this->fontsize01, "b", "o", "z", "EINGANG" );
-    $this->draw_text (  27,   7,  0, $this->color_sw, $this->fontsize00, "n", "o", "z", "Aufnahmevermerk" );
-    $this->draw_text (  27,  26,  0, $this->color_sw, $this->fontsize00, "n", "o", "z", "Datum   Zeit   Kürzel" );
+  /** Felder 7 bis 17: was der Verfasser traegt. */
+  function nv_zone_verfasser (){
+    $r = $this->raster;
+    $x = $r ['x'];
+    $y = $r ['y'];
+    $schrift = $r ['schrift'];
 
+    $this->nv_linie (
+      $x ['randspalte'], $y ['inhalt_oben'],
+      $x ['randspalte'], $y ['inhalt_ende']
+    );
+    $this->nv_linie (
+      $x ['blatt'], $y ['inhalt_oben'], $x ['blatt'], $y ['inhalt_ende']
+    );
 
+    // Feld 7: das gewuenschte Uebermittlungsmittel.
+    foreach ($r ['mittel'] as $spalte => $mittel) {
+      $links = $r ['mittelspalten']['feld7'][$spalte];
+      $this->nv_ankreuzfeld (
+        $links,
+        48.9,
+        $r ['kaestchen']['mittel'],
+        $this->nv_mittel_gewaehlt ($mittel, $this->db_dataset ["06_befwegausw"])
+      );
+      $this->nv_text (
+        $links + $r ['kaestchen']['mittel'] + 1.0,
+        49.7,
+        $schrift ['mittel'],
+        "",
+        $mittel ['name']
+      );
+    }
+    $this->nv_nummer (18.3, 53.4, 7);
+    $this->nv_linie (
+      $x ['randspalte'], $y ['weg_ende'], $x ['blatt'], $y ['weg_ende']
+    );
 
-    $this->draw_text (  97,   2.4,  0, $this->color_sw, $this->fontsize01, "b", "o", "z", "AUSGANG" );
-    $this->draw_text (  76,   7,  0, $this->color_sw, $this->fontsize00, "n", "o", "z", "Annahmevermerk" );
-    $this->draw_text (  76,  26,  0, $this->color_sw, $this->fontsize00, "n", "o", "z", "Zeit   Kürzel" );
+    // Feld 8: Durchsage oder Spruch. Keines von beiden ist vorbelegt.
+    $durchspruch = (string) $this->db_dataset ["07_durchspruch"];
+    $this->nv_ankreuzfeld (
+      19.4, 57.3, $r ['kaestchen']['art'], $durchspruch === "D"
+    );
+    $this->nv_text (25.7, 58.1, $schrift ['feld'], "", "DURCHSAGE");
+    $this->nv_ankreuzfeld (
+      52.4, 57.3, $r ['kaestchen']['art'], $durchspruch === "S"
+    );
+    $this->nv_text (58.7, 58.1, $schrift ['feld'], "", "SPRUCH");
+    $this->nv_nummer (18.3, 61.8, 8);
 
-    $this->draw_text ( 120,   7,  0, $this->color_sw, $this->fontsize00, "n", "o", "z", "Beförderungsvermerk" );
-    $this->draw_text ( 120,  26,  0, $this->color_sw, $this->fontsize00, "n", "o", "z", "Datum   Zeit   Kürzel" );
+    // Feld 9: die Vorrangstufe. Ohne besondere Stufe bleibt das Feld leer.
+    $this->nv_linie (
+      $x ['zeichen'], $y ['weg_ende'], $x ['zeichen'], $y ['art_ende']
+    );
+    $stufe = (string) $this->db_dataset ["09_vorrangstufe"];
+    $this->nv_ankreuzfeld (
+      121.6, 57.9, $r ['kaestchen']['vorrang'], $stufe === "Sofort"
+    );
+    $this->nv_text (125.8, 58.4, $schrift ['hinweis'], "", "Sofort");
+    $this->nv_ankreuzfeld (
+      134.3, 57.9, $r ['kaestchen']['vorrang'], $stufe === "Blitz"
+    );
+    $this->nv_text (138.5, 58.4, $schrift ['hinweis'], "", "Blitz");
+    if ($stufe !== "" && $stufe !== "Sofort" && $stufe !== "Blitz") {
+      // Der Ausdruck darf kein Ankreuzfeld vortaeuschen, das der Vordruck
+      // nicht hat. Eine weitere Stufe wird deshalb benannt, nicht gekreuzt.
+      $this->nv_text (
+        144.8, 58.4, $schrift ['hinweis'], "", "Vorrangstufe: " . $stufe
+      );
+    }
+    $this->nv_nummer (120.5, 61.8, 9);
+    $this->nv_linie (
+      $x ['randspalte'], $y ['art_ende'], $x ['blatt'], $y ['art_ende']
+    );
 
+    // Felder 10 und 11: Anschrift und Rufnummer.
+    $this->nv_linie (
+      $x ['kopfspalte'], $y ['art_ende'],
+      $x ['kopfspalte'], $y ['adresse_ende']
+    );
+    $this->nv_linie (
+      $x ['randspalte'], $y ['anschrift_ende'],
+      $x ['kopfspalte'], $y ['anschrift_ende']
+    );
+    $this->nv_text (18.5, 64.9, $schrift ['feld'], "", "Anschrift:");
+    $this->nv_nummer (18.3, 70.7, 10);
+    $this->nv_schreiblinie (52.1, 149.9, 71.8);
+    $this->nv_text (18.5, 73.8, $schrift ['feld'], "", "Ruf Nr.");
+    $this->nv_nummer (18.3, 84.9, 11);
+    $this->nv_schreiblinie (52.4, 149.9, 83.2);
 
-    $this->draw_text ( 165,  2.3,   0, $this->color_sw, $this->fontsize01, "b", "o", "z", "Nachweis-Nr." );
+    // Feld 12: die Gespraechsnotiz steht neben Anschrift und Rufnummer.
+    $this->nv_linie (
+      $x ['notiz'], $y ['art_ende'], $x ['notiz'], $y ['adresse_ende']
+    );
+    $this->nv_linie (
+      $x ['notiz'], $y ['anschrift_ende'],
+      $x ['blatt'], $y ['anschrift_ende']
+    );
+    $this->nv_text (152.4, 64.7, $schrift ['feld'], "", "GESPRÄCHS-");
+    $this->nv_text (152.4, 68.7, $schrift ['feld'], "", "NOTIZ");
+    $this->nv_ankreuzfeld (
+      164.3,
+      76.0,
+      $r ['kaestchen']['notiz'],
+      $this->db_dataset ["11_gesprnotiz"] == true
+    );
+    $this->nv_nummer (152.4, 84.9, 12);
+    $this->nv_linie (
+      $x ['randspalte'], $y ['adresse_ende'],
+      $x ['blatt'], $y ['adresse_ende']
+    );
 
-    $this->draw_text ( 2,  31,  0, $this->color_sw, $this->fontsize00, "n", "o", "l", "Rufname der Gegenstelle/" );
-    $this->draw_text ( 2,  34,  0, $this->color_sw, $this->fontsize00, "n", "o", "l", "Spruchkopf" );
+    // Feld 13: der Betreff steht in der Kopfzeile des Inhalts.
+    $this->nv_linie (
+      $x ['kopfspalte'], $y ['adresse_ende'],
+      $x ['kopfspalte'], $y ['betreff_ende']
+    );
+    $this->nv_text (18.5, 88.0, $schrift ['feld'], "", "Inhalt");
+    $this->nv_nummer (18.3, 94.8, 13);
+    $this->nv_schreiblinie (52.1, 183.1, 95.2);
+    $this->nv_linie (
+      $x ['randspalte'], $y ['betreff_ende'],
+      $x ['blatt'], $y ['betreff_ende']
+    );
 
-    $this->draw_text ( 2,  40,  0, $this->color_sw, $this->fontsize00, "n", "o", "l", "Beförderungsweg" );
+    // Feld 14: der Nachrichtentext. Die Linien traegt das Papier, auch
+    // wenn niemand darauf schreibt.
+    $zeile = $y ['betreff_ende'] + $r ['zeilenhoehe'];
+    while ($zeile < $y ['text_ende'] - 0.5) {
+      $this->nv_schreiblinie ($x ['raster'], $x ['blatt'] - 0.2, $zeile);
+      $zeile += $r ['zeilenhoehe'];
+    }
+    $this->nv_nummer (18.3, 192.9, 14);
+    $this->nv_linie (
+      $x ['randspalte'], $y ['text_ende'], $x ['blatt'], $y ['text_ende']
+    );
 
-    $this->draw_text ( 118,  48,  0, $this->color_sw, $this->fontsize00, "n", "o", "l", "Vorrang" );
-    $this->draw_text (   2,  61,  0, $this->color_sw, $this->fontsize00, "n", "o", "l", "Anschrift" );
-    $this->draw_text (   2,  69,  0, $this->color_sw, $this->fontsize00, "n", "o", "l", "Ruf Nr." );
-    $this->draw_text ( 137,  61,  0, $this->color_sw, $this->fontsize00, "n", "o", "l", "Gesprächsnotiz" );
+    // Feld 15: der Absender.
+    $this->nv_linie (
+      $x ['kopfspalte'], $y ['text_ende'],
+      $x ['kopfspalte'], $y ['absender_ende']
+    );
+    $this->nv_text (18.5, 196.0, $schrift ['feld'], "", "Absender:");
+    $this->nv_nummer (18.3, 203.4, 15);
+    $this->nv_schreiblinie (52.1, 183.1, 203.5);
+    $this->nv_linie (
+      $x ['randspalte'], $y ['absender_ende'],
+      $x ['blatt'], $y ['absender_ende']
+    );
 
-    $this->draw_text ( $this->point [34][0]+2,
-                       $this->point [34][1]+2,  0, $this->color_sw, $this->fontsize00, "n", "o", "l", "Inhalt" );
+    // Feld 16: die Abfassungszeit.
+    $this->nv_linie (
+      $x ['kopfspalte'], $y ['absender_ende'],
+      $x ['kopfspalte'], $y ['abfassung_ende']
+    );
+    $this->nv_linie (
+      $x ['abfassung_ende'], $y ['absender_ende'],
+      $x ['abfassung_ende'], $y ['abfassung_ende']
+    );
+    $this->nv_text (18.5, 206.6, $schrift ['feld'], "", "Abfassungszeit:");
+    $this->nv_nummer (18.3, 214.0, 16);
+    $this->nv_schreiblinie (52.1, 117.2, 214.1);
+    $this->nv_linie (
+      $x ['randspalte'], $y ['abfassung_ende'],
+      $x ['blatt'], $y ['abfassung_ende']
+    );
 
-    $this->draw_text ( $this->point [38][0]+2,
-                       $this->point [38][1]+2,  0, $this->color_sw, $this->fontsize00, "n", "o", "l", "Abfassungszeit" );
-
-    $this->draw_text ( $this->point [41][0]+2,
-                       $this->point [41][1]+2,  0, $this->color_sw, $this->fontsize00, "n", "o", "l", "Absender" );
-
-    $this->draw_text ( $this->point [42][0]+($this->point [43][0]-$this->point [42][0])/2,
-                       $this->point [47][1]-3,  0, $this->color_sw, $this->fontsize00, "n", "o", "z", "Einheit/Einrichtung/Stelle" );
-
-    $this->draw_text ( $this->point [43][0]+($this->point [44][0]-$this->point [43][0])/2,
-                       $this->point [48][1]-3,  0, $this->color_sw, $this->fontsize00, "n", "o", "z", "Zeichen" );
-
-    $this->draw_text ( $this->point [44][0]+2,
-                       $this->point [50][1]-3,  0, $this->color_sw, $this->fontsize00, "n", "o", "l", "Funktion" );
-
-    $this->draw_text ( $this->point [46][0]+2,
-                       $this->point [46][1]+2,  0, $this->color_sw, $this->fontsize00, "n", "o", "l", "Quittung" );
-
-    $this->draw_text ( $this->point [46][0]+30,
-                       $this->point [46][1]+10,  0, $this->color_sw, $this->fontsize00, "n", "o", "l", "Zeit  Zeichen" );
-
-    $this->draw_text ( $this->point [49][0]+2,
-                       $this->point [49][1]+2,   0, $this->color_sw, $this->fontsize00, "n", "o", "l", "Vermerk" );
+    // Feld 17: Einheit, Zeichen und Funktion des Verfassers.
+    $this->nv_linie (
+      $x ['zeichen'], $y ['abfassung_ende'],
+      $x ['zeichen'], $y ['inhalt_ende']
+    );
+    $this->nv_linie (
+      $x ['funktion'], $y ['abfassung_ende'],
+      $x ['funktion'], $y ['inhalt_ende']
+    );
+    $this->nv_schreiblinie (18.9, 118.2, 223.2);
+    $this->nv_text (
+      18.9, 223.6, $schrift ['feld'], "", "Einheit/Einrichtung/Stelle",
+      99.3, "C"
+    );
+    $this->nv_rahmen (121.1, 216.9, 151.6, 223.5);
+    $this->nv_text (
+      121.1, 223.9, $schrift ['feld'], "", "Zeichen", 30.5, "C"
+    );
+    $this->nv_schreiblinie (154.5, 183.3, 223.5);
+    $this->nv_text (
+      154.5, 223.9, $schrift ['feld'], "", "Funktion", 28.8, "C"
+    );
+    $this->nv_nummer (120.5, 225.9, 17);
   }
 
+  /** Felder 18 bis 20: was der Sichter traegt. */
+  function nv_zone_sichter (){
+    $r = $this->raster;
+    $x = $r ['x'];
+    $y = $r ['y'];
+    $schrift = $r ['schrift'];
 
-  function draw_textfield ($x1, $y1, $x2, $y2, $color, $ntext){
+    $this->nv_rahmen (
+      $x ['randspalte'], $y ['sichter_oben'],
+      $x ['blatt'], $y ['sichter_ende'],
+      $r ['strich']['rahmen']
+    );
+    $this->nv_linie (
+      $x ['sichter_teiler'], $y ['sichter_oben'],
+      $x ['sichter_teiler'], $y ['sichter_ende']
+    );
 
-    $x1 += $this->border ['left'];
-    $y1 += $this->border ['top'];
-    $x2 += $this->border ['left'];
-    $y2 += $this->border ['top'];
+    // Feld 18: die Quittung.
+    $this->nv_linie (17.6, 237.3, 119.2, 237.3);
+    $this->nv_linie (55.6, $y ['sichter_oben'], 55.6, 237.3);
+    $this->nv_text (18.5, 229.7, $schrift ['feld'], "", "Quittung:");
+    $this->nv_schreiblinie (56.9, 96.8, 236.4);
+    $this->nv_schreiblinie (97.9, 117.8, 236.4);
+    $this->nv_text (
+      17.6, 237.9, $schrift ['feld'], "", "Uhrzeit", 50.8, "C"
+    );
+    $this->nv_text (
+      68.4, 237.9, $schrift ['feld'], "", "Zeichen", 50.8, "C"
+    );
+    $this->nv_nummer (18.3, 240.6, 18);
+    $this->nv_linie (
+      $x ['randspalte'], $y ['quittung_ende'],
+      $x ['sichter_teiler'], $y ['quittung_ende']
+    );
 
+    // Feld 19: der Verteiler in seinen drei gedruckten Bloecken.
+    $this->nv_verteiler ();
+    $this->nv_nummer (18.3, 276.5, 19);
 
-    $this->SetXY ($x1, $y1);
-    $this->SetTextColor ($color['r'],$color['g'],$color['b']);
-    $this->SetFont ("helvetica","B",$this->fontsize01);
-    $text = estab_fpdf_text(estab_message_plain_text($ntext));
-
-    $delta_x = $x2 - $x1 ;
-    $delta_y = $y2 - $y1 ;
-
-    $this->MultiCell ($delta_x, 5, $text);
-//    $this->MultiCell (0,5,$text);
+    // Feld 20: Vermerke und Erledigung.
+    $this->nv_linie (
+      $x ['sichter_teiler'], 238.2, $x ['blatt'], 238.2
+    );
+    $this->nv_text (120.2, 229.7, $schrift ['feld'], "", "Vermerke:");
+    $this->nv_nummer (120.2, 276.5, 20);
   }
 
   /**
-   * Draw one field value on a single official-form line without crossing the
-   * neighbouring cell. FPDF core fonts use Windows-1252, so byte-wise fitting
-   * is deterministic after conversion.
+   * Feld 19: die Empfaengermatrix als die drei Bloecke des Vordrucks.
+   *
+   * Fuehrung, Fachberater und Verbindungsstellen -- dieselbe Zuordnung, die
+   * die Bildschirmansicht benutzt (app/nv_verteiler.php). Ein Empfaenger,
+   * der gespeichert ist, aber in keiner Zelle der Matrix mehr steht, hat auf
+   * dem Blatt keinen Platz; er wird unter dem Nachrichtentext benannt.
    */
-  function draw_fitted_textfield (
-    $x1,
-    $y1,
-    $x2,
-    $color,
-    $size,
-    $ntext
-  ) {
-    $x1 += $this->border ['left'];
-    $y1 += $this->border ['top'];
-    $x2 += $this->border ['left'];
-
-    $this->SetTextColor ($color['r'], $color['g'], $color['b']);
-    $this->SetFont ("helvetica", "B", $size);
-    $plain = preg_replace (
-      "/[\\r\\n]+/",
-      " ",
-      estab_message_plain_text ($ntext)
+  function nv_verteiler (){
+    $r = $this->raster;
+    $schrift = $r ['schrift'];
+    $modell = estab_nv_verteiler_modell (
+      is_array ($this->empfarray) ? $this->empfarray : array (),
+      estab_nv_gespeicherte_empfaenger (
+        (string) $this->db_dataset ["16_empf"]
+      )
     );
-    $text = estab_fpdf_text ($plain === null ? "" : $plain);
-    $maximumWidth = max (0, $x2 - $x1 - 1);
-    if ($this->GetStringWidth ($text) > $maximumWidth) {
-      $suffix = "...";
-      $maximumTextWidth = max (
-        0,
-        $maximumWidth - $this->GetStringWidth ($suffix)
+    $ueberschriften = estab_nv_verteiler_ueberschriften ();
+    $bloecke = array (
+      "lead" => array ("x" => 19.3, "breite" => 40.3),
+      "adviser" => array ("x" => 60.7, "breite" => 27.8),
+      "liaison" => array ("x" => 89.7, "breite" => 27.8),
+    );
+    $kante = $r ['kaestchen']['verteiler'];
+    foreach ($bloecke as $name => $block) {
+      $this->nv_text (
+        $block ['x'], 243.4, $schrift ['gruppe'], "B", $ueberschriften [$name]
       );
-      while (
-        $text !== ""
-        && $this->GetStringWidth ($text) > $maximumTextWidth
-      ) {
-        $text = rtrim (substr ($text, 0, -1));
+      $eintraege = $modell ['groups'][$name] ?? array ();
+      if ($name === "lead") {
+        // Der Leiter steht ueber der Spalte der Sachgebiete, nicht in ihr.
+        $this->nv_verteiler_eintrag (
+          19.3, 247.0, 17.4, $kante, $eintraege [0] ?? null
+        );
+        foreach (array_slice ($eintraege, 1) as $platz => $eintrag) {
+          $this->nv_verteiler_eintrag (
+            37.4, 247.4 + $platz * 4.78, 22.2, $kante, $eintrag
+          );
+        }
+        continue;
       }
-      $text .= $suffix;
+      foreach ($eintraege as $platz => $eintrag) {
+        $this->nv_verteiler_eintrag (
+          $block ['x'],
+          247.0 + $platz * 5.05,
+          $block ['breite'],
+          $kante,
+          $eintrag
+        );
+      }
     }
-    $this->SetXY ($x1, $y1);
-    $this->Cell ($maximumWidth, 5, $text, 0, 0, "L");
   }
+
+  /** Ein Platz des Verteilers: Kaestchen, Name und die Linie darunter. */
+  function nv_verteiler_eintrag ($x, $y, $breite, $kante, $eintrag){
+    $r = $this->raster;
+    $this->nv_schreiblinie ($x, $x + $breite, $y + $kante + 0.6);
+    if (!is_array ($eintrag)) {
+      return;
+    }
+    $name = estab_function_display_name (
+      (string) ($eintrag ['display'] ?? $eintrag ['function'] ?? "")
+    );
+    $unbesetzt = (bool) ($eintrag ['unavailable'] ?? false);
+    $gewaehlt = is_array ($eintrag ['copies'] ?? null)
+      && $eintrag ['copies'] !== array ();
+    if (!$unbesetzt || $gewaehlt) {
+      $this->nv_ankreuzfeld ($x, $y, $kante, $gewaehlt);
+    } else {
+      // Ein Platz, den die Matrix nicht besetzt, bleibt ein leerer Kasten.
+      $this->nv_ankreuzfeld ($x, $y, $kante, false);
+    }
+    if ($name === "") {
+      return;
+    }
+    $this->nv_text (
+      $x + $kante + 0.9,
+      $y + 0.2,
+      $r ['schrift']['verteiler'],
+      "",
+      $name,
+      max (0.0, $breite - $kante - 0.9),
+      "L"
+    );
+  }
+
 
   var $empfarray ;
 
@@ -935,10 +1215,13 @@ class vordruckaspdf extends PDF_Ellipse {
     for ($i=1; $i <= 5 ; $i++){
       for ($j=1; $j <= 4 ; $j++){
         $this->empfarray [$i][$j]["checked"] = false;
-//        $this->empfarray [$i][$j]["cpycol"]  = "";
-//        $this->empfarray [$i][$j]["typ"]     = $empf_matrix [$i][$j]["typ"];
         $this->empfarray [$i][$j]["fkt"]     = $empf_matrix [$i][$j]["fkt"];
-//        $this->empfarray [$i][$j]["rolle"]   = $empf_matrix [$i][$j]["rolle"];
+        // Die Rolle entscheidet, in welchen der drei gedruckten Bloecke
+        // von Feld 19 die Zelle gehoert (app/nv_verteiler.php).
+        $this->empfarray [$i][$j]["rolle"]   =
+          isset ($empf_matrix [$i][$j]["rolle"])
+            ? $empf_matrix [$i][$j]["rolle"]
+            : "";
       }
     }
     $empf_text  = $this->db_dataset ["16_empf"] ; // Zeile mit den Empfaengern aus der DB
@@ -999,201 +1282,231 @@ class vordruckaspdf extends PDF_Ellipse {
 
 
 
-  function mediumselect () {
-      // Aufnamevermerk
-    $this->draw_mediumselect (  3,  11, $this->db_dataset ["01_medium"]);
-      // Beförderungsweg
-    $this->draw_mediumselect (138,  42, $this->db_dataset ["06_befwegausw"]);
 
-    if ( $this->db_dataset ["07_durchspruch"] == "D"){ $select_D = true;}else{$select_D = false;}
-    $this->draw_checkbox  (  3,  49, $select_D, $this->fontsize00, "DURCHSAGE" );
-
-    if ( $this->db_dataset ["07_durchspruch"] == "S"){ $select_S = true;}else{$select_S = false;}
-    $this->draw_checkbox  (  3,  53, $select_S, $this->fontsize00, "SPRUCH" );
-
-    // Alle Vorrangstufen stehen direkt im Nachrichtenvordruck. Der gespeicherte
-    // Datenbankcode wurde in set_message_form_data() bereits in die sichtbare
-    // Langform uebersetzt; genau die gewaehlte Option wird angekreuzt.
-    $priorities = array (
-      array ("x" => 121, "label" => "Sofort"),
-      array ("x" => 140, "label" => "Blitz"),
-      array ("x" => 156, "label" => "Staatsnot")
-    );
-    foreach ($priorities as $priority) {
-      $this->draw_checkbox (
-        $priority ["x"],
-        53,
-        $this->db_dataset ["09_vorrangstufe"] == $priority ["label"],
-        $this->fontsize00,
-        $priority ["label"]
-      );
+  /**
+   * Zerlegt eine taktische Zeitangabe in Datum und Uhrzeit.
+   *
+   * Gespeichert wird "011847sep2026": Tag, Uhrzeit, Monat, Jahr in einem
+   * Stueck. Der Vordruck fuehrt dafuer zwei Spalten. Was nicht dem Muster
+   * folgt, bleibt ungeteilt in der Datumsspalte -- lieber ganz lesbar als
+   * halb falsch getrennt.
+   */
+  function nv_taktzeit_teile ($taktzeit){
+    $taktzeit = trim ((string) $taktzeit);
+    if (preg_match ("/\A(\d{2})(\d{4})([a-z]{3})(\d{4})\z/D", $taktzeit, $teile) === 1) {
+      return array ($teile [1] . $teile [3] . $teile [4], $teile [2]);
     }
+    return array ($taktzeit, "");
+  }
 
-    if ( $this->db_dataset ["11_gesprnotiz"] == "t"){ $select = true;}else{$select = false;}
-    $this->draw_radiobutton  ( 164, 66, $select, $this->fontsize00, "" );
-
-    $this->ziele();
-
-    $empf_matrix = $this->recipientMatrix;
-    $x0 =  $this->point [52][0] + 5 ;
-    $y0 =  $this->point [52][1] + 5 ;
-    $dx =  24 ;
-    $dy =  10 ;
-    for ($y=1; $y<=5; $y++){
-      for ($x=1; $x<=4; $x++){
-        if ( $empf_matrix[$y][$x]['fkt'] != "" ) {
-          if ( $this->empfarray [$y][$x]["checked"] ){ $select = true;}else{$select = false;}
-          $this->draw_radiobutton  ( $x0 + ($x-1)*$dx, $y0 + ($y-1)*$dy, $select, $this->fkt_size,  $empf_matrix[$y][$x]['fkt'] );
+  /**
+   * Setzt einen mehrzeiligen Wert in seinen Kasten.
+   *
+   * Der Umbruch geschieht an Wortgrenzen. Was nicht mehr in den Kasten
+   * passt, wird mit Auslassung abgeschnitten, statt ueber den Rahmen in das
+   * naechste Feld zu laufen.
+   */
+  function nv_textblock ($x, $y, $breite, $hoehe, $text, $groesse = null){
+    $groesse = $groesse === null ? $this->raster ['schrift']['wert'] : $groesse;
+    $zeilenhoehe = $groesse * 1.35;
+    $plaetze = (int) floor ($hoehe / $zeilenhoehe);
+    if ($plaetze < 1) {
+      return;
+    }
+    $klartext = estab_message_plain_text ((string) $text);
+    $this->SetFont ("helvetica", "B", $this->nv_punkt ($groesse));
+    $zeilen = array ();
+    foreach (preg_split ("/\R/", $klartext) as $absatz) {
+      $zeile = "";
+      foreach (preg_split ("/\s+/", trim ($absatz)) as $wort) {
+        if ($wort === "") {
+          continue;
         }
+        $versuch = $zeile === "" ? $wort : $zeile . " " . $wort;
+        if (
+          $this->GetStringWidth (estab_fpdf_text ($versuch)) <= $breite
+          || $zeile === ""
+        ) {
+          $zeile = $versuch;
+          continue;
+        }
+        $zeilen [] = $zeile;
+        $zeile = $wort;
       }
+      $zeilen [] = $zeile;
+    }
+    $zeilen = array_values (array_filter (
+      $zeilen,
+      static function ($zeile) { return $zeile !== ""; }
+    ));
+    $abgeschnitten = count ($zeilen) > $plaetze;
+    $zeilen = array_slice ($zeilen, 0, $plaetze);
+    if ($abgeschnitten && $zeilen !== array ()) {
+      $zeilen [count ($zeilen) - 1] .= " ...";
+    }
+    foreach ($zeilen as $nummer => $zeile) {
+      $this->nv_wert (
+        $x, $y + $nummer * $zeilenhoehe, $breite, $zeile, $groesse
+      );
     }
   }
 
-  function writedata_without_inhalt(){
-      // Eingang Aufnahmevermerk Datum/Zeit
-    $this->draw_text ( 27,  20,  0, $this->color_bl, $this->fontsize02, "b", "o", "z",
-                       $this->db_dataset ["01_datum"]." ".$this->db_dataset ["01_zeichen"] );
-      // Ausgang Annahmevermerk Datum/Zeit
-    $this->draw_text ( 76,  20,  0, $this->color_bl, $this->fontsize02, "b", "o", "z",
-               $this->db_dataset ["02_zeit"]." ".$this->db_dataset ["02_zeichen"] );
-      // Eingang Aufnahmevermerk Datum/Zeit
-    $this->draw_text ( 120, 20,  0, $this->color_bl, $this->fontsize02, "b", "o", "z",
-               $this->db_dataset ["03_datum"]." ".$this->db_dataset ["03_zeichen"] );
-      // Nachweisung E/A Nummer
-    $this->draw_text ( 146,  33,  0, $this->color_bl, $this->fontsize35, "b", "m", "l",
-               $this->db_dataset ["04_richtung"]." ".$this->db_dataset ["04_nummer"] );
+/*******************************************************************************/
+  /**
+   * Setzt alle eingetragenen Angaben ausser dem Nachrichtentext.
+   *
+   * Der Nachrichtentext steht allein, weil nur er ueber Seiten laeuft.
+   */
+  function writedata_without_inhalt (){
+    $r = $this->raster;
+    $schrift = $r ['schrift'];
 
-      // Rufname der Gegenstelle
-    $this->draw_text ( $this->point[14][0]+2,
-                       $this->point[14][1]+4,  0,
-                       $this->color_bl,
-                       $this->fontsize01, "b", "o", "l",
-                       $this->db_dataset ["05_gegenstelle"] );
-      // Beförderungsweg
-    $this->draw_text ( $this->point[24][0]+2,
-                       $this->point[24][1]+4,  0,
-                       $this->color_bl,
-                       $this->fontsize01, "b", "o", "l",
-                       $this->db_dataset ["06_befweg"] );
-      // Anschrift und Rufnummer stehen wie im amtlichen Vordruck gemeinsam
-      // neben dem Gesprächsnotiz-Feld.
-    $this->draw_fitted_textfield (
-      $this->point[29][0]+23,
-      $this->point[29][1]+1,
-      $this->point[36][0],
-      $this->color_bl,
-      $this->fontsize01,
-      $this->db_dataset ["10_anschrift"]
+    // Felder 2 bis 4: Datum, Uhrzeit und Handzeichen der drei Vermerke.
+    $eintraege = array (
+      array ($this->db_dataset ["01_datum"], $this->db_dataset ["01_zeichen"]),
+      array ($this->db_dataset ["02_zeit"], $this->db_dataset ["02_zeichen"]),
+      array ($this->db_dataset ["03_datum"], $this->db_dataset ["03_zeichen"]),
     );
-    $this->draw_fitted_textfield (
-      $this->point[29][0]+23,
-      $this->point[29][1]+9,
-      $this->point[36][0],
-      $this->color_bl,
-      $this->fontsize01,
-      $this->db_dataset ["11_rufnummer"]
-    );
+    foreach ($r ['vermerke'] as $platz => $vermerk) {
+      $geteilt = $this->nv_taktzeit_teile ($eintraege [$platz][0]);
+      $this->nv_wert (
+        $vermerk ['links'], 22.8, $vermerk ['datum'] - $vermerk ['links'],
+        $geteilt [0], $schrift ['klein'], "C"
+      );
+      $this->nv_wert (
+        $vermerk ['datum'], 22.8, $vermerk ['zeit'] - $vermerk ['datum'],
+        $geteilt [1], $schrift ['klein'], "C"
+      );
+      $this->nv_wert (
+        $vermerk ['zeichen'], 22.8,
+        $vermerk ['rechts'] - $vermerk ['zeichen'],
+        $eintraege [$platz][1], $schrift ['klein'], "C"
+      );
+    }
 
-      // Betreff in der eigenen Inhalts-Kopfzeile.
-    $this->draw_fitted_textfield (
-      $this->point[34][0]+36,
-      $this->point[34][1]+1,
-      $this->point[37][0],
-      $this->color_bl,
-      $this->fontsize01,
-      $this->db_dataset ["12_betreff"]
+    // Feld 5: die Nummer im Technischen Betriebsbuch. Sie fehlt, solange
+    // die Nachricht dort keinen Nachweis hat -- eine interne Notiz bekommt
+    // nie einen.
+    $nachweis = trim ((string) $this->db_dataset ["04_nummer"]);
+    $this->nv_wert (
+      160.3, 13.2, 22.7,
+      $nachweis === "" ? "noch kein TBB-Nachweis" : $nachweis,
+      $nachweis === "" ? $schrift ['durchschrift'] * 1.6 : $schrift ['wert'],
+      "C"
     );
 
+    // Feld 6: Rufname der Gegenstelle und der benutzte Befoerderungsweg.
+    // Der Weg gehoert nach der Ausfuellanleitung in dieses Feld; er wird
+    // benannt und nicht als Kaestchen vorgetaeuscht.
+    $weg = trim ((string) $this->db_dataset ["06_befweg"]);
+    if ($weg !== "") {
+      $this->nv_text (74.2, 34.8, $schrift ['hinweis'], "", "Beförderungsweg");
+      $this->nv_wert (96.2, 34.8, 87.0, $weg, $schrift ['hinweis']);
+    }
+    $this->nv_wert (74.2, 39.4, 109.0, $this->db_dataset ["05_gegenstelle"]);
 
-      // Anfassungszeit
-    $this->draw_text ( $this->point[39][0]+2,
-                       $this->point[39][1]+4,  0,
-                       $this->color_bl,
-                       $this->fontsize01, "b", "o", "l",
-                       $this->db_dataset ["12_abfzeit"] );
+    // Felder 10, 11 und 13.
+    $this->nv_wert (52.1, 67.4, 97.8, $this->db_dataset ["10_anschrift"]);
+    $this->nv_wert (52.4, 79.8, 97.5, $this->db_dataset ["11_rufnummer"]);
+    $this->nv_wert (52.1, 91.8, 131.0, $this->db_dataset ["12_betreff"]);
 
-     // Absende Einheit Stelle Einrichtung
-    $this->draw_text ( $this->point[42][0]+2,
-                       $this->point[42][1]+4,  0,
-                       $this->color_bl,
-                       $this->fontsize01, "b", "o", "l",
-                       $this->db_dataset ["13_abseinheit"] );
-      // Kürzel
-    $this->draw_text ( $this->point[43][0]+2,
-                       $this->point[43][1]+4,  0,
-                       $this->color_bl,
-                       $this->fontsize01, "b", "o", "l",
-                       $this->db_dataset ["14_zeichen"] );
-      // Funktion
-    $this->draw_text ( $this->point[44][0]+2,
-                       $this->point[44][1]+4,  0,
-                       $this->color_bl,
-                       $this->fontsize02, "b", "o", "l",
-                       $this->db_dataset ["14_funktion"] );
+    // Felder 15 bis 17.
+    $this->nv_wert (52.1, 200.1, 131.0, $this->db_dataset ["13_abseinheit"]);
+    $this->nv_wert (52.1, 210.7, 65.1, $this->db_dataset ["12_abfzeit"]);
+    $this->nv_wert (
+      121.6, 218.4, 29.5, $this->db_dataset ["14_zeichen"],
+      $schrift ['wert'], "C"
+    );
+    $this->nv_wert (154.5, 220.1, 28.8, $this->db_dataset ["14_funktion"]);
 
-      // Quittung
-    $this->draw_text ( $this->point[42][0]+2,
-                       $this->point[46][1]+6,  0,
-                       $this->color_bl,
-                       $this->fontsize01, "b", "o", "z ",
-                       $this->db_dataset ["15_quitdatum"]."  ".$this->db_dataset ["15_quitzeichen"] );
+    // Feld 18: die Quittung des Sichters.
+    $quittung = $this->nv_taktzeit_teile ($this->db_dataset ["15_quitdatum"]);
+    $this->nv_wert (
+      56.9, 233.0, 39.9,
+      trim ($quittung [0] . " " . $quittung [1]),
+      $schrift ['klein'], "C"
+    );
+    $this->nv_wert (
+      97.9, 233.0, 19.9, $this->db_dataset ["15_quitzeichen"],
+      $schrift ['klein'], "C"
+    );
 
-    $this->draw_textfield ( $this->point[49][0],
-                            $this->point[49][1]+5,
-                            $this->point[56][0],
-                            $this->point[56][1],
-                            $this->color_bl,
-                            $this->db_dataset["17_vermerke"]);
-
+    // Feld 20: Vermerke und Erledigung.
+    $this->nv_textblock (
+      120.7, 239.4, 63.3, 36.4, $this->db_dataset ["17_vermerke"],
+      $schrift ['klein']
+    );
   }
 
 
 /*******************************************************************************/
 
+  /**
+   * Feld 14: der Nachrichtentext, und was ihm sonst noch anhaengt.
+   *
+   * Als einziges Feld laeuft der Text ueber Seiten. Jede Folgeseite traegt
+   * denselben Vordruck; nur der Text setzt sich fort.
+   */
   function writedata_inhalt () {
-    $this->draw_textfield ( $this->point[34][0]+5,
-                            $this->point[34][1]+15,
-                            $this->point[40][0]-10,
-                            $this->point[40][1]-5,
-                            $this->color_bl,
-                            $this->db_dataset["12_inhalt"]
-//                            html_entity_decode($this->db_dataset["12_inhalt"]
-                            );
-    $x = $this->GetX ();
+    $r = $this->raster;
+    $this->set_message_content_continuation_position ();
+    $this->SetTextColor (
+      $this->color_eintrag ['r'],
+      $this->color_eintrag ['g'],
+      $this->color_eintrag ['b']
+    );
+    $this->SetFont ("helvetica", "B", $this->nv_punkt ($r ['schrift']['wert']));
+    // Linksbuendig, nicht im Blocksatz: auf dem Vordruck wird geschrieben,
+    // nicht gesetzt, und gedehnte Wortabstaende erschweren das Lesen.
+    $this->MultiCell (
+      $r ['x']['blatt'] - $r ['x']['raster'] - 3.4,
+      $r ['zeilenhoehe'],
+      estab_fpdf_text (
+        estab_message_plain_text ($this->db_dataset ["12_inhalt"])
+      ),
+      0,
+      "L"
+    );
+    // MultiCell() setzt die Schreibmarke auf den Seitenrand zurueck. Die
+    // Anlagen und die zusaetzlichen Empfaenger gehoeren aber unter den Text,
+    // also in dieselbe Einrueckung -- sonst stehen sie am Blattrand.
+    $textrand = $this->border ['left'] + $r ['x']['raster'] + 1.7;
     $y = $this->GetY ();
 
     if (count ($this->unmatchedRecipientLabels) > 0) {
-      $this->SetXY ($x + 5, $y);
+      $this->SetXY ($textrand, $y);
       $this->SetTextColor (
-        $this->color_bl ["r"],
-        $this->color_bl ["g"],
-        $this->color_bl ["b"]
+        $this->color_eintrag ["r"],
+        $this->color_eintrag ["g"],
+        $this->color_eintrag ["b"]
       );
-      $this->SetFont ("helvetica", "B", $this->fontsize00);
+      $this->SetFont ("helvetica", "B", $this->nv_punkt ($r ['schrift']['klein']));
       $this->MultiCell (
-        $this->point[40][0] - $this->point[34][0] - 15,
-        5,
+        $r ['x']['blatt'] - $r ['x']['raster'] - 3.4,
+        $r ['zeilenhoehe'],
         estab_fpdf_text (
           "Empfänger außerhalb aktueller Matrix: "
           . implode (", ", $this->unmatchedRecipientLabels)
-        )
+        ),
+        0,
+        "L"
       );
-      $x = $this->GetX ();
       $y = $this->GetY ();
     }
 
-    if ($this->db_dataset["12_anhang"] != ""){
-      $this->list_anhang ($x+5,$y);
+    if ($this->db_dataset ["12_anhang"] != ""){
+      $this->list_anhang ($textrand, $y);
     }
   }
 
 
 
 /*******************************************************************************/
+  /** Die Stelle, an der der Nachrichtentext beginnt und fortgesetzt wird. */
   function set_message_content_continuation_position () {
     $this->SetXY (
-      $this->point[34][0] + $this->border['left'] + 5,
-      $this->point[34][1] + $this->border['top'] + 15
+      $this->border ['left'] + $this->raster ['x']['raster'] + 1.7,
+      $this->border ['top'] + $this->raster ['y']['betreff_ende'] + 0.6
     );
   }
 
@@ -1201,47 +1514,50 @@ class vordruckaspdf extends PDF_Ellipse {
   function Footer () {
     include (__DIR__ . "/../4fcfg/config.inc.php");    // Konfigurationseinstellungen und Vorgaben
 
-
-    $this->SetTextColor ( 0, 0, 0);
-    $this->SetFont ("times","B",12);
-
-    $this->RotatedText( 7, $this->point[22][1]+2 , "Fm-Betriebsstelle", 90) ;
-    $this->RotatedText( 7, 10 + $this->point[22][1] + ( $this->point[46][1] - $this->point[22][1] )/2 ,
-                        "Verfasser", 90) ;
-
-    $this->RotatedText( 7, 10 + $this->point[46][1] + ( $this->point[54][1] - $this->point[46][1] )/2 ,
-                        "Sichter", 90) ;
-
-    $this->SetTextColor (220,220,220);
-    $this->SetFont ("times","",3);
-    $text = "(C) 2005 bis 2013 Hajo Landmesser - ".$conf_4f['Titelkurz'] ."  ".$conf_4f['Version']." alle Rechte vorbehalten" ;
-    $this->RotatedText( 9, $this->point[54][1]+9 , $text, 90) ;
-
+    // Seitenzahl und Herkunftsvermerk stehen unter dem Blatt, nicht darauf.
+    // Auf dem Papiervordruck gibt es sie nicht; im Abzug braucht sie, wer
+    // einen mehrseitigen Nachrichtentext zusammenhalten muss.
+    $fuss = $this->border ['top'] + $this->raster ['hoehe'] + 2.0;
+    $this->SetTextColor (110, 110, 110);
+    $this->SetFont ("helvetica", "", $this->nv_punkt (2.6));
+    $this->SetXY ($this->border ['left'], $fuss);
+    $this->Cell (
+      $this->raster ['breite'] / 2,
+      3.0,
+      estab_fpdf_text (
+        "eStab " . $conf_4f ['Version']
+        . " · (C) 2005 bis 2013 Hajo Landmesser"
+      ),
+      0,
+      0,
+      "L"
+    );
+    $this->SetXY (
+      $this->border ['left'] + $this->raster ['breite'] / 2,
+      $fuss
+    );
+    $this->Cell (
+      $this->raster ['breite'] / 2,
+      3.0,
+      estab_fpdf_text ("Seite " . $this->PageNo () . "/{nb}"),
+      0,
+      0,
+      "R"
+    );
   }
 
 /*******************************************************************************/
   function Header (){
-//    $this->SetAutoPageBreak(false, 0) ;
-    $this->gesamtrahmenbypoints();
-    $this->linesbypoints ();
-
-    $this->fixtext ();
-    $this->mediumselect ();
-
-        //Position 1,5 cm von unten
-    $this->SetXY ($this->point[16][0]-15, $this->point[16][1]+2);
-    //Arial kursiv 8
-    $this->SetFont('Arial','I',8);
-    //Seitenzahl
-    $this->Cell(0,10,'Seite '.$this->PageNo().'/{nb}',0,0,'C');
-
-
+    $this->nv_blatt ();
     $this->writedata_without_inhalt ();
   }
 
 /*******************************************************************************/
   function AcceptPageBreak() {
-    if($this->GetY() >= $this->point[38][1]-10) {
+    if (
+      $this->GetY () >= $this->message_form_text_bottom ()
+        - $this->raster ['zeilenhoehe']
+    ) {
       $this->AddPage();
       $this->set_message_content_continuation_position();
     }

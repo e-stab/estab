@@ -56,60 +56,415 @@ foreach ($expectedMedia as $code => $label) {
         estab_dv_telecom_medium_label($code) === $label,
         'telecommunications medium is not expanded: ' . $code
     );
-    $values = estab_dv_telecom_entry_values([
-        'betriebsstelle' => 'Betriebsstelle ' . $code,
-        'rufname' => 'Rufname ' . $code,
-        'medium' => $code,
-        'kanal' => 'Manipulierter Kanal',
-        'bandlage' => 'Manipulierte Bandlage',
-        'verkehrsform' => 'Verkehrsform ' . $code,
-        'besondere_vermerke' => 'Vermerk',
-        'bemerkungen' => 'Bemerkung',
+}
+
+/*
+ * Der Plan bietet den Fernschreiber nicht mehr an.
+ *
+ * Das Telexnetz ist abgeschaltet, also ist keine Stelle darueber erreichbar.
+ * Der Vordruck behaelt sein gedrucktes Kaestchen und Altnachrichten ihren
+ * Wert -- ein Plan fuehrt, was tatsaechlich betrieben wird, und ein Medium
+ * ohne Geraet ist kein Weg.
+ */
+$assert(
+    ESTAB_DV_PLAN_MEDIA === ['Fe', 'Fu', 'Me', 'FAX', '@']
+        && !in_array('FS', ESTAB_DV_PLAN_MEDIA, true)
+        && in_array('FS', ESTAB_DV_MEDIA, true),
+    'the plan still offers a medium nobody operates, or lost one it needs'
+);
+$planMediaOfKinds = array_values(array_unique(array_map(
+    static fn (array $kind): string => (string) $kind['medium'],
+    ESTAB_DV_TELECOM_ROUTE_KINDS
+)));
+$assert(
+    $planMediaOfKinds === ESTAB_DV_PLAN_MEDIA,
+    'route kinds and offered plan media drifted apart'
+);
+
+/*
+ * Analog fuehrt Kanaele, digital fuehrt Rufgruppen -- beide unter dem Medium
+ * Fu, weil das der Wert ist, den Feld 1 des Vordrucks druckt.
+ */
+$analog = estab_dv_telecom_entry_values([
+    'wegart' => 'Fu:ANALOG',
+    'betriebsstelle' => 'Führungsstelle',
+    'erreichbarkeit' => 'Funkrufname',
+    'band' => '4m',
+    'kanal' => '55',
+    'bandlage' => 'Oberband',
+    'verkehrsform' => 'Wechselverkehr',
+    'relaisstelle' => 'Rs1',
+    'rufgruppe' => 'geschmuggelte Rufgruppe',
+    'betriebsart' => 'TMO',
+    'datenart' => 'MAIL',
+    'bemerkungen' => 'Bemerkung',
+]);
+$assert(
+    $analog['medium'] === 'Fu'
+        && $analog['funkart'] === 'ANALOG'
+        && $analog['band'] === '4m'
+        && $analog['kanal'] === '55'
+        && $analog['bandlage'] === 'Oberband'
+        && $analog['verkehrsform'] === 'Wechselverkehr'
+        && $analog['relaisstelle'] === 'Rs1'
+        && $analog['rufgruppe'] === ''
+        && $analog['betriebsart'] === null
+        && $analog['datenart'] === null,
+    'an analogue route kept fields that belong to another technology'
+);
+
+$digital = estab_dv_telecom_entry_values([
+    'wegart' => 'Fu:DIGITAL',
+    'betriebsstelle' => 'Führungsstelle',
+    'erreichbarkeit' => 'Funkrufname',
+    'betriebsart' => 'DMO',
+    'rufgruppe' => '726_B*',
+    'kanal' => 'geschmuggelter Kanal',
+    'bandlage' => 'geschmuggelte Bandlage',
+    'verkehrsform' => 'geschmuggelte Verkehrsform',
+    'band' => '2m',
+]);
+$assert(
+    $digital['medium'] === 'Fu'
+        && $digital['funkart'] === 'DIGITAL'
+        && $digital['betriebsart'] === 'DMO'
+        && $digital['rufgruppe'] === '726_B*'
+        && $digital['kanal'] === ''
+        && $digital['bandlage'] === ''
+        && $digital['verkehrsform'] === ''
+        && $digital['band'] === null,
+    'a digital route carried a channel, band position or traffic form'
+);
+
+/*
+ * Bandlage und Verkehrsform werden auf Anwesenheit geprueft, nie auf ihren
+ * Wert. Die Werteliste dafuer steht in einer eingestuften Vorschrift, die
+ * nicht vorliegt; eine hier erfundene wuerde zurueckweisen, was ein Einsatz
+ * tatsaechlich benutzt hat.
+ */
+$freitext = estab_dv_telecom_entry_values([
+    'wegart' => 'Fu:ANALOG',
+    'betriebsstelle' => 'Führungsstelle',
+    'erreichbarkeit' => 'Funkrufname',
+    'band' => '2m',
+    'kanal' => 'K 31',
+    'bandlage' => 'irgendetwas, das keine Liste kennt',
+    'verkehrsform' => 'bedingter Gegenverkehr über Rs2',
+]);
+$assert(
+    $freitext['bandlage'] === 'irgendetwas, das keine Liste kennt'
+        && $freitext['verkehrsform'] === 'bedingter Gegenverkehr über Rs2',
+    'band position or traffic form was checked against a value list'
+);
+
+foreach (['Fe' => 'anschlussart', 'FAX' => 'anschlussart'] as $kind => $field) {
+    $werte = estab_dv_telecom_entry_values([
+        'wegart' => $kind,
+        'betriebsstelle' => 'Führungsstelle',
+        'erreichbarkeit' => '0228 940-0',
+        $field => 'NST',
+        'kanal' => 'geschmuggelt',
+        'bandlage' => 'geschmuggelt',
+        'verkehrsform' => 'geschmuggelt',
     ]);
-    $isRadio = $code === 'Fu';
     $assert(
-        $values['medium'] === $code
-            && $values['verkehrsform'] === 'Verkehrsform ' . $code
-            && $values['kanal'] === ($isRadio ? 'Manipulierter Kanal' : '')
-            && $values['bandlage']
-                === ($isRadio ? 'Manipulierte Bandlage' : ''),
-        'medium-dependent fields were not normalized server-side: ' . $code
+        $werte['medium'] === $kind
+            && $werte['funkart'] === null
+            && $werte[$field] === 'NST'
+            && $werte['kanal'] === ''
+            && $werte['bandlage'] === ''
+            && $werte['verkehrsform'] === '',
+        'a wire-bound route carried radio fields: ' . $kind
     );
 }
+
+$melder = estab_dv_telecom_entry_values([
+    'wegart' => 'Me',
+    'betriebsstelle' => 'Meldekopf Nord',
+    'erreichbarkeit' => 'Sammelstelle Tor 2',
+]);
+$assert(
+    $melder['medium'] === 'Me'
+        && $melder['funkart'] === null
+        && $melder['kanal'] === ''
+        && $melder['verkehrsform'] === '',
+    'the messenger route was given technical fields it cannot have'
+);
+
 $expect(
     EstabDvInputException::class,
     static fn (): array => estab_dv_telecom_entry_values([
-        'betriebsstelle' => 'Betriebsstelle',
-        'rufname' => 'Rufname',
-        'medium' => 'Funk',
-        'kanal' => '1',
-        'bandlage' => 'G/U',
-        'verkehrsform' => 'Gegenverkehr',
+        'wegart' => 'Fu',
+        'betriebsstelle' => 'Führungsstelle',
+        'erreichbarkeit' => 'Funkrufname',
+    ]),
+    'a radio route without its kind was accepted'
+);
+$expect(
+    EstabDvInputException::class,
+    static fn (): array => estab_dv_telecom_entry_values([
+        'wegart' => 'FS',
+        'betriebsstelle' => 'Führungsstelle',
+        'erreichbarkeit' => 'Fernschreibkennung',
+    ]),
+    'the plan accepted a telex route'
+);
+$expect(
+    EstabDvInputException::class,
+    static fn (): array => estab_dv_telecom_entry_values([
+        'wegart' => 'Funk (analog)',
+        'betriebsstelle' => 'Führungsstelle',
+        'erreichbarkeit' => 'Funkrufname',
     ]),
     'expanded display label was accepted as a storage value'
 );
 $expect(
     EstabDvInputException::class,
     static fn (): array => estab_dv_telecom_entry_values([
-        'betriebsstelle' => 'Betriebsstelle',
-        'rufname' => 'Rufname',
-        'medium' => 'Fu',
+        'wegart' => 'Fu:ANALOG',
+        'betriebsstelle' => 'Führungsstelle',
+        'erreichbarkeit' => 'Funkrufname',
+        'band' => '4m',
         'kanal' => '',
-        'bandlage' => 'G/U',
-        'verkehrsform' => 'Gegenverkehr',
+        'bandlage' => 'Oberband',
+        'verkehrsform' => 'Wechselverkehr',
     ]),
-    'radio route without channel/group was accepted'
+    'an analogue route without a channel was accepted'
 );
 $expect(
     EstabDvInputException::class,
     static fn (): array => estab_dv_telecom_entry_values([
-        'betriebsstelle' => 'Betriebsstelle',
-        'rufname' => 'Rufname',
-        'medium' => 'Me',
-        'verkehrsform' => '',
+        'wegart' => 'Fu:DIGITAL',
+        'betriebsstelle' => 'Führungsstelle',
+        'erreichbarkeit' => 'Funkrufname',
+        'betriebsart' => 'TETRA',
+        'rufgruppe' => '726_B*',
     ]),
-    'route without traffic form or special handling was accepted'
+    'an invented operating mode was accepted'
 );
+$expect(
+    EstabDvInputException::class,
+    static fn (): array => estab_dv_telecom_entry_values([
+        'wegart' => 'Fu:DIGITAL',
+        'betriebsstelle' => 'Führungsstelle',
+        'erreichbarkeit' => 'Funkrufname',
+        'rufgruppe' => '726_B*',
+    ]),
+    'a digital route without its operating mode was accepted'
+);
+
+/* Ein Altweg ohne Funkart loest zu keiner Wegart auf -- unbestimmt. */
+$assert(
+    estab_dv_telecom_route_kind('Fu', null) === null
+        && estab_dv_telecom_route_kind('Fu', 'ANALOG') === 'Fu:ANALOG'
+        && estab_dv_telecom_route_kind('Fe', null) === 'Fe'
+        && estab_dv_telecom_route_kind('FS', null) === null,
+    'legacy radio routes no longer read as undetermined'
+);
+/*
+ * Eine Gegenstelle traegt zwei Angaben, weil der Vordruck zwei braucht: den
+ * Namen der Stelle und die Adresse, unter der sie antwortet. Ein eigenes
+ * Medium hat sie NICHT -- das ist das des Wegs, und genau darin liegt die
+ * Aussage "ueber DIESEN Weg antwortet JENE Stelle unter DIESER Adresse".
+ */
+/*
+ * Die Versionskopie und die Rueckfallebene.
+ *
+ * Der Verweis zeigt ueber einen zusammengesetzten Fremdschluessel auf die
+ * Wegzuordnung DESSELBEN Plans -- und die entsteht erst NACH den Zeilen. Wer
+ * ihn gleich mitkopiert, laesst die Kopie am Fremdschluessel scheitern, und
+ * zwar erst dann, wenn ein Plan zum ersten Mal eine Rueckfallebene hat. Genau
+ * so ist es im Betrieb aufgefallen: "Die Aktion konnte nicht vollstaendig
+ * gespeichert werden", sobald der Betreiber die vierte Fassung bearbeiten
+ * wollte.
+ *
+ * Deshalb: Zeilen mit NULL kopieren, Kennungen anlegen, dann nachtragen.
+ */
+$revisionQuelle = file_get_contents(
+    dirname(__DIR__, 2) . '/app/dv_operations.php'
+);
+$assert(
+    is_string($revisionQuelle),
+    'Die Fernmeldeplanung ist nicht lesbar.'
+);
+$revisionQuelle = (string) $revisionQuelle;
+$kopieAnfang = strpos(
+    $revisionQuelle,
+    'function estab_dv_start_telecom_plan_revision('
+);
+$kopieEnde = strpos(
+    $revisionQuelle,
+    'function estab_dv_update_telecom_plan_draft(',
+    $kopieAnfang === false ? 0 : $kopieAnfang
+);
+$kopie = ($kopieAnfang !== false && $kopieEnde !== false)
+    ? substr($revisionQuelle, $kopieAnfang, $kopieEnde - $kopieAnfang)
+    : '';
+$stelleZeilen = strpos($kopie, 'INSERT INTO `nv_fernmeldeplan_eintraege`');
+$stelleKennungen = strpos($kopie, 'INSERT INTO `nv_fernmeldeweg_zuordnung`');
+$stelleNachtrag = strpos($kopie, 'SET neu.`rueckfallebene_fuer_weg`');
+$assert(
+    $stelleZeilen !== false
+        && $stelleKennungen !== false
+        && $stelleNachtrag !== false
+        && $stelleZeilen < $stelleKennungen
+        && $stelleKennungen < $stelleNachtrag,
+    'the version copy writes a fallback before the route identities exist'
+);
+$assert(
+    str_contains($kopie, "' `erreichbarkeit`, NULL,'"),
+    'the version copy carries the fallback into a plan that cannot hold it yet'
+);
+$assert(
+    str_contains($kopie, "AND alt.`rueckfallebene_fuer_weg` IS NOT NULL"),
+    'the version copy touches routes that never had a fallback'
+);
+
+$gegenstelle = estab_dv_telecom_counterpart_values([
+    'name' => 'Kreisleitstelle',
+    'stellenart' => 'NEBEN',
+    'erreichbarkeit' => 'Leitstelle Kreis',
+    'bemerkungen' => 'rund um die Uhr besetzt',
+]);
+$assert(
+    $gegenstelle === [
+        'name' => 'Kreisleitstelle',
+        'stellenart' => 'NEBEN',
+        'erreichbarkeit' => 'Leitstelle Kreis',
+        'bemerkungen' => 'rund um die Uhr besetzt',
+    ]
+        && !array_key_exists('medium', $gegenstelle)
+        && !array_key_exists('funkart', $gegenstelle),
+    'a counterpart carries a medium of its own'
+);
+/*
+ * Die Stellenart gehoert der GEGENSTELLE -- ueber, unter oder daneben ist
+ * eine Eigenschaft der anderen Seite. "EIGEN" waere hier ein Widerspruch:
+ * eine Gegenstelle ist per Begriff nicht wir selbst. Ein Wert, den nichts je
+ * annehmen darf, gehoert nicht in die Aufzaehlung -- er wuerde irgendwann
+ * doch gesetzt und dann ausgewertet.
+ */
+$assert(
+    estab_dv_telecom_counterpart_values([
+        'name' => 'Ohne Angabe',
+        'erreichbarkeit' => 'Heros 1',
+    ])['stellenart'] === null,
+    'a counterpart without a station kind is rejected instead of accepted'
+);
+$eigenAbgewiesen = false;
+try {
+    estab_dv_telecom_counterpart_values([
+        'name' => 'Wir selbst',
+        'stellenart' => 'EIGEN',
+        'erreichbarkeit' => 'Heros 1',
+    ]);
+} catch (EstabDvInputException) {
+    $eigenAbgewiesen = true;
+}
+$assert(
+    $eigenAbgewiesen,
+    'a counterpart may call itself the own command post'
+);
+foreach (['name', 'erreichbarkeit'] as $pflicht) {
+    $eingabe = [
+        'name' => 'Kreisleitstelle',
+        'erreichbarkeit' => 'Leitstelle Kreis',
+    ];
+    $eingabe[$pflicht] = '';
+    $expect(
+        EstabDvInputException::class,
+        static fn (): array => estab_dv_telecom_counterpart_values($eingabe),
+        'a counterpart without ' . $pflicht . ' was accepted'
+    );
+}
+$assert(
+    estab_dv_telecom_counterpart_values([
+        'name' => 'Kreisleitstelle',
+        'erreichbarkeit' => 'Leitstelle Kreis',
+    ])['bemerkungen'] === '',
+    'a counterpart without a note was refused'
+);
+
+/*
+ * Die Rueckfallebene ist ein Verweis, kein Schalter mit Ziel. Sie nimmt eine
+ * Kennung an oder nichts; ein zweites Wahrheitsfeld gaebe es nur, damit es
+ * dem Verweis widersprechen kann.
+ */
+$mitErsatz = estab_dv_telecom_entry_values([
+    'wegart' => 'Fe',
+    'betriebsstelle' => 'Kreisleitstelle',
+    'erreichbarkeit' => '0228 940-0',
+    'rueckfallebene_fuer_weg' => '7',
+]);
+$assert(
+    $mitErsatz['rueckfallebene_fuer_weg'] === 7,
+    'the fallback reference was not kept as an identity'
+);
+$ohneErsatz = estab_dv_telecom_entry_values([
+    'wegart' => 'Fe',
+    'betriebsstelle' => 'Kreisleitstelle',
+    'erreichbarkeit' => '0228 940-0',
+    'rueckfallebene_fuer_weg' => '',
+]);
+$assert(
+    $ohneErsatz['rueckfallebene_fuer_weg'] === null,
+    'an empty fallback was not read as "no fallback"'
+);
+$expect(
+    EstabDvInputException::class,
+    static fn (): array => estab_dv_telecom_entry_values([
+        'wegart' => 'Fe',
+        'betriebsstelle' => 'Kreisleitstelle',
+        'erreichbarkeit' => '0228 940-0',
+        'rueckfallebene_fuer_weg' => '0',
+    ]),
+    'a fallback pointing at no route was accepted'
+);
+$assert(
+    function_exists('estab_dv_telecom_assert_fallback'),
+    'the fallback ring check is missing'
+);
+
+/* Die Stellenart sagt, in welche Richtung die Verbindung zeigt. */
+$mitArt = estab_dv_telecom_entry_values([
+    'wegart' => 'Fe',
+    'betriebsstelle' => 'Kreisleitstelle',
+    'stellenart' => 'UEBER',
+    'erreichbarkeit' => '0228 940-0',
+]);
+$assert(
+    $mitArt['stellenart'] === 'UEBER'
+        && array_keys(ESTAB_DV_TELECOM_STATION_KINDS)
+            === ['EIGEN', 'UEBER', 'UNTER', 'NEBEN'],
+    'the station kind was not kept or its value list changed'
+);
+$ohneArt = estab_dv_telecom_entry_values([
+    'wegart' => 'Fe',
+    'betriebsstelle' => 'Kreisleitstelle',
+    'erreichbarkeit' => '0228 940-0',
+]);
+$assert(
+    $ohneArt['stellenart'] === null,
+    'a route without a station kind was not accepted'
+);
+$expect(
+    EstabDvInputException::class,
+    static fn (): array => estab_dv_telecom_entry_values([
+        'wegart' => 'Fe',
+        'betriebsstelle' => 'Kreisleitstelle',
+        'stellenart' => 'SEITWAERTS',
+        'erreichbarkeit' => '0228 940-0',
+    ]),
+    'an invented station kind was accepted'
+);
+
+$assert(
+    estab_dv_telecom_route_label('Fu', null) === 'Funk'
+        && estab_dv_telecom_route_label('Fu', 'DIGITAL') === 'Funk (digital)'
+        && estab_dv_telecom_route_label('Me', null) === 'Melder',
+    'route labels do not name the technology'
+);
+
 $token = hash('sha256', 'telecommunications revision fixture');
 $assert(
     estab_dv_telecom_revision_token($token) === $token,
@@ -131,12 +486,18 @@ $headerSnapshot = estab_dv_telecom_plan_header_audit_state([
     'session_id' => 'darf-ebenfalls-nicht-in-die-evidenz',
 ]);
 $assert(
+    // Die dreigeteilte Kopfleiste des Fb Fue 76 ist jetzt vollstaendig im
+    // Nachweis. Die Zusage bleibt dieselbe: NUR betriebliche Kopfdaten --
+    // die Liste ist abgeschlossen, jeder weitere Schluessel faellt auf.
     array_keys($headerSnapshot) === [
         'einsatzbezeichnung',
         'herkunft',
         'gueltig_ab',
         'gueltig_bis',
+        'verfasser_funktion',
+        'vs_vermerk',
         'betriebsleitung',
+        'freigabe_dienststellung',
         'bemerkungen',
     ]
         && !array_key_exists('password', $headerSnapshot)
@@ -146,6 +507,7 @@ $assert(
 
 $domain = $read('app/dv_operations.php');
 $controller = $read('4fach/fuehrungsstelle.php');
+$messengerController = $read('4fach/melderauftraege.php');
 $officialForm = $read('4fach/official_message_form.php');
 $legacyForm = $read('4fach/4fachform.php');
 $sessionUi = $read('app/session_ui.php');
@@ -253,7 +615,33 @@ $assert(
             $integration,
             'array_intersect($sourceEntryIds, $draftEntryIds) === []'
         )
-        && str_contains($integration, '$draftEntryStates === $sourceEntryStates')
+        /*
+         * Verglichen wird alles ausser den Vermerken -- und die Vermerke
+         * werden eigens geprueft.
+         *
+         * Hier stand der schlichte Vergleich beider Zustaende. Der gilt nicht
+         * mehr, seit die Kopie die zwei Vermerkfelder bewusst zusammenfuehrt;
+         * die Begruendung steht an der Kopieranweisung in app/dv_operations.php.
+         * Die Integrationspruefung belegt jetzt beides: Gleichheit aller
+         * uebrigen Felder UND die gemeinte Zusammenfuehrung. Das ist mehr
+         * Nachweis als vorher, nicht weniger.
+         */
+        && str_contains(
+            $integration,
+            'array_map($withoutNotes, $draftEntryStates)'
+        )
+        && str_contains(
+            $integration,
+            '=== array_map($withoutNotes, $sourceEntryStates)'
+        )
+        && str_contains(
+            $integration,
+            '=== $mergedNotes($sourceEntryStates[0])'
+        )
+        && str_contains(
+            $integration,
+            '=== $mergedNotes($sourceEntryStates[1])'
+        )
         && str_contains(
             $integration,
             'estab_dv_telecom_plan_header_audit_state($draftAfterClone)'
@@ -379,10 +767,23 @@ foreach (
 $assert(
     str_contains($controller, 'name="plan_revision"')
         && str_contains($controller, 'data-estab-telecom-entry-form')
-        && str_contains($controller, 'data-estab-telecom-field="kanal"')
-        && str_contains($controller, 'data-estab-telecom-field="bandlage"')
+        // Die Feldmarker entstehen aus dem Katalog, stehen also nicht mehr
+        // woertlich im Quelltext. Gepinnt wird deshalb der Mechanismus: die
+        // Schleife ueber die Felder und die Liste, die das Skript steuert.
+        && str_contains($controller, 'data-estab-telecom-field="<?= ')
+        && str_contains($controller, 'data-estab-telecom-kind')
+        && str_contains(
+            $controller,
+            "'band', 'kanal', 'bandlage', 'verkehrsform', 'relaisstelle',"
+        )
+        && str_contains(
+            $controller,
+            "'betriebsart', 'rufgruppe', 'anschlussart', 'datenart'"
+        )
+        && str_contains($controller, 'ESTAB_DV_TELECOM_ROUTE_KINDS')
         && str_contains($controller, 'input.disabled = !visible')
         && str_contains($controller, 'input.required = visible')
+        && str_contains($controller, 'art.pflicht.indexOf(fieldName)')
         && str_contains($controller, 'dv_operations_post_value(')
         && str_contains($controller, 'data-estab-telecom-discard-form')
         && str_contains($controller, 'discard-telecom-draft')
@@ -485,7 +886,7 @@ $assert(
 $assert(
     str_contains(
         $controller,
-        '<option value="" <?= $medium === \'\' ? \'selected\' : \'\' ?>>'
+        '<option value="" <?= $kind === null ? \'selected\' : \'\' ?>>'
     )
         && str_contains($controller, 'field.disabled) continue;')
         && str_contains($controller, 'field.checked !== field.defaultChecked')
@@ -535,7 +936,7 @@ $historyStart = strpos($controller, 'data-estab-telecom-history>');
 $historyEnd = is_int($historyStart)
     ? strpos(
         $controller,
-        '<section class="estab-tool-panel" id="melderauftraege">',
+        '<footer class="estab-tool-footer">',
         $historyStart
     )
     : false;
@@ -576,20 +977,33 @@ $assert(
 );
 $assert(
     !str_contains($controller, 'foreach (ESTAB_DV_MEDIA as $medium)')
+        && !str_contains($controller, 'foreach (ESTAB_DV_PLAN_MEDIA')
+        // Der Auswahlkasten fuehrt Wegarten und druckt deren Beschriftung;
+        // die Zeilen benennen die Technik mit, nicht nur das Medium.
+        && str_contains($controller, "dv_operations_html(\$art['label'])")
+        && str_contains($controller, 'estab_dv_telecom_route_label(')
+        /*
+         * Der Melderweg steht seit der Trennung auf der eigenen Seite --
+         * das Versprechen bleibt dasselbe: Auf dem Bildschirm steht kein
+         * Datenbankkuerzel, sondern das Mittel, das jemand kennt.
+         */
         && str_contains(
-            $controller,
-            'estab_dv_telecom_medium_label($candidate)'
+            $messengerController,
+            'Ausgangsnachricht mit Weg „Melder“'
         )
-        && str_contains(
-            $controller,
-            'estab_dv_telecom_medium_label($entry[\'medium\'])'
-        )
-        && str_contains($controller, 'Ausgangsnachricht mit Weg „Melder“')
-        && !str_contains($controller, 'Ausgangsnachricht mit Weg „Me“'),
+        && !str_contains(
+            $messengerController,
+            'Ausgangsnachricht mit Weg „Me“'
+        ),
     'telecommunications UI still exposes raw medium codes'
 );
 $assert(
-    str_contains($officialForm, 'estab_dv_telecom_medium_label(')
+    // Der Vordruck nennt inzwischen die WEGART statt nur des Mediums:
+    // „Funk (digital)“ trennt, was „Fu“ zusammenwarf. Die Zusage bleibt
+    // dieselbe -- estab_dv_telecom_route_label() faellt auf die
+    // Medienbeschriftung zurueck und gibt in keinem Fall einen Rohcode aus.
+    str_contains($officialForm, 'estab_dv_telecom_route_label(')
+        && !str_contains($officialForm, 'estab_dv_telecom_medium_label(')
         && str_contains($legacyForm, 'estab_dv_telecom_medium_label ('),
     'message route choices still expose raw telecommunications codes'
 );

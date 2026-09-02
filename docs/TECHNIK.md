@@ -59,6 +59,34 @@ Jeder Endpunkt prüft seine Berechtigung unabhängig von der Navigation:
 
 Die Sidebar blendet unzulässige Ziele aus, ist aber keine Sicherheitsgrenze.
 
+### Content-Security-Policy
+
+Jede von PHP erzeugte Seite sendet ihre eigene Richtlinie mit einer Nonce je
+Anfrage (`app/csp.php`, gesendet aus `app/bootstrap.php`). Ein Webserver kann
+keine unratbare Nonce erzeugen, deshalb entsteht sie in der Anwendung.
+
+Jedes eingebettete Skript muss `estab_csp_script_attribute()` tragen:
+
+```php
+echo '<script' . estab_csp_script_attribute() . ' data-estab-beispiel>';
+```
+
+Ereignisattribute im Markup (`onclick=` und Verwandte) laufen unter dieser
+Richtlinie nicht mehr; eine Nonce deckt sie nicht ab. Stattdessen trägt das
+Bedienelement ein Datenmerkmal, und ein Skript bindet den Zuhörer.
+
+`docker/apache/estab.conf` setzt die Richtlinie nur für Antworten, die noch
+keine haben: statische Auslieferungen und Apache-eigene Fehlerseiten. Dort gilt
+`script-src 'none'`. Die Bedingung `expr=-z %{resp:Content-Security-Policy}`
+ist notwendig -- ohne sie hängt der Webserver eine zweite Richtlinie an die
+PHP-Antwort, und mehrere Richtlinien gelten gemeinsam.
+
+`style-src` behält `'unsafe-inline'`: die Listen färben eine Zeile nach der
+Durchschrift, die die lesende Funktion erreicht. Das ist Datum, nicht Markup,
+und Stilattribute lassen sich mit einer Nonce ohnehin nicht freigeben.
+
+`tests/php/csp_nonce_security.php` hält all das fest.
+
 ## Dateien und PDF
 
 Uploads werden nach Größe, Endung, MIME-Typ und Integrität geprüft. E-Mail-
@@ -68,6 +96,16 @@ Objektberechtigung.
 Das PDF-Einsatzdossier verwendet denselben Nachrichtenrenderer wie der
 Einzelvordruck. Darstellbare Anlagen werden zusätzlich sichtbar gerendert;
 Originale werden als eingebettete Dateien mitgeführt.
+
+Das Raster des Nachrichtenvordrucks steht in `app/nv_raster.php` — in
+Millimetern, gemessen am gedruckten Blatt der Bildschirmansicht. Damit zeigen
+Oberfläche, Browserdruck und PDF dasselbe Blatt (`UX-PAPIERBILD`). Wer
+nachmisst: die Oberfläche stellt den Vordruck im Druckmedium mit `zoom: 0.78`.
+Kastenmaße liefert der Browser fertig skaliert, `font-size` dagegen
+unskaliert — wer die Schriftgröße ungerechnet übernimmt, setzt jede
+Beschriftung um ein Viertel zu groß, und die Felder laufen ineinander. Die
+Zuordnung der Empfängermatrix zu den drei gedruckten Blöcken von Feld 19
+teilen sich Bildschirm und PDF über `app/nv_verteiler.php`.
 
 Die aktive PDF-Bibliothek ist derzeit als FPDF 1.6 im Quellbaum eingebettet.
 Vor einer öffentlichen Weiterverteilung muss sie auf eine gepflegte Version
@@ -82,6 +120,42 @@ Mit lokalem PHP 8.5:
 ```console
 tests/static/run.sh
 ```
+
+Die statische Suite registriert ihre Prüfungen programmatisch und führt sie
+nebenläufig aus. Sie bricht nicht beim ersten Fehler ab, sondern meldet am Ende
+jede fehlgeschlagene Prüfung mit ihrer Ausgabe. Die Zahl der gleichzeitigen
+Läufe folgt der Kernzahl und lässt sich mit `ESTAB_TEST_JOBS` setzen. Welche
+Prüfungen registriert sind, beantwortet:
+
+```console
+tests/static/run.sh --list
+```
+
+Den Lint des gesamten Baums erledigt `tools/lint_sources.php` in einem einzigen
+Prozess. Über `opcache_compile_file()` meldet es dieselben zwei Fehlerklassen
+wie `php -l` -- Kompilierfehler und Kompilierzeit-Deprecations -- und fällt auf
+hosts ohne nutzbare OPcache auf `php -l` je Datei zurück:
+
+```console
+php -d opcache.enable_cli=1 tools/lint_sources.php
+```
+
+### Regeln der Dienstvorschriften
+
+`app/dv_rules.php` führt die Regeln, denen die Anwendung entsprechen muss, mit
+Quelle, Fundstelle und Anforderung. Ein Test benennt die Regel, die er
+absichert, über die Fehlermeldung:
+
+```php
+require_once $root . '/app/dv_rules.php';
+$assert($bedingung, estab_dv_requirement('NV-19-VERTEILER-EINGANG', 'was fehlt'));
+```
+
+`tests/php/dv_rule_registry.php` führt die abgedeckten Regeln zur Laufzeit mit
+und schlägt fehl, sobald eine Regel ohne Test im Katalog steht oder ein Test
+eine Regel benennt, die es nicht gibt. Eine Regel, deren Durchsetzung an einem
+Datenbank-Trigger hängt, muss ihre Migration ausdrücklich mitprüfen -- sonst
+gilt sie als erfüllt, während der Betrieb sie abweist.
 
 Workflow-Lint:
 

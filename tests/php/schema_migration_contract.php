@@ -43,6 +43,34 @@ $dvEvidenceMigration = $read(
 $dvOperationsMigration = $read(
     $root . '/docker/db/migrations/94-dv-organisational-controls.sql'
 );
+$routeIdentityMigration = $read(
+    $root . '/docker/db/migrations/122-fernmeldeweg-identitaet.sql'
+);
+$radioKindMigration = $read(
+    $root . '/docker/db/migrations/123-fernmeldeweg-funkart.sql'
+);
+$reachabilityMigration = $read(
+    $root . '/docker/db/migrations/124-fernmeldeweg-erreichbarkeit.sql'
+);
+$fallbackMigration = $read(
+    $root . '/docker/db/migrations/125-fernmeldeweg-rueckfallebene.sql'
+);
+$counterpartMigration = $read(
+    $root . '/docker/db/migrations/126-fernmeldeplan-gegenstellen.sql'
+);
+$incomingRouteMigration = $read(
+    $root . '/docker/db/migrations/127-eingangsweg.sql'
+);
+$planHeaderMigration = $read(
+    $root . '/docker/db/migrations/128-fernmeldeplan-kopfleiste.sql'
+);
+$counterpartKindMigration = $read(
+    $root . '/docker/db/migrations/129-gegenstelle-stellenart.sql'
+);
+$legacyPlanRemoval = $read(
+    $root . '/docker/db/migrations/130-komplan-abbau.sql'
+);
+$freshSchema = $read($root . '/docker/db/init/10-schema.sql');
 $attachmentIntegrityMigration = $read(
     $root . '/docker/db/migrations/95-attachment-ingest-integrity.sql'
 );
@@ -213,7 +241,7 @@ $assert(
     && str_contains($runner, 'CREATE TABLE IF NOT EXISTS estab_schema_baselines')
     && str_contains($runner, 'Retrying interrupted fresh schema baseline')
     && str_contains($runner, 'Checksum mismatch for fresh schema baseline')
-    && str_contains($runner, 'expected 14 runtime tables')
+    && str_contains($runner, 'expected 13 runtime tables')
     && str_contains($runner, 'database_apply < "$ESTAB_SCHEMA_BASELINE_FILE"'),
     'Fresh installation lacks a checksum-ledgered, retryable embedded baseline'
 );
@@ -2784,6 +2812,332 @@ $assert(
         ),
     'DV duty, S6, messenger, route, or operational event schema is outside the gate'
 );
+// Die Wegkennung entsteht ausschliesslich durch INSERT in zwei neue Tabellen.
+// Wer hier spaeter eine Spalte an nv_fernmeldeplan_eintraege fuellt, faellt
+// ueber estab_dv94_fernmeldeplan_entry_update -- das Tor haelt die Bauart fest.
+$assert(
+    str_contains(
+        $routeIdentityMigration,
+        'CREATE TABLE IF NOT EXISTS `nv_fernmeldewege`'
+    )
+        && str_contains(
+            $routeIdentityMigration,
+            'CREATE TABLE IF NOT EXISTS `nv_fernmeldeweg_zuordnung`'
+        )
+        && str_contains(
+            $routeIdentityMigration,
+            'uq_fernmeldeweg_nummer'
+        )
+        && str_contains(
+            $routeIdentityMigration,
+            'uq_fernmeldeweg_zuordnung_plan'
+        )
+        && str_contains(
+            $routeIdentityMigration,
+            'estab_dv122_wegzuordnung_update'
+        )
+        && str_contains(
+            $routeIdentityMigration,
+            'Route identity assignments are immutable'
+        )
+        && str_contains(
+            $routeIdentityMigration,
+            "'121-transport-disposition-field-one.sql'"
+        )
+        && !str_contains(
+            $routeIdentityMigration,
+            'UPDATE `nv_fernmeldeplan_eintraege`'
+        )
+        && str_contains(
+            $routeIdentityMigration,
+            'entries without an identity remain'
+        )
+        && str_contains(
+            $verify,
+            'estab:migration:122-fernmeldeweg-identitaet:v1'
+        )
+        && str_contains(
+            $readiness,
+            "'122-fernmeldeweg-identitaet.sql'"
+        ),
+    'Route identity schema, its immutable assignment, or its read-only '
+        . 'backfill is outside the gate'
+);
+// Analog fuehrt Kanaele, digital fuehrt Rufgruppen. Das Tor haelt beides
+// fest: die getrennten Felder UND dass Bandlage und Verkehrsform Freitext
+// bleiben -- die Werteliste dafuer steht in einer eingestuften Vorschrift,
+// die nicht vorliegt, und der Betreiber hat gegen das Erfinden entschieden.
+$assert(
+    str_contains($radioKindMigration, "`funkart` ENUM('ANALOG','DIGITAL')")
+        && str_contains($radioKindMigration, "`band` ENUM('2m','4m')")
+        && str_contains($radioKindMigration, "`betriebsart` ENUM('TMO','DMO')")
+        && str_contains($radioKindMigration, '`rufgruppe` VARCHAR(64)')
+        && str_contains($radioKindMigration, '`relaisstelle` VARCHAR(64)')
+        && str_contains(
+            $radioKindMigration,
+            "`anschlussart` ENUM('AMT','NST','MOBIL','SONDER')"
+        )
+        && str_contains(
+            $radioKindMigration,
+            "`datenart`\n        ENUM('MAIL','MESSENGER','FACHANW','INTERNET')"
+        )
+        && str_contains(
+            $radioKindMigration,
+            "'122-fernmeldeweg-identitaet.sql'"
+        )
+        && !str_contains($radioKindMigration, '`bandlage` ENUM')
+        && !str_contains($radioKindMigration, '`verkehrsform` ENUM')
+        && str_contains(
+            $radioKindMigration,
+            'no longer free text'
+        )
+        && str_contains(
+            $readiness,
+            "'123-fernmeldeweg-funkart.sql'"
+        ),
+    'Radio-kind separation or the free-text guarantee is outside the gate'
+);
+// Der Weg heisst, was er traegt. Und die zweite Vermerkspalte BLEIBT: Sie
+// wird nicht zusammengefuehrt, sondern nur nicht mehr beschrieben -- eine
+// freigegebene Fassung darf nicht nachtraeglich anders lauten.
+$assert(
+    str_contains(
+        $reachabilityMigration,
+        'CHANGE COLUMN `rufname` `erreichbarkeit`'
+    )
+        && str_contains(
+            $reachabilityMigration,
+            "`stellenart` ENUM('EIGEN','UEBER','UNTER','NEBEN')"
+        )
+        && !str_contains($reachabilityMigration, 'DROP COLUMN')
+        && !str_contains($reachabilityMigration, 'UPDATE `nv_fernmeldeplan')
+        && str_contains(
+            $reachabilityMigration,
+            'the legacy note column was removed'
+        )
+        && str_contains(
+            $reachabilityMigration,
+            "'123-fernmeldeweg-funkart.sql'"
+        )
+        && str_contains(
+            $readiness,
+            "'124-fernmeldeweg-erreichbarkeit.sql'"
+        ),
+    'Reachability rename, station kind, or the kept legacy note is outside '
+        . 'the gate'
+);
+// Die Rueckfallebene zeigt auf die dauerhafte Kennung, nie auf eine Zeile --
+// sonst zeigte sie nach dem ersten Versionswechsel auf die Vorgaengerversion.
+// Und sie verweigert das Loeschen ihres Hauptwegs, statt still zu verwaisen.
+$assert(
+    str_contains(
+        $fallbackMigration,
+        '`rueckfallebene_fuer_weg` BIGINT UNSIGNED NULL'
+    )
+        && str_contains(
+            $fallbackMigration,
+            'FOREIGN KEY (`fernmeldeplan_id`, `rueckfallebene_fuer_weg`)'
+        )
+        && str_contains(
+            $fallbackMigration,
+            'REFERENCES `nv_fernmeldeweg_zuordnung`'
+        )
+        && str_contains($fallbackMigration, 'ON DELETE RESTRICT')
+        && !str_contains($fallbackMigration, 'ON DELETE SET NULL')
+        && !str_contains(
+            $fallbackMigration,
+            '`fernmeldeplan_eintrag_id`)\n        REFERENCES'
+        )
+        && str_contains(
+            $fallbackMigration,
+            '124-fernmeldeweg-erreichbarkeit.sql'
+        )
+        && str_contains($readiness, "'125-fernmeldeweg-rueckfallebene.sql'"),
+    'Fallback reference, its identity target, or its delete rule is outside '
+        . 'the gate'
+);
+// Eine Gegenstelle haengt an genau einem Weg und erbt dessen Mittel -- sie
+// traegt selbst keines. Und sie ist nur im Entwurf veraenderlich, wie ihr Weg.
+$assert(
+    str_contains(
+        $counterpartMigration,
+        'CREATE TABLE IF NOT EXISTS `nv_fernmeldeplan_gegenstellen`'
+    )
+        && str_contains($counterpartMigration, 'ON DELETE CASCADE')
+        && !str_contains($counterpartMigration, '`medium`')
+        && str_contains(
+            $counterpartMigration,
+            'estab_dv126_gegenstelle_insert'
+        )
+        && str_contains(
+            $counterpartMigration,
+            'estab_dv126_gegenstelle_update'
+        )
+        && str_contains(
+            $counterpartMigration,
+            'estab_dv126_gegenstelle_delete'
+        )
+        && str_contains(
+            $counterpartMigration,
+            'Activated telecommunications counterparts are immutable'
+        )
+        && str_contains(
+            $counterpartMigration,
+            "'125-fernmeldeweg-rueckfallebene.sql'"
+        )
+        && str_contains(
+            $verify,
+            'estab:migration:126-fernmeldeplan-gegenstellen:v1'
+        )
+        && str_contains(
+            $readiness,
+            "'126-fernmeldeplan-gegenstellen.sql'"
+        ),
+    'Counterpart table, its inherited medium, or its draft-only mutability is '
+        . 'outside the gate'
+);
+// Der Weg steht ausserhalb des Vordrucks -- estab_-Praefix, nie eine
+// Feldnummer. Und der Verweis auf die Gegenstelle traegt bewusst KEINEN
+// Fremdschluessel: RESTRICT verboete dem S6 das Streichen, SET NULL loeschte
+// den Nachweis.
+$assert(
+    str_contains(
+        $incomingRouteMigration,
+        '`estab_eingangsweg_bemerkung` VARCHAR(2000) NULL'
+    )
+        && str_contains(
+            $incomingRouteMigration,
+            '`estab_gegenstelle_id` BIGINT UNSIGNED NULL'
+        )
+        && !str_contains($incomingRouteMigration, 'FOREIGN KEY')
+        && !str_contains($incomingRouteMigration, '`06_')
+        && !str_contains($incomingRouteMigration, '`05_')
+        && str_contains(
+            $incomingRouteMigration,
+            "'126-fernmeldeplan-gegenstellen.sql'"
+        )
+        && str_contains($readiness, "'127-eingangsweg.sql'"),
+    'Incoming route columns, their form boundary, or the deliberate absence '
+        . 'of a counterpart foreign key is outside the gate'
+);
+/*
+ * Der Abbau der ungenutzten Alttabelle.
+ *
+ * Ein DROP ist die eine Operation, die dieses Schema nicht zuruecknehmen
+ * kann. Deshalb bricht die Migration ab, wenn auch nur eine Zeile darin
+ * steht, und sagt, was zu tun ist -- eine Installation, die dort doch Daten
+ * hat, muss es VORHER merken.
+ *
+ * Und die Grundfassung behaelt die Tabelle. Sie ist in
+ * `estab_schema_baselines` pruefsummengebunden; sie zu aendern liesse jede
+ * bestehende Installation mit "Checksum mismatch for fresh schema baseline"
+ * scheitern. Eine Neuinstallation legt die Tabelle deshalb an, die
+ * Migrationen 45, 50 und 97 finden sie, und diese hier raeumt sie am Ende
+ * weg -- derselbe Weg, den eine bestehende Installation geht.
+ */
+$assert(
+    str_contains($legacyPlanRemoval, 'DROP TABLE IF EXISTS `nv_komplan`;')
+        && str_contains(
+            $legacyPlanRemoval,
+            'nv_komplan still holds rows'
+        )
+        && str_contains(
+            $legacyPlanRemoval,
+            'DROP TRIGGER IF EXISTS `estab_komplan_bi_einsatz`;'
+        )
+        && str_contains(
+            $legacyPlanRemoval,
+            'DROP TRIGGER IF EXISTS `estab_komplan_bu_einsatz`;'
+        )
+        && str_contains(
+            $legacyPlanRemoval,
+            'DROP TRIGGER IF EXISTS `estab_komplan_bd_einsatz`;'
+        )
+        && str_contains(
+            $legacyPlanRemoval,
+            'the current plan schema is incomplete'
+        )
+        && str_contains(
+            $legacyPlanRemoval,
+            "'129-gegenstelle-stellenart.sql'"
+        )
+        // Die Grundfassung behaelt die Tabelle -- ihre Pruefsumme haengt daran.
+        && str_contains($freshSchema, 'CREATE TABLE IF NOT EXISTS `nv_komplan`')
+        // Und die Laufzeit kennt sie nicht mehr.
+        && !str_contains($readiness, 'nv_komplan')
+        && !str_contains($verify, 'nv_komplan'),
+    'The legacy plan removal, its refusal on non-empty data, or the '
+        . 'preserved fresh-schema baseline is outside the gate'
+);
+/*
+ * Die Stellenart gehoert der GEGENSTELLE, nicht dem eigenen Weg.
+ *
+ * Der Plan fuehrt die EIGENEN Erreichbarkeiten; ueber- und untergeordnet sind
+ * Eigenschaften der anderen Seite. Die alte Spalte am Weg wird NICHT
+ * geloescht -- eine freigegebene Fassung muss weiter sagen koennen, was sie
+ * gesagt hat, und ein DROP fiele unter keinen Auslöser und aenderte still
+ * genau die Zeilen, die Migration 94 schuetzt.
+ */
+$assert(
+    str_contains(
+        $counterpartKindMigration,
+        "ALTER TABLE `nv_fernmeldeplan_gegenstellen`"
+    )
+        && str_contains(
+            $counterpartKindMigration,
+            "`stellenart` ENUM('UEBER','UNTER','NEBEN') NULL"
+        )
+        && !str_contains($counterpartKindMigration, 'EIGEN')
+        && !str_contains($counterpartKindMigration, 'DROP COLUMN')
+        && str_contains(
+            $counterpartKindMigration,
+            'a released version lost a value'
+        )
+        && str_contains(
+            $counterpartKindMigration,
+            "'128-fernmeldeplan-kopfleiste.sql'"
+        ),
+    'The counterpart station kind, or the deliberate preservation of the '
+        . 'released route column, is outside the gate'
+);
+// Die Kopfleiste des Fb Fue 76. Alle drei Spalten sind freiwillig und
+// tragen KEINE Vorbelegung: ein DEFAULT schriebe "NfD" in jede bereits
+// freigegebene Fassung -- eine Aussage, die sie nie getroffen hat. Die
+// Nachpruefung der Migration besteht genau darauf.
+$assert(
+    str_contains(
+        $planHeaderMigration,
+        '`verfasser_funktion` VARCHAR(120) NULL'
+    )
+        && str_contains($planHeaderMigration, '`vs_vermerk` VARCHAR(40) NULL')
+        && str_contains(
+            $planHeaderMigration,
+            '`freigabe_dienststellung` VARCHAR(120) NULL'
+        )
+        /*
+         * Keine Spalte ist Pflicht, also braucht keine eine Vorbelegung.
+         * Geprueft werden die ADD-COLUMN-Zeilen selbst -- "NOT NULL" und
+         * "DEFAULT" stehen sonst auch in der Nachpruefung ("IS NOT NULL",
+         * "DECLARE ... DEFAULT 0") und die Probe schluege dort an, ohne dass
+         * eine Spalte etwas erzwaenge.
+         */
+        && preg_match(
+            '/ADD COLUMN[^;]*?(NOT NULL|DEFAULT)/i',
+            $planHeaderMigration
+        ) !== 1
+        && preg_match('/`kennwort`/i', $planHeaderMigration) !== 1
+        && str_contains($planHeaderMigration, "'127-eingangsweg.sql'")
+        && str_contains(
+            $planHeaderMigration,
+            'an existing plan version was given a value'
+        )
+        && str_contains(
+            $readiness,
+            "'128-fernmeldeplan-kopfleiste.sql'"
+        ),
+    'Plan header columns, their absent defaults, or the deliberate absence '
+        . 'of a PDV-800 password field is outside the gate'
+);
 $etbMigrationFragments = [
     "table_name = 'nv_funktionsfaehigkeiten' AND table_type = 'BASE TABLE' "
         . "AND engine = 'InnoDB' AND table_collation = "
@@ -3012,7 +3366,10 @@ foreach ([
     'missing ETB head was not rejected explicitly',
     'missing TTB head was not rejected explicitly',
     'MariaDB default snapshot isolation is not enabled for concurrency tests',
-    'assert_equal "25"',
+    // 38 statt 27: so viele Migrationen gibt es, seit 122 bis 132
+    // dazugekommen sind. Die Zahl steht drueben im Integrationstest bewusst
+    // fest, und hier als Beleg, dass dort ueberhaupt noch gezaehlt wird.
+    'assert_equal "38"',
 ] as $marker) {
     $assert(
         str_contains($schemaIntegration, $marker),
@@ -3079,7 +3436,7 @@ $assert(
         && str_contains($verifySql, "index_name <> 'PRIMARY') = 0")
         && str_contains(
             $verifySql,
-            '(SELECT COUNT(*) FROM `estab_schema_migrations`) = 25'
+            '(SELECT COUNT(*) FROM `estab_schema_migrations`) = 38'
         )
         && str_contains($verifySql, "'96-etb-duty-function.sql'")
         && str_contains(
@@ -3114,7 +3471,50 @@ $assert(
             $verifySql,
             "'119-inactive-messenger-dispatch.sql'"
         )
-        && str_contains($verifySql, ") = 25) AS `schema_migrations_ok`")
+        && str_contains(
+            $verifySql,
+            "'120-single-function-relief.sql'"
+        )
+        && str_contains(
+            $verifySql,
+            "'121-transport-disposition-field-one.sql'"
+        )
+        && str_contains(
+            $verifySql,
+            "'122-fernmeldeweg-identitaet.sql'"
+        )
+        && str_contains(
+            $verifySql,
+            "'123-fernmeldeweg-funkart.sql'"
+        )
+        && str_contains(
+            $verifySql,
+            "'124-fernmeldeweg-erreichbarkeit.sql'"
+        )
+        && str_contains(
+            $verifySql,
+            "'125-fernmeldeweg-rueckfallebene.sql'"
+        )
+        && str_contains(
+            $verifySql,
+            "'126-fernmeldeplan-gegenstellen.sql'"
+        )
+        && str_contains($verifySql, "'127-eingangsweg.sql'")
+        && str_contains(
+            $verifySql,
+            "'128-fernmeldeplan-kopfleiste.sql'"
+        )
+        && str_contains(
+            $verifySql,
+            "'129-gegenstelle-stellenart.sql'"
+        )
+        && str_contains($verifySql, "'130-komplan-abbau.sql'")
+        && str_contains(
+            $verifySql,
+            "'131-fernmeldeplan-nebenstellen.sql'"
+        )
+        && str_contains($verifySql, "'132-ttb-schreiber-ldf.sql'")
+        && str_contains($verifySql, ") = 38) AS `schema_migrations_ok`")
         && str_contains(
             $verifySql,
             'Discarded telecommunications drafts are immutable evidence'
@@ -3141,7 +3541,7 @@ $assert(
         && str_contains($readinessSql, "index_name <> 'PRIMARY') = 0")
         && str_contains(
             $readinessSql,
-            '(SELECT COUNT(*) FROM estab_schema_migrations) = 25'
+            '(SELECT COUNT(*) FROM estab_schema_migrations) = 38'
         )
         && str_contains($readinessSql, "'96-etb-duty-function.sql'")
         && str_contains(
@@ -3193,7 +3593,7 @@ $assert(
         )
         && str_contains(
             $readinessSql,
-            "checksum REGEXP BINARY '^[0-9a-f]{64}$') = 25"
+            "checksum REGEXP BINARY '^[0-9a-f]{64}$') = 38"
         ),
     'Runtime readiness does not require the exact final ETB catalogue and ledger'
 );
@@ -3439,9 +3839,31 @@ $assert(
         && str_contains($verify, "'117-telecom-draft-discard.sql'")
         && str_contains($verify, "'118-operational-authority.sql'")
         && str_contains($verify, "'119-inactive-messenger-dispatch.sql'")
-        && str_contains($verify, 'estab_schema_migrations`) = 25')
-        && str_contains($readiness, 'estab_schema_migrations) = 25'),
-    'Migration ledger/readiness does not require all twenty-five release migrations'
+        && str_contains($verify, "'122-fernmeldeweg-identitaet.sql'")
+        && str_contains($readiness, "'122-fernmeldeweg-identitaet.sql'")
+        && str_contains($verify, "'123-fernmeldeweg-funkart.sql'")
+        && str_contains($readiness, "'123-fernmeldeweg-funkart.sql'")
+        && str_contains($verify, "'124-fernmeldeweg-erreichbarkeit.sql'")
+        && str_contains($readiness, "'124-fernmeldeweg-erreichbarkeit.sql'")
+        && str_contains($verify, "'125-fernmeldeweg-rueckfallebene.sql'")
+        && str_contains($readiness, "'125-fernmeldeweg-rueckfallebene.sql'")
+        && str_contains($verify, "'126-fernmeldeplan-gegenstellen.sql'")
+        && str_contains($readiness, "'126-fernmeldeplan-gegenstellen.sql'")
+        && str_contains($verify, "'127-eingangsweg.sql'")
+        && str_contains($readiness, "'127-eingangsweg.sql'")
+        && str_contains($verify, "'128-fernmeldeplan-kopfleiste.sql'")
+        && str_contains($readiness, "'128-fernmeldeplan-kopfleiste.sql'")
+        && str_contains($verify, "'129-gegenstelle-stellenart.sql'")
+        && str_contains($readiness, "'129-gegenstelle-stellenart.sql'")
+        && str_contains($verify, "'130-komplan-abbau.sql'")
+        && str_contains($readiness, "'130-komplan-abbau.sql'")
+        && str_contains($verify, "'131-fernmeldeplan-nebenstellen.sql'")
+        && str_contains($readiness, "'131-fernmeldeplan-nebenstellen.sql'")
+        && str_contains($verify, "'132-ttb-schreiber-ldf.sql'")
+        && str_contains($readiness, "'132-ttb-schreiber-ldf.sql'")
+        && str_contains($verify, 'estab_schema_migrations`) = 38')
+        && str_contains($readiness, 'estab_schema_migrations) = 38'),
+    'Migration ledger/readiness does not require all release migrations'
 );
 $assert(
     str_contains($readiness, "require_once __DIR__ . '/bootstrap.php'")

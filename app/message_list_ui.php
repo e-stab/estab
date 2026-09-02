@@ -7,29 +7,25 @@ require_once __DIR__ . '/datetime.php';
 require_once __DIR__ . '/file_access.php';
 require_once __DIR__ . '/message_priority.php';
 require_once __DIR__ . '/message_repository.php';
+require_once __DIR__ . '/message_list.php';
+require_once __DIR__ . '/message_status.php';
+require_once __DIR__ . '/tabelle.php';
+require_once __DIR__ . '/message_timeline.php';
 
 /** Human-readable workflow state without relying on colour alone. */
 function estab_message_list_status_label(mixed $status): string
 {
-    $parsed = filter_var($status, FILTER_VALIDATE_INT);
-    return match ($parsed) {
-        0 => 'Entwurf',
-        1 => 'Bei LdF',
-        2 => 'In Beförderung',
-        4 => 'In Sichtung',
-        8 => 'Abgeschlossen',
-        10 => 'Zur Korrektur',
-        default => 'Unbekannter Stand',
-    };
+    return estab_message_status_name($status);
 }
 
 function estab_message_list_status_class(mixed $status): string
 {
-    $parsed = filter_var($status, FILTER_VALIDATE_INT);
-    return match ($parsed) {
-        8 => 'estab-message-list-status--done',
-        10 => 'estab-message-list-status--returned',
-        1, 2, 4 => 'estab-message-list-status--active',
+    return match (estab_message_status($status)) {
+        ESTAB_MESSAGE_STATUS_CLOSED => 'estab-message-list-status--done',
+        ESTAB_MESSAGE_STATUS_RETURNED => 'estab-message-list-status--returned',
+        ESTAB_MESSAGE_STATUS_LDF,
+        ESTAB_MESSAGE_STATUS_TRANSPORT,
+        ESTAB_MESSAGE_STATUS_REVIEW => 'estab-message-list-status--active',
         default => 'estab-message-list-status--neutral',
     };
 }
@@ -43,7 +39,25 @@ function estab_message_list_direction_label(mixed $direction): string
     };
 }
 
-/** Describe the canonical TTB link without inventing a fallback number. */
+/**
+ * Der Nachweis im Technischen Betriebsbuch -- und wenn keiner da ist, warum.
+ *
+ * > „Warum steht bei den Meldungen überall noch kein TBB-Nachweis?"
+ *
+ * Weil er beim Befördern entsteht, nicht beim Abfassen. Das TBB dokumentiert
+ * den Fernmeldebetrieb: Eine eingehende Nachricht bekommt ihre Nummer bei der
+ * Aufnahme, eine ausgehende erst, wenn der Fernmelder sie tatsächlich
+ * abgesetzt hat. Eine Gesprächsnotiz bekommt nie eine -- sie hält ein
+ * geführtes Gespräch fest und geht über keinen Sender.
+ *
+ * Der Satz lautete für alle drei Fälle gleich: „noch kein TBB-Nachweis".
+ * Damit sah eine Liste aus, als fehle überall etwas -- auch dort, wo nichts
+ * fehlt. Jetzt sagt er, woran man ist.
+ *
+ * Ob er das kann, hängt davon ab, was die Abfrage mitgeliefert hat. Fehlen
+ * Richtung und Gesprächsnotiz, bleibt es beim alten, ehrlich unbestimmten
+ * Satz -- eine erfundene Begründung wäre schlimmer als keine.
+ */
 function estab_message_list_tbb_evidence_label(array $row): string
 {
     $value = $row['estab_tbb_book_lfd'] ?? null;
@@ -57,6 +71,18 @@ function estab_message_list_tbb_evidence_label(array $row): string
         )
     ) {
         return 'TBB-Nachweis ' . (string) ((int) $value);
+    }
+    // Die Gespraechsnotiz steht in der Datenbank als 't', im Formular als
+    // '1' oder 'on'. Der Vordruck prueft seit jeher alle drei; hier ebenso.
+    if (in_array(
+        (string) ($row['11_gesprnotiz'] ?? ''),
+        ['t', '1', 'on'],
+        true
+    )) {
+        return 'ohne TBB-Nachweis · Gesprächsnotiz';
+    }
+    if ((string) ($row['04_richtung'] ?? '') === 'A') {
+        return 'TBB-Nachweis mit der Beförderung';
     }
     return 'noch kein TBB-Nachweis';
 }
@@ -141,6 +167,16 @@ function estab_message_list_filter_labels(array $filters): array
         $labels['status'] = 'Stand: '
             . estab_message_list_status_label($statusMap[$filters['status']] ?? null);
     }
+    if (($filters['read_state'] ?? '') !== '') {
+        $labels['read_state'] = 'Kenntnis: ' . (
+            $filters['read_state'] === 'unread' ? 'ungelesen' : 'gelesen'
+        );
+    }
+    if (($filters['done_state'] ?? '') !== '') {
+        $labels['done_state'] = 'Bearbeitung: ' . (
+            $filters['done_state'] === 'done' ? 'erledigt' : 'offen'
+        );
+    }
     if (($filters['from'] ?? '') !== '') {
         $labels['from'] = 'Von: '
             . (new DateTimeImmutable((string) $filters['from']))->format('d.m.Y');
@@ -180,6 +216,26 @@ function estab_message_list_status_options(): array
         'review' => 'In Sichtung',
         'done' => 'Abgeschlossen',
         'returned' => 'Zur Korrektur',
+    ];
+}
+
+/** @return array<string,string> */
+function estab_message_list_read_state_options(): array
+{
+    return [
+        '' => 'Gelesen und ungelesen',
+        'unread' => 'Nur ungelesene',
+        'read' => 'Nur gelesene',
+    ];
+}
+
+/** @return array<string,string> */
+function estab_message_list_done_state_options(): array
+{
+    return [
+        '' => 'Offen und erledigt',
+        'open' => 'Nur offene',
+        'done' => 'Nur erledigte',
     ];
 }
 
@@ -225,6 +281,22 @@ function estab_message_list_render_controls(
         throw new InvalidArgumentException('Ungültige versteckte Listenfelder');
     }
     $csrfHtml = (string) ($options['csrf_html'] ?? '');
+    /*
+     * Nur die Felder, ohne eigenes Formular.
+     *
+     * Die Uebersicht setzt ihre Filter seit der Vereinheitlichung *in* das
+     * Band des Tabellenbauteils. Ein Formular im Formular wirft der Browser
+     * weg, und zwei Baender nebeneinander sind genau die Uneinheitlichkeit,
+     * die abgestellt werden sollte.
+     *
+     * Weggelassen werden dabei die Felder, die das Bauteil selbst stellt:
+     * die Volltextsuche, die Seitengroesse und die Absendeschaltflaeche.
+     */
+    $nurFelder = ($options['nur_felder'] ?? false) === true;
+    // Only a caller which really owns per-identity read/done tables may offer
+    // those filters; otherwise the surface would promise a filter that no
+    // query can answer.
+    $stateFilters = ($options['state_filters'] ?? false) === true;
     $labels = estab_message_list_filter_labels($filters);
     $advancedOpen = ($filters['from'] ?? '') !== ''
         || ($filters['to'] ?? '') !== ''
@@ -233,11 +305,13 @@ function estab_message_list_render_controls(
         || (int) ($filters['page_size'] ?? 50) !== 50;
     $helpId = $domPrefix . '-query-help';
 
-    echo '<section class="estab-message-list-controls" '
-        . 'data-estab-message-list-controls>';
-    echo '<form class="estab-message-list-search-form" role="search" method="'
-        . $method . '" action="' . estab_auth_html($action) . '" target="'
-        . estab_auth_html($target) . '">';
+    if (!$nurFelder) {
+        echo '<section class="estab-message-list-controls" '
+            . 'data-estab-message-list-controls>';
+        echo '<form class="estab-message-list-search-form" role="search" method="'
+            . $method . '" action="' . estab_auth_html($action) . '" target="'
+            . estab_auth_html($target) . '">';
+    }
     echo $csrfHtml;
     foreach ($hidden as $name => $value) {
         if (
@@ -250,21 +324,27 @@ function estab_message_list_render_controls(
         echo '<input type="hidden" name="' . estab_auth_html($name)
             . '" value="' . estab_auth_html((string) $value) . '">';
     }
-    echo '<div class="estab-message-list-search-row">';
-    echo '<label class="estab-message-list-query" for="' . $domPrefix . '-q">';
-    echo '<span>Nachrichten durchsuchen</span>';
-    echo '<input id="' . $domPrefix . '-q" type="search" name="ml_q" '
-        . 'value="' . estab_auth_html((string) ($filters['q'] ?? '')) . '" '
-        . 'maxlength="120" autocomplete="off" enterkeyhint="search" '
-        . 'placeholder="z. B. Überschrift, TBB-Nachweis 142 oder Rufname" '
-        . 'aria-describedby="' . $helpId . '">';
-    echo '<small id="' . $helpId . '">Durchsucht Vordruck-Überschrift '
-        . '(Betreff), TBB-Nachweisnummer, Rufname, Rufnummer, Von, An, '
-        . 'Verfasserfunktion und Nachrichtentext.</small>';
-    echo '</label>';
-    echo '<button class="estab-button estab-button-primary" type="submit" '
-        . 'name="ml_apply" value="1">Suchen</button>';
-    echo '</div>';
+    if ($nurFelder) {
+        // Das Bauteil stellt die Volltextsuche; der Hinweis, worin sie
+        // sucht, gehoert trotzdem hierher -- er beschreibt diese Liste.
+        echo '<input type="hidden" name="ml_apply" value="1">';
+    } else {
+        echo '<div class="estab-message-list-search-row">';
+        echo '<label class="estab-message-list-query" for="' . $domPrefix . '-q">';
+        echo '<span>Nachrichten durchsuchen</span>';
+        echo '<input id="' . $domPrefix . '-q" type="search" name="ml_q" '
+            . 'value="' . estab_auth_html((string) ($filters['q'] ?? '')) . '" '
+            . 'maxlength="120" autocomplete="off" enterkeyhint="search" '
+            . 'placeholder="z. B. Überschrift, TBB-Nachweis 142 oder Rufname" '
+            . 'aria-describedby="' . $helpId . '">';
+        echo '<small id="' . $helpId . '">Durchsucht Vordruck-Überschrift '
+            . '(Betreff), TBB-Nachweisnummer, Rufname, Rufnummer, Von, An, '
+            . 'Verfasserfunktion und Nachrichtentext.</small>';
+        echo '</label>';
+        echo '<button class="estab-button estab-button-primary" type="submit" '
+            . 'name="ml_apply" value="1">Suchen</button>';
+        echo '</div>';
+    }
 
     echo '<fieldset class="estab-message-list-quick-filters">';
     echo '<legend>Schnellfilter</legend>';
@@ -297,6 +377,21 @@ function estab_message_list_render_controls(
             estab_message_list_status_options(),
             (string) ($filters['status'] ?? '')
         ) . '</select></label>';
+    if ($stateFilters) {
+        echo '<label for="' . $domPrefix . '-read-state"><span>Kenntnis</span>';
+        echo '<select id="' . $domPrefix . '-read-state" name="ml_read_state">'
+            . estab_message_list_select_options(
+                estab_message_list_read_state_options(),
+                (string) ($filters['read_state'] ?? '')
+            ) . '</select></label>';
+        echo '<label for="' . $domPrefix . '-done-state"><span>Bearbeitung'
+            . '</span>';
+        echo '<select id="' . $domPrefix . '-done-state" name="ml_done_state">'
+            . estab_message_list_select_options(
+                estab_message_list_done_state_options(),
+                (string) ($filters['done_state'] ?? '')
+            ) . '</select></label>';
+    }
     echo '</fieldset>';
 
     echo '<details class="estab-message-list-more"'
@@ -327,12 +422,17 @@ function estab_message_list_render_controls(
             estab_message_list_sort_options(),
             (string) ($filters['sort'] ?? 'priority_newest')
         ) . '</select></label>';
-    echo '<label for="' . $domPrefix . '-page-size"><span>Nachrichten pro Seite</span>'
-        . '<select id="' . $domPrefix . '-page-size" name="ml_page_size">'
-        . estab_message_list_select_options(
-            ['25' => '25', '50' => '50', '100' => '100'],
-            (string) ($filters['page_size'] ?? 50)
-        ) . '</select></label>';
+    if (!$nurFelder) {
+        // Die Seitengroesse stellt das Bauteil ("Zeilen"), wenn es das Band
+        // baut. Zwei Bedienelemente fuer dieselbe Sache sind schlimmer als
+        // eines.
+        echo '<label for="' . $domPrefix . '-page-size"><span>Nachrichten pro Seite</span>'
+            . '<select id="' . $domPrefix . '-page-size" name="ml_page_size">'
+            . estab_message_list_select_options(
+                ['25' => '25', '50' => '50', '100' => '100'],
+                (string) ($filters['page_size'] ?? 50)
+            ) . '</select></label>';
+    }
     echo '</div></details>';
 
     echo '<div class="estab-tool-actions">';
@@ -354,7 +454,9 @@ function estab_message_list_render_controls(
         }
         echo '</div></div>';
     }
-    echo '</form></section>';
+    if (!$nurFelder) {
+        echo '</form></section>';
+    }
 }
 
 /** @param array<string,mixed> $options */
@@ -388,18 +490,23 @@ function estab_message_list_render_resultbar(
 }
 
 /** @return array<string,string> */
-function estab_message_list_filter_hidden_fields(array $filters): array
-{
+function estab_message_list_filter_hidden_fields(
+    array $filters,
+    string $prefix = 'ml_'
+): array {
+    $prefix = estab_message_list_prefix($prefix);
     return [
-        'ml_q' => (string) ($filters['q'] ?? ''),
-        'ml_direction' => (string) ($filters['direction'] ?? ''),
-        'ml_priority' => (string) ($filters['priority'] ?? ''),
-        'ml_status' => (string) ($filters['status'] ?? ''),
-        'ml_from' => (string) ($filters['from'] ?? ''),
-        'ml_to' => (string) ($filters['to'] ?? ''),
-        'ml_recipient' => (string) ($filters['recipient'] ?? ''),
-        'ml_sort' => (string) ($filters['sort'] ?? 'priority_newest'),
-        'ml_page_size' => (string) ($filters['page_size'] ?? 50),
+        $prefix . 'q' => (string) ($filters['q'] ?? ''),
+        $prefix . 'direction' => (string) ($filters['direction'] ?? ''),
+        $prefix . 'priority' => (string) ($filters['priority'] ?? ''),
+        $prefix . 'status' => (string) ($filters['status'] ?? ''),
+        $prefix . 'read_state' => (string) ($filters['read_state'] ?? ''),
+        $prefix . 'done_state' => (string) ($filters['done_state'] ?? ''),
+        $prefix . 'from' => (string) ($filters['from'] ?? ''),
+        $prefix . 'to' => (string) ($filters['to'] ?? ''),
+        $prefix . 'recipient' => (string) ($filters['recipient'] ?? ''),
+        $prefix . 'sort' => (string) ($filters['sort'] ?? 'priority_newest'),
+        $prefix . 'page_size' => (string) ($filters['page_size'] ?? 50),
     ];
 }
 
@@ -416,6 +523,10 @@ function estab_message_list_render_pager(
     $action = (string) ($options['action'] ?? '');
     $method = strtolower((string) ($options['method'] ?? 'get'));
     $target = (string) ($options['target'] ?? '_self');
+    $prefix = estab_message_list_prefix(
+        (string) ($options['prefix'] ?? 'ml_')
+    );
+    $pageField = $prefix . 'page';
     $hidden = $options['hidden'] ?? [];
     if (!is_array($hidden)) {
         throw new InvalidArgumentException('Ungültige Pagerfelder');
@@ -425,25 +536,27 @@ function estab_message_list_render_pager(
         . estab_auth_html($action) . '" target="' . estab_auth_html($target)
         . '">';
     echo (string) ($options['csrf_html'] ?? '');
-    foreach (array_merge(estab_message_list_filter_hidden_fields($filters), $hidden)
-        as $name => $value) {
+    foreach (array_merge(
+        estab_message_list_filter_hidden_fields($filters, $prefix),
+        $hidden
+    ) as $name => $value) {
         echo '<input type="hidden" name="' . estab_auth_html((string) $name)
             . '" value="' . estab_auth_html((string) $value) . '">';
     }
     $disabledBack = $page <= 1 ? ' disabled' : '';
     $disabledForward = $page >= $pages ? ' disabled' : '';
-    echo '<button class="estab-button" name="ml_page" value="1" type="submit"'
-        . $disabledBack . '>Erste</button>';
-    echo '<button class="estab-button" name="ml_page" value="'
+    echo '<button class="estab-button" name="' . $pageField
+        . '" value="1" type="submit"' . $disabledBack . '>Erste</button>';
+    echo '<button class="estab-button" name="' . $pageField . '" value="'
         . max(1, $page - 1) . '" type="submit"' . $disabledBack
         . '>Zurück</button>';
     echo '<span class="estab-message-list-page-status" aria-current="page">Seite '
         . $page . ' von ' . $pages . '</span>';
-    echo '<button class="estab-button" name="ml_page" value="'
+    echo '<button class="estab-button" name="' . $pageField . '" value="'
         . min($pages, $page + 1) . '" type="submit"' . $disabledForward
         . '>Weiter</button>';
-    echo '<button class="estab-button" name="ml_page" value="' . $pages
-        . '" type="submit"' . $disabledForward . '>Letzte</button>';
+    echo '<button class="estab-button" name="' . $pageField . '" value="'
+        . $pages . '" type="submit"' . $disabledForward . '>Letzte</button>';
     echo '</form></nav>';
 }
 
@@ -463,25 +576,141 @@ function estab_message_list_recipient_labels(mixed $stored): array
 }
 
 /**
+ * Dwell time of one row together with its deadline verdict.
+ *
+ * The verdict is written out, so colour only reinforces a word which is
+ * already there. The exact seconds stay in a data attribute for tooling and
+ * for tests.
+ */
+function estab_message_list_dwell_markup(array $row): string
+{
+    $priority = $row['09_vorrangstufe'] ?? null;
+    $state = estab_message_list_dwell_state(
+        $priority,
+        $row['estab_dwell_seconds'] ?? null,
+        $row['x00_status'] ?? null
+    );
+    $seconds = estab_message_list_dwell_seconds(
+        $row['estab_dwell_seconds'] ?? null
+    );
+    $verdict = [
+        'overdue' => 'überfällig',
+        'warn' => 'wird fällig',
+        'ok' => 'in Frist',
+    ][$state] ?? '';
+    if ($state === 'closed') {
+        $text = 'Laufzeit beendet';
+    } elseif ($seconds === null) {
+        $text = 'Verweildauer nicht nachgewiesen';
+    } else {
+        $text = 'seit ' . estab_message_timeline_duration_label($seconds)
+            . ' · ' . $verdict;
+    }
+    $limits = estab_message_list_dwell_limits($priority);
+    $title = 'Vorrang ' . estab_message_priority_label($priority)
+        . ': überfällig ab '
+        . estab_message_timeline_duration_label($limits['overdue']);
+    return '<span class="estab-message-list-dwell '
+        . 'estab-message-list-dwell--' . $state . '" '
+        . 'data-estab-message-dwell="' . $state . '"'
+        . ($seconds === null
+            ? ''
+            : ' data-estab-message-dwell-seconds="' . $seconds . '"')
+        . ' title="' . estab_auth_html($title) . '">'
+        . estab_auth_html($text) . '</span>';
+}
+
+/** Whether one EXISTS result column reports a present state row. */
+function estab_message_list_state_flag(mixed $value): bool
+{
+    return $value === 1 || $value === true || $value === '1';
+}
+
+/**
+ * Reading and handling state of one row.
+ *
+ * A caller without per-identity state tables says so instead of presenting an
+ * unread message as read.
+ */
+function estab_message_list_awareness_markup(array $row): string
+{
+    if (
+        !array_key_exists('estab_state_read', $row)
+        && !array_key_exists('estab_state_done', $row)
+    ) {
+        return '<span class="estab-message-list-awareness '
+            . 'estab-message-list-awareness--unknown">nicht geführt</span>';
+    }
+    $read = estab_message_list_state_flag($row['estab_state_read'] ?? null);
+    $done = estab_message_list_state_flag($row['estab_state_done'] ?? null);
+    return '<span class="estab-message-list-awareness '
+        . 'estab-message-list-awareness--' . ($read ? 'read' : 'unread')
+        . '">' . ($read ? 'gelesen' : 'ungelesen') . '</span>'
+        . '<span class="estab-message-list-awareness '
+        . 'estab-message-list-awareness--' . ($done ? 'done' : 'open')
+        . '">' . ($done ? 'erledigt' : 'offen') . '</span>';
+}
+
+/**
+ * Shorten one message text and keep the complete text one click away.
+ *
+ * Truncation is a display decision only: the full evidence text stays in the
+ * same row, so a Nachweisung line remains one screen line high without
+ * withholding anything.
+ */
+function estab_message_list_clamped_text(mixed $value, int $limit = 160): string
+{
+    if ($limit < 1) {
+        throw new InvalidArgumentException('Ungültige Textkürzung');
+    }
+    $text = estab_message_plain_text($value);
+    if (trim($text) === '') {
+        return '<span class="estab-message-list-clamp '
+            . 'estab-message-list-clamp--empty">ohne Inhalt</span>';
+    }
+    $excerpt = estab_message_excerpt($text, $limit);
+    if ($excerpt === $text) {
+        return '<span class="estab-message-list-clamp">'
+            . estab_message_html($text) . '</span>';
+    }
+    return '<span class="estab-message-list-clamp">'
+        . estab_message_html($excerpt) . ' …</span>'
+        . '<details class="estab-message-list-fulltext">'
+        . '<summary>Ganze Nachricht</summary><p>'
+        . estab_message_html($text) . '</p></details>';
+}
+
+/**
  * Render the common compact result table. The callback must emit exactly one
  * authenticated detail control for the supplied row.
  *
  * @param list<array<string,mixed>> $rows
  */
-function estab_message_list_render_table(array $rows, callable $openControl): void
-{
-    echo '<div class="estab-message-list-table-wrap estab-tool-table-wrap">';
-    echo '<table class="estab-message-list-table estab-tool-table">';
-    echo '<caption class="estab-visually-hidden">Gefilterte Nachrichtenvordrucke '
-        . 'des aktiven Einsatzes</caption>';
-    echo '<thead><tr>';
-    foreach ([
-        'TBB-Nachweis', 'Zeitpunkt', 'Von und An', 'Überschrift und Inhalt',
-        'Bearbeitungsstand', 'Verteilung', 'Aktion',
-    ] as $heading) {
-        echo '<th scope="col">' . estab_auth_html($heading) . '</th>';
-    }
-    echo '</tr></thead><tbody>';
+function estab_message_list_render_table(
+    array $rows,
+    callable $openControl,
+    string $zusatzbaender = '',
+    ?array $fremd = null,
+    bool $eigeneBedienung = false
+): void {
+    /*
+     * Die Meldungsuebersicht kommt aus dem Tabellenbauteil (app/tabelle.php)
+     * -- in dessen zweiter Betriebsart.
+     *
+     * Sie siebt in der Datenbank: sechs Baender ueber vorbereitete
+     * Anweisungen, darunter EXISTS-Unterabfragen auf die Kenntnis- und
+     * Erledigt-Tabellen des jeweiligen Kontos, und die Berechtigungspruefung
+     * haengt mit daran. Das bleibt, wo es ist. Das Bauteil bekommt deshalb
+     * eine fertige Auswahl und stellt sie dar: Rahmen, klebender Kopf,
+     * Beschriftung, Zellenbezeichnungen, Kartenumbruch unter 48rem.
+     *
+     * Seine eigenen Baender und seinen Blaetterer schaltet sie ab -- die hat
+     * sie selbst, und zwei Blaetterer nebeneinander, die verschiedene
+     * Adressen ansprechen, sind schlimmer als einer.
+     *
+     * Das Markup jeder Zelle bleibt Zeile fuer Zeile, wie es war.
+     */
+    $zeilen = [];
     foreach ($rows as $row) {
         $recordId = estab_message_positive_id($row['00_lfd'] ?? null);
         $direction = (string) ($row['04_richtung'] ?? '');
@@ -513,33 +742,31 @@ function estab_message_list_render_table(array $rows, callable $openControl): vo
         $attachmentCount = count(estab_message_list_attachment_tokens(
             $row['12_anhang'] ?? null
         ));
-
-        echo '<tr class="estab-message-list-row'
-            . ($urgent ? ' estab-message-list-row--priority' : '')
-            . '" data-message-id="' . $recordId . '">';
         $storedPriority = estab_message_priority_storage_value(
             $row['09_vorrangstufe'] ?? null
         );
-        echo '<td data-label="TBB-Nachweis"><strong class="estab-message-list-route">'
+
+        $nachweis = '<strong class="estab-message-list-route">'
             . estab_auth_html(estab_message_list_direction_label($direction))
             . ' · ' . estab_auth_html(estab_message_list_tbb_evidence_label($row))
             . '</strong><span class="estab-message-list-priority'
             . ($urgent ? ' estab-message-list-priority--urgent' : '')
             . '" data-priority="'
             . estab_auth_html($storedPriority ?? 'unknown') . '">'
-            . estab_auth_html($priorityLabel) . '</span></td>';
-        echo '<td data-label="Zeitpunkt" class="estab-tool-table-number">'
+            . estab_auth_html($priorityLabel) . '</span>';
+
+        $zeit = '<span class="estab-message-list-time">'
             . estab_auth_html(estab_message_list_datetime_label(
                 $row['12_abfzeit'] ?? null
-            )) . '</td>';
-        echo '<td data-label="Von und An"><span '
-            . 'class="estab-message-list-correspondents"><span>'
+            )) . '</span>'
+            . estab_message_list_dwell_markup($row);
+
+        $beteiligte = '<span class="estab-message-list-correspondents"><span>'
             . '<strong>Von:</strong> '
             . estab_message_html($from) . '</span><span><strong>An:</strong> '
-            . estab_message_html($to) . '</span></span></td>';
-        echo '<td data-label="Überschrift und Inhalt" '
-            . 'class="estab-message-list-summary">'
-            . '<span class="estab-message-list-field-label">'
+            . estab_message_html($to) . '</span></span>';
+
+        $inhalt = '<span class="estab-message-list-field-label">'
             . 'Vordruck-Überschrift</span><strong '
             . 'class="estab-message-list-subject'
             . ($subjectMissing ? ' estab-message-list-subject--empty' : '')
@@ -555,36 +782,151 @@ function estab_message_list_render_table(array $rows, callable $openControl): vo
             $attachmentLabel = estab_message_list_attachment_label(
                 $attachmentCount
             );
-            echo '<span class="estab-tool-badge estab-tool-badge-warning '
+            $inhalt .= '<span class="estab-tool-badge estab-tool-badge-warning '
                 . 'estab-message-list-attachments" '
                 . 'data-estab-message-attachment-badge '
                 . 'data-estab-message-attachment-count="' . $attachmentCount
                 . '" aria-label="' . estab_auth_html($attachmentLabel) . '">'
                 . estab_auth_html($attachmentLabel) . '</span>';
         }
-        echo '</td>';
-        echo '<td data-label="Bearbeitungsstand"><span '
-            . 'class="estab-message-list-status '
+
+        $stand = '<span class="estab-message-list-status '
             . estab_message_list_status_class($row['x00_status'] ?? null)
             . '" data-status="'
             . estab_auth_html((string) ($row['x00_status'] ?? 'unknown')) . '">'
-            . estab_auth_html($statusLabel) . '</span></td>';
-        echo '<td data-label="Verteilung"><span '
-            . 'class="estab-message-list-recipients">';
+            . estab_auth_html($statusLabel) . '</span>';
+
+        $kenntnis = '<span class="estab-message-list-awareness-group">'
+            . estab_message_list_awareness_markup($row) . '</span>';
+
+        $verteilung = '<span class="estab-message-list-recipients">';
         if ($recipients === []) {
-            echo '<span>Keine Verteilung</span>';
+            $verteilung .= '<span>Keine Verteilung</span>';
         } else {
             foreach ($recipients as $recipient) {
-                echo '<span class="estab-tool-badge estab-tool-badge-neutral">'
+                $verteilung .= '<span class="estab-tool-badge estab-tool-badge-neutral">'
                     . estab_auth_html($recipient) . '</span>';
             }
         }
-        echo '</span></td>';
-        echo '<td data-label="Aktion" class="estab-message-list-action">';
+        $verteilung .= '</span>';
+
+        ob_start();
         $openControl($row);
-        echo '</td></tr>';
+        $aktion = (string) ob_get_clean();
+
+        $zeilen[] = [
+            'id' => (string) $recordId,
+            'vorrang' => $urgent ? '1' : '',
+            'z_nachweis' => $nachweis,
+            'z_zeit' => $zeit,
+            'z_beteiligte' => $beteiligte,
+            'z_inhalt' => $inhalt,
+            'z_stand' => $stand,
+            'z_kenntnis' => $kenntnis,
+            'z_verteilung' => $verteilung,
+            'z_aktion' => $aktion,
+        ];
     }
-    echo '</tbody></table></div>';
+
+    $spalte = static fn (string $kopf, int $breite, string $feld): array => [
+        'schluessel' => 'id',
+        'kopf' => $kopf,
+        'breite' => $breite,
+        // Sortiert wird ueber das Sortierband der Seite, nicht je Spalte:
+        // Die Uebersicht sortiert in der Datenbank ueber alle Seiten, nicht
+        // nur ueber die angezeigte.
+        'sortierbar' => false,
+        'suchbar' => false,
+        'art' => 'text',
+        'zelle' => static fn (array $z): string => $z[$feld],
+    ];
+
+    echo estab_tabelle_markup([
+        'id' => 'meldungen',
+        'beschriftung' => 'Gefilterte Nachrichtenvordrucke des aktiven Einsatzes',
+        /*
+         * Die Uebersicht siebt und blaettert in der Datenbank -- an ihrer
+         * Abfrage haengt die Berechtigungspruefung. Das Bauteil bekommt
+         * deshalb eine fertige Auswahl und die Adressfelder, unter denen die
+         * Seite ihren Zustand seit jeher kennt. So spricht sein Band ihre
+         * Sprache, und die Liste sieht aus wie jede andere.
+         */
+        'zusatzbaender' => $zusatzbaender,
+        /*
+         * Wer seine Bedienung selbst stellt, bekommt keine zweite dazu.
+         *
+         * Das Band des Bauteils spricht GET: Sein Suchknopf schickt ein
+         * GET-Formular, sein Blaetterer sind Verweise. Die Uebersicht der
+         * Uebungsleitung ist genauso gebaut -- dort ist das richtig.
+         *
+         * Die zweite Sichtung im Nachrichtenteil ist es nicht: Sie bringt
+         * Suchband, Ergebnisleiste und Blaetterer als POST-Formulare mit
+         * Token mit, weil ihr Steuerlauf jede Nachrichtenanfrage an POST und
+         * an die gewaehlte Ansicht bindet. Neben dieser Bedienung stand
+         * bisher die des Bauteils -- und jede Suche darin endete mit
+         * "Aktion nicht erlaubt", weil ihr GET weder Token noch
+         * Ansichtsauswahl trug. Die Korrekturliste zeigte dasselbe Band,
+         * ohne ueberhaupt danach zu sieben.
+         */
+        'baender' => !$eigeneBedienung,
+        'felder' => [
+            'suche' => 'ml_q',
+            'groesse' => 'ml_page_size',
+            'seite' => 'ml_page',
+        ],
+        'groessen' => [25, 50, 100],
+        'fremd' => $fremd ?? [
+            'treffer' => count($zeilen),
+            'gesamt' => count($zeilen),
+        ],
+        // Acht Spalten brauchen Platz. Ohne diese Angabe quetscht
+        // `table-layout: fixed` die Aktionsspalte auf ein Zeichen je Zeile.
+        //
+        // 56rem und nicht mehr: Die Inhaltsspalte einer Fuehrungsstelle misst
+        // bei 1440 Bildpunkten rund 61rem. Wer hier 68rem verlangt, schiebt
+        // die Aktionsspalte aus dem Bild und laesst den Bediener zu jedem
+        // Oeffnen erst quer scrollen. Enger wird es nur auf schmaleren
+        // Fenstern -- und darunter wird die Tabelle ohnehin zu Karten.
+        'mindestbreite' => '56rem',
+        'zeilenmarke' => static fn (array $z): string =>
+            'class="estab-message-list-row'
+                . ($z['vorrang'] !== '' ? ' estab-message-list-row--priority' : '')
+                . '" data-message-id="' . estab_auth_html($z['id']) . '"',
+        /*
+         * Die Spaltenbreiten sind gemessen, nicht geschaetzt.
+         *
+         * Der Kopf steht in Grossbuchstaben mit Sperrung; "BEARBEITUNGS-
+         * STAND" braucht dadurch 154 Bildpunkte, bekam aber 99 bis 114 und
+         * wurde in jeder Fensterbreite abgeschnitten -- auf dem Schirm stand
+         * "BEARBEITUNGS". Die Marke "Abgeschlossen" in derselben Spalte lief
+         * um 16 Bildpunkte ueber ihre Zelle hinaus.
+         *
+         * Die Tabelle ist nie schmaler als 56rem (896 Bildpunkte), darunter
+         * wird sie zu Karten. Ein Hundertstel ist also mindestens 9
+         * Bildpunkte wert; die Spalte "Bearbeitungsstand" braucht 14. Den
+         * Platz gibt die Aktionsspalte her, deren Knopf jetzt kurz
+         * beschriftet ist, und die Spalte "Von und An", die ohnehin
+         * umbricht. Die Inhaltsspalte bleibt unangetastet: Sie traegt den
+         * Meldungstext.
+         *
+         * Weiches Trennzeichen im Kopf: Ein einzelnes langes Wort kann sonst
+         * nirgends brechen. Es ist die einzige Trennung, die in jedem
+         * Browser und auch im Druck sicher wirkt -- "hyphens: auto" ist eine
+         * Bitte, kein Versprechen.
+         */
+        'spalten' => [
+            $spalte('TBB-Nachweis', 11, 'z_nachweis'),
+            $spalte("Zeit und Verweil\u{00AD}dauer", 11, 'z_zeit'),
+            $spalte('Von und An', 13, 'z_beteiligte'),
+            $spalte('Überschrift und Inhalt', 22, 'z_inhalt'),
+            $spalte("Bearbeitungs\u{00AD}stand", 13, 'z_stand'),
+            $spalte('Kenntnis', 9, 'z_kenntnis'),
+            $spalte("Ver\u{00AD}teilung", 10, 'z_verteilung'),
+            $spalte('Aktion', 11, 'z_aktion'),
+        ],
+        'zeilen' => $zeilen,
+        'leer' => 'Keine Meldung entspricht den gesetzten Filtern.',
+    ]);
 }
 
 function estab_message_list_render_empty(array $filters): void

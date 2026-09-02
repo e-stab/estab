@@ -653,7 +653,7 @@ try {
         $connection,
         'INSERT INTO `nv_fernmeldeplan_eintraege`'
             . ' (`fernmeldeplan_id`, `sortierung`, `betriebsstelle`,'
-            . ' `rufname`, `medium`, `kanal`, `bandlage`, `verkehrsform`,'
+            . ' `erreichbarkeit`, `medium`, `kanal`, `bandlage`, `verkehrsform`,'
             . ' `besondere_vermerke`, `bemerkungen`)'
             . " VALUES (?, 1, 'CI Betriebsstelle', 'Florian 1', 'Fu',"
             . " 'Kanal 404', 'G/U', 'Gegenverkehr', '', '')",
@@ -669,7 +669,7 @@ try {
         $connection,
         'INSERT INTO `nv_fernmeldeplan_eintraege`'
             . ' (`fernmeldeplan_id`, `sortierung`, `betriebsstelle`,'
-            . ' `rufname`, `medium`, `kanal`, `bandlage`, `verkehrsform`,'
+            . ' `erreichbarkeit`, `medium`, `kanal`, `bandlage`, `verkehrsform`,'
             . ' `besondere_vermerke`, `bemerkungen`)'
             . " VALUES (?, 2, 'CI Ersatzstelle', 'Florian 2', 'Fu',"
             . " 'Kanal 505', 'O/U', 'Wechselverkehr', '', 'Redisposition B')",
@@ -1650,7 +1650,7 @@ try {
             && (string) $statusTwoRow['05_gegenstelle'] === 'Florian 1'
             && (string) $statusTwoRow['06_befweg']
                 === 'CI Betriebsstelle · Florian 1 · Kanal 404 · G/U · Gegenverkehr'
-            && (string) $statusTwoRow['06_befwegausw'] === 'Fu'
+            && (string) $statusTwoRow['01_medium'] === 'Fu'
             && (int) $statusTwoRow['estab_fernmeldeplan_eintrag_id']
                 === $telecomEntryId
             && estab_datetime_is_unset($statusTwoRow['03_datum'])
@@ -1858,7 +1858,8 @@ try {
             $connection,
             'UPDATE ' . estab_message_table($messageTable)
                 . ' SET `estab_fernmeldeplan_eintrag_id` = ?,'
-                . " `06_befwegausw` = 'Fu', `06_befweg` = ?"
+                . " `01_medium` = 'Fu', `06_befwegausw` = 'Fu',"
+                . " `06_befweg` = ?"
                 . ' WHERE `00_lfd` = ? AND `einsatz_id` = ?',
             [
                 $telecomEntryBId,
@@ -1996,7 +1997,7 @@ try {
             && (string) $completedRow['05_gegenstelle'] === 'Florian 2'
             && (string) $completedRow['06_befweg']
                 === 'CI Ersatzstelle · Florian 2 · Kanal 505 · O/U · Wechselverkehr'
-            && (string) $completedRow['06_befwegausw'] === 'Fu'
+            && (string) $completedRow['01_medium'] === 'Fu'
             && (int) $completedRow['estab_fernmeldeplan_eintrag_id']
                 === $telecomEntryBId
             && (string) $completedRow['x02_sperre'] === 'f'

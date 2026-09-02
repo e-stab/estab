@@ -11,6 +11,8 @@ require_once __DIR__ . '/../app/dv_operations.php';
 require_once __DIR__ . '/../app/navigation.php';
 require_once __DIR__ . '/../app/read_authorization.php';
 require_once __DIR__ . '/../app/session_ui.php';
+require_once __DIR__ . '/../app/tabelle.php';
+require_once __DIR__ . '/../app/telecom_sketch.php';
 
 estab_session_ui_start($_SESSION);
 estab_navigation_require_session(
@@ -23,6 +25,31 @@ if ($identity === null) {
     throw new LogicException('Authenticated command-post identity missing');
 }
 $operationIdentity = estab_read_session_identity($_SESSION) ?? $identity;
+
+/*
+ * Zwei Ansichten auf denselben Bestand.
+ *
+ * Fb Fü 76 beschreibt zwei Leserkreise mit zwei Tiefen: der taktische Führer
+ * bekommt nur, was er für seine Entscheidung braucht, das Betriebspersonal
+ * sämtliche technischen Einzelheiten. Das ist kein Widerspruch im Vordruck,
+ * sondern die Beschreibung zweier Unterlagen -- eStab führt einen Bestand und
+ * zwei Ansichten darauf.
+ *
+ * Die Wahl steht in der Sitzung, nicht in der Adresse: wer umgeschaltet hat,
+ * soll nach dem Speichern eines Weges dieselbe Ansicht wiederfinden, und die
+ * Umschaltung ist ein Wunsch der Person, keine Eigenschaft der Seite.
+ * Umgeschaltet wird mit einem Verweis; JavaScript ist dafür nicht nötig.
+ */
+$tiefenSchluessel = 'estab_fernmeldeplan_tiefe';
+$gewuenschteTiefe = $_GET['ansicht'] ?? null;
+if (in_array($gewuenschteTiefe, ['taktisch', 'betrieblich'], true)) {
+    $_SESSION[$tiefenSchluessel] = $gewuenschteTiefe;
+}
+$planTiefe = in_array(
+    $_SESSION[$tiefenSchluessel] ?? null,
+    ['taktisch', 'betrieblich'],
+    true
+) ? (string) $_SESSION[$tiefenSchluessel] : 'taktisch';
 
 header('Content-Type: text/html; charset=UTF-8');
 header('Cache-Control: private, no-store, max-age=0');
@@ -106,6 +133,10 @@ function dv_operations_is_telecom_revision_action(mixed $action): bool
             'add_plan_entry',
             'update_plan_entry',
             'delete_plan_entry',
+            'add_plan_counterpart',
+            'delete_plan_counterpart',
+            'add_plan_extension',
+            'delete_plan_extension',
             'discard_plan',
             'activate_plan',
         ],
@@ -189,87 +220,162 @@ function dv_operations_post_value(
 /** @param array<string, mixed> $values */
 function dv_operations_render_telecom_entry_fields(array $values): void
 {
-    $medium = is_string($values['medium'] ?? null)
-        && isset(ESTAB_DV_MEDIA_DEFINITIONS[$values['medium']])
-        ? $values['medium']
-        : '';
-    $definition = $medium === ''
+    /*
+     * Der Auswahlkasten fuehrt Wegarten, nicht Medien.
+     *
+     * "Funk (analog)" und "Funk (digital)" speichern beide das Medium `Fu` --
+     * das ist der Wert, den Feld 1 des Vordrucks druckt. Was sie
+     * unterscheidet, steht daneben in `funkart`. Der Bediener waehlt also die
+     * Sache, die er kennt, und der Vordruck merkt davon nichts.
+     */
+    $kind = estab_dv_telecom_route_kind(
+        $values['medium'] ?? null,
+        $values['funkart'] ?? null
+    );
+    if (is_string($values['wegart'] ?? null)
+        && isset(ESTAB_DV_TELECOM_ROUTE_KINDS[$values['wegart']])) {
+        $kind = $values['wegart'];
+    }
+    $definition = $kind === null
         ? null
-        : ESTAB_DV_MEDIA_DEFINITIONS[$medium];
-    $channelVisible = $definition === null
-        || $definition['kanal'] !== null;
-    $bandVisible = $definition === null
-        || $definition['bandlage'] !== null;
-    $channelRequired = $definition !== null
-        && $definition['kanal'] !== null;
-    $bandRequired = $definition !== null
-        && $definition['bandlage'] !== null;
+        : ESTAB_DV_TELECOM_ROUTE_KINDS[$kind];
+    $legacyRadio = $kind === null
+        && ($values['medium'] ?? null) !== null
+        && (string) $values['medium'] !== '';
     ?>
     <div class="estab-tool-form-grid">
-      <label>Betriebsstellen-Klarbezeichnung
+      <label>Stelle
         <input name="betriebsstelle" maxlength="255" required
           value="<?= dv_operations_html($values['betriebsstelle'] ?? '') ?>">
+        <small><strong>Ihre eigene</strong> Betriebsstelle, die dieses
+          Mittel führt: Führungsstelle, Fernmeldezentrale, Meldekopf. Wen Sie
+          darüber erreichen, tragen Sie weiter unten als Gegenstelle ein.</small>
       </label>
-      <label>Rufname
-        <input name="rufname" maxlength="128" required
-          value="<?= dv_operations_html($values['rufname'] ?? '') ?>">
+      <?php
+        /*
+         * Hier stand einmal die Stellenart. Sie ist an die Gegenstelle
+         * gewandert, und das war eine Berichtigung, keine Verschiebung:
+         *
+         * Der Plan legt die EIGENEN Erreichbarkeiten fest. Eine Zeile ist
+         * eines UNSERER Mittel, getragen von einer unserer eigenen
+         * Betriebsstellen -- ihr Verhältnis zu uns ist immer "eigen". Ober-
+         * und Unterstellung sind Eigenschaften der ANDEREN Seite, und dort
+         * werden sie jetzt auch gepflegt. Fb Fü 77 zeichnet es genauso: wir
+         * in der Mitte, übergeordnet links, nachgeordnet rechts.
+         */
+      ?>
+      <?php
+        /*
+         * Die Rueckfallebene ist ein Verweis, kein Schalter mit Ziel: NULL
+         * heisst "keine". Angeboten werden nur die uebrigen Wege desselben
+         * Entwurfs -- der eigene faellt heraus, weil ein Weg nicht seine
+         * eigene Rueckfallebene sein kann.
+         */
+        $andereWege = [];
+        foreach ($values['geschwister'] ?? [] as $geschwister) {
+            if ((int) ($geschwister['weg_id'] ?? 0) < 1) {
+                continue;
+            }
+            if (($geschwister['eigen'] ?? false) === true) {
+                continue;
+            }
+            $andereWege[] = $geschwister;
+        }
+      ?>
+      <label>Rückfallebene für
+        <select name="rueckfallebene_fuer_weg"
+          <?= $andereWege === [] ? 'disabled' : '' ?>>
+          <?php
+            /*
+             * Auch die Leerwahl wird ausgezeichnet. Der Aenderungswaechter
+             * vergleicht `selected` gegen `defaultSelected`; eine Vorauswahl,
+             * die nur der Browser trifft, sieht fuer ihn wie eine Bearbeitung
+             * aus. Solange es keinen anderen Weg gab, war das Feld gesperrt
+             * und fiel nicht auf -- ab dem ersten Weg blockierte es jede
+             * weitere Eingabe im Entwurf.
+             */
+          ?>
+          <option value=""
+            <?= (int) ($values['rueckfallebene_fuer_weg'] ?? 0) === 0
+                ? 'selected' : '' ?>>keine Rückfallebene</option>
+          <?php foreach ($andereWege as $geschwister): ?>
+            <option value="<?= (int) $geschwister['weg_id'] ?>"
+              <?= (int) ($values['rueckfallebene_fuer_weg'] ?? 0)
+                  === (int) $geschwister['weg_id'] ? 'selected' : '' ?>>
+              <?= dv_operations_html($geschwister['bezeichnung']) ?>
+            </option>
+          <?php endforeach; ?>
+        </select>
+        <small><?= $andereWege === []
+            ? 'Noch kein anderer Weg vorhanden, für den dieser einspringen '
+              . 'könnte.'
+            : 'Dieser Weg tritt an die Stelle des gewählten, wenn der '
+              . 'ausfällt.' ?></small>
       </label>
-      <label>Übertragungsmedium
-        <select name="medium" required data-estab-telecom-medium>
-          <option value="" <?= $medium === '' ? 'selected' : '' ?>>
-            Medium auswählen
+      <label>Wegart
+        <select name="wegart" required data-estab-telecom-kind>
+          <option value="" <?= $kind === null ? 'selected' : '' ?>>
+            Wegart auswählen
           </option>
-          <?php foreach (ESTAB_DV_MEDIA as $candidate): ?>
-            <option value="<?= dv_operations_html($candidate) ?>"
-              <?= $candidate === $medium ? 'selected' : '' ?>>
-              <?= dv_operations_html(
-                  estab_dv_telecom_medium_label($candidate)
-              ) ?>
+          <?php foreach (ESTAB_DV_TELECOM_ROUTE_KINDS as $key => $art): ?>
+            <option value="<?= dv_operations_html($key) ?>"
+              <?= $key === $kind ? 'selected' : '' ?>>
+              <?= dv_operations_html($art['label']) ?>
             </option>
           <?php endforeach; ?>
         </select>
       </label>
-      <label data-estab-telecom-field="kanal"
-        <?= $channelVisible ? '' : 'hidden' ?>>
-        <span data-estab-telecom-field-label="kanal"><?= dv_operations_html(
-            $definition['kanal'] ?? 'Kanal oder Rufgruppe'
+      <label>
+        <span data-estab-telecom-field-label="rufname"><?= dv_operations_html(
+            $definition['erreichbarkeit'] ?? 'Erreichbar unter'
         ) ?></span>
-        <input name="kanal" maxlength="64"
-          value="<?= dv_operations_html($values['kanal'] ?? '') ?>"
-          <?= $channelVisible
-              ? ($channelRequired ? 'required' : '')
-              : 'disabled' ?>>
+        <input name="erreichbarkeit" maxlength="255" required
+          value="<?= dv_operations_html($values['erreichbarkeit'] ?? '') ?>">
       </label>
-      <label data-estab-telecom-field="bandlage"
-        <?= $bandVisible ? '' : 'hidden' ?>>
-        <span data-estab-telecom-field-label="bandlage"><?= dv_operations_html(
-            $definition['bandlage'] ?? 'Bandlage'
-        ) ?></span>
-        <input name="bandlage" maxlength="64"
-          value="<?= dv_operations_html($values['bandlage'] ?? '') ?>"
-          <?= $bandVisible
-              ? ($bandRequired ? 'required' : '')
-              : 'disabled' ?>>
-      </label>
-      <label data-estab-telecom-field="verkehrsform">
-        <span data-estab-telecom-field-label="verkehrsform">
-          Verkehrsform oder besondere Behandlung
-        </span>
-        <input name="verkehrsform" maxlength="128" required
-          value="<?= dv_operations_html($values['verkehrsform'] ?? '') ?>">
-      </label>
+      <?php foreach (
+          ['band', 'kanal', 'bandlage', 'verkehrsform', 'relaisstelle',
+           'betriebsart', 'rufgruppe', 'anschlussart', 'datenart']
+          as $name
+      ):
+          $owned = $definition !== null
+              && isset($definition['felder'][$name]);
+          $needed = $definition !== null
+              && in_array($name, $definition['pflicht'], true);
+          $label = $definition['felder'][$name] ?? ucfirst($name);
+          $choices = ESTAB_DV_TELECOM_FIELD_CHOICES[$name] ?? null;
+          $current = (string) ($values[$name] ?? '');
+      ?>
+        <label data-estab-telecom-field="<?= dv_operations_html($name) ?>"
+          <?= $owned ? '' : 'hidden' ?>>
+          <span data-estab-telecom-field-label="<?= dv_operations_html($name)
+            ?>"><?= dv_operations_html($label) ?></span>
+          <?php if (is_array($choices)): ?>
+            <select name="<?= dv_operations_html($name) ?>"
+              <?= $owned ? ($needed ? 'required' : '') : 'disabled' ?>>
+              <?php /* selected: siehe Rueckfallebene. */ ?>
+              <option value=""
+                <?= $current === '' ? 'selected' : '' ?>>ohne Angabe</option>
+              <?php foreach ($choices as $value => $text): ?>
+                <option value="<?= dv_operations_html($value) ?>"
+                  <?= $current === (string) $value ? 'selected' : '' ?>>
+                  <?= dv_operations_html($text) ?>
+                </option>
+              <?php endforeach; ?>
+            </select>
+          <?php else: ?>
+            <input name="<?= dv_operations_html($name) ?>" maxlength="128"
+              value="<?= dv_operations_html($current) ?>"
+              <?= $owned ? ($needed ? 'required' : '') : 'disabled' ?>>
+          <?php endif; ?>
+        </label>
+      <?php endforeach; ?>
     </div>
-    <?php if (
-        $medium !== 'Fu'
-        && (
-            trim((string) ($values['kanal'] ?? '')) !== ''
-            || trim((string) ($values['bandlage'] ?? '')) !== ''
-        )
-    ): ?>
+    <?php if ($legacyRadio): ?>
       <p class="estab-tool-notice estab-telecom-legacy-note">
-        Dieser übernommene Weg enthält technische Altangaben. Für das
-        gewählte Medium sind Kanal und Bandlage nicht vorgesehen; beim
-        Speichern dieses Wegs werden sie entfernt.
+        Dieser übernommene Weg stammt aus der Zeit vor der Trennung von
+        Analog- und Digitalfunk und sagt nicht, welche der beiden er meint.
+        Wählen Sie die Wegart; die Angaben, die zur gewählten Technik nicht
+        gehören, werden beim Speichern entfernt.
       </p>
     <?php endif; ?>
     <label>Besondere Vermerke
@@ -282,6 +388,9 @@ function dv_operations_render_telecom_entry_fields(array $values): void
       <textarea name="bemerkungen" maxlength="10000"><?=
         dv_operations_html($values['bemerkungen'] ?? '')
       ?></textarea>
+      <small>Betriebszeiten, Einschränkungen, Ersatzweg, Verkehrskreis
+        (Führung, Einsatz, Versorgung), Besonderheiten der Bedienung.
+        Gerätekennungen wie OPTA oder ISSI gehören nicht hierher.</small>
     </label>
     <?php
 }
@@ -421,6 +530,107 @@ if ($requestMethod === 'POST') {
                 'fernmeldeplan-entwurf'
             );
         }
+        if ($action === 'add_plan_counterpart') {
+            $planId = estab_dv_positive_id(
+                $_POST['fernmeldeplan_id'] ?? null,
+                'Fernmeldeplan'
+            );
+            $entryId = estab_dv_positive_id(
+                $_POST['fernmeldeplan_eintrag_id'] ?? null,
+                'Fernmeldeweg'
+            );
+            estab_dv_add_telecom_counterpart(
+                $connection,
+                $incidentId,
+                $planId,
+                $entryId,
+                $operationIdentity,
+                $_POST,
+                estab_dv_telecom_revision_token(
+                    $_POST['plan_revision'] ?? null
+                ),
+                $conf_4f_tbl['protokoll']
+            );
+            dv_operations_redirect(
+                'counterpart_added',
+                'fernmeldeweg-' . $entryId,
+                ['entry' => $entryId]
+            );
+        }
+        if ($action === 'add_plan_extension') {
+            $planId = estab_dv_positive_id(
+                $_POST['fernmeldeplan_id'] ?? null,
+                'Fernmeldeplan'
+            );
+            estab_dv_add_telecom_extension(
+                $connection,
+                $incidentId,
+                $planId,
+                $operationIdentity,
+                $_POST,
+                estab_dv_telecom_revision_token(
+                    $_POST['plan_revision'] ?? null
+                ),
+                $conf_4f_tbl['protokoll']
+            );
+            dv_operations_redirect(
+                'extension_added',
+                'fernmeldeplan-nebenstellen'
+            );
+        }
+        if ($action === 'delete_plan_extension') {
+            $planId = estab_dv_positive_id(
+                $_POST['fernmeldeplan_id'] ?? null,
+                'Fernmeldeplan'
+            );
+            estab_dv_remove_telecom_extension(
+                $connection,
+                $incidentId,
+                $planId,
+                estab_dv_positive_id(
+                    $_POST['nebenstelle_id'] ?? null,
+                    'Nebenstelle'
+                ),
+                $operationIdentity,
+                estab_dv_telecom_revision_token(
+                    $_POST['plan_revision'] ?? null
+                ),
+                $conf_4f_tbl['protokoll']
+            );
+            dv_operations_redirect(
+                'extension_removed',
+                'fernmeldeplan-nebenstellen'
+            );
+        }
+        if ($action === 'delete_plan_counterpart') {
+            $planId = estab_dv_positive_id(
+                $_POST['fernmeldeplan_id'] ?? null,
+                'Fernmeldeplan'
+            );
+            $entryId = estab_dv_positive_id(
+                $_POST['fernmeldeplan_eintrag_id'] ?? null,
+                'Fernmeldeweg'
+            );
+            estab_dv_remove_telecom_counterpart(
+                $connection,
+                $incidentId,
+                $planId,
+                estab_dv_positive_id(
+                    $_POST['gegenstelle_id'] ?? null,
+                    'Gegenstelle'
+                ),
+                $operationIdentity,
+                estab_dv_telecom_revision_token(
+                    $_POST['plan_revision'] ?? null
+                ),
+                $conf_4f_tbl['protokoll']
+            );
+            dv_operations_redirect(
+                'counterpart_removed',
+                'fernmeldeweg-' . $entryId,
+                ['entry' => $entryId]
+            );
+        }
         if ($action === 'update_plan_entry') {
             $planId = estab_dv_positive_id(
                 $_POST['fernmeldeplan_id'] ?? null,
@@ -506,55 +716,6 @@ if ($requestMethod === 'POST') {
             );
             dv_operations_redirect('plan_activated');
         }
-        if ($action === 'assign_messenger') {
-            $assignmentDetails = null;
-            estab_dv_assign_messenger(
-                $connection,
-                $incidentId,
-                estab_dv_positive_id(
-                    $_POST['nachricht_id'] ?? null,
-                    'Nachricht'
-                ),
-                $_POST['melder_kuerzel'] ?? null,
-                $_POST['ziel'] ?? null,
-                $operationIdentity,
-                $conf_4f_tbl['protokoll'],
-                $assignmentDetails
-            );
-            $requiresNotification = !is_array($assignmentDetails)
-                || ($assignmentDetails['requires_separate_notification']
-                    ?? true) === true;
-            $presenceState = is_array($assignmentDetails)
-                && is_string($assignmentDetails['presence_state'] ?? null)
-                    ? $assignmentDetails['presence_state']
-                    : 'unknown';
-            dv_operations_redirect(
-                $requiresNotification
-                    ? 'messenger_assigned_notification_required'
-                    : 'messenger_assigned',
-                'melderauftraege',
-                ['presence' => $presenceState]
-            );
-        }
-        if ($action === 'messenger_transition') {
-            $transition = $_POST['transition'] ?? null;
-            if (!is_string($transition)) {
-                throw new EstabDvInputException('Unbekannter Melderstatus.');
-            }
-            estab_dv_transition_messenger(
-                $connection,
-                $incidentId,
-                estab_dv_positive_id(
-                    $_POST['melderauftrag_id'] ?? null,
-                    'Melderauftrag'
-                ),
-                $transition,
-                $operationIdentity,
-                $_POST,
-                $conf_4f_tbl['protokoll']
-            );
-            dv_operations_redirect('messenger_updated');
-        }
         throw new EstabDvInputException('Unbekannte Führungsstellenaktion.');
     } catch (EstabCsrfException) {
         http_response_code(403);
@@ -576,7 +737,7 @@ if ($requestMethod === 'POST') {
         http_response_code(409);
         $error = $exception->getMessage();
     } catch (Throwable $exception) {
-        error_log('eStab Führungsstellenbetrieb: ' . $exception->getMessage());
+        error_log('eStab Fernmeldeplan: ' . $exception->getMessage());
         http_response_code(500);
         $error = 'Die Aktion konnte nicht vollständig gespeichert werden.';
     } finally {
@@ -592,15 +753,12 @@ if ($requestMethod === 'POST') {
 
 $status = null;
 $plans = [];
-$jobs = [];
-$users = [];
-$eligibleMessages = [];
 $isS6 = false;
-$isLdf = false;
-$isAw = false;
 $selectedIdentity = null;
 $plansLoaded = false;
 $strictMode = true;
+$ausserplan = ['ohne_weg' => [], 'abgeloest' => []];
+$fuehrungsstellenName = '';
 $activeDutyShift = null;
 $hats = [];
 $handoverRequests = [];
@@ -665,63 +823,27 @@ try {
                 'FERNMELDEPLANUNG',
                 false
             );
-            $isLdf = estab_dv_has_write_capability(
-                $connection,
-                $incidentId,
-                $selectedIdentity,
-                'FERNMELDEBETRIEB',
-                false
-            );
-            $isAw = estab_dv_has_write_capability(
-                $connection,
-                $incidentId,
-                $selectedIdentity,
-                'BEFOERDERUNG',
-                false
-            );
             $plans = estab_dv_telecom_plans($connection, $incidentId);
             $plansLoaded = true;
-            $jobs = estab_dv_messenger_jobs(
-                $connection,
-                $incidentId,
-                ($isLdf || $isAw) ? null : $code
-            );
-            if ($isLdf) {
-                $users = estab_dv_messenger_candidates(
+            $fuehrungsstellenName = estab_incident_command_post_name($status);
+            /*
+             * Was lief, das der Plan nicht fuehrt -- hier geladen, nicht in
+             * der Ansicht: die Verbindung wird lange vor dem Seitenaufbau
+             * geschlossen, und eine Ansicht, die selbst noch abfragt, waere
+             * eine zweite Stelle, an der eine Berechtigung geprueft werden
+             * muesste.
+             */
+            try {
+                $ausserplan = estab_read_unplanned_incoming_routes(
                     $connection,
-                    $incidentId
+                    'nv_nachrichten',
+                    $operationIdentity
                 );
-                $messageStatement = $connection->prepare(
-                    'SELECT n.`00_lfd`, n.`04_nummer`, n.`10_anschrift`,'
-                    . ' n.`12_inhalt` FROM `nv_nachrichten` AS n'
-                    . ' WHERE n.`einsatz_id` = ?'
-                    . " AND n.`04_richtung` = 'A'"
-                    . " AND n.`06_befwegausw` = 'Me'"
-                    . ' AND n.`x00_status` = 2'
-                    . " AND n.`x01_abschluss` = 'f'"
-                    . ' AND NOT EXISTS ('
-                    . '   SELECT 1 FROM `nv_melderauftraege` AS m'
-                    . '   WHERE m.`einsatz_id` = n.`einsatz_id`'
-                    . '     AND m.`nachricht_id` = n.`00_lfd`'
-                    . "     AND m.`status` <> 'ABGEBROCHEN'"
-                    . ' )'
-                    . ' ORDER BY n.`04_nummer`, n.`00_lfd`'
+            } catch (Throwable $unplannedException) {
+                error_log(
+                    'eStab unplanned incoming routes are temporarily '
+                    . 'unavailable'
                 );
-                if (!$messageStatement) {
-                    throw new RuntimeException(
-                        'Melderfähige Nachrichten konnten nicht vorbereitet '
-                        . 'werden.'
-                    );
-                }
-                try {
-                    $messageStatement->bind_param('i', $incidentId);
-                    $messageStatement->execute();
-                    $messageResult = $messageStatement->get_result();
-                    $eligibleMessages = $messageResult->fetch_all(MYSQLI_ASSOC);
-                    $messageResult->free();
-                } finally {
-                    $messageStatement->close();
-                }
             }
         }
     }
@@ -757,6 +879,13 @@ $flashMessages = [
         'Sie haben die Schichtübernahme persönlich bestätigt. Die '
         . 'Nachfolgeschicht ist jetzt aktiv.',
     'plan_created' => 'Der erste Fernmeldeplanentwurf wurde angelegt.',
+    'counterpart_added' =>
+        'Die Gegenstelle wurde am Weg erfasst. Sie steht dem Fernmelder und '
+        . 'dem LdF künftig als Vorschlag zur Verfügung.',
+    'counterpart_removed' => 'Die Gegenstelle wurde vom Weg entfernt.',
+    'extension_added' =>
+        'Die Nebenstelle wurde der Führungsstelle hinzugefügt.',
+    'extension_removed' => 'Die Nebenstelle wurde entfernt.',
     'plan_revision_started' => 'Der aktive Fernmeldeplan wurde vollständig '
         . 'in einen bearbeitbaren Entwurf kopiert.',
     'plan_updated' => 'Die Kopfdaten des Entwurfs wurden gespeichert.',
@@ -767,22 +896,9 @@ $flashMessages = [
         . 'in die Versionshistorie übernommen. Sie können jetzt eine neue '
         . 'Bearbeitung auf Basis des aktiven Plans starten.',
     'plan_activated' => 'Der Fernmeldeplan wurde freigegeben und versioniert.',
-    'messenger_assigned' => 'Der Melderauftrag wurde verbindlich erteilt.',
-    'messenger_assigned_notification_required' =>
-        'Der Melderauftrag wurde verbindlich erteilt.',
-    'messenger_updated' => 'Der Melderstatus wurde nachgewiesen.',
 ];
 $result = $_GET['result'] ?? null;
 $flash = is_string($result) ? ($flashMessages[$result] ?? null) : null;
-$flashWarning = null;
-if ($result === 'messenger_assigned_notification_required') {
-    $presenceResult = $_GET['presence'] ?? null;
-    $presenceLabel = estab_dv_messenger_presence_label(
-        is_string($presenceResult) ? $presenceResult : null
-    );
-    $flashWarning = 'Status des Fernmelders: ' . $presenceLabel . '. '
-        . 'Der LdF muss ihn separat über den Auftrag informieren.';
-}
 $highlightEntryId = null;
 $entryResult = $_GET['entry'] ?? null;
 if (is_string($entryResult)) {
@@ -813,18 +929,14 @@ foreach ($plans as $plan) {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>eStab Führungsstellenbetrieb</title>
+  <title>eStab Fernmeldeplan</title>
   <?= estab_session_ui_stylesheet() ?>
 </head>
 <body class="estab-tool-page">
 <main class="estab-tool-main" data-estab-dv-operations>
   <header class="estab-tool-hero">
     <p class="estab-tool-eyebrow">Einsatzführung · DV 1-101</p>
-    <h1>Führungsstellenbetrieb</h1>
-    <p>Den Fernmeldeplan als S6 führen und Melderaufträge lückenlos
-      nachweisen. Fachliche Schreibaktionen folgen dem am Einsatz
-      festgelegten Berechtigungsmodus; Anmeldung, Einsatzbezug,
-      Melder-Eignung und Nachweise bleiben verbindlich.</p>
+    <h1>Fernmeldeplan</h1>
   </header>
 
   <section class="estab-tool-status estab-tool-status-active
@@ -841,9 +953,27 @@ foreach ($plans as $plan) {
         ) ?></strong>
       </div>
     <?php endif; ?>
+    <?php
+      /*
+       * Die Kopfzeile nennt Namenszeichen und Funktion im Klartext und als
+       * Merkmal. Diese Seite zeichnet ihre Anmeldung selbst und nicht ueber
+       * estab_session_ui_markup(); ohne die Merkmale kann niemand ablesen,
+       * ALS WER hier gehandelt wird. Das Merkmal traegt die rohe Funktion,
+       * nicht ihren Anzeigenamen: 'A/W' ist die Funktion, 'Fernmelder' nur
+       * ihr Name. Solange in strenger Ordnung keine Arbeitsfunktion gewaehlt
+       * ist, steht auch kein Merkmal da -- eine Kontofunktion vorzugeben,
+       * die gerade NICHT gilt, waere schlimmer als gar keine Angabe.
+       */
+      $shownFunction = (string) (
+          $selectedIdentity['funktion'] ?? $identity['funktion']
+      );
+      $functionUnchosen = $strictMode && !is_array($selectedIdentity);
+    ?>
     <div>
       <span>Angemeldet als</span>
-      <strong><?= dv_operations_html(
+      <strong data-estab-user-code="<?= dv_operations_html(
+          (string) $identity['kuerzel']
+      ) ?>"><?= dv_operations_html(
           $identity['benutzer'] . ' · ' . $identity['kuerzel']
       ) ?></strong>
     </div>
@@ -851,11 +981,13 @@ foreach ($plans as $plan) {
       <span><?= $strictMode
           ? 'Aktive Arbeitsfunktion'
           : 'Kontofunktion' ?></span>
-      <strong><?php if ($strictMode && !is_array($selectedIdentity)): ?>
+      <strong<?= $functionUnchosen ? '' : ' data-estab-user-function="'
+          . dv_operations_html($shownFunction) . '"' ?>><?php
+        if ($functionUnchosen): ?>
         Noch nicht ausgewählt
       <?php else: ?><?= dv_operations_html(
           estab_function_identity_display_name(
-              (string) ($selectedIdentity['funktion'] ?? $identity['funktion']),
+              $shownFunction,
               (string) ($selectedIdentity['rolle'] ?? $identity['rolle'])
           )
       ) ?><?php endif; ?></strong>
@@ -890,11 +1022,6 @@ foreach ($plans as $plan) {
   <?php if ($flash !== null): ?>
     <p class="estab-tool-feedback estab-tool-feedback-success" role="status">
       <?= dv_operations_html($flash) ?>
-    </p>
-  <?php endif; ?>
-  <?php if ($flashWarning !== null): ?>
-    <p class="estab-tool-feedback estab-tool-feedback-warning" role="status">
-      <?= dv_operations_html($flashWarning) ?>
     </p>
   <?php endif; ?>
 
@@ -934,83 +1061,126 @@ foreach ($plans as $plan) {
           <p class="estab-tool-empty">Ihrem Konto ist in der aktuellen oder
             geplanten Schicht noch keine Funktion zugewiesen.</p>
         <?php else: ?>
-          <div class="estab-tool-table-wrap estab-tool-table-responsive">
-            <table class="estab-tool-table">
-              <caption class="estab-visually-hidden">
-                Persönlich zugewiesene Dienstfunktionen
-              </caption>
-              <thead><tr>
-                <th scope="col">Schicht</th>
-                <th scope="col">Funktion</th>
-                <th scope="col">Status</th>
-                <th scope="col">Aktion</th>
-              </tr></thead>
-              <tbody>
-              <?php foreach ($hats as $hat): ?>
-                <?php
-                  $isSelectedHat = is_array($selectedIdentity)
-                      && (int) ($selectedIdentity['duty_assignment_id'] ?? 0)
-                          === (int) $hat['dienstbesetzung_id'];
-                ?>
-                <tr<?= $isSelectedHat ? ' data-estab-selected-duty-hat' : '' ?>>
-                  <td data-label="Schicht">#<?= (int) $hat['nummer'] ?> ·
-                    <?= dv_operations_html($hat['bezeichnung']) ?><br>
-                    <?= dv_operations_html($hat['schicht_status']) ?></td>
-                  <td data-label="Funktion"><?= dv_operations_html(
-                      estab_function_identity_display_name(
-                          $hat['funktion'],
-                          $hat['rolle']
-                      )
-                  ) ?></td>
-                  <td data-label="Status"><?= $isSelectedHat
-                      ? 'Aktiv ausgewählt'
-                      : dv_operations_html($hat['status']) ?></td>
-                  <td data-label="Aktion">
-                    <?php if (
-                        $hat['status'] === 'ZUGEWIESEN'
-                        && in_array(
-                            $hat['schicht_status'],
-                            ['GEPLANT', 'AKTIV'],
-                            true
-                        )
-                    ): ?>
-                      <form method="post" action="fuehrungsstelle.php">
-                        <?= estab_csrf_field() ?>
-                        <input type="hidden" name="operation_action"
-                          value="accept_hat">
-                        <input type="hidden" name="dienstbesetzung_id"
-                          value="<?= (int) $hat['dienstbesetzung_id'] ?>">
-                        <button class="estab-button estab-button-primary"
-                          type="submit"><?= $hat['schicht_status'] === 'AKTIV'
-                              ? 'Ergänzung annehmen'
-                              : 'Verbindlich annehmen' ?></button>
-                      </form>
-                    <?php elseif (
-                        $hat['status'] === 'ANGENOMMEN'
-                        && $hat['schicht_status'] === 'AKTIV'
-                        && !$isSelectedHat
-                    ): ?>
-                      <form method="post" action="fuehrungsstelle.php">
-                        <?= estab_csrf_field() ?>
-                        <input type="hidden" name="operation_action"
-                          value="select_hat">
-                        <input type="hidden" name="dienstbesetzung_id"
-                          value="<?= (int) $hat['dienstbesetzung_id'] ?>">
-                        <button class="estab-button" type="submit">
-                          Als Arbeitsfunktion wählen
-                        </button>
-                      </form>
-                    <?php else: ?>
-                      <span><?= $isSelectedHat
-                          ? 'Diese Funktion ist wirksam.'
-                          : 'Keine Aktion verfügbar' ?></span>
-                    <?php endif; ?>
-                  </td>
-                </tr>
-              <?php endforeach; ?>
-              </tbody>
-            </table>
-          </div>
+          <?php
+            /*
+             * Die Dienstfunktionen kommen aus dem Tabellenbauteil.
+             *
+             * Wer in mehreren Schichten eingeteilt ist, hat hier schnell ein
+             * Dutzend Zeilen -- und suchte die eine, die gerade gilt, ohne
+             * Suche und ohne Sortierung.
+             */
+            $funktionsZeilen = [];
+            foreach ($hats as $hat) {
+                $istGewaehlt = is_array($selectedIdentity)
+                    && (int) ($selectedIdentity['duty_assignment_id'] ?? 0)
+                        === (int) $hat['dienstbesetzung_id'];
+                $funktionsZeilen[] = [
+                    'schicht' => '#' . (int) $hat['nummer'] . ' · '
+                        . (string) $hat['bezeichnung'] . ' · '
+                        . (string) $hat['schicht_status'],
+                    'funktion' => estab_function_identity_display_name(
+                        $hat['funktion'],
+                        $hat['rolle']
+                    ),
+                    'status' => $istGewaehlt
+                        ? 'Aktiv ausgewählt'
+                        : (string) $hat['status'],
+                    'gewaehlt' => $istGewaehlt,
+                    'kennung' => (int) $hat['dienstbesetzung_id'],
+                    'schicht_status' => (string) $hat['schicht_status'],
+                    'roh_status' => (string) $hat['status'],
+                ];
+            }
+            $funktionsStati = [];
+            foreach ($funktionsZeilen as $z) {
+                $funktionsStati[$z['status']] = true;
+            }
+            ksort($funktionsStati);
+            echo estab_tabelle_markup([
+                'id' => 'dienstfunktionen',
+                'beschriftung' => 'Persönlich zugewiesene Dienstfunktionen',
+                'mindestbreite' => '46rem',
+                'schmal' => true,
+                // Die wirksame Funktion ist die eine Zeile, die zählt.
+                'zeilenmarke' => static fn (array $z): string =>
+                    ($z['gewaehlt'] ?? false)
+                        ? 'data-estab-selected-duty-hat'
+                        : '',
+                'spalten' => [
+                    ['schluessel' => 'schicht', 'kopf' => 'Schicht',
+                        'breite' => 30, 'sortierbar' => true,
+                        'suchbar' => true, 'art' => 'text'],
+                    ['schluessel' => 'funktion', 'kopf' => 'Funktion',
+                        'breite' => 22, 'sortierbar' => true,
+                        'suchbar' => true, 'art' => 'text'],
+                    ['schluessel' => 'status', 'kopf' => 'Status',
+                        'breite' => 20, 'sortierbar' => true,
+                        'suchbar' => true, 'art' => 'text',
+                        'filter' => array_keys($funktionsStati),
+                        'filtername' => 'Alle Zustände'],
+                    ['schluessel' => 'aktion', 'kopf' => 'Aktion',
+                        'breite' => 28, 'sortierbar' => false,
+                        'suchbar' => false, 'art' => 'text',
+                        'zelle' => static function (array $z): string {
+                            /*
+                             * Annehmen und Wählen sind Handlungen und
+                             * bleiben CSRF-geschützte Formulare. Eine
+                             * Dienstfunktion persönlich anzunehmen ist ein
+                             * Nachweis, kein Anzeigewechsel.
+                             */
+                            $formular = static fn (
+                                string $aktion,
+                                int $kennung,
+                                string $klasse,
+                                string $beschriftung
+                            ): string =>
+                                '<form method="post" action="fuehrungsstelle.php">'
+                                . estab_csrf_field()
+                                . '<input type="hidden" name="operation_action" value="'
+                                . dv_operations_html($aktion) . '">'
+                                . '<input type="hidden" name="dienstbesetzung_id" value="'
+                                . $kennung . '">'
+                                . '<button class="' . $klasse . '" type="submit">'
+                                . dv_operations_html($beschriftung)
+                                . '</button></form>';
+                            if (
+                                $z['roh_status'] === 'ZUGEWIESEN'
+                                && in_array(
+                                    $z['schicht_status'],
+                                    ['GEPLANT', 'AKTIV'],
+                                    true
+                                )
+                            ) {
+                                return $formular(
+                                    'accept_hat',
+                                    (int) $z['kennung'],
+                                    'estab-button estab-button-primary',
+                                    $z['schicht_status'] === 'AKTIV'
+                                        ? 'Ergänzung annehmen'
+                                        : 'Verbindlich annehmen'
+                                );
+                            }
+                            if (
+                                $z['roh_status'] === 'ANGENOMMEN'
+                                && $z['schicht_status'] === 'AKTIV'
+                                && !($z['gewaehlt'] ?? false)
+                            ) {
+                                return $formular(
+                                    'select_hat',
+                                    (int) $z['kennung'],
+                                    'estab-button',
+                                    'Als Arbeitsfunktion wählen'
+                                );
+                            }
+                            return '<span>' . (($z['gewaehlt'] ?? false)
+                                ? 'Diese Funktion ist wirksam.'
+                                : 'Keine Aktion verfügbar') . '</span>';
+                        }],
+                ],
+                'zeilen' => $funktionsZeilen,
+                'leer' => 'Keine Dienstfunktion entspricht den gesetzten Filtern.',
+            ]);
+          ?>
         <?php endif; ?>
       </section>
 
@@ -1078,11 +1248,22 @@ foreach ($plans as $plan) {
         <dl class="estab-telecom-plan-meta">
           <div><dt>Status</dt><dd>Aktiv · Version
             <?= (int) $activePlan['version'] ?></dd></div>
-          <div><dt>Herkunft</dt><dd data-estab-telecom-header-origin><?=
+          <div><dt>Herausgebende Dienststelle</dt><dd
+            data-estab-telecom-header-origin><?=
             dv_operations_html(
               $activePlan['herkunft']
+          ) ?><?= trim((string) ($activePlan['verfasser_funktion'] ?? '')) === ''
+              ? ''
+              : ' · ' . dv_operations_html(
+                  (string) $activePlan['verfasser_funktion']
+              )
+          ?></dd></div>
+          <div><dt>Verwendungsbereich</dt><dd
+            data-estab-telecom-header-scope>Kommunikationsplan für <?=
+            dv_operations_html(
+              $activePlan['einsatzbezeichnung']
           ) ?></dd></div>
-          <div><dt>Gültigkeit</dt><dd data-estab-telecom-header-validity
+          <div><dt>Stand</dt><dd data-estab-telecom-header-validity
             data-estab-valid-from="<?= dv_operations_html(
                 dv_operations_datetime_input($activePlan['gueltig_ab'])
             ) ?>" data-estab-valid-until="<?= dv_operations_html(
@@ -1093,10 +1274,41 @@ foreach ($plans as $plan) {
               ? ''
               : ' bis ' . dv_operations_html($activePlan['gueltig_bis'])
           ?></dd></div>
+          <div><dt>Verschlusssachenvermerk</dt><dd
+            data-estab-telecom-header-classification><?=
+            trim((string) ($activePlan['vs_vermerk'] ?? '')) === ''
+              ? 'nicht angegeben'
+              : dv_operations_html((string) $activePlan['vs_vermerk'])
+          ?></dd></div>
           <div><dt>Betriebsleitung</dt><dd
             data-estab-telecom-header-lead><?= dv_operations_html(
               $activePlan['betriebsleitung']
           ) ?></dd></div>
+          <?php
+            /*
+             * F.d.R. -- "Für die Richtigkeit".
+             *
+             * Q6 verlangt Unterschrift mit Dienststellung. Am Bildschirm gibt
+             * es keine Unterschrift; an ihre Stelle tritt, wer freigegeben hat
+             * und in welcher Dienststellung. Fehlt die Dienststellung, steht
+             * trotzdem der Name da -- eine halbe Angabe ist mehr als keine,
+             * und dass sie halb ist, sieht man.
+             */
+            $freigabeZeichen = trim(
+                (string) ($activePlan['freigegeben_von'] ?? '')
+            );
+            $freigabeStellung = trim(
+                (string) ($activePlan['freigabe_dienststellung'] ?? '')
+            );
+          ?>
+          <?php if ($freigabeZeichen !== ''): ?>
+            <div><dt>F.d.R.</dt><dd data-estab-telecom-header-attestation><?=
+              dv_operations_html($freigabeZeichen)
+            ?><?= $freigabeStellung === ''
+                ? ''
+                : ', ' . dv_operations_html($freigabeStellung)
+            ?></dd></div>
+          <?php endif; ?>
         </dl>
         <?php if (trim((string) $activePlan['bemerkungen']) !== ''): ?>
           <p class="estab-telecom-plan-note">
@@ -1106,49 +1318,315 @@ foreach ($plans as $plan) {
             ) ?></span>
           </p>
         <?php endif; ?>
-        <div class="estab-tool-table-wrap estab-tool-table-responsive">
-          <table class="estab-tool-table">
-            <caption class="estab-visually-hidden">
-              Wege des aktiven Fernmeldeplans
-            </caption>
-            <thead><tr>
-              <th scope="col">Betriebsstelle</th>
-              <th scope="col">Rufname</th>
-              <th scope="col">Medium und technische Angaben</th>
-              <th scope="col">Verkehrsform</th>
-              <th scope="col">Vermerke</th>
-            </tr></thead>
-            <tbody>
-            <?php foreach ($activePlan['eintraege'] as $entry): ?>
-              <?php $routeParts = array_values(array_filter([
-                  estab_dv_telecom_medium_label($entry['medium']),
+        <?php
+          /*
+           * Die Wege des Fernmeldeplans kommen aus dem Tabellenbauteil.
+           *
+           * Ein Fernmeldeplan hat schnell zwanzig Wege. Wer den einen
+           * Rufnamen sucht, über den er gerade sprechen soll, suchte ihn
+           * bisher mit dem Finger am Bildschirm.
+           */
+          /*
+           * Die taktische Ansicht: je Stelle ein Kasten.
+           *
+           * Gruppiert wird nach der Stelle, weil die Frage des taktischen
+           * Führers "wen erreiche ich womit" lautet und nicht "welche Wege
+           * gibt es". Ein Ersatzweg steht eingerückt unter dem Weg, den er
+           * ersetzt, und nicht noch einmal für sich -- sonst stünde derselbe
+           * Weg zweimal im Bild und man müsste raten, welcher gilt.
+           */
+          $wegeNachKennung = [];
+          foreach ($activePlan['eintraege'] as $entry) {
+              if ($entry['weg_nummer'] !== null) {
+                  $wegeNachKennung[(int) $entry['weg_nummer']] = $entry;
+              }
+          }
+          $ersatzwegeZu = [];
+          foreach ($activePlan['eintraege'] as $entry) {
+              $ersetzt = $entry['rueckfallebene_fuer_weg'];
+              if ($ersetzt !== null && isset($wegeNachKennung[(int) $ersetzt])) {
+                  $ersatzwegeZu[(int) $ersetzt][] = $entry;
+              }
+          }
+          $stellen = [];
+          foreach ($activePlan['eintraege'] as $entry) {
+              $ersetzt = $entry['rueckfallebene_fuer_weg'];
+              if ($ersetzt !== null && isset($wegeNachKennung[(int) $ersetzt])) {
+                  continue;
+              }
+              $stelle = (string) $entry['betriebsstelle'];
+              if (!isset($stellen[$stelle])) {
+                  $stellen[$stelle] = ['wege' => []];
+              }
+              $stellen[$stelle]['wege'][] = $entry;
+          }
+          $wegeZeilen = [];
+          $wegeMedien = [];
+          foreach ($activePlan['eintraege'] as $entry) {
+              /*
+               * Die technische Kurzangabe fuehrt nur, was die Technik des
+               * Wegs kennt. Ein Digitalfunkweg hat keine Bandlage, ein
+               * Analogfunkweg keine Rufgruppe -- ein Feld, das leer bleibt,
+               * weil es nicht gemeint ist, gehoert nicht in die Zeile.
+               */
+              $teile = array_values(array_filter([
+                  trim((string) ($entry['band'] ?? '')),
                   trim((string) $entry['kanal']),
                   trim((string) $entry['bandlage']),
-              ], static fn (string $part): bool => $part !== '')); ?>
-              <tr>
-                <td data-label="Betriebsstelle"><?= dv_operations_html(
-                    $entry['betriebsstelle']
-                ) ?></td>
-                <td data-label="Rufname"><?= dv_operations_html(
-                    $entry['rufname']
-                ) ?></td>
-                <td data-label="Medium und technische Angaben"><?=
-                  dv_operations_html(implode(' · ', $routeParts))
-                ?></td>
-                <td data-label="Verkehrsform"><?= dv_operations_html(
-                    $entry['verkehrsform']
-                ) ?></td>
-                <td data-label="Vermerke"><?= dv_operations_html(
-                    trim(
-                        (string) $entry['besondere_vermerke']
-                        . ' ' . (string) $entry['bemerkungen']
-                    )
-                ) ?></td>
-              </tr>
+                  trim((string) ($entry['betriebsart'] ?? '')),
+                  trim((string) ($entry['rufgruppe'] ?? '')),
+                  trim((string) ($entry['relaisstelle'] ?? '')),
+                  trim((string) $entry['verkehrsform']),
+              ], static fn (string $part): bool => $part !== ''));
+              $mittel = estab_dv_telecom_route_label(
+                  $entry['medium'],
+                  $entry['funkart'] ?? null
+              );
+              $wegeMedien[$mittel] = true;
+              $wegeZeilen[] = [
+                  'betriebsstelle' => (string) $entry['betriebsstelle'],
+                  'weg' => $entry['weg_nummer'] === null
+                      ? ''
+                      : (string) (int) $entry['weg_nummer'],
+                  'rufname' => (string) $entry['erreichbarkeit'],
+                  'mittel' => $mittel,
+                  'technik' => implode(' · ', $teile),
+                  'ersatz' => $entry['rueckfallebene_fuer_weg'] === null
+                      ? ''
+                      : 'für Weg ' . (int) $entry['rueckfallebene_fuer_weg'],
+                  'gegenstellen' => implode(' · ', array_map(
+                      static fn (array $g): string =>
+                          (string) $g['name'] . ' ('
+                          . (string) $g['erreichbarkeit'] . ')',
+                      $entry['gegenstellen'] ?? []
+                  )),
+                  'vermerke' => trim(
+                      (string) $entry['besondere_vermerke']
+                      . ' ' . (string) $entry['bemerkungen']
+                  ),
+              ];
+          }
+          ksort($wegeMedien);
+          $wegeTafel = [
+              'id' => 'fernmeldewege',
+              'beschriftung' => 'Wege des aktiven Fernmeldeplans',
+              // Gemessen stehen hier 916 Bildpunkte zur Verfuegung; 58rem
+              // waeren 928 gewesen und haetten quergescrollt.
+              'mindestbreite' => '56rem',
+              'spalten' => [
+                  ['schluessel' => 'weg', 'kopf' => 'Weg', 'breite' => 6,
+                      'sortierbar' => true, 'suchbar' => true, 'art' => 'text'],
+                  ['schluessel' => 'betriebsstelle',
+                      'kopf' => 'Stelle', 'breite' => 14,
+                      'sortierbar' => true, 'suchbar' => true, 'art' => 'text'],
+                  ['schluessel' => 'rufname', 'kopf' => 'Erreichbar unter',
+                      'breite' => 16, 'sortierbar' => true,
+                      'suchbar' => true, 'art' => 'text'],
+                  /*
+                   * Das Mittel bekommt eine eigene Spalte mit Filter --
+                   * dieselbe Not wie im Ausgang: Wer den Funk betreut,
+                   * sucht die Funkwege.
+                   */
+                  ['schluessel' => 'mittel', 'kopf' => 'Mittel',
+                      'breite' => 12, 'sortierbar' => true,
+                      'suchbar' => true, 'art' => 'text',
+                      'filter' => array_keys($wegeMedien),
+                      'filtername' => 'Alle Mittel'],
+                  ['schluessel' => 'technik',
+                      'kopf' => 'Technische Angaben', 'breite' => 18,
+                      'sortierbar' => false, 'suchbar' => true,
+                      'art' => 'text'],
+                  ['schluessel' => 'ersatz', 'kopf' => 'Rückfallebene',
+                      'breite' => 12, 'sortierbar' => true,
+                      'suchbar' => true, 'art' => 'text'],
+                  ['schluessel' => 'gegenstellen',
+                      'kopf' => 'Erreicht', 'breite' => 12,
+                      'sortierbar' => false, 'suchbar' => true,
+                      'art' => 'text', 'klammern' => true],
+                  ['schluessel' => 'vermerke', 'kopf' => 'Vermerke',
+                      'breite' => 10, 'sortierbar' => false,
+                      'suchbar' => true, 'art' => 'text',
+                      'klammern' => true],
+              ],
+              'zeilen' => $wegeZeilen,
+              'leer' => 'Kein Weg entspricht den gesetzten Filtern.',
+          ];
+          /*
+           * Ein Weg im taktischen Bild -- als eigene Funktion, weil ein
+           * Ersatzweg genauso dargestellt wird wie der Weg, den er ersetzt.
+           * Nur die Einrückung unterscheidet sie, nicht der Inhalt.
+           */
+          $wegZeile = static function (array $weg): string {
+              $stuecke = [
+                  '<span class="estab-telecom-station-medium">'
+                  . dv_operations_html(estab_dv_telecom_route_label(
+                      $weg['medium'],
+                      $weg['funkart'] ?? null
+                  )) . '</span>',
+                  '<span class="estab-telecom-station-address">'
+                  . dv_operations_html((string) $weg['erreichbarkeit'])
+                  . '</span>',
+              ];
+              /*
+               * Das Kennzeichen des Wegs.
+               *
+               * Eine Führungsstelle hat mehrere Digitalfunkwege unter EINEM
+               * eigenen Funkrufnamen -- nach oben eine andere Rufgruppe als
+               * nach unten. Ohne sie stünde „Funk (digital) · Heros
+               * Übungsplatz 10" zweimal da und wäre nicht auseinanderzuhalten.
+               */
+              $kennzeichen = estab_dv_telecom_route_key($weg);
+              if ($kennzeichen !== '') {
+                  $stuecke[] = '<span class="estab-telecom-station-key">'
+                      . dv_operations_html($kennzeichen) . '</span>';
+              }
+              if ($weg['weg_nummer'] !== null) {
+                  $stuecke[] = '<span class="estab-telecom-station-route">Weg '
+                      . (int) $weg['weg_nummer'] . '</span>';
+              }
+              return implode(' ', $stuecke);
+          };
+        ?>
+        <nav class="estab-telecom-depth" aria-label="Tiefe der Ansicht">
+          <?php foreach ([
+              'taktisch' => 'Taktisch',
+              'betrieblich' => 'Betrieblich',
+          ] as $tiefe => $beschriftung): ?>
+            <?php if ($planTiefe === $tiefe): ?>
+              <strong class="estab-telecom-depth-current"
+                aria-current="true"><?= dv_operations_html($beschriftung)
+              ?></strong>
+            <?php else: ?>
+              <a class="estab-telecom-depth-link"
+                href="fuehrungsstelle.php?ansicht=<?= dv_operations_html($tiefe)
+                ?>#fernmeldeplan"><?= dv_operations_html($beschriftung) ?></a>
+            <?php endif; ?>
+          <?php endforeach; ?>
+          <span class="estab-telecom-depth-hint"><?= $planTiefe === 'taktisch'
+              ? 'Nur, was für die Führungsentscheidung nötig ist.'
+              : 'Sämtliche technischen und betrieblichen Einzelheiten.'
+          ?></span>
+        </nav>
+        <?php if ($planTiefe === 'betrieblich'): ?>
+          <?= estab_tabelle_markup($wegeTafel) ?>
+        <?php else: ?>
+          <ol class="estab-telecom-stations">
+            <?php foreach ($stellen as $stelleName => $stelle): ?>
+              <li class="estab-telecom-station">
+                <h3 class="estab-telecom-station-name"><?=
+                  dv_operations_html((string) $stelleName)
+                ?><span class="estab-telecom-station-kind">eigene
+                  Betriebsstelle</span></h3>
+                <ul class="estab-telecom-station-routes">
+                  <?php foreach ($stelle['wege'] as $weg): ?>
+                    <li>
+                      <?= $wegZeile($weg) ?>
+                      <?php $erreicht = $weg['gegenstellen'] ?? []; ?>
+                      <?php if ($erreicht !== []): ?>
+                        <ul class="estab-telecom-station-counterparts">
+                          <?php foreach ($erreicht as $gegenstelle): ?>
+                            <li><?= dv_operations_html(
+                              (string) $gegenstelle['name'] . ' · '
+                              . (string) $gegenstelle['erreichbarkeit']
+                            ) ?><?php if (
+                                ($gegenstelle['stellenart'] ?? null) !== null
+                            ): ?>
+                              <span class="estab-telecom-station-kind"><?=
+                                dv_operations_html(
+                                  ESTAB_DV_TELECOM_STATION_KINDS[
+                                      $gegenstelle['stellenart']
+                                  ] ?? (string) $gegenstelle['stellenart']
+                                )
+                              ?></span>
+                            <?php endif; ?></li>
+                          <?php endforeach; ?>
+                        </ul>
+                      <?php endif; ?>
+                      <?php
+                        $ersatz = $weg['weg_nummer'] === null
+                          ? []
+                          : ($ersatzwegeZu[(int) $weg['weg_nummer']] ?? []);
+                      ?>
+                      <?php if ($ersatz !== []): ?>
+                        <ul class="estab-telecom-station-fallbacks">
+                          <?php foreach ($ersatz as $ersatzweg): ?>
+                            <li><span class="estab-telecom-station-fallback-mark">Ersatzweg</span>
+                              <?= $wegZeile($ersatzweg) ?><?php
+                                $fremd = (string) $ersatzweg['betriebsstelle'];
+                              ?><?php if ($fremd !== (string) $stelleName): ?>
+                                <span class="estab-telecom-station-elsewhere">über <?=
+                                  dv_operations_html($fremd)
+                                ?></span>
+                              <?php endif; ?></li>
+                          <?php endforeach; ?>
+                        </ul>
+                      <?php endif; ?>
+                    </li>
+                  <?php endforeach; ?>
+                </ul>
+              </li>
             <?php endforeach; ?>
-            </tbody>
-          </table>
-        </div>
+          </ol>
+          <?php if ($stellen === []): ?>
+            <p>Der aktive Plan führt keine Wege.</p>
+          <?php endif; ?>
+          <?php
+            /*
+             * Die Skizze ist erzeugt, nicht gezeichnet.
+             *
+             * Sie trägt denselben Stand wie die Liste darüber, weil sie aus
+             * denselben Daten entsteht. Eine von Hand gepflegte Skizze wäre
+             * nach der zweiten Planänderung falsch, ohne dass es jemand
+             * merkte.
+             */
+          ?>
+          <details class="estab-telecom-sketch-holder">
+            <summary>Kommunikationsskizze nach Fb Fü 77</summary>
+            <p class="estab-telecom-sketch-note">Erzeugt aus Version
+              <?= (int) $activePlan['version'] ?> des Plans. Die Anordnung
+              zeigt in der Mitte Ihre eigene Führungsstelle mit ihrem
+              Funkrufnamen und ihren Mitteln, links die übergeordneten und
+              rechts die nachgeordneten Gegenstellen. Die Linienart nennt das
+              Mittel, auch ohne Farbe.</p>
+            <?= estab_telecom_sketch_svg(
+                $activePlan,
+                $fuehrungsstellenName === ''
+                    ? (string) $activePlan['herkunft']
+                    : $fuehrungsstellenName
+            ) ?>
+          </details>
+        <?php endif; ?>
+        <?php if ($ausserplan['ohne_weg'] !== []
+            || $ausserplan['abgeloest'] !== []): ?>
+          <section class="estab-telecom-offplan"
+            aria-labelledby="fernmeldeplan-ausserplan">
+            <h3 id="fernmeldeplan-ausserplan">Verkehr, den der Plan nicht
+              führt</h3>
+            <?php foreach ([
+                'ohne_weg' => 'Eingänge ohne Wegangabe',
+                'abgeloest' => 'Eingänge über einen Weg, den die aktive '
+                    . 'Fassung nicht mehr führt',
+            ] as $art => $ueberschrift): ?>
+              <?php if ($ausserplan[$art] !== []): ?>
+                <h4><?= dv_operations_html($ueberschrift) ?></h4>
+                <ul>
+                  <?php foreach ($ausserplan[$art] as $zeile): ?>
+                    <li><?= dv_operations_html(
+                        estab_dv_telecom_medium_label($zeile['medium'])
+                      ) ?>: <?= (int) $zeile['anzahl'] ?>
+                      <?= $zeile['anzahl'] === 1 ? 'Eingang' : 'Eingänge' ?><?=
+                        $zeile['zuletzt'] === null
+                          ? ''
+                          : ', zuletzt ' . dv_operations_html(
+                              (string) $zeile['zuletzt']
+                          )
+                      ?></li>
+                  <?php endforeach; ?>
+                </ul>
+              <?php endif; ?>
+            <?php endforeach; ?>
+          </section>
+        <?php endif; ?>
       <?php endif; ?>
     </section>
 
@@ -1190,7 +1668,7 @@ foreach ($plans as $plan) {
             <?= estab_csrf_field() ?>
             <input type="hidden" name="operation_action" value="create_plan">
             <div class="estab-tool-form-grid">
-              <label>Herkunft
+              <label>Herausgebende Dienststelle
                 <input name="herkunft" maxlength="255" required value="<?=
                   dv_operations_html(dv_operations_post_value(
                       'create_plan',
@@ -1198,6 +1676,17 @@ foreach ($plans as $plan) {
                       ''
                   ))
                 ?>">
+                <small>Linkes Kopffeld nach Fb Fü 76.</small>
+              </label>
+              <label>Funktion des Verfassers
+                <input name="verfasser_funktion" maxlength="120" value="<?=
+                  dv_operations_html(dv_operations_post_value(
+                      'create_plan',
+                      'verfasser_funktion',
+                      ''
+                  ))
+                ?>">
+                <small>Freiwillig, etwa „S 6" oder „Fm-Zugführer".</small>
               </label>
               <label>Gültig ab
                 <input type="datetime-local" name="gueltig_ab" required
@@ -1216,6 +1705,17 @@ foreach ($plans as $plan) {
                   ))
                 ?>">
               </label>
+              <label>Verschlusssachenvermerk
+                <input name="vs_vermerk" maxlength="40" value="<?=
+                  dv_operations_html(dv_operations_post_value(
+                      'create_plan',
+                      'vs_vermerk',
+                      'NfD'
+                  ))
+                ?>">
+                <small>Rechtes Kopffeld. Vorgeschlagen ist „NfD"; die
+                  Vorbelegung ist ein Vorschlag, keine Setzung.</small>
+              </label>
               <label>Betriebsleitung
                 <input name="betriebsleitung" maxlength="255" required
                   value="<?= dv_operations_html(dv_operations_post_value(
@@ -1223,6 +1723,15 @@ foreach ($plans as $plan) {
                       'betriebsleitung',
                       ''
                   )) ?>">
+              </label>
+              <label>Dienststellung für die Freigabe
+                <input name="freigabe_dienststellung" maxlength="120"
+                  value="<?= dv_operations_html(dv_operations_post_value(
+                      'create_plan',
+                      'freigabe_dienststellung',
+                      ''
+                  )) ?>">
+                <small>Erscheint bei der Freigabe als „F.d.R.".</small>
               </label>
             </div>
             <label>Bemerkungen
@@ -1303,13 +1812,24 @@ foreach ($plans as $plan) {
                 <input type="hidden" name="plan_revision"
                   value="<?= dv_operations_html($revision) ?>">
                 <div class="estab-tool-form-grid">
-                  <label>Herkunft
+                  <label>Herausgebende Dienststelle
                     <input name="herkunft" maxlength="255" required
                       value="<?= dv_operations_html(
                           dv_operations_post_value(
                               'update_plan',
                               'herkunft',
                               $plan['herkunft'],
+                              $planId
+                          )
+                      ) ?>">
+                  </label>
+                  <label>Funktion des Verfassers
+                    <input name="verfasser_funktion" maxlength="120"
+                      value="<?= dv_operations_html(
+                          dv_operations_post_value(
+                              'update_plan',
+                              'verfasser_funktion',
+                              (string) ($plan['verfasser_funktion'] ?? ''),
                               $planId
                           )
                       ) ?>">
@@ -1338,6 +1858,17 @@ foreach ($plans as $plan) {
                           )
                       ) ?>">
                   </label>
+                  <label>Verschlusssachenvermerk
+                    <input name="vs_vermerk" maxlength="40"
+                      value="<?= dv_operations_html(
+                          dv_operations_post_value(
+                              'update_plan',
+                              'vs_vermerk',
+                              (string) ($plan['vs_vermerk'] ?? 'NfD'),
+                              $planId
+                          )
+                      ) ?>">
+                  </label>
                   <label>Betriebsleitung
                     <input name="betriebsleitung" maxlength="255" required
                       value="<?= dv_operations_html(
@@ -1345,6 +1876,19 @@ foreach ($plans as $plan) {
                               'update_plan',
                               'betriebsleitung',
                               $plan['betriebsleitung'],
+                              $planId
+                          )
+                      ) ?>">
+                  </label>
+                  <label>Dienststellung für die Freigabe
+                    <input name="freigabe_dienststellung" maxlength="120"
+                      value="<?= dv_operations_html(
+                          dv_operations_post_value(
+                              'update_plan',
+                              'freigabe_dienststellung',
+                              (string) (
+                                  $plan['freigabe_dienststellung'] ?? ''
+                              ),
                               $planId
                           )
                       ) ?>">
@@ -1366,6 +1910,132 @@ foreach ($plans as $plan) {
               </form>
             </details>
 
+            <?php
+              /*
+               * Die Nebenstellen der eigenen Führungsstelle.
+               *
+               * Fb Fü 77 zeichnet sie in der Mitte der Skizze, in der Tafel
+               * unter der Führungsstelle: Technik, NSt-Nr., Teilnehmer. Sie
+               * sind weder Weg noch Gegenstelle -- über sie wird niemand
+               * draußen erreicht. Sie sagen, wer im Haus hinter welchem
+               * Apparat sitzt, und das ist genau die Auskunft, die jemand
+               * vor der Skizze braucht, wenn der Lagedienst ans Telefon soll
+               * und nur der Raum bekannt ist.
+               */
+            ?>
+            <section id="fernmeldeplan-nebenstellen"
+              class="estab-telecom-extensions" aria-labelledby="<?=
+                'telecom-extensions-' . $planId
+              ?>">
+              <header class="estab-telecom-routes-heading">
+                <div>
+                  <h3 id="<?= 'telecom-extensions-' . $planId ?>">
+                    Nebenstellen der eigenen Führungsstelle
+                  </h3>
+                  <p>Die Tafel in der Mitte der Kommunikationsskizze: wer im
+                    Haus hinter welchem Apparat zu erreichen ist.</p>
+                </div>
+                <span><?= count($plan['nebenstellen'] ?? []) ?>
+                  Nebenstellen</span>
+              </header>
+              <?php if (($plan['nebenstellen'] ?? []) === []): ?>
+                <p class="estab-tool-notice">Für diesen Entwurf ist noch keine
+                  Nebenstelle erfasst.</p>
+              <?php else: ?>
+                <ul class="estab-telecom-counterpart-list">
+                  <?php foreach ($plan['nebenstellen'] as $nebenstelle): ?>
+                    <li>
+                      <span><strong><?= dv_operations_html(
+                          ESTAB_DV_TELECOM_EXTENSION_KINDS[
+                              $nebenstelle['technik']
+                          ] ?? (string) $nebenstelle['technik']
+                      ) ?></strong> ·
+                      <?= dv_operations_html($nebenstelle['nummer']) ?> ·
+                      <?= dv_operations_html($nebenstelle['teilnehmer'])
+                      ?><?= trim(
+                          (string) ($nebenstelle['bemerkungen'] ?? '')
+                      ) === ''
+                          ? ''
+                          : ' · ' . dv_operations_html(
+                              (string) $nebenstelle['bemerkungen']
+                          ) ?></span>
+                      <form method="post" action="fuehrungsstelle.php">
+                        <?= estab_csrf_field() ?>
+                        <input type="hidden" name="operation_action"
+                          value="delete_plan_extension">
+                        <input type="hidden" name="fernmeldeplan_id"
+                          value="<?= $planId ?>">
+                        <input type="hidden" name="nebenstelle_id"
+                          value="<?= (int) $nebenstelle['nebenstelle_id'] ?>">
+                        <input type="hidden" name="plan_revision"
+                          value="<?= dv_operations_html($revision) ?>">
+                        <button
+                          class="estab-button estab-button-danger-outline"
+                          type="submit">Entfernen</button>
+                      </form>
+                    </li>
+                  <?php endforeach; ?>
+                </ul>
+              <?php endif; ?>
+              <form class="estab-tool-form" method="post"
+                action="fuehrungsstelle.php" data-estab-dirty-guard
+                data-estab-telecom-form-label="Nebenstelle">
+                <?= estab_csrf_field() ?>
+                <input type="hidden" name="operation_action"
+                  value="add_plan_extension">
+                <input type="hidden" name="fernmeldeplan_id"
+                  value="<?= $planId ?>">
+                <input type="hidden" name="plan_revision"
+                  value="<?= dv_operations_html($revision) ?>">
+                <div class="estab-tool-form-grid">
+                  <label>Technik
+                    <?php $technikErste = true; ?>
+                    <select name="technik" required>
+                      <?php foreach (
+                          ESTAB_DV_TELECOM_EXTENSION_KINDS
+                          as $technikWert => $technikText
+                      ): ?>
+                        <?php
+                          /*
+                           * Die erste Wahl wird ausdrücklich als gewählt
+                           * ausgezeichnet. Ohne das Merkmal waehlt der Browser
+                           * sie zwar auch, aber der Aenderungswaechter
+                           * vergleicht `selected` gegen `defaultSelected` --
+                           * und haelt das Formular dann ab dem Seitenaufbau
+                           * fuer bearbeitet. Jede Eingabe im Entwurf lief
+                           * deshalb in die Warnung "Aktion noch nicht
+                           * ausgefuehrt", ohne dass jemand etwas angefasst
+                           * hatte.
+                           */
+                        ?>
+                        <option value="<?= dv_operations_html($technikWert)
+                          ?>"<?= $technikErste ? ' selected' : '' ?>><?=
+                          dv_operations_html($technikText) ?></option>
+                        <?php $technikErste = false; ?>
+                      <?php endforeach; ?>
+                    </select>
+                    <small>Die Zeilen der Nebenstellentafel des Vordrucks.</small>
+                  </label>
+                  <label>NSt-Nr.
+                    <input name="nummer" maxlength="40" required>
+                    <small>Wie sie im Haus gewählt wird — „23",
+                      „0228 940-1523" oder ein Apparatname.</small>
+                  </label>
+                  <label>Teilnehmer
+                    <input name="teilnehmer" maxlength="255" required>
+                    <small>Wer dort sitzt: Lagedienst, S 6, Meldekopf.</small>
+                  </label>
+                </div>
+                <label>Bemerkungen
+                  <textarea name="bemerkungen" maxlength="10000"></textarea>
+                  <small>Besetzungszeiten, Einschränkungen.</small>
+                </label>
+                <button class="estab-button" type="submit">
+                  Nebenstelle erfassen
+                </button>
+              </form>
+            </section>
+
             <section class="estab-telecom-routes" aria-labelledby="<?=
               'telecom-routes-' . $planId
             ?>">
@@ -1385,6 +2055,26 @@ foreach ($plans as $plan) {
               <?php foreach ($plan['eintraege'] as $entry): ?>
                 <?php
                   $entryId = (int) $entry['fernmeldeplan_eintrag_id'];
+                  /*
+                   * Die uebrigen Wege des Entwurfs, damit die Auswahl der
+                   * Rueckfallebene sie anbieten kann. Der eigene ist
+                   * gekennzeichnet und faellt in der Auswahl heraus.
+                   */
+                  $geschwister = [];
+                  foreach ($plan['eintraege'] as $anderer) {
+                      $geschwister[] = [
+                          'weg_id' => (int) ($anderer['weg_id'] ?? 0),
+                          'eigen' => (int) $anderer['fernmeldeplan_eintrag_id']
+                              === $entryId,
+                          'bezeichnung' => 'Weg '
+                              . (int) ($anderer['weg_nummer'] ?? 0)
+                              . ' · ' . (string) $anderer['betriebsstelle']
+                              . ' · ' . estab_dv_telecom_route_label(
+                                  $anderer['medium'],
+                                  $anderer['funkart'] ?? null
+                              ),
+                      ];
+                  }
                   $entryValues = $entry;
                   foreach (array_keys($entryValues) as $field) {
                       $entryValues[$field] = dv_operations_post_value(
@@ -1419,10 +2109,13 @@ foreach ($plans as $plan) {
                     <span><strong><?= dv_operations_html(
                         $entry['betriebsstelle']
                     ) ?></strong> · <?= dv_operations_html(
-                        $entry['rufname']
+                        $entry['erreichbarkeit']
                     ) ?></span>
                     <span><?= dv_operations_html(
-                        estab_dv_telecom_medium_label($entry['medium'])
+                        estab_dv_telecom_route_label(
+                            $entry['medium'],
+                            $entry['funkart'] ?? null
+                        )
                     ) ?></span>
                   </summary>
                   <form class="estab-tool-form" method="post"
@@ -1432,7 +2125,7 @@ foreach ($plans as $plan) {
                     data-estab-dirty-guard
                     data-estab-telecom-form-label="<?= dv_operations_html(
                         'Fernmeldeweg ' . $entry['betriebsstelle']
-                            . ' / ' . $entry['rufname']
+                            . ' / ' . $entry['erreichbarkeit']
                     ) ?>"
                     <?= $entryHasError
                         ? 'data-estab-dirty-initial="true"'
@@ -1447,7 +2140,7 @@ foreach ($plans as $plan) {
                     <input type="hidden" name="plan_revision"
                       value="<?= dv_operations_html($revision) ?>">
                     <?php dv_operations_render_telecom_entry_fields(
-                        $entryValues
+                        $entryValues + ['geschwister' => $geschwister]
                     ); ?>
                     <button class="estab-button" type="submit">
                       Änderungen am Weg speichern
@@ -1469,6 +2162,114 @@ foreach ($plans as $plan) {
                       Weg aus dem Entwurf entfernen
                     </button>
                   </form>
+                  <section class="estab-telecom-counterparts">
+                    <h4>Gegenstellen über diesen Weg</h4>
+                    <p>Wer ist über diesen Weg zu erreichen, und unter welcher
+                      Erreichbarkeit? Die Angaben stehen dem Fernmelder und
+                      dem LdF später als Vorschlag im Vordruck zur Verfügung;
+                      sie ersetzen die Felder der Nachricht nicht.</p>
+                    <?php $gegenstellen = $entry['gegenstellen'] ?? []; ?>
+                    <?php if ($gegenstellen === []): ?>
+                      <p class="estab-tool-notice">Für diesen Weg ist noch
+                        keine Gegenstelle erfasst.</p>
+                    <?php else: ?>
+                      <ul class="estab-telecom-counterpart-list">
+                        <?php foreach ($gegenstellen as $gegenstelle): ?>
+                          <li>
+                            <span><strong><?= dv_operations_html(
+                                $gegenstelle['name']
+                            ) ?></strong> ·
+                            <?= dv_operations_html(
+                                $gegenstelle['erreichbarkeit']
+                            ) ?><?= ($gegenstelle['stellenart'] ?? null) === null
+                                ? ''
+                                : ' · ' . dv_operations_html(
+                                    ESTAB_DV_TELECOM_STATION_KINDS[
+                                        $gegenstelle['stellenart']
+                                    ] ?? (string) $gegenstelle['stellenart']
+                                ) ?><?= trim(
+                                (string) ($gegenstelle['bemerkungen'] ?? '')
+                            ) === ''
+                                ? ''
+                                : ' · ' . dv_operations_html(
+                                    (string) $gegenstelle['bemerkungen']
+                                ) ?></span>
+                            <form method="post" action="fuehrungsstelle.php">
+                              <?= estab_csrf_field() ?>
+                              <input type="hidden" name="operation_action"
+                                value="delete_plan_counterpart">
+                              <input type="hidden" name="fernmeldeplan_id"
+                                value="<?= $planId ?>">
+                              <input type="hidden"
+                                name="fernmeldeplan_eintrag_id"
+                                value="<?= $entryId ?>">
+                              <input type="hidden" name="gegenstelle_id"
+                                value="<?= (int)
+                                  $gegenstelle['gegenstelle_id'] ?>">
+                              <input type="hidden" name="plan_revision"
+                                value="<?= dv_operations_html($revision) ?>">
+                              <button
+                                class="estab-button estab-button-danger-outline"
+                                type="submit">Entfernen</button>
+                            </form>
+                          </li>
+                        <?php endforeach; ?>
+                      </ul>
+                    <?php endif; ?>
+                    <form class="estab-tool-form" method="post"
+                      action="fuehrungsstelle.php" data-estab-dirty-guard
+                      data-estab-telecom-form-label="Gegenstelle">
+                      <?= estab_csrf_field() ?>
+                      <input type="hidden" name="operation_action"
+                        value="add_plan_counterpart">
+                      <input type="hidden" name="fernmeldeplan_id"
+                        value="<?= $planId ?>">
+                      <input type="hidden" name="fernmeldeplan_eintrag_id"
+                        value="<?= $entryId ?>">
+                      <input type="hidden" name="plan_revision"
+                        value="<?= dv_operations_html($revision) ?>">
+                      <div class="estab-tool-form-grid">
+                        <label>Name der Gegenstelle
+                          <input name="name" maxlength="255" required>
+                          <small>Klarbezeichnung der Stelle oder Einheit.</small>
+                        </label>
+                        <label>Stellenart
+                          <select name="stellenart">
+                            <?php /* selected: siehe Nebenstellen-Technik. */ ?>
+                            <option value="" selected>ohne Angabe</option>
+                            <?php foreach (
+                                estab_dv_telecom_counterpart_kinds()
+                                as $artWert => $artText
+                            ): ?>
+                              <option value="<?= dv_operations_html($artWert)
+                                ?>"><?= dv_operations_html($artText) ?></option>
+                            <?php endforeach; ?>
+                          </select>
+                          <small>Steht diese Stelle über, unter oder neben
+                            Ihnen? Die Skizze setzt übergeordnete nach links
+                            und nachgeordnete nach rechts.</small>
+                        </label>
+                        <label><?= dv_operations_html(
+                            'Erreichbar unter · '
+                            . estab_dv_telecom_route_label(
+                                $entry['medium'],
+                                $entry['funkart'] ?? null
+                            )
+                        ) ?>
+                          <input name="erreichbarkeit" maxlength="255" required>
+                          <small>Das Mittel ist das dieses Wegs.</small>
+                        </label>
+                      </div>
+                      <label>Bemerkungen
+                        <textarea name="bemerkungen"
+                          maxlength="10000"></textarea>
+                        <small>Betriebszeiten, Einschränkungen.</small>
+                      </label>
+                      <button class="estab-button" type="submit">
+                        Gegenstelle am Weg erfassen
+                      </button>
+                    </form>
+                  </section>
                 </details>
               <?php endforeach; ?>
               </div>
@@ -1478,8 +2279,10 @@ foreach ($plans as $plan) {
               $addValues = [];
               foreach (
                   [
-                      'betriebsstelle', 'rufname', 'medium', 'kanal',
-                      'bandlage', 'verkehrsform', 'besondere_vermerke',
+                      'betriebsstelle', 'stellenart', 'erreichbarkeit',
+                      'wegart', 'band', 'kanal', 'bandlage', 'verkehrsform',
+                      'relaisstelle', 'betriebsart', 'rufgruppe',
+                      'anschlussart', 'datenart', 'besondere_vermerke',
                       'bemerkungen',
                   ] as $field
               ) {
@@ -1513,7 +2316,25 @@ foreach ($plans as $plan) {
                   value="<?= $planId ?>">
                 <input type="hidden" name="plan_revision"
                   value="<?= dv_operations_html($revision) ?>">
-                <?php dv_operations_render_telecom_entry_fields($addValues); ?>
+                <?php
+                  $neueGeschwister = [];
+                  foreach ($plan['eintraege'] as $anderer) {
+                      $neueGeschwister[] = [
+                          'weg_id' => (int) ($anderer['weg_id'] ?? 0),
+                          'eigen' => false,
+                          'bezeichnung' => 'Weg '
+                              . (int) ($anderer['weg_nummer'] ?? 0)
+                              . ' · ' . (string) $anderer['betriebsstelle']
+                              . ' · ' . estab_dv_telecom_route_label(
+                                  $anderer['medium'],
+                                  $anderer['funkart'] ?? null
+                              ),
+                      ];
+                  }
+                  dv_operations_render_telecom_entry_fields(
+                      $addValues + ['geschwister' => $neueGeschwister]
+                  );
+                ?>
                 <button class="estab-button" type="submit">
                   Weg zum Entwurf hinzufügen
                 </button>
@@ -1649,7 +2470,10 @@ foreach ($plans as $plan) {
                     <?php foreach ($plan['eintraege'] as $entry): ?>
                       <?php
                         $historyRouteParts = array_values(array_filter([
-                            estab_dv_telecom_medium_label($entry['medium']),
+                            estab_dv_telecom_route_label(
+                                $entry['medium'],
+                                $entry['funkart'] ?? null
+                            ),
                             trim((string) $entry['kanal']),
                             trim((string) $entry['bandlage']),
                             trim((string) $entry['verkehrsform']),
@@ -1665,7 +2489,7 @@ foreach ($plans as $plan) {
                         <span><strong><?= dv_operations_html(
                             $entry['betriebsstelle']
                         ) ?></strong><small><?= dv_operations_html(
-                            $entry['rufname']
+                            $entry['erreichbarkeit']
                         ) ?></small></span>
                         <span><?= dv_operations_html(
                             implode(' · ', $historyRouteParts)
@@ -1699,195 +2523,38 @@ foreach ($plans as $plan) {
         </div>
       </section>
     <?php endif; ?>
-
-    <section class="estab-tool-panel" id="melderauftraege">
-      <header class="estab-tool-panel-heading">
-        <h2>Melderaufträge</h2>
-        <p>Übernahme, tatsächlicher Empfänger, Rücknachricht, Rückkehr und
-          Abschlussmeldung werden als eigene unveränderbare Ereignisse
-          protokolliert.</p>
-      </header>
-      <?php if ($isLdf): ?>
-        <form class="estab-tool-form" method="post"
-          action="fuehrungsstelle.php" data-estab-messenger-assignment>
-          <?= estab_csrf_field() ?>
-          <input type="hidden" name="operation_action"
-            value="assign_messenger">
-          <label>Ausgangsnachricht mit Weg „Melder“
-            <select name="nachricht_id" required>
-              <?php foreach ($eligibleMessages as $message): ?>
-                <option value="<?= (int) $message['00_lfd'] ?>">
-                  A<?= (int) $message['04_nummer'] ?> ·
-                  <?= dv_operations_html($message['10_anschrift']) ?>
-                </option>
-              <?php endforeach; ?>
-            </select>
-          </label>
-          <label>Melder
-            <select name="melder_kuerzel" required
-              data-estab-messenger-select>
-              <?php if ($users === []): ?>
-                <option value="">Kein fachlich berechtigter Fernmelder verfügbar</option>
-              <?php else: ?>
-                <option value="" selected>Bitte Fernmelder auswählen</option>
-              <?php endif; ?>
-              <?php foreach ($users as $user): ?>
-                <option value="<?= dv_operations_html($user['kuerzel']) ?>"
-                  data-estab-presence-state="<?= dv_operations_html(
-                      $user['presence_state']
-                  ) ?>" data-estab-presence-label="<?= dv_operations_html(
-                      $user['presence_label']
-                  ) ?>" data-estab-notification-required="<?=
-                      ($user['requires_separate_notification'] ?? true)
-                          ? '1'
-                          : '0' ?>">
-                  <?= dv_operations_html(
-                      $user['benutzer'] . ' (' . $user['kuerzel'] . ')'
-                          . ' · ' . $user['presence_label']
-                  ) ?>
-                </option>
-              <?php endforeach; ?>
-            </select>
-          </label>
-          <p class="estab-tool-notice estab-tool-notice-warning" role="status"
-            aria-live="polite" hidden data-estab-messenger-presence-warning>
-            <strong>Separat informieren:</strong>
-            Der gewählte Fernmelder ist aktuell
-            <span data-estab-messenger-presence-label>nicht aktiv</span>.
-            Der LdF muss ihn separat über den Auftrag informieren.
-          </p>
-          <label>Ziel
-            <input name="ziel" maxlength="255" required>
-          </label>
-          <button class="estab-button estab-button-primary" type="submit"
-            <?= $eligibleMessages === [] || $users === []
-                ? 'disabled'
-                : '' ?>>
-            Melder verbindlich beauftragen
-          </button>
-        </form>
-      <?php endif; ?>
-
-      <?php if ($jobs === []): ?>
-        <p class="estab-tool-empty">Keine sichtbaren Melderaufträge.</p>
-      <?php else: ?>
-        <?php foreach ($jobs as $job): ?>
-          <article class="estab-tool-panel">
-            <h3>Auftrag #<?= (int) $job['melderauftrag_id'] ?> ·
-              A<?= (int) $job['04_nummer'] ?> ·
-              <?= dv_operations_html($job['status']) ?></h3>
-            <p><strong>Melder:</strong>
-              <?= dv_operations_html(
-                  $job['melder_name'] . ' (' . $job['melder_kuerzel'] . ')'
-              ) ?><br>
-              <strong>Ziel:</strong> <?= dv_operations_html($job['ziel']) ?>
-            </p>
-            <?php
-              $isOwnJob = hash_equals(
-                  (string) $job['melder_kuerzel'],
-                  (string) $identity['kuerzel']
-              );
-              $transition = null;
-              $button = '';
-              if ($isOwnJob) {
-                  [$transition, $button] = match ($job['status']) {
-                      'BEAUFTRAGT' => ['accept', 'Auftrag übernehmen'],
-                      'UEBERNOMMEN' => ['deliver', 'Übergabe nachweisen'],
-                      'UEBERGEBEN' => ['return_path', 'Rückweg antreten'],
-                      'RUECKWEG' => ['returned', 'Rückkehr melden'],
-                      default => [null, ''],
-                  };
-              } elseif ($isLdf && $job['status'] === 'ZURUECK') {
-                  $transition = 'report';
-                  $button = 'Abschluss an FmZt bestätigen';
-              }
-            ?>
-            <?php if ($transition !== null): ?>
-              <form class="estab-tool-form" method="post"
-                action="fuehrungsstelle.php">
-                <?= estab_csrf_field() ?>
-                <input type="hidden" name="operation_action"
-                  value="messenger_transition">
-                <input type="hidden" name="melderauftrag_id"
-                  value="<?= (int) $job['melderauftrag_id'] ?>">
-                <input type="hidden" name="transition"
-                  value="<?= dv_operations_html($transition) ?>">
-                <?php if ($transition === 'deliver'): ?>
-                  <label>Tatsächlicher Empfänger
-                    <input name="tatsaechlicher_empfaenger" maxlength="255"
-                      required>
-                  </label>
-                <?php elseif ($transition === 'return_path'): ?>
-                  <fieldset>
-                    <legend>Liegt eine Rücknachricht vor?</legend>
-                    <label>
-                      <input type="radio"
-                        name="ruecknachricht_vorhanden" value="ja" required>
-                      Ja, Rücknachricht nachfolgend erfassen
-                    </label>
-                    <label>
-                      <input type="radio"
-                        name="ruecknachricht_vorhanden" value="nein" required>
-                      Nein, ausdrücklich keine Rücknachricht
-                    </label>
-                  </fieldset>
-                  <label>Rücknachricht (nur bei „Ja“)
-                    <textarea name="ruecknachricht"
-                      maxlength="10000"></textarea>
-                  </label>
-                <?php elseif ($transition === 'report'): ?>
-                  <label>Abschlussvermerk
-                    <textarea name="abschlussvermerk" maxlength="10000"
-                      required></textarea>
-                  </label>
-                <?php endif; ?>
-                <button class="estab-button estab-button-primary" type="submit">
-                  <?= dv_operations_html($button) ?>
-                </button>
-              </form>
-            <?php endif; ?>
-            <?php if ($isLdf && $job['status'] === 'BEAUFTRAGT'): ?>
-              <form class="estab-tool-form" method="post"
-                action="fuehrungsstelle.php">
-                <?= estab_csrf_field() ?>
-                <input type="hidden" name="operation_action"
-                  value="messenger_transition">
-                <input type="hidden" name="melderauftrag_id"
-                  value="<?= (int) $job['melderauftrag_id'] ?>">
-                <input type="hidden" name="transition" value="cancel">
-                <label>Abbruchgrund
-                  <textarea name="abbruchgrund" maxlength="10000"
-                    required></textarea>
-                </label>
-                <button class="estab-button estab-button-danger-outline"
-                  type="submit">Auftrag begründet abbrechen</button>
-              </form>
-            <?php endif; ?>
-          </article>
-        <?php endforeach; ?>
-      <?php endif; ?>
-    </section>
     <?php endif; ?>
   <?php endif; ?>
 
   <footer class="estab-tool-footer">
+    <a href="melderauftraege.php">Zu den Melderaufträgen</a>
     <a href="mainindex.php">Zurück zu Nachrichten</a>
     <span>Alle Änderungen sind einsatzgebunden und hashverkettet.</span>
   </footer>
 </main>
-<script data-estab-telecom-media-fields>
+<script<?= estab_csp_script_attribute() ?> data-estab-telecom-kind-fields>
 (function () {
   'use strict';
-  var media = <?= json_encode(
-      ESTAB_DV_MEDIA_DEFINITIONS,
+  var arten = <?= json_encode(
+      ESTAB_DV_TELECOM_ROUTE_KINDS,
       JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE
           | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP
   ) ?>;
+  var felder = [
+    'band', 'kanal', 'bandlage', 'verkehrsform', 'relaisstelle',
+    'betriebsart', 'rufgruppe', 'anschlussart', 'datenart'
+  ];
   function update(form) {
-    var select = form.querySelector('[data-estab-telecom-medium]');
+    var select = form.querySelector('[data-estab-telecom-kind]');
     if (!select) return;
-    var definition = media[select.value] || null;
-    ['kanal', 'bandlage', 'verkehrsform'].forEach(function (fieldName) {
+    var art = arten[select.value] || null;
+    var reach = form.querySelector(
+      '[data-estab-telecom-field-label="rufname"]'
+    );
+    if (reach) {
+      reach.textContent = art ? art.erreichbarkeit : 'Erreichbar unter';
+    }
+    felder.forEach(function (fieldName) {
       var wrapper = form.querySelector(
         '[data-estab-telecom-field="' + fieldName + '"]'
       );
@@ -1896,12 +2563,13 @@ foreach ($plans as $plan) {
       var label = wrapper.querySelector(
         '[data-estab-telecom-field-label="' + fieldName + '"]'
       );
-      var fieldLabel = definition ? definition[fieldName] : null;
+      var fieldLabel = art && art.felder ? art.felder[fieldName] : null;
       var visible = typeof fieldLabel === 'string' && fieldLabel !== '';
       wrapper.hidden = !visible;
       if (input) {
         input.disabled = !visible;
-        input.required = visible;
+        input.required = visible
+          && art.pflicht.indexOf(fieldName) !== -1;
       }
       if (label && visible) label.textContent = fieldLabel;
     });
@@ -1909,35 +2577,10 @@ foreach ($plans as $plan) {
   document.querySelectorAll('[data-estab-telecom-entry-form]')
     .forEach(function (form) {
       update(form);
-      var select = form.querySelector('[data-estab-telecom-medium]');
+      var select = form.querySelector('[data-estab-telecom-kind]');
       if (select) select.addEventListener('change', function () {
         update(form);
       });
-    });
-  document.querySelectorAll('[data-estab-messenger-assignment]')
-    .forEach(function (form) {
-      var select = form.querySelector('[data-estab-messenger-select]');
-      var warning = form.querySelector(
-        '[data-estab-messenger-presence-warning]'
-      );
-      var label = warning && warning.querySelector(
-        '[data-estab-messenger-presence-label]'
-      );
-      function updateMessengerPresence() {
-        if (!select || !warning) return;
-        var option = select.options[select.selectedIndex] || null;
-        var required = option
-          && option.dataset.estabNotificationRequired === '1';
-        warning.hidden = !required;
-        if (label && option) {
-          label.textContent = option.dataset.estabPresenceLabel
-            || 'nicht aktiv';
-        }
-      }
-      updateMessengerPresence();
-      if (select) {
-        select.addEventListener('change', updateMessengerPresence);
-      }
     });
   function changed(form) {
     if (form.hasAttribute('data-estab-dirty-initial')) return true;

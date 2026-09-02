@@ -14,6 +14,8 @@ require_once __DIR__ . '/dv_operations.php';
 require_once __DIR__ . '/incident.php';
 require_once __DIR__ . '/message_evidence.php';
 require_once __DIR__ . '/message_priority.php';
+require_once __DIR__ . '/message_status.php';
+require_once __DIR__ . '/message_transport.php';
 
 /** @return array<string, true> */
 function estab_message_columns(): array
@@ -27,6 +29,8 @@ function estab_message_columns(): array
             '04_richtung', '04_nummer',
             '05_gegenstelle', '06_befweg', '06_befwegausw',
             'estab_fernmeldeplan_eintrag_id',
+            'estab_eingangsweg_bemerkung',
+            'estab_gegenstelle_id',
             '07_durchspruch', '08_befhinweis', '08_befhinwausw',
             '09_vorrangstufe', '10_anschrift',
             '11_rufnummer', '11_gesprnotiz',
@@ -484,6 +488,10 @@ function estab_message_followup_new_record(array $draft): array
     $draft['11_gesprnotiz'] = 'f';
     $draft['estab_fernmeldeplan_eintrag_id'] = null;
     $draft['fernmeldeplan_eintrag_id'] = '';
+    // Auch der Eingangsweg und die dazu ausgewaehlte Gegenstelle sind
+    // Nachweis der Quellnachricht und gehen nie in eine Antwort ueber.
+    $draft['estab_eingangsweg_bemerkung'] = null;
+    $draft['estab_gegenstelle_id'] = null;
     // A reply/forward is not linked to a TBB row until its own transport is
     // documented. Never carry the source message's visible evidence number.
     unset($draft['msglfd'], $draft['estab_ttb_lfd']);
@@ -496,8 +504,35 @@ function estab_message_connect(array $databaseConfig): mysqli
 }
 
 /**
+ * Der Fehlerschluessel einer fehlgeschlagenen Datenbankoperation.
+ *
+ * Nur Codes, keine Daten: die Fehlernummer und der SQLSTATE. MySQL schreibt
+ * in seinen Klartext gern den beanstandeten Wert hinein ("Incorrect datetime
+ * value: '1810' for column ..."), und der gehoert weder in eine Ausnahme noch
+ * in ein Protokoll. Die Nummer sagt genug: 1292 ist ein unbrauchbares Datum,
+ * 1048 eine fehlende Pflichtangabe, 1406 ein zu langer Wert, 1062 ein
+ * doppelter Schluessel.
+ *
+ * Ohne diese zwei Zahlen stand im Protokoll nur "Could not execute message
+ * operation" -- und wer einen Eingang nicht aufnehmen konnte, erfuhr nirgends,
+ * woran es lag.
+ */
+function estab_message_error_key(mysqli $connection): string
+{
+    $nummer = (int) $connection->errno;
+    $zustand = (string) $connection->sqlstate;
+    if ($nummer === 0 && $zustand === '') {
+        return 'ohne Angabe';
+    }
+    return 'Fehler ' . $nummer . ', SQLSTATE ' . $zustand;
+}
+
+/**
  * Prepare and execute without exposing SQL, parameters or credentials in an
  * exception or audit record.
+ *
+ * Der Fehlerschluessel der Datenbank kommt mit -- er besteht aus Codes, nicht
+ * aus Werten.
  */
 function estab_message_execute(
     mysqli $connection,
@@ -506,22 +541,33 @@ function estab_message_execute(
 ): mysqli_stmt {
     $statement = $connection->prepare($sql);
     if (!$statement) {
-        throw new RuntimeException('Could not prepare message operation');
+        throw new RuntimeException(
+            'Could not prepare message operation ('
+                . estab_message_error_key($connection) . ')'
+        );
     }
     try {
         $executed = $parameters === []
             ? $statement->execute()
             : $statement->execute(array_values($parameters));
         if (!$executed) {
-            throw new RuntimeException('Could not execute message operation');
+            throw new RuntimeException(
+                'Could not execute message operation ('
+                    . estab_message_error_key($connection) . ')'
+            );
         }
         return $statement;
     } catch (Throwable $exception) {
+        $schluessel = estab_message_error_key($connection);
         $statement->close();
         if ($exception instanceof RuntimeException) {
             throw $exception;
         }
-        throw new RuntimeException('Could not execute message operation', 0, $exception);
+        throw new RuntimeException(
+            'Could not execute message operation (' . $schluessel . ')',
+            0,
+            $exception
+        );
     }
 }
 
@@ -970,6 +1016,131 @@ function estab_message_counter_repair_max(
  *
  * @return array{id: int, number: int}
  */
+/**
+ * Den vom Fernmelder benannten Eingangsweg und seine Gegenstelle aufloesen.
+ *
+ * Beides ist FREIWILLIG. Der Fernmelder weiss das Mittel immer -- den Weg
+ * meistens, die Gegenstelle manchmal. Ein Pflichtfeld erzwaenge dort eine
+ * Angabe, und eine erzwungene Angabe ist eine erfundene.
+ *
+ * Ist etwas angegeben, wird es geprueft, und zwar gegen den Plan, nicht gegen
+ * den Browser: der Weg muss zum AKTIVEN Plan dieses Einsatzes gehoeren und
+ * sein Mittel muss zu Feld 1 passen, die Gegenstelle muss an genau diesem Weg
+ * haengen. Die Anwendung LEITET Feld 1 nicht ab, sie PRUEFT es -- Feld 1 ist
+ * ein Vordruckfeld und wird im Vordruck angekreuzt, der Weg steht daneben.
+ *
+ * @return array{0:?int,1:?int}
+ */
+/**
+ * Die Bemerkung des Fernmelders zum Eingangsweg.
+ *
+ * Sie gehoert ihm allein. Geprueft wird nur die Form -- Laenge und keine
+ * Steuerzeichen ausser Umbruch und Tabulator; was darin steht, ist seine
+ * Aussage und nicht Sache der Anwendung.
+ */
+function estab_message_incoming_route_note(mixed $value): ?string
+{
+    if (!is_string($value)) {
+        return null;
+    }
+    $note = trim($value);
+    if ($note === '') {
+        return null;
+    }
+    $withoutAllowedWhitespace = str_replace(["\t", "\r", "\n"], '', $note);
+    $length = function_exists('mb_strlen')
+        ? mb_strlen($note, 'UTF-8')
+        : strlen($note);
+    if (
+        preg_match('//u', $note) !== 1
+        || $length > 2000
+        || preg_match('/\p{C}/u', $withoutAllowedWhitespace) === 1
+    ) {
+        throw new EstabDvInputException(
+            'Die Bemerkung zum Eingangsweg ist ungültig.'
+        );
+    }
+    return $note;
+}
+
+function estab_message_resolve_incoming_route(
+    mysqli $connection,
+    int $incidentId,
+    string $medium,
+    mixed $routeValue,
+    mixed $counterpartValue
+): array {
+    $route = is_int($routeValue)
+        ? $routeValue
+        : (is_string($routeValue) && $routeValue !== ''
+            ? (int) $routeValue
+            : null);
+    if ($route !== null && $route < 1) {
+        $route = null;
+    }
+    $counterpart = is_int($counterpartValue)
+        ? $counterpartValue
+        : (is_string($counterpartValue) && $counterpartValue !== ''
+            ? (int) $counterpartValue
+            : null);
+    if ($counterpart !== null && $counterpart < 1) {
+        $counterpart = null;
+    }
+    if ($route === null) {
+        // Ohne Weg gibt es keine Gegenstelle AUS DEM PLAN. Feld 6 bleibt
+        // davon unberuehrt: dort steht weiterhin freier Text.
+        return [null, null];
+    }
+    $statement = estab_message_execute(
+        $connection,
+        'SELECT e.`medium` FROM `nv_fernmeldeplan_eintraege` AS e'
+            . ' JOIN `nv_fernmeldeplaene` AS p'
+            . ' ON p.`fernmeldeplan_id` = e.`fernmeldeplan_id`'
+            . ' WHERE e.`fernmeldeplan_eintrag_id` = ?'
+            . ' AND p.`einsatz_id` = ?'
+            . " AND p.`status` = 'AKTIV'",
+        [$route, $incidentId]
+    );
+    try {
+        $row = $statement->get_result()->fetch_assoc();
+    } finally {
+        $statement->close();
+    }
+    if (!is_array($row)) {
+        throw new EstabDvInputException(
+            'Der erfasste Eingangsweg gehört nicht zum aktiven '
+            . 'S6-Fernmeldeplan.'
+        );
+    }
+    if (!hash_equals((string) $row['medium'], $medium)) {
+        throw new EstabDvInputException(
+            'Der Eingangsweg und das Übermittlungsmittel in Feld 1 '
+            . 'widersprechen einander.'
+        );
+    }
+    if ($counterpart === null) {
+        return [$route, null];
+    }
+    $counterpartStatement = estab_message_execute(
+        $connection,
+        'SELECT 1 FROM `nv_fernmeldeplan_gegenstellen`'
+            . ' WHERE `gegenstelle_id` = ?'
+            . ' AND `fernmeldeplan_eintrag_id` = ?',
+        [$counterpart, $route]
+    );
+    try {
+        $counterpartRow = $counterpartStatement->get_result()->fetch_row();
+    } finally {
+        $counterpartStatement->close();
+    }
+    if (!is_array($counterpartRow)) {
+        throw new EstabDvInputException(
+            'Die gewählte Gegenstelle gehört nicht zu diesem Eingangsweg.'
+        );
+    }
+    return [$route, $counterpart];
+}
+
 function estab_message_insert_numbered(
     mysqli $connection,
     string $databaseName,
@@ -1020,6 +1191,26 @@ function estab_message_insert_numbered(
                     $incident,
                     $expectedIncidentId
                 );
+                if ($direction === 'E') {
+                    // Der Fernmelder benennt den Weg beim Aufnehmen. Geprueft
+                    // wird er hier, in derselben Transaktion, in der die Zeile
+                    // entsteht -- sonst koennte der Plan zwischen Pruefung und
+                    // Einfuegen wechseln.
+                    [
+                        $fields['estab_fernmeldeplan_eintrag_id'],
+                        $fields['estab_gegenstelle_id'],
+                    ] = estab_message_resolve_incoming_route(
+                        $connection,
+                        $incidentId,
+                        (string) ($fields['01_medium'] ?? ''),
+                        $fields['estab_fernmeldeplan_eintrag_id'] ?? null,
+                        $fields['estab_gegenstelle_id'] ?? null
+                    );
+                    // Der Nachweis der Aufnahme wird hier NICHT erweitert.
+                    // Sein Umfang ist per SHA-256 festgeschrieben; den Weg
+                    // in die Beweiskette aufzunehmen ist ein eigener,
+                    // versionierter Schritt und keine Nebenwirkung.
+                }
                 if ($separateNumbering) {
                     $numberStatement = estab_message_execute(
                         $connection,
@@ -1273,12 +1464,18 @@ function estab_message_update_locked_outgoing(
  * mandatory formal approval. Status 2 belongs to A/W and is reachable only
  * after both approvals and the LdF transport decision. The direction/status
  * pairs are deliberately closed.
+ *
+ * The LdF transport decision is proven by Feld 1 (`01_medium`, the disposed
+ * and therefore actually used means) together with the disposed way in
+ * `06_befweg`. Both columns are written exclusively by the LdF transition out
+ * of status 1. Feld 7 (`06_befwegausw`) carries the wish of the author and is
+ * already filled while the message is written, so it proves no stage at all.
  */
 function estab_message_operator_stage_predicate(
     string $direction,
     int $status
 ): string {
-    if ($status === 1 && $direction === 'E') {
+    if ($status === ESTAB_MESSAGE_STATUS_LDF && $direction === 'E') {
         return " AND `04_richtung` = '" . $direction . "'"
             . ' AND `x00_status` = 1'
             . ' AND `02_zeit` IS NULL AND `02_zeichen` = ?'
@@ -1286,7 +1483,7 @@ function estab_message_operator_stage_predicate(
             . ' AND `15_quitdatum` IS NULL AND `15_quitzeichen` = ?'
             . " AND `x01_abschluss` = 'f'";
     }
-    if ($status === 1 && $direction === 'A') {
+    if ($status === ESTAB_MESSAGE_STATUS_LDF && $direction === 'A') {
         return " AND `04_richtung` = 'A'"
             . ' AND `x00_status` = 1'
             . ' AND `02_zeit` IS NULL AND `02_zeichen` = ?'
@@ -1294,11 +1491,12 @@ function estab_message_operator_stage_predicate(
             . ' AND `15_quitdatum` IS NOT NULL AND `15_quitzeichen` <> ?'
             . " AND `x01_abschluss` = 'f'";
     }
-    if ($status === 2 && $direction === 'A') {
+    if ($status === ESTAB_MESSAGE_STATUS_TRANSPORT && $direction === 'A') {
         return " AND `04_richtung` = 'A'"
             . ' AND `x00_status` = 2'
             . ' AND `02_zeit` IS NOT NULL AND `02_zeichen` <> ?'
-            . ' AND `06_befwegausw` <> ?'
+            . ' AND `01_medium` <> ?'
+            . ' AND `06_befweg` <> ?'
             . ' AND `03_datum` IS NULL AND `03_zeichen` = ?'
             . ' AND `15_quitdatum` IS NOT NULL AND `15_quitzeichen` <> ?'
             . " AND `x01_abschluss` = 'f'";
@@ -1312,7 +1510,7 @@ function estab_message_operator_stage_parameters(
     int $status
 ): array {
     estab_message_operator_stage_predicate($direction, $status);
-    return $status === 1 ? ['', '', ''] : ['', '', '', ''];
+    return $status === ESTAB_MESSAGE_STATUS_LDF ? ['', '', ''] : ['', '', '', '', ''];
 }
 
 /**
@@ -1334,12 +1532,12 @@ function estab_message_require_operator_stage_actor(
     // Validate the closed direction/status vocabulary even in LOOSE.
     estab_message_operator_stage_predicate($direction, $status);
     $incidentId = (int) ($incident['active_einsatz_id'] ?? 0);
-    $requiredFunction = $status === 1 ? 'LdF' : 'A/W';
+    $requiredFunction = $status === ESTAB_MESSAGE_STATUS_LDF ? 'LdF' : 'A/W';
     $operationalActor = estab_dv_require_write_capability(
         $connection,
         $incidentId,
         $actor,
-        $status === 1 ? 'FERNMELDEBETRIEB' : 'BEFOERDERUNG'
+        $status === ESTAB_MESSAGE_STATUS_LDF ? 'FERNMELDEBETRIEB' : 'BEFOERDERUNG'
     );
     if (
         $operationalActor['funktion'] !== $requiredFunction
@@ -1538,7 +1736,7 @@ function estab_message_update_locked_operator_stage(
             // Evidence and lock ownership are one authenticated identity.
             $event['actor'] = $operationalActor;
             $incomingTbbCorrection = null;
-            if ($direction === 'E' && $status === 1) {
+            if ($direction === 'E' && $status === ESTAB_MESSAGE_STATUS_LDF) {
                 if (
                     ($event['snapshot']['incoming_transport_confirmed'] ?? null)
                     !== true
@@ -1571,7 +1769,8 @@ function estab_message_update_locked_operator_stage(
                 // browser-supplied "previous" medium.
                 $previousMediumStatement = estab_message_execute(
                     $connection,
-                    'SELECT `01_medium`, `13_abseinheit`, `05_gegenstelle` FROM '
+                    'SELECT `01_medium`, `13_abseinheit`, `05_gegenstelle`,'
+                        . ' `estab_gegenstelle_id` FROM '
                         . estab_message_table($table)
                         . ' WHERE `00_lfd` = ? AND `einsatz_id` = ?'
                         . $stageSql
@@ -1660,7 +1859,131 @@ function estab_message_update_locked_operator_stage(
                             . 'Begründung erforderlich.'
                     );
                 }
+                /*
+                 * Der Weg des Eingangs ist FREIWILLIG -- das Mittel bleibt
+                 * Pflicht. Der Fernmelder weiss das Mittel immer; den Weg
+                 * meistens, aber nicht zwingend. Ein Pflichtfeld erzwaenge
+                 * dort eine Angabe, und eine erzwungene Angabe ist eine
+                 * erfundene.
+                 *
+                 * Ist ein Weg angegeben, muss sein Mittel zu Feld 1 passen.
+                 * Die Anwendung LEITET Feld 1 nicht ab, sie PRUEFT es: Feld 1
+                 * ist ein Vordruckfeld und wird im Vordruck eingetragen, der
+                 * Weg steht daneben. Die Doppelangabe wird damit zur Probe.
+                 */
+                $incomingRoute = $fields['estab_fernmeldeplan_eintrag_id']
+                    ?? null;
+                $incomingRoute = is_string($incomingRoute)
+                        && $incomingRoute !== ''
+                    ? (int) $incomingRoute
+                    : (is_int($incomingRoute) ? $incomingRoute : null);
+                if ($incomingRoute !== null && $incomingRoute > 0) {
+                    $routeCheck = estab_message_execute(
+                        $connection,
+                        'SELECT e.`medium` FROM'
+                            . ' `nv_fernmeldeplan_eintraege` AS e'
+                            . ' JOIN `nv_fernmeldeplaene` AS p'
+                            . ' ON p.`fernmeldeplan_id`'
+                            . ' = e.`fernmeldeplan_id`'
+                            . ' WHERE e.`fernmeldeplan_eintrag_id` = ?'
+                            . ' AND p.`einsatz_id` = ?'
+                            . " AND p.`status` = 'AKTIV'",
+                        [$incomingRoute, $incidentId]
+                    );
+                    try {
+                        $routeRow = $routeCheck->get_result()->fetch_assoc();
+                    } finally {
+                        $routeCheck->close();
+                    }
+                    if (!is_array($routeRow)) {
+                        throw new EstabDvInputException(
+                            'Der bestätigte Eingangsweg gehört nicht zum '
+                            . 'aktiven S6-Fernmeldeplan.'
+                        );
+                    }
+                    if (
+                        !hash_equals(
+                            (string) $routeRow['medium'],
+                            $requestedMedium
+                        )
+                    ) {
+                        throw new EstabDvInputException(
+                            'Der Eingangsweg und das Übermittlungsmittel in '
+                            . 'Feld 1 widersprechen einander.'
+                        );
+                    }
+                    $fields['estab_fernmeldeplan_eintrag_id'] =
+                        $incomingRoute;
+                    $event['snapshot']['incoming_route_entry_id'] =
+                        $incomingRoute;
+                } else {
+                    $fields['estab_fernmeldeplan_eintrag_id'] = null;
+                    $event['snapshot']['incoming_route_entry_id'] = null;
+                }
                 $fields['01_medium'] = $requestedMedium;
+                /*
+                 * Woher der Absender kommt, gehoert in den Nachweis.
+                 *
+                 * Feld 15 wird dem Leiter des Fernmeldebetriebes aus der vom
+                 * Fernmelder gewaehlten Gegenstelle vorbelegt. Ob er die
+                 * Vorbelegung uebernommen oder ueberschrieben hat, ist der
+                 * eigentliche Vorgang an dieser Station -- und ohne
+                 * Aufzeichnung waere hinterher nicht zu sagen, ob der
+                 * Absender aus dem Plan stammt oder aus seinem Urteil.
+                 *
+                 * Die Planfassung steht dabei, weil eine Gegenstelle nur
+                 * innerhalb ihrer Fassung eindeutig ist: eine spaetere
+                 * Version fuehrt dieselbe Stelle unter einer neuen Kennung.
+                 */
+                $namedCounterpart = $previousMediumRow['estab_gegenstelle_id']
+                    ?? null;
+                $namedCounterpart = $namedCounterpart === null
+                    ? null
+                    : (int) $namedCounterpart;
+                $event['snapshot']['incoming_counterpart_id'] =
+                    $namedCounterpart;
+                $event['snapshot']['incoming_counterpart_source'] = 'none';
+                $event['snapshot']['incoming_plan_version'] = null;
+                if ($namedCounterpart !== null && $namedCounterpart > 0) {
+                    $counterpartStatement = estab_message_execute(
+                        $connection,
+                        'SELECT g.`name`, p.`version`'
+                            . ' FROM `nv_fernmeldeplan_gegenstellen` AS g'
+                            . ' JOIN `nv_fernmeldeplan_eintraege` AS e'
+                            . ' ON e.`fernmeldeplan_eintrag_id`'
+                            . ' = g.`fernmeldeplan_eintrag_id`'
+                            . ' JOIN `nv_fernmeldeplaene` AS p'
+                            . ' ON p.`fernmeldeplan_id`'
+                            . ' = e.`fernmeldeplan_id`'
+                            . ' WHERE g.`gegenstelle_id` = ?'
+                            . ' AND p.`einsatz_id` = ?',
+                        [$namedCounterpart, $incidentId]
+                    );
+                    try {
+                        $counterpartRow = $counterpartStatement
+                            ->get_result()
+                            ->fetch_assoc();
+                    } finally {
+                        $counterpartStatement->close();
+                    }
+                    if (is_array($counterpartRow)) {
+                        $event['snapshot']['incoming_plan_version'] =
+                            (int) $counterpartRow['version'];
+                        $event['snapshot']['incoming_counterpart_source'] =
+                            hash_equals(
+                                (string) $counterpartRow['name'],
+                                (string) ($fields['13_abseinheit'] ?? '')
+                            )
+                                ? 'plan_unchanged'
+                                : 'plan_overridden';
+                    } else {
+                        // Die Gegenstelle stand damals im Plan und steht
+                        // heute nicht mehr darin. Das ist kein Fehler --
+                        // der Nachweis sagt es, statt zu schweigen.
+                        $event['snapshot']['incoming_counterpart_source'] =
+                            'plan_withdrawn';
+                    }
+                }
                 unset(
                     $event['snapshot'][
                         'requested_transport_correction_reason'
@@ -1700,7 +2023,7 @@ function estab_message_update_locked_operator_stage(
                     'reason' => $correctionReason,
                 ];
             }
-            if ($direction === 'A' && $status === 1) {
+            if ($direction === 'A' && $status === ESTAB_MESSAGE_STATUS_LDF) {
                 $remoteCallsign = estab_message_single_line_value(
                     $fields['05_gegenstelle'] ?? null,
                     128,
@@ -1716,7 +2039,7 @@ function estab_message_update_locked_operator_stage(
                 $previousRouteStatement = estab_message_execute(
                     $connection,
                     'SELECT `estab_fernmeldeplan_eintrag_id`,'
-                        . ' `06_befwegausw`, `06_befweg` FROM '
+                        . ' `01_medium`, `06_befweg` FROM '
                         . estab_message_table($table)
                         . ' WHERE `00_lfd` = ? AND `einsatz_id` = ?'
                         . " AND `04_richtung` = 'A'"
@@ -1733,92 +2056,161 @@ function estab_message_update_locked_operator_stage(
                 if (!is_array($previousRoute)) {
                     return false;
                 }
+                $previousRouteEntryId = (int) (
+                    $previousRoute['estab_fernmeldeplan_eintrag_id'] ?? 0
+                );
+                $previousDisposedMedium = trim(
+                    (string) ($previousRoute['01_medium'] ?? '')
+                );
+                $previousRouteText = trim(
+                    (string) ($previousRoute['06_befweg'] ?? '')
+                );
+                // Feld 1 nimmt die Disposition auf. Bei einer Gesprächsnotiz
+                // stand dort das Mittel des dokumentierten Gesprächs; der
+                // Nachweis hält diesen Vorwert unveränderlich fest.
+                $event['snapshot']['medium_before_disposition'] =
+                    $previousDisposedMedium;
+                // Feld 6 bleibt leer, bis eine LdF-Disposition sie schreibt.
+                // Zusammen mit dem Plan-Eintrag erkennt sie deshalb die
+                // Neudisposition nach einer Rückgabe durch A/W.
+                $redisposition = $previousRouteEntryId > 0
+                    || $previousRouteText !== '';
+                $submittedRoute =
+                    $fields['estab_fernmeldeplan_eintrag_id'] ?? null;
+                $routeSelected = $submittedRoute !== null
+                    && $submittedRoute !== '';
                 if (
-                    !array_key_exists(
-                        'estab_fernmeldeplan_eintrag_id',
-                        $fields
-                    )
+                    !$routeSelected
+                    && estab_permission_telecom_plan_required()
                 ) {
                     throw new EstabDvInputException(
                         'Ein Weg aus dem aktiven S6-Fernmeldeplan ist erforderlich.'
                     );
                 }
-                $routeEntryId = estab_message_positive_id(
-                    $fields['estab_fernmeldeplan_eintrag_id']
-                );
-                $previousRouteEntryId = (int) (
-                    $previousRoute['estab_fernmeldeplan_eintrag_id'] ?? 0
-                );
-                if (
-                    $previousRouteEntryId > 0
-                    && $routeEntryId === $previousRouteEntryId
-                ) {
-                    throw new EstabDvConflictException(
-                        'Nach einer Rückgabe ist ein anderer aktiver '
-                        . 'S6-Beförderungsweg zu disponieren.'
+                if ($routeSelected) {
+                    $routeEntryId = estab_message_positive_id($submittedRoute);
+                    if (
+                        $previousRouteEntryId > 0
+                        && $routeEntryId === $previousRouteEntryId
+                    ) {
+                        throw new EstabDvConflictException(
+                            'Nach einer Rückgabe ist ein anderer aktiver '
+                            . 'S6-Beförderungsweg zu disponieren.'
+                        );
+                    }
+                    $route = estab_dv_resolve_active_route(
+                        $connection,
+                        $incidentId,
+                        $routeEntryId
                     );
-                }
-                $route = estab_dv_resolve_active_route(
-                    $connection,
-                    $incidentId,
-                    $routeEntryId
-                );
-                $routeParts = array_values(array_filter(
-                    [
-                        trim((string) ($route['betriebsstelle'] ?? '')),
-                        trim((string) ($route['rufname'] ?? '')),
-                        trim((string) ($route['kanal'] ?? '')),
-                        trim((string) ($route['bandlage'] ?? '')),
-                        trim((string) ($route['verkehrsform'] ?? '')),
-                    ],
-                    static fn (string $part): bool => $part !== ''
-                ));
-                $routeText = estab_message_excerpt(
-                    implode(' · ', $routeParts),
-                    128
-                );
-                if ($routeText === '') {
-                    throw new EstabDvConflictException(
-                        'Der ausgewählte Fernmeldeweg hat keine lesbare Bezeichnung.'
+                    $routeParts = array_values(array_filter(
+                        [
+                            trim((string) ($route['betriebsstelle'] ?? '')),
+                            trim((string) ($route['erreichbarkeit'] ?? '')),
+                            trim((string) ($route['kanal'] ?? '')),
+                            trim((string) ($route['bandlage'] ?? '')),
+                            trim((string) ($route['verkehrsform'] ?? '')),
+                        ],
+                        static fn (string $part): bool => $part !== ''
+                    ));
+                    $routeText = estab_message_excerpt(
+                        implode(' · ', $routeParts),
+                        128
                     );
+                    if ($routeText === '') {
+                        throw new EstabDvConflictException(
+                            'Der ausgewählte Fernmeldeweg hat keine lesbare Bezeichnung.'
+                        );
+                    }
+                    $fields['estab_fernmeldeplan_eintrag_id'] = $routeEntryId;
+                    // Feld 1 trägt die Disposition des LdF und damit das
+                    // tatsächlich benutzte Mittel; Feld 7 bleibt der Wunsch
+                    // des Verfassers und wird hier nicht angefasst.
+                    $fields['01_medium'] = (string) $route['medium'];
+                    $fields['06_befweg'] = $routeText;
+                    $event['snapshot']['telecom_plan_id'] =
+                        (int) $route['fernmeldeplan_id'];
+                    $event['snapshot']['telecom_plan_version'] =
+                        (int) $route['version'];
+                    $event['snapshot']['telecom_plan_entry_id'] = $routeEntryId;
+                    $event['snapshot']['transport_medium'] =
+                        (string) $route['medium'];
+                    $event['snapshot']['transport_route'] = $routeText;
+                    $event['snapshot']['route'] = [
+                        'betriebsstelle' =>
+                            (string) ($route['betriebsstelle'] ?? ''),
+                        'erreichbarkeit' => (string) ($route['erreichbarkeit'] ?? ''),
+                        'kanal' => (string) ($route['kanal'] ?? ''),
+                        'bandlage' => (string) ($route['bandlage'] ?? ''),
+                        'verkehrsform' =>
+                            (string) ($route['verkehrsform'] ?? ''),
+                    ];
+                } else {
+                    // DV 1-101, Führungsstelle ohne Stab: ohne
+                    // veröffentlichten S6-Fernmeldeplan benennt LdF Mittel
+                    // und Weg selbst. Der Nachweis darf dadurch nicht
+                    // schwächer werden, deshalb gehen beide in die Zeile
+                    // UND in die unveränderliche Ereigniskette.
+                    if ($previousRouteEntryId > 0) {
+                        throw new EstabDvConflictException(
+                            'Nach einer Disposition aus dem S6-Fernmeldeplan '
+                            . 'ist erneut ein Weg aus dem Plan zu disponieren.'
+                        );
+                    }
+                    $disposedMedium = estab_message_medium_storage_value(
+                        $fields['01_medium'] ?? null
+                    );
+                    if ($disposedMedium === null) {
+                        throw new EstabDvInputException(
+                            'LdF muss ohne S6-Fernmeldeplan ein gültiges '
+                            . 'Übermittlungsmittel disponieren.'
+                        );
+                    }
+                    $routeText = estab_message_single_line_value(
+                        $fields['06_befweg'] ?? null,
+                        128,
+                        false
+                    );
+                    if ($routeText === null) {
+                        throw new EstabDvInputException(
+                            'LdF muss ohne S6-Fernmeldeplan den '
+                            . 'Beförderungsweg benennen.'
+                        );
+                    }
+                    if (
+                        $redisposition
+                        && hash_equals($previousDisposedMedium, $disposedMedium)
+                        && hash_equals($previousRouteText, $routeText)
+                    ) {
+                        throw new EstabDvConflictException(
+                            'Nach einer Rückgabe ist ein anderes '
+                            . 'Übermittlungsmittel oder ein anderer '
+                            . 'Beförderungsweg zu disponieren.'
+                        );
+                    }
+                    $fields['estab_fernmeldeplan_eintrag_id'] = null;
+                    $fields['01_medium'] = $disposedMedium;
+                    $fields['06_befweg'] = $routeText;
+                    $event['snapshot']['telecom_plan_entry_id'] = null;
+                    $event['snapshot']['telecom_plan_published'] = false;
+                    $event['snapshot']['transport_medium'] = $disposedMedium;
+                    $event['snapshot']['transport_route'] = $routeText;
                 }
-                $fields['estab_fernmeldeplan_eintrag_id'] = $routeEntryId;
-                $fields['06_befwegausw'] = (string) $route['medium'];
-                $fields['06_befweg'] = $routeText;
-                $event['snapshot']['telecom_plan_id'] =
-                    (int) $route['fernmeldeplan_id'];
-                $event['snapshot']['telecom_plan_version'] =
-                    (int) $route['version'];
-                $event['snapshot']['telecom_plan_entry_id'] = $routeEntryId;
-                $event['snapshot']['transport_medium'] =
-                    (string) $route['medium'];
-                $event['snapshot']['transport_route'] = $routeText;
-                $event['snapshot']['route'] = [
-                    'betriebsstelle' =>
-                        (string) ($route['betriebsstelle'] ?? ''),
-                    'rufname' => (string) ($route['rufname'] ?? ''),
-                    'kanal' => (string) ($route['kanal'] ?? ''),
-                    'bandlage' => (string) ($route['bandlage'] ?? ''),
-                    'verkehrsform' =>
-                        (string) ($route['verkehrsform'] ?? ''),
-                ];
-                if ($previousRouteEntryId > 0) {
+                if ($redisposition) {
                     $event['snapshot']['redisposition'] = true;
                     $event['snapshot']['previous_telecom_plan_entry_id'] =
                         $previousRouteEntryId;
-                    $event['snapshot']['previous_transport_medium'] = trim(
-                        (string) ($previousRoute['06_befwegausw'] ?? '')
-                    );
-                    $event['snapshot']['previous_transport_route'] = trim(
-                        (string) ($previousRoute['06_befweg'] ?? '')
-                    );
+                    $event['snapshot']['previous_transport_medium'] =
+                        $previousDisposedMedium;
+                    $event['snapshot']['previous_transport_route'] =
+                        $previousRouteText;
                 }
             }
-            if ($direction === 'A' && $status === 2) {
+            if ($direction === 'A' && $status === ESTAB_MESSAGE_STATUS_TRANSPORT) {
                 $targetStatus = (int) ($fields['x00_status'] ?? 0);
                 $mediumStatement = estab_message_execute(
                     $connection,
-                    'SELECT `06_befwegausw`, `06_befweg`, '
+                    'SELECT `01_medium`, `06_befweg`, `17_vermerke`, '
                         . '`estab_fernmeldeplan_eintrag_id` FROM '
                         . estab_message_table($table)
                         . ' WHERE `00_lfd` = ? AND `einsatz_id` = ?'
@@ -1840,18 +2232,21 @@ function estab_message_update_locked_operator_stage(
                     $mediumRow['estab_fernmeldeplan_eintrag_id'] ?? 0
                 );
                 $confirmedMedium = trim(
-                    (string) ($mediumRow['06_befwegausw'] ?? '')
+                    (string) ($mediumRow['01_medium'] ?? '')
                 );
                 $confirmedRoute = trim(
                     (string) ($mediumRow['06_befweg'] ?? '')
                 );
                 if (
-                    $confirmedRouteId < 1
-                    || $confirmedMedium === ''
+                    $confirmedMedium === ''
                     || $confirmedRoute === ''
+                    || (
+                        $confirmedRouteId < 1
+                        && estab_permission_telecom_plan_required()
+                    )
                 ) {
                     throw new EstabDvConflictException(
-                        'Der disponierte S6-Beförderungsweg ist unvollständig.'
+                        'Der disponierte Beförderungsweg ist unvollständig.'
                     );
                 }
 
@@ -1930,6 +2325,19 @@ function estab_message_update_locked_operator_stage(
                                 $messengerHistory
                             );
                     }
+                    // Feld 20 sammelt die Bearbeitungsvermerke des Laufwegs.
+                    // Die Rückgabe nennt das TK-Mittel, über das der Empfänger
+                    // nicht erreichbar war, damit LdF ein anderes disponieren
+                    // kann. Der Eintrag ergänzt die vorhandenen Vermerke.
+                    $fields['17_vermerke'] = estab_message_note_with_entry(
+                        $mediumRow['17_vermerke'] ?? '',
+                        'Rückgabe an LdF durch A/W ' . $operatorCode,
+                        'Empfänger über '
+                            . estab_message_medium_text($confirmedMedium)
+                            . ' (' . $confirmedMedium . ') nicht erreichbar.'
+                            . ' Beförderungsweg: ' . $confirmedRoute . '.'
+                            . ' Grund: ' . $returnReason
+                    );
                 } else {
                     throw new EstabDvConflictException(
                         'Ungültiger Übergang in der Fernmelder-Beförderung.'
@@ -1984,7 +2392,7 @@ function estab_message_update_locked_operator_stage(
                 }
                 if (
                     $direction === 'A'
-                    && $status === 2
+                    && $status === ESTAB_MESSAGE_STATUS_TRANSPORT
                     && (int) ($fields['x00_status'] ?? 0) === 8
                     && ($event['event_type'] ?? null) === 'aw_transported'
                 ) {
@@ -2005,6 +2413,83 @@ function estab_message_update_locked_operator_stage(
             }
         }
     );
+}
+
+/**
+ * Upper bound for the collected notes of one message in field 20.
+ *
+ * The column is LONGTEXT, so the database itself needs no bound. The limit
+ * keeps one merged note inside the packet of a prepared statement. It is
+ * Once the bound is reached the oldest entries give way, because the newest
+ * entry is the one the next stage has to act on. The unabridged wording of
+ * every entry stays in the immutable event chain.
+ */
+const ESTAB_MESSAGE_NOTE_MAX_LENGTH = 60000;
+
+/**
+ * Append one processing note to field 20 without losing the earlier entries.
+ *
+ * Field 20 carries the notes of the whole message route, so a later stage
+ * adds its entry below the existing text instead of replacing it. Every entry
+ * names the moment and the stage that wrote it, which keeps the Sichter's
+ * note distinguishable from the reason of a later return. Stored text is
+ * taken over verbatim. Once the bound is reached the oldest entries give way
+ * so the newest note is always recorded; the full history stays in the
+ * immutable event chain.
+ */
+function estab_message_note_with_entry(
+    mixed $existingNote,
+    string $marker,
+    string $text,
+    ?string $occurredAt = null
+): string {
+    $existing = rtrim((string) $existingNote);
+    $marker = trim($marker);
+    $text = trim($text);
+    if ($text === '') {
+        return $existing;
+    }
+    $entry = '[' . ($occurredAt ?? date('d.m.Y H:i')) . ']'
+        . ($marker === '' ? '' : ' ' . $marker . ':')
+        . ' ' . $text;
+    $elision = '[…] frühere Vermerke siehe Nachweis';
+    $available = ESTAB_MESSAGE_NOTE_MAX_LENGTH
+        - estab_auth_text_length($existing)
+        - 1;
+    if ($available < 40) {
+        // Field 20 is full. The newest entry is the one the next stage has to
+        // act on, so earlier entries give way instead of the new one being
+        // dropped. Their unabridged wording stays in the immutable evidence.
+        $lines = explode("\n", $existing);
+        while (
+            $lines !== []
+            && ESTAB_MESSAGE_NOTE_MAX_LENGTH
+                - estab_auth_text_length(implode("\n", $lines))
+                - estab_auth_text_length($elision) - 2
+                < estab_auth_text_length($entry)
+        ) {
+            array_shift($lines);
+        }
+        $existing = $lines === []
+            ? $elision
+            : $elision . "\n" . implode("\n", $lines);
+        $available = ESTAB_MESSAGE_NOTE_MAX_LENGTH
+            - estab_auth_text_length($existing) - 1;
+    }
+    $separator = $existing === '' ? '' : "\n";
+    if (estab_auth_text_length($entry) > $available) {
+        $keep = $available - 6;
+        if (function_exists('mb_substr')) {
+            $entry = mb_substr($entry, 0, $keep, 'UTF-8');
+        } else {
+            $characters = preg_split('//u', $entry, -1, PREG_SPLIT_NO_EMPTY);
+            $entry = is_array($characters)
+                ? implode('', array_slice($characters, 0, $keep))
+                : '';
+        }
+        $entry .= ' [...]';
+    }
+    return $existing . $separator . $entry;
 }
 
 /**
@@ -2097,6 +2582,16 @@ function estab_message_ldf_return_outgoing(
                 return false;
             }
 
+            // Field 20 collects the notes of the whole route: the note of the
+            // formal review stays and the return reason is added below it.
+            // The row was read with FOR UPDATE inside this transaction, so no
+            // concurrent write can slip between reading and merging the note.
+            $mergedNote = estab_message_note_with_entry(
+                $message['17_vermerke'] ?? '',
+                'Rückgabe an den Verfasser durch LdF ' . $operatorCode,
+                $reason
+            );
+
             $updateStatement = estab_message_execute(
                 $connection,
                 'UPDATE ' . estab_message_table($table)
@@ -2108,7 +2603,7 @@ function estab_message_ldf_return_outgoing(
                     . " AND `x02_sperre` = 't'"
                     . ' AND BINARY `x03_sperruser` = BINARY ?',
                 array_merge(
-                    [$reason, $recordId, $incidentId],
+                    [$mergedNote, $recordId, $incidentId],
                     $stageParameters,
                     [$operatorCode]
                 )
@@ -2248,7 +2743,8 @@ function estab_message_update_pending_review(
     mixed $recordId,
     array $fields,
     array $event,
-    mixed $expectedIncidentId = null
+    mixed $expectedIncidentId = null,
+    string $handedOverTo = ''
 ): bool {
     $recordId = estab_message_positive_id($recordId);
     $fields = estab_message_fields($fields);
@@ -2260,7 +2756,8 @@ function estab_message_update_pending_review(
             $recordId,
             $fields,
             $event,
-            $expectedIncidentId
+            $expectedIncidentId,
+            $handedOverTo
         ): bool {
             $incidentId = estab_message_transaction_incident_id(
                 $incident,
@@ -2297,6 +2794,29 @@ function estab_message_update_pending_review(
                     $recordId,
                     $event
                 );
+                // A completed incoming sighting is the moment the message is
+                // handed out. The TBB is append-only, so the receipt column of
+                // the intake row can never be filled in afterwards: the
+                // handover receives its own entry inside this transaction.
+                // Nur ein Eingang wird ausgehaendigt. Eine Gespraechsnotiz
+                // schliesst mit der Sichtung ab, ohne dass die
+                // Fernmeldebetriebsstelle sie je in der Hand hatte.
+                if (
+                    (int) ($fields['x00_status'] ?? 0) === 8
+                    && $handedOverTo !== ''
+                ) {
+                    $occurredAt = is_string($event['occurred_at'] ?? null)
+                        ? (string) $event['occurred_at']
+                        : date('Y-m-d H:i:s');
+                    estab_logbook_lifecycle_message_handover(
+                        $connection,
+                        $incidentId,
+                        $recordId,
+                        $occurredAt,
+                        (string) ($fields['15_quitzeichen'] ?? ''),
+                        $handedOverTo
+                    );
+                }
                 return true;
             } finally {
                 $statement->close();
@@ -3279,7 +3799,7 @@ function estab_message_object_allowed(
     $hasViewerApproval =
         !estab_datetime_is_unset($message['15_quitdatum'] ?? null)
         && (string) ($message['15_quitzeichen'] ?? '') !== '';
-    $isPendingIncomingLead = $status === 1
+    $isPendingIncomingLead = $status === ESTAB_MESSAGE_STATUS_LDF
         && $direction === 'E'
         && estab_datetime_is_unset($message['02_zeit'] ?? null)
         && (string) ($message['02_zeichen'] ?? '') === ''
@@ -3287,7 +3807,7 @@ function estab_message_object_allowed(
         && (string) ($message['03_zeichen'] ?? '') === ''
         && !$hasViewerApproval
         && (string) ($message['x01_abschluss'] ?? 'f') === 'f';
-    $isPendingOutgoingLead = $status === 1
+    $isPendingOutgoingLead = $status === ESTAB_MESSAGE_STATUS_LDF
         && $direction === 'A'
         && estab_datetime_is_unset($message['02_zeit'] ?? null)
         && (string) ($message['02_zeichen'] ?? '') === ''
@@ -3296,16 +3816,17 @@ function estab_message_object_allowed(
         && $hasViewerApproval
         && (string) ($message['x01_abschluss'] ?? 'f') === 'f';
     $isPendingLead = $isPendingIncomingLead || $isPendingOutgoingLead;
-    $isPendingOutgoing = $status === 2
+    $isPendingOutgoing = $status === ESTAB_MESSAGE_STATUS_TRANSPORT
         && $direction === 'A'
         && !estab_datetime_is_unset($message['02_zeit'] ?? null)
         && (string) ($message['02_zeichen'] ?? '') !== ''
-        && (string) ($message['06_befwegausw'] ?? '') !== ''
+        && (string) ($message['01_medium'] ?? '') !== ''
+        && (string) ($message['06_befweg'] ?? '') !== ''
         && estab_datetime_is_unset($message['03_datum'] ?? null)
         && (string) ($message['03_zeichen'] ?? '') === ''
         && $hasViewerApproval
         && (string) ($message['x01_abschluss'] ?? 'f') === 'f';
-    $isPendingReview = $status === 4
+    $isPendingReview = $status === ESTAB_MESSAGE_STATUS_REVIEW
         && estab_datetime_is_unset($message['15_quitdatum'] ?? null)
         && (string) ($message['15_quitzeichen'] ?? '') === ''
         && (
@@ -3322,7 +3843,7 @@ function estab_message_object_allowed(
                 && (string) ($message['03_zeichen'] ?? '') === ''
             )
         );
-    $isReturnedToAuthor = $status === 10
+    $isReturnedToAuthor = $status === ESTAB_MESSAGE_STATUS_RETURNED
         && $direction === 'A'
         && (string) ($message['14_zeichen'] ?? '') !== ''
         && (string) ($message['14_funktion'] ?? '') !== ''
@@ -3334,7 +3855,7 @@ function estab_message_object_allowed(
         && $hasViewerApproval
         && (string) ($message['x01_abschluss'] ?? 'f') === 'f';
     $isTerminalStaffRecipient = false;
-    if ($status === 8) {
+    if ($status === ESTAB_MESSAGE_STATUS_CLOSED) {
         foreach (array_keys($staffFunctions) as $staffFunction) {
             if (estab_message_is_recipient($message, $staffFunction)) {
                 $isTerminalStaffRecipient = true;

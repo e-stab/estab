@@ -12,6 +12,17 @@ require_once __DIR__ . '/auth.php';
 require_once __DIR__ . '/navigation.php';
 require_once __DIR__ . '/permission_mode.php';
 require_once __DIR__ . '/session_ui.php';
+require_once __DIR__ . '/tabelle_felder.php';
+
+/**
+ * Die Kontenliste der Anmeldeseite.
+ *
+ * Vor der Anmeldung nimmt der Steuerlauf nur eine genau umrissene Anfrage
+ * an. Die Kontenliste ist die einzige Tabelle, die dort steht; ihr Sieb
+ * gehoert damit zur Anmeldeanfrage. Der Name steht hier neben der Sperre,
+ * damit beide zusammen gelesen werden.
+ */
+const ESTAB_WORKFLOW_ANMELDUNG_TABELLE = 'konten';
 
 /** Return true only for the exact anonymous requests used by the login UI. */
 function estab_workflow_public_login_request(array $server, array $get, array $post): bool
@@ -24,7 +35,7 @@ function estab_workflow_public_login_request(array $server, array $get, array $p
         if ($get === []) {
             return true;
         }
-        foreach (array_keys($get) as $key) {
+        foreach ($get as $key => $wert) {
             if (
                 !is_string($key)
                 || !in_array(
@@ -33,6 +44,19 @@ function estab_workflow_public_login_request(array $server, array $get, array $p
                     true
                 )
             ) {
+                // Das Sieb der Kontenliste waehlt und sortiert, es aendert
+                // nichts. Ohne diese Zulassung antwortete die Anmeldeseite
+                // auf jede Suche mit "Aktion nicht erlaubt".
+                if (
+                    is_string($key)
+                    && is_string($wert)
+                    && estab_tabelle_ist_siebschluessel(
+                        ESTAB_WORKFLOW_ANMELDUNG_TABELLE,
+                        $key
+                    )
+                ) {
+                    continue;
+                }
                 return false;
             }
         }
@@ -758,6 +782,40 @@ function estab_workflow_is_telecommunications(
     );
 }
 
+/**
+ * Darf diese Kennung fuer den Annahme- und Weitergabeplatz handeln?
+ *
+ * Der Annahme- und Weitergabeplatz selbst -- und der Leiter des
+ * Fernmeldebetriebs, der ihn vertritt.
+ *
+ * Der LdF ist fuer den Betrieb zustaendig. Er muss die Kennzahlen seiner
+ * Fernmelder ueberwachen, erkennen, wenn es klemmt, und im Problemfall
+ * einzelne Aufgaben selbst uebernehmen. Dafuer braucht er die Ansichten und
+ * die Arbeitsschritte des A/W -- im Einsatz sitzt er oft allein.
+ *
+ * Er wird dadurch **nicht** zu einem A/W, und das ist keine Feinheit:
+ * `estab_workflow_is_telecommunications()` bleibt fuer ihn falsch. Wer die
+ * beiden Identitaeten verschmilzt, bricht die strikte Trennung, die
+ * workflow_security namentlich verlangt -- und laesst ihn nach
+ * FUEST-DOPPELFUNKTION zwei Warteschlangen tragen, was den Unterschied
+ * zwischen "leitet den Betrieb" und "ist an der Annahmestelle eingeteilt"
+ * verwischt.
+ *
+ * Die Identitaet bleibt, die Erlaubnis waechst. Und sie waechst nur in eine
+ * Richtung: Wer die Handgriffe tut, leitet deshalb nicht den Betrieb.
+ */
+function estab_workflow_may_act_for_telecommunications(
+    array $identity,
+    bool $allowLooseWriteMode = false
+): bool
+{
+    return estab_workflow_is_telecommunications($identity, $allowLooseWriteMode)
+        || estab_workflow_is_telecommunications_lead(
+            $identity,
+            $allowLooseWriteMode
+        );
+}
+
 /** Leiter der Fernmeldebetriebsstelle: Rufnamen und Transportwege disponieren. */
 function estab_workflow_is_telecommunications_lead(
     array $identity,
@@ -1295,6 +1353,109 @@ function estab_workflow_cancelled_new_form(array $request): bool
     ], true);
 }
 
+/**
+ * Die Auswahl einer Ansicht als Adresse -- oder null.
+ *
+ * Ein Menueknopf waehlt eine Ansicht und aendert nichts. Trotzdem war er
+ * ein POST, und die Antwort darauf war eine Seite: Wer danach neu lud,
+ * bekam die Frage nach dem erneuten Senden fuer einen Vorgang, bei dem es
+ * nichts zu wiederholen gibt.
+ *
+ * Nachgemessen: Dieselben Auswahlmerkmale funktionieren als GET bereits --
+ * `?fm_ausgang_x=1` und `?stab_lesen_x=1&acting_function=S6` liefern genau
+ * dieselben Ansichten. Es wird deshalb nichts aufgeweicht und nichts
+ * gespeichert; die Adresse traegt, was vorher das Formular trug, und die
+ * Herleitung der Arbeitsfunktion bleibt unveraendert.
+ *
+ * Die Arbeitsfunktion muss mitfahren. Ohne sie landete "Lesen als S6" auf
+ * der Vorgabeansicht des Kontos -- gemessen beim LdF auf der Disposition.
+ * Der Bedienende waere aus seiner Ansicht geworfen worden, und das waere
+ * schlimmer als der Dialog.
+ *
+ * Weitergeleitet wird nur *reine* Auswahl. Traegt die Anfrage sonst
+ * etwas -- einen Datensatz, Formulardaten, eine Handlung --, ist sie keine
+ * Navigation mehr, und die Weiterleitung wuerfe weg, was sie traegt.
+ *
+ * @param array<string,mixed> $request
+ * @return string|null Die Abfragezeichenkette, oder null.
+ */
+function estab_workflow_view_selection_redirect(
+    array $request,
+    string $method
+): ?string {
+    if (strtoupper($method) !== 'POST') {
+        return null;
+    }
+
+    /*
+     * Die Auswahlnamen. Sie stehen hier noch einmal und nicht als Ableitung
+     * aus estab_workflow_primary_view_selector: Dort stehen auch Namen, die
+     * *nicht* bloss auswaehlen (reset_record, action, task). Eine Ableitung
+     * wuerde sie stillschweigend mitnehmen.
+     */
+    $auswahl = [
+        'stab_schreiben', 'stab_lesen', 'stab_korrekturen', 'stab_sichten',
+        'ldf_nachrichten', 'fm_eingang', 'fm_ausgang', 'fm_admin', 'si_admin',
+        'stab_anhang', 'fm_anhang', 'm2_benutzer',
+    ];
+    $begleiter = ['csrf_token', 'acting_function', 'next'];
+
+    $gewaehlt = null;
+    foreach (array_keys($request) as $schluessel) {
+        if (!is_string($schluessel)) {
+            return null;
+        }
+        if (in_array($schluessel, $begleiter, true)) {
+            continue;
+        }
+        $name = null;
+        foreach ($auswahl as $kandidat) {
+            if ($schluessel === $kandidat . '_x' || $schluessel === $kandidat . '_y') {
+                $name = $kandidat;
+                break;
+            }
+        }
+        if ($name === null) {
+            // Irgendetwas anderes: keine reine Auswahl.
+            return null;
+        }
+        if ($gewaehlt !== null && $gewaehlt !== $name) {
+            // Zwei Ansichten zugleich waeren keine Auswahl, sondern ein
+            // Widerspruch. Der Steuerlauf weist ihn ohnehin ab.
+            return null;
+        }
+        $gewaehlt = $name;
+    }
+    if ($gewaehlt === null) {
+        return null;
+    }
+
+    $abfrage = [$gewaehlt . '_x' => '1'];
+    if (array_key_exists('acting_function', $request)) {
+        try {
+            $funktion = estab_workflow_requested_acting_function($request);
+        } catch (InvalidArgumentException) {
+            // Eine unzulaessige Funktion gehoert nicht in eine Adresse. Der
+            // Steuerlauf weist sie an seiner eigenen Stelle ab; hier wird
+            // nur nicht weitergeleitet.
+            return null;
+        }
+        if ($funktion !== null) {
+            $abfrage['acting_function'] = $funktion;
+        }
+    }
+    if (array_key_exists('next', $request)) {
+        $ziel = $request['next'];
+        if (
+            is_string($ziel)
+            && estab_navigation_login_destination_key($ziel) !== null
+        ) {
+            $abfrage['next'] = $ziel;
+        }
+    }
+    return http_build_query($abfrage, '', '&', PHP_QUERY_RFC3986);
+}
+
 /** Return whether acknowledging an already-read message restores its queue. */
 function estab_workflow_acknowledged_read_form(array $request): bool
 {
@@ -1421,6 +1582,29 @@ function estab_workflow_distribution_selection(array $request): array
 }
 
 /**
+ * Does the request carry at least one browser-selected recipient box?
+ *
+ * Only these coordinates are resolved through the recipient matrix. A request
+ * without them yields the mandatory server-side copies alone, so a changed
+ * matrix cannot misroute anything and the stale-form guard has nothing left
+ * to protect.
+ */
+function estab_workflow_distribution_has_selection(array $request): bool
+{
+    foreach ($request as $field => $value) {
+        if (
+            is_string($field)
+            && preg_match('/\A16_[1-5][1-4]\z/D', $field) === 1
+            && $value !== ''
+        ) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+/**
  * Resolve validated browser coordinates to canonical matrix recipient tokens.
  */
 function estab_workflow_distribution_tokens(
@@ -1475,6 +1659,40 @@ function estab_workflow_distribution_tokens(
     }
 
     return $tokens === [] ? '' : implode(',', array_keys($tokens)) . ',';
+}
+
+/**
+ * Does a distribution list name at least one processing recipient?
+ *
+ * Feld 19 distinguishes the copies by their colour suffix. The red copy
+ * (`_rt`) goes to Lage/Dokumentation and the server adds it to every incoming
+ * message on its own, so its presence says nothing about who works on the
+ * message. Only a blue copy (`_bl`) names a recipient who has to act on it.
+ * Tokens are produced by estab_workflow_distribution_tokens() and therefore
+ * carry the exact lower-case form `<funktion>_bl`.
+ */
+function estab_workflow_distribution_has_processor(string $distribution): bool
+{
+    foreach (explode(',', $distribution) as $token) {
+        if (preg_match('/\A[A-Za-z0-9_]{1,6}_bl\z/D', trim($token)) === 1) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+/**
+ * What the Sichter is told when Feld 19 names nobody who works the message.
+ */
+function estab_workflow_missing_processor_message(): string
+{
+    return 'Feld 19 benennt keinen Bearbeiter: Bitte kreuzen Sie im '
+        . 'Verteiler mindestens eine Funktion an, welche die Nachricht '
+        . 'bearbeitet (blaue Durchschrift). Die rote Durchschrift für Lage '
+        . 'und Dokumentation trägt jeder Eingang bereits, sie ersetzt den '
+        . 'Bearbeiter nicht. Ohne Bearbeiter erreicht die abgeschlossene '
+        . 'Nachricht niemanden.';
 }
 
 /** Return the object-level permission required by this request, if any. */
@@ -1560,13 +1778,15 @@ function estab_workflow_route_allowed(array $identity, string $method, array $re
         return false;
     }
 
-    $isTelecommunications = estab_workflow_is_telecommunications($identity);
-    $isTelecommunicationsLead =
-        estab_workflow_is_telecommunications_lead($identity);
     $isViewer = estab_workflow_is_viewer($identity);
     $isStaffWriter = estab_workflow_is_staff_writer($identity);
     $mayWriteTelecommunications =
         estab_workflow_is_telecommunications($identity, true);
+    // Die Vertretung: der A/W selbst und der LdF, der fuer ihn einspringt.
+    $mayActForTelecommunications =
+        estab_workflow_may_act_for_telecommunications($identity);
+    $mayWriteForTelecommunications =
+        estab_workflow_may_act_for_telecommunications($identity, true);
     $mayWriteTelecommunicationsLead =
         estab_workflow_is_telecommunications_lead($identity, true);
     $mayWriteViewer = estab_workflow_is_viewer($identity, true);
@@ -1610,7 +1830,7 @@ function estab_workflow_route_allowed(array $identity, string $method, array $re
         && (
             $method !== 'POST'
             || !(
-                ($isTelecommunications && isset($request['fm_admin_x']))
+                ($mayActForTelecommunications && isset($request['fm_admin_x']))
                 || ($isViewer && isset($request['si_admin_x']))
             )
         )
@@ -1664,8 +1884,10 @@ function estab_workflow_route_allowed(array $identity, string $method, array $re
             'Stab_lesen' => $isStaffWriter,
             'Stab_sichten' => $mayWriteViewer,
             'LdF-Eingang', 'LdF-Ausgang' => $mayWriteTelecommunicationsLead,
+            // Die Vertretung endet nicht am Knopf: Wer die Seite des A/W
+            // oeffnen darf, muss ihren Vordruck auch abschicken koennen.
             'FM-Ausgang',
-            'FM-Eingang', 'FM-Eingang_Anhang' => $mayWriteTelecommunications,
+            'FM-Eingang', 'FM-Eingang_Anhang' => $mayWriteForTelecommunications,
             default => false,
         };
         if (!$allowed) {
@@ -1725,6 +1947,18 @@ function estab_workflow_route_allowed(array $identity, string $method, array $re
         ) {
             // A/W records only the received callsign. LdF is the sole actor
             // that may translate it into the sender field.
+            return false;
+        }
+        if (
+            in_array($task, ['LdF-Eingang', 'LdF-Ausgang'], true)
+            && array_key_exists('estab_eingangsweg_bemerkung', $request)
+        ) {
+            // Der eine sagt aus, der andere prueft. Die Bemerkung zum
+            // Eingangsweg gehoert dem Fernmelder; der LdF sieht sie und
+            // traegt daneben seine eigene ein. Duerfte er die fremde
+            // umschreiben, koennte der Nachweis nicht mehr sagen, wer was
+            // behauptet hat. Die Maske bietet ihm kein Feld dafuer -- diese
+            // Regel gilt auch fuer den, der die Maske umgeht.
             return false;
         }
         if (
@@ -1906,8 +2140,8 @@ function estab_workflow_route_allowed(array $identity, string $method, array $re
             return false;
         }
         $fmAllowed = match ($request['fm']) {
-            'meldung' => $mayWriteTelecommunications,
-            'FM-Adminmeldung' => $isTelecommunications,
+            'meldung' => $mayWriteForTelecommunications,
+            'FM-Adminmeldung' => $mayActForTelecommunications,
             'SI-Adminmeldung' => $isViewer,
             default => false,
         };
@@ -1925,10 +2159,10 @@ function estab_workflow_route_allowed(array $identity, string $method, array $re
         'stab_lesen_x' => $isStaffWriter,
         'stab_korrekturen_x' => $mayWriteStaff,
         'stab_anhang_x' => $isStaffWriter,
-        'fm_eingang_x' => $mayWriteTelecommunications,
-        'fm_ausgang_x' => $mayWriteTelecommunications,
-        'fm_admin_x' => $isTelecommunications,
-        'fm_anhang_x' => $isTelecommunications,
+        'fm_eingang_x' => $mayWriteForTelecommunications,
+        'fm_ausgang_x' => $mayWriteForTelecommunications,
+        'fm_admin_x' => $mayActForTelecommunications,
+        'fm_anhang_x' => $mayActForTelecommunications,
         'ldf_nachrichten_x' => $mayWriteTelecommunicationsLead,
         'stab_sichten_x' => $mayWriteViewer,
         'si_admin_x' => $isViewer,

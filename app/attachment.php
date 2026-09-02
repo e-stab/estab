@@ -427,7 +427,7 @@ function estab_attachment_origin_authority_identity(array $context): array
 function estab_attachment_origin_role_allowed(array $identity, string $task): bool
 {
     if (in_array($task, ['FM-Eingang', 'FM-Eingang_Anhang'], true)) {
-        return estab_workflow_is_telecommunications($identity, true);
+        return estab_workflow_may_act_for_telecommunications($identity, true);
     }
     if (
         in_array(

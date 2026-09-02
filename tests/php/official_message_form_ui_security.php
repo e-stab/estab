@@ -154,13 +154,19 @@ $requiredGuideContent = [
     5 => ['Technischen Betriebsbuch', 'Eingang', 'Ausgang'],
     6 => ['Funkrufnamen', 'Gegenstelle'],
     7 => ['Hinweis', 'TK-Mittel'],
-    8 => ['DURCHSAGE', 'Spruch (Ausnahme)'],
+    // Keine der beiden Formen ist die Ausnahme der anderen: Beides sind
+    // Sonderfälle, und der Hinweis muss sagen, welcher wann gilt.
+    8 => ['DURCHSAGE', 'Spruch', '1:1', 'Wortlaut', 'Gruppe von Empfängern'],
     9 => ['Vorrangstufe', 'Sofort', 'Blitz', 'Staatsnot'],
     10 => ['Immer ausfüllen', 'Dienststellen-', 'Eigennamen'],
     11 => ['Rufnummer', 'Gesprächsnotizen'],
+    // Die Gesprächsnotiz hält ein bereits geführtes Gespräch fest. Der
+    // Hinweis nannte früher LdF, Rufname, Beförderungsweg und Fernmelder --
+    // Stationen, die dieser Laufweg gar nicht mehr hat. Er muss stattdessen
+    // sagen, dass die Sichtung sie abschliesst.
     12 => [
         'eigenständig', 'übermittelt', 'aufgenommen', 'notiert',
-        'ursprüngliche', 'LdF', 'Rufname', 'Beförderungsweg', 'Fernmelder',
+        'ursprüngliche', 'Sichtung', 'abgeschlossen',
     ],
     13 => ['Inhalt ist immer auszufüllen', 'Betreff'],
     14 => ['Inhalt ist immer auszufüllen', 'so kurz wie möglich', 'Blockschrift', 'Nachrichtentext'],
@@ -328,19 +334,32 @@ $fixture->formdata = ['09_vorrangstufe' => 'eee'];
 ob_start();
 $fixture->official_message_priority();
 $historicNoPriorityMarkup = (string) ob_get_clean();
+/*
+ * "eee" ist ein Altbestand und bedeutet dasselbe wie ein leeres Feld: keine
+ * Vorrangstufe. Er wurde bisher von einem eigenen Kästchen „keine" getragen,
+ * das angekreuzt war. Das Kästchen gibt es nicht mehr, und die Aussage
+ * braucht keines -- sie ist die Abwesenheit eines Kreuzes.
+ *
+ * Der Vordruck zeigt eine solche Nachricht deshalb wie jede ohne Stufe: kein
+ * Kreuz, alle drei Stufen wählbar. Speichert jemand sie in einem
+ * bearbeitenden Schritt erneut, wird aus "eee" ein leerer Wert. Beide sind
+ * für Anzeige, Ausdruck und Dringlichkeit gleichbedeutend, also geht nichts
+ * verloren.
+ */
 $assert(
-    preg_match(
-        '/class="estab-official-priority-clear"[^>]*'
-            . 'for="f_09_vorrangstufe_keine".*?'
-            . 'id="f_09_vorrangstufe_keine"[^>]*'
-            . 'name="09_vorrangstufe"[^>]*value="eee"[^>]*checked/s',
-        $historicNoPriorityMarkup
-    ) === 1
+    !str_contains($historicNoPriorityMarkup, 'checked')
         && str_contains(
             $historicNoPriorityMarkup,
             'id="f_09_vorrangstufe_staatsnot"'
         ),
-    'The compact reset option cannot retain the historic no-priority value'
+    'A historic no-priority value shows as a checked box or hides the scale'
+);
+$assert(
+    estab_message_priority_document_label('eee') === ''
+        && estab_message_priority_document_label('') === ''
+        && estab_message_priority_is_urgent('eee') === false
+        && estab_message_priority_is_urgent('') === false,
+    'The historic no-priority value stopped meaning the same as an empty one'
 );
 
 $fixture->feld[9] = false;
@@ -402,14 +421,13 @@ $fixture->formdata = [
 ];
 ob_start();
 foreach ([
-    ['Aufnahmevermerk', 1, 2, '01_datum', '01_zeichen'],
-    ['Annahmevermerk', 2, 3, '02_zeit', '02_zeichen'],
-    ['Beförderungsvermerk', 3, 4, '03_datum', '03_zeichen'],
-] as [$title, $printedNumber, $helpNumber, $timeField, $markField]) {
+    ['Aufnahmevermerk', 2, '01_datum', '01_zeichen'],
+    ['Annahmevermerk', 3, '02_zeit', '02_zeichen'],
+    ['Beförderungsvermerk', 4, '03_datum', '03_zeichen'],
+] as [$title, $number, $timeField, $markField]) {
     $fixture->official_message_timestamp_block(
         $title,
-        $printedNumber,
-        $helpNumber,
+        $number,
         $timeField,
         $markField,
         true,
@@ -800,10 +818,14 @@ foreach ($officialLabels as $label) {
     );
     $previousOffset = $offset;
 }
+// Die Ueberschriften stehen einmal, im gemeinsamen Verteilermodul: Der
+// PDF-Abzug druckt dieselben drei Bloecke wie die Ansicht.
+$distributionHeadings = estab_nv_verteiler_ueberschriften();
 $assert(
-    str_contains($view, "'lead' => 'TEL/EL/EAL/UEAL'")
-        && str_contains($view, "'adviser' => 'Fachberater'")
-        && str_contains($view, "'liaison' => 'Verb.stellen'"),
+    ($distributionHeadings['lead'] ?? '') === 'TEL/EL/EAL/UEAL'
+        && ($distributionHeadings['adviser'] ?? '') === 'Fachberater'
+        && ($distributionHeadings['liaison'] ?? '') === 'Verb.stellen'
+        && str_contains($view, 'estab_nv_verteiler_ueberschriften()'),
     'Official distribution headings are incomplete'
 );
 $assert(
@@ -903,10 +925,13 @@ $assert(
             < strpos($renderView, 'name="kate_todo"'),
     'The form does not submit a server-derived recipient-matrix revision value'
 );
+$leadPositions = estab_nv_verteiler_fuehrung();
 $assert(
     str_contains($view, 'estab-official-lead-director')
         && str_contains($view, 'estab-official-lead-sections')
-        && str_contains($view, "5 => ['display' => 'S5'")
+        && count($leadPositions) === 7
+        && ($leadPositions[0]['display'] ?? '') === 'Leiter'
+        && ($leadPositions[5]['display'] ?? '') === 'S5'
         && str_contains($css, 'grid-template-rows: repeat(6,'),
     'The official Leiter/S1-S6 distributor geometry can collapse'
 );
@@ -932,10 +957,19 @@ $assert(
 $assert(
     str_contains($view, 'id="nachrichtenanlagen"')
         && str_contains($view, '<h2 id="nachrichtenanlagen-title">Anlagen (')
-        && str_contains($view, 'class="estab-message-attachment-badge')
         && str_contains($view, "'Anlage hinzufügen'")
         && str_contains($view, 'estab-message-attachment-jump')
-        && str_contains($view, 'data-estab-attachment-count="'),
+        && str_contains($view, 'data-estab-attachment-count="')
+        /*
+         * Im Kopf stand dieselbe Angabe ein zweites Mal, als runde Marke
+         * neben dem Titel. Der Knopf in der Aktionsleiste hat dasselbe
+         * Sprungziel und nennt dabei die Zahl der Anlagen; die Marke sagte
+         * nichts, was nicht daneben schon stand, und nahm Platz im Kopf.
+         * Ebenso die Marke mit dem Arbeitsschritt: Der ist links im Menue
+         * hervorgehoben.
+         */
+        && !str_contains($view, 'class="estab-message-attachment-badge')
+        && !str_contains($view, 'class="estab-message-task-badge'),
     'The form does not make attached files immediately visible at the message'
 );
 $assert(
@@ -1037,7 +1071,10 @@ $assert(
             $view,
             'aria-label="Sichterzeichen wird aus der Anmeldung übernommen"'
         )
-        && str_contains($view, "\$editableReceipt = (bool)\$this->feld[15]"),
+        && str_contains(
+            $view,
+            "\$editableReceipt = \$this->official_message_field_access(18)"
+        ),
     'Sighting identity fields are not kept server-authoritative'
 );
 $assert(
@@ -1151,7 +1188,30 @@ $assert(
 );
 $assert(
     str_contains($css, '@media (max-width: 56rem)')
+        /*
+         * Das Blatt ist 56 rem breit; das ist das Raster des Vordrucks und
+         * daran wird nicht gerueckt. Passt es nicht in die Spalte, wird es
+         * als Ganzes kleiner gezogen -- wie ein Blatt Papier, das man weiter
+         * weghaelt. Alle Verhaeltnisse bleiben, kein Feld wandert, nichts
+         * wird abgeschnitten.
+         *
+         * Vorher stand es in voller Groesse da und der Kasten trug den
+         * Hinweis "horizontal wischen". Wer auf einem Laptop arbeitete, sah
+         * die rechte Haelfte des Vordrucks erst nach dem Schieben -- und
+         * beim Ausfuellen nie beide Haelften zugleich.
+         *
+         * Der Faktor muss aus der Breite des Kastens kommen und darf eins
+         * nicht ueberschreiten, sonst wird das Blatt auf grossen Schirmen
+         * aufgeblasen.
+         */
+        && str_contains($css, 'container-type: inline-size;')
+        // Der Maszstab hat seit GES-VORDRUCK-LESBAR eine Untergrenze:
+        // Wer das Blatt skaliert, skaliert seine Schrift mit.
         && str_contains(
+            $css,
+            'zoom: max(0.75, min(1, calc(100cqw / 56rem)));'
+        )
+        && !str_contains(
             $css,
             'content: "Zum vollständigen Vordruck horizontal wischen"'
         )

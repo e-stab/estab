@@ -215,6 +215,21 @@ if ($requestMethod === 'POST') {
     } catch (EstabIncidentExportInputException | EstabIncidentInputException $exception) {
         http_response_code(422);
         $error = $exception->getMessage();
+    } catch (EstabPdfBesetztException $exception) {
+        /*
+         * Kein Fehler, sondern eine Auskunft.
+         *
+         * Es laeuft bereits ein Dossier. 503 mit Retry-After sagt das auch
+         * einem Zwischenspeicher; der Bediener liest den Satz, der in der
+         * Ausnahme steht -- er nennt den Grund und was zu tun ist.
+         *
+         * Ohne diesen Zweig faele die Abweisung in den Sammelzweig unten
+         * und der Bediener saehe "Details stehen im Container-Log": eine
+         * Meldung, die ihn ratlos zuruecklaesst, wo ein Satz genuegt.
+         */
+        header('Retry-After: 60');
+        http_response_code(503);
+        $error = $exception->getMessage();
     } catch (EstabIncidentNotFoundException $exception) {
         http_response_code(404);
         $error = $exception->getMessage();
@@ -478,7 +493,7 @@ try {
       <a href="incidents.php">Einsätze verwalten</a>
     </footer>
   </main>
-  <script>
+  <script<?= estab_csp_script_attribute() ?>>
   (() => {
     const incident = document.getElementById('incident-export-incident');
     const scope = document.getElementById('incident-export-logbook-scope');

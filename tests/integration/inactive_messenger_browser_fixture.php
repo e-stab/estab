@@ -159,11 +159,12 @@ function inactive_messenger_fixture_active_me_route(
         $identity,
         [
             'betriebsstelle' => 'Browser-Melderweg',
-            'rufname' => 'Browser-Melder',
-            'medium' => 'Me',
-            'kanal' => '',
-            'bandlage' => '',
-            'verkehrsform' => 'Persönliche Beförderung',
+            // Migration 124: aus `rufname` wurde `erreichbarkeit`; die
+            // Wegart trat an die Stelle des Mittels. Der Melderweg besitzt
+            // keine Funkfelder -- Kanal, Bandlage und Verkehrsform gehoeren
+            // ihm nicht und wuerden ohnehin geleert.
+            'erreichbarkeit' => 'Browser-Melder',
+            'wegart' => 'Me',
             'besondere_vermerke' => '',
             'bemerkungen' => $marker,
         ],
@@ -450,7 +451,7 @@ try {
     $insertMessage = $connection->prepare(
         'INSERT INTO `nv_nachrichten`'
         . ' (`einsatz_id`, `04_richtung`, `04_nummer`, `06_befweg`,'
-        . ' `06_befwegausw`, `estab_fernmeldeplan_eintrag_id`,'
+        . ' `01_medium`, `estab_fernmeldeplan_eintrag_id`,'
         . ' `10_anschrift`, `12_betreff`, `12_inhalt`, `13_abseinheit`,'
         . ' `x00_status`, `x01_abschluss`)'
         . " VALUES (?, 'A', ?, 'Melder', 'Me', ?, ?, ?, ?, '', 2, 'f')"

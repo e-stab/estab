@@ -23,6 +23,7 @@ $uiFiles = [
     'menue.inc.php',
     'app/navigation.php',
     'app/root_menu.php',
+    'app/situation_overview.php',
     'app/session_ui.php',
     'app/sidebar.php',
     '4fach/index.php',

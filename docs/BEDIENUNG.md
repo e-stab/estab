@@ -21,8 +21,18 @@ Unter `/4fadm/incidents.php` werden mindestens erfasst:
 - Auftrag und Ausgangslage,
 - Berechtigungsmodus.
 
-Es kann nur einen aktiven Einsatz geben. Der Modus muss vor der ersten
-operativen oder formalen Eintragung feststehen.
+Es kann nur einen aktiven Einsatz geben. Der Modus soll vor der ersten
+operativen oder formalen Eintragung feststehen. Danach bleibt genau eine
+Richtung offen: der Aufwuchs von „Locker“ auf „Streng“, wenn die
+Führungsstufe steigt und ein Stab zusammentritt. Der Wechsel steht im
+Einsatztagebuch, und bis eine Dienstschicht mit allen Pflichtfunktionen
+aktiviert und angenommen ist, bleiben operative Eingaben gesperrt. Der
+umgekehrte Weg ist gesperrt: eine formal geführte Führungsstelle darf ihre
+Nachweisführung nicht abschwächen.
+
+Vor der Freigabe benennt die Einsatzverwaltung die Stationen des
+Nachrichtenlaufs, die nicht besetzt sind. Das ist ein Hinweis, keine Sperre --
+eine Führungsstelle ohne Stab arbeitet auch mit Lücken.
 
 ### Streng
 
@@ -30,7 +40,9 @@ operativen oder formalen Eintragung feststehen.
 - aktive formale Dienstschicht erforderlich,
 - Funktionen werden persönlich besetzt,
 - die Person nimmt die Besetzung an und wählt sie als aktuelle Funktion,
-- nur diese ausgewählte Besetzung verleiht operative Rechte.
+- nur diese ausgewählte Besetzung verleiht operative Rechte,
+- fällt eine Kraft aus, lässt sich ihre Funktion einzeln neu besetzen, ohne
+  die Schicht zu übergeben; beide Namen stehen mit Grund im Einsatztagebuch.
 
 ### Locker
 
@@ -38,7 +50,11 @@ operativen oder formalen Eintragung feststehen.
 - Rechte stammen aus fester Kontofunktion und ausdrücklich vergebenen
   Zusatzfunktionen,
 - optionale Zugangsschichten steuern Gruppenzugänge, nicht Fachrechte,
-- die manuelle Kontosperre hat immer Vorrang.
+- die manuelle Kontosperre hat immer Vorrang,
+- ausgehende Nachrichten sind auch ohne veröffentlichten S6-Fernmeldeplan
+  beförderbar; der LdF benennt Übermittlungsmittel und Weg dann unmittelbar,
+- trägt eine Person mehrere Funktionen, führt die Seitenleiste für jede einen
+  eigenen Warteschlangenzähler.
 
 ## Benutzer
 
@@ -57,25 +73,43 @@ werden. Das sollte nur in einem kontrollierten Netz geschehen.
 Die Anwendung führt Nachrichten durch feste Stationen:
 
 ```text
-Ausgang: Verfasser → Si → LdF → Fernmelder → abgeschlossen
-Eingang: Fernmelder → LdF → Si → Empfänger → abgeschlossen
+Ausgang:       Verfasser → Si → LdF → Fernmelder → abgeschlossen
+Eingang:       Fernmelder → LdF → Si → Empfänger → abgeschlossen
+Gesprächsnotiz: Verfasser → Si → abgeschlossen
 ```
 
 Eine zurückgegebene Nachricht geht zur korrigierenden Station zurück; die
 Statusleiste des Vordrucks zeigt auch wiederholte Durchläufe und Laufzeiten.
-Gesprächsnotizen durchlaufen denselben Ausgangsweg.
+
+Die Gesprächsnotiz hat einen eigenen, kurzen Laufweg: Sie hält ein bereits
+geführtes Gespräch fest, deshalb ist mit der Sichtung nichts mehr zu
+befördern. Eine Disposition durch den LdF und ein Beförderungsnachweis der
+Fernmelder entfallen.
 
 ### Nachricht anlegen
 
 1. Richtung und Art wählen.
 2. Rufnamen, Absender, Empfänger, Überschrift und Text ausfüllen.
-3. Priorität, Übertragungsweg und erforderliche Vermerke im Vordruck setzen.
-4. Anhänge direkt am Vordruck auswählen und hochladen.
-5. Nachricht an die nächste Station übergeben.
+3. Vorrangstufe, gewünschtes Übermittlungsmittel (Feld 7) und erforderliche
+   Vermerke im Vordruck setzen.
+4. Abfassungszeit (Feld 16) eintragen. Die Anwendung setzt sie nicht selbst
+   ein: sie kennt den Zeitpunkt der Erfassung, nicht den der Abfassung.
+5. Verteiler (Feld 19) ausfüllen. Die rote Lage- und die eigene grüne
+   Durchschrift ergänzt der Server unabwählbar.
+6. Anhänge direkt am Vordruck auswählen und hochladen.
+7. Nachricht an die nächste Station übergeben.
 
 Rufnamen und Absender werden aus früheren Einträgen desselben Einsatzes
 vorgeschlagen. Die tatsächliche Aufnahme- oder Beförderungszeit bleibt
 änderbar.
+
+Feld 7 trägt den Wunsch des Verfassers und bleibt dauerhaft stehen. Der LdF
+disponiert davon unabhängig in Feld 1; erreicht der Fernmelder den Empfänger
+darüber nicht, geht die Nachricht mit einem Vermerk in Feld 20 an den LdF
+zurück und wird neu disponiert.
+
+Eine eingehende Nachricht lässt sich erst abschliessen, wenn im Verteiler
+mindestens ein Bearbeiter benannt ist -- sonst erreichte sie niemanden.
 
 ### Anhänge
 
@@ -99,13 +133,24 @@ Einsatz begrenzt.
 Je Einsatz existiert genau ein ETB und ein TTB.
 
 - ETB schreiben `ETB/Stab` oder `S2/Stab`.
-- TTB schreiben Fernmelder.
+- TTB schreibt der LdF. Er leitet den Fernmeldebetrieb, den das Buch
+  beschreibt.
 - Gespeicherte Zeilen werden nicht geändert oder gelöscht.
 - Eine Korrektur ist ein neuer Eintrag mit Bezug auf die ursprüngliche Zeile.
 - Nachrichteneingänge erscheinen im TTB bei der Aufnahme.
 - Nachrichtenausgänge erscheinen im TTB erst nach tatsächlicher Beförderung.
 
 ## Fernmeldeplan
+
+Eigener Bereich unter `/4fach/fuehrungsstelle.php`. Die Melderaufträge stehen
+daneben, nicht darunter: Der Plan ist eine Unterlage, die tagelang gilt; ein
+Melderauftrag ist ein einzelner Botengang.
+
+Der Plan hält die eigenen Kommunikationsmittel fest, nicht fremde Stellen.
+Er besteht aus Kopf, Wegen, Gegenstellen je Weg und den Nebenstellen der
+eigenen Führungsstelle. Aus denselben Daten zeichnet eStab die
+Kommunikationsskizze nach Fb Fü 77: eigene Führungsstelle in der Mitte,
+übergeordnete Stellen links, untergeordnete rechts.
 
 S6 legt einen Planentwurf mit Gültigkeitszeitraum und mindestens einem Weg an.
 Je nach Medium werden nur passende Felder angezeigt. Ein Entwurf wird
@@ -116,6 +161,8 @@ LdF kann für einen Nachrichtenausgang nur einen aktuell gültigen,
 veröffentlichten Beförderungsweg auswählen.
 
 ## Melderauftrag
+
+Eigener Bereich unter `/4fach/melderauftraege.php`.
 
 ```text
 LdF beauftragt → Melder übernimmt → Zustellung →

@@ -64,6 +64,8 @@ if [ ! -r "$fixture" ] \
     || [ ! -r "$ESTAB_MIGRATIONS_DIR/117-telecom-draft-discard.sql" ] \
     || [ ! -r "$ESTAB_MIGRATIONS_DIR/118-operational-authority.sql" ] \
     || [ ! -r "$ESTAB_MIGRATIONS_DIR/119-inactive-messenger-dispatch.sql" ] \
+    || [ ! -r "$ESTAB_MIGRATIONS_DIR/120-single-function-relief.sql" ] \
+    || [ ! -r "$ESTAB_MIGRATIONS_DIR/121-transport-disposition-field-one.sql" ] \
     || [ ! -x "$ESTAB_MIGRATOR_BIN" ]; then
     echo "schema migrator test: fixture, baseline, or migrator is unavailable" >&2
     exit 1
@@ -79,12 +81,29 @@ failure_log=$(mktemp "${TMPDIR:-/tmp}/estab-migration-test-failure.XXXXXX")
 concurrency_log=$(mktemp "${TMPDIR:-/tmp}/estab-logbook-concurrency.XXXXXX")
 pre_110_migrations=$(mktemp -d "${TMPDIR:-/tmp}/estab-pre-110-migrations.XXXXXX")
 
+# Der Stand VOR 110 -- als Zahl, nicht als Namensliste.
+#
+# Hier stand eine Aufzaehlung von 110 bis 121. Sie war vollstaendig, solange
+# 121 die juengste Migration war. Jede spaeter hinzugekommene Migration fiel
+# durch die Liste hindurch und landete in diesem Satz -- zusammen mit ihren
+# Vorbedingungen, die es hier per Definition nicht gibt: Migration 122
+# verlangt 121 im Verzeichnis der angewandten Migrationen, und genau das
+# sollte dieser Satz ja NICHT haben. Der Migrator brach ab, und die Pruefung
+# darunter, die genau 15 angewandte Migrationen erwartet, kam nie dazu.
+#
+# Die Grenze steht jetzt einmal da und haelt auch fuer die naechste Migration.
 for migration_path in "$ESTAB_MIGRATIONS_DIR"/*.sql; do
-    case "$(basename "$migration_path")" in
-        110-etb-tbb-rules.sql|111-logbook-shift-assignment.sql|112-optional-access-shifts.sql|113-password-policy.sql|114-self-registration-policy.sql|115-incident-permission-mode.sql|116-standard-categories.sql|117-telecom-draft-discard.sql|118-operational-authority.sql|119-inactive-messenger-dispatch.sql)
-            continue
+    migration_number=$(basename "$migration_path")
+    migration_number=${migration_number%%-*}
+    case "$migration_number" in
+        ''|*[!0-9]*)
+            echo "schema migrator test: unnumbered migration filename" >&2
+            exit 1
             ;;
     esac
+    if [ "$migration_number" -ge 110 ]; then
+        continue
+    fi
     cp "$migration_path" "$pre_110_migrations/"
 done
 
@@ -351,14 +370,14 @@ assert_equal "$pre_110_ledger_snapshot" "$(
 SELECT GROUP_CONCAT(CONCAT(version, ':', checksum, ':', state)
                     ORDER BY version SEPARATOR ',')
  FROM estab_schema_migrations
- WHERE version NOT IN (
-   '110-etb-tbb-rules.sql', '111-logbook-shift-assignment.sql',
-   '112-optional-access-shifts.sql', '113-password-policy.sql',
-   '114-self-registration-policy.sql', '115-incident-permission-mode.sql',
-   '116-standard-categories.sql', '117-telecom-draft-discard.sql',
-   '118-operational-authority.sql',
-   '119-inactive-messenger-dispatch.sql'
- )"
+ -- Verglichen wird der Stand VOR 110, also alles, was der Aufstieg nicht
+ -- angefasst haben darf. Hier stand dieselbe Namensliste 110 bis 121 wie
+ -- oben beim Zusammenstellen des Satzes, mit demselben Mangel: Migrationen
+ -- ab 122 fielen nicht heraus, standen nach dem Aufstieg im Verzeichnis und
+ -- liessen den Vergleich scheitern, obwohl keine einzige alte Zeile
+ -- angeruehrt worden war. Die Grenze steht als Zahl da und haelt auch fuer
+ -- die naechste Migration.
+ WHERE CAST(SUBSTRING_INDEX(version, '-', 1) AS UNSIGNED) < 110"
 )" \
     "migration 110 upgrade rewrote a released migration ledger row"
 assert_equal "1|1|1|1|1|1|1|1|1|1|1|3|1|2|1" "$(database_query "$logbook_upgrade_database" "
@@ -420,8 +439,9 @@ SELECT CONCAT(
        )")" \
     "logbook upgrade omitted immutable-ledger, locking, history, or attachment rules"
 
-# A running shift may gain a genuinely new function, but a function that was
-# already occupied in that shift cannot be replaced or reoccupied later.
+# A running shift may gain a genuinely new function. A function that is still
+# assigned or accepted cannot be occupied twice -- but once its holder was
+# relieved, Migration 120 frees it again. Both directions are checked below.
 database_query "$logbook_upgrade_database" "
 INSERT INTO nv_benutzer
   (benutzer, kuerzel, funktion, rolle, aktiv, password)
@@ -465,11 +485,7 @@ INSERT INTO nv_dienstbesetzungen
   (dienstschicht_id, benutzer_kuerzel, funktion, rolle, status,
    zugewiesen_von)
 VALUES
-  (@upgrade_shift_id, 'awb', 'A/W', 'Fernmelder', 'ZUGEWIESEN', 'schema-test');
-UPDATE nv_dienstbesetzungen
-   SET status = 'ABGELOEST', abgeloest_am = NOW(6)
- WHERE dienstschicht_id = @upgrade_shift_id
-   AND BINARY funktion = BINARY 'S2'"
+  (@upgrade_shift_id, 'awb', 'A/W', 'Fernmelder', 'ZUGEWIESEN', 'schema-test')"
 upgrade_shift_id=$(database_query "$logbook_upgrade_database" "
 SELECT dienstschicht_id FROM nv_dienstschichten
  WHERE bezeichnung = 'Upgrade shift'")
@@ -489,7 +505,26 @@ if ! grep -q 'Active duty shift function was already assigned' \
     sed -n '1,120p' "$failure_log" >&2
     exit 1
 fi
-assert_equal "AKTIV|8|1|0|1|2" "$(
+
+# Migration 120 loest die Einzelbesetzung ab: danach ist die Funktion frei,
+# sonst koennte eine Schicht nach einer Abloesung nie wieder besetzt werden.
+database_query "$logbook_upgrade_database" "
+UPDATE nv_dienstbesetzungen
+   SET status = 'ABGELOEST', abgeloest_am = NOW(6)
+ WHERE dienstschicht_id = $upgrade_shift_id
+   AND BINARY funktion = BINARY 'S2'"
+if ! database_query "$logbook_upgrade_database" "
+INSERT INTO nv_dienstbesetzungen
+  (dienstschicht_id, benutzer_kuerzel, funktion, rolle, status,
+   zugewiesen_von)
+VALUES
+  ($upgrade_shift_id, 's2b', 'S2', 'Stab', 'ZUGEWIESEN', 'schema-test')" \
+    >"$failure_log" 2>&1; then
+    echo "schema migrator test: relieved function was not free again" >&2
+    sed -n '1,120p' "$failure_log" >&2
+    exit 1
+fi
+assert_equal "AKTIV|9|1|1|1|2" "$(
     database_query "$logbook_upgrade_database" "
 SELECT CONCAT(
          shift_row.status, '|',
@@ -512,7 +547,7 @@ SELECT CONCAT(
   FROM nv_dienstschichten AS shift_row
  WHERE shift_row.bezeichnung = 'Upgrade shift'"
 )" \
-    "active-shift extension or no-replacement evidence is incomplete"
+    "active-shift extension or relief-reoccupation evidence is incomplete"
 
 if database_query "$logbook_upgrade_database" "
 INSERT INTO nv_etb
@@ -576,7 +611,10 @@ SELECT GROUP_CONCAT(kategorie ORDER BY BINARY kategorie SEPARATOR ',')
   FROM nv_masterkatego"
 )" \
     "fresh installation did not receive exact standard categories"
-assert_equal "7|7|1|1|1|1|25" "$(database_query "$fresh_database" "
+# Der letzte Wert ist die Gesamtzahl angewandter Migrationen: 38 statt 27.
+# Sie steht bewusst als Zahl da -- wer eine Migration hinzufuegt, soll hier
+# vorbeikommen. Die elf neuen sind 122 bis 132.
+assert_equal "7|7|1|1|1|1|38" "$(database_query "$fresh_database" "
 SELECT CONCAT(
          COUNT(*), '|', COUNT(DISTINCT BINARY kategorie), '|',
          (SELECT COUNT(*) FROM estab_schema_migrations
@@ -717,10 +755,10 @@ SET @estab_dv_target_assignment_id = NULL"
 # assigning LdF active and enforcing the durable account block.
 database_query "$fresh_database" "
 INSERT INTO nv_nachrichten
-  (\`04_richtung\`, \`06_befwegausw\`, \`12_betreff\`, \`12_inhalt\`,
-   \`x00_status\`, \`x01_abschluss\`)
+  (\`04_richtung\`, \`01_medium\`, \`06_befwegausw\`, \`12_betreff\`,
+   \`12_inhalt\`, \`x00_status\`, \`x01_abschluss\`)
 VALUES
-  ('A', 'Me', 'Migration 119 STRICT messenger target',
+  ('A', 'Me', 'Me', 'Migration 119 STRICT messenger target',
    'Inactive authorised messenger target fixture.', 2, 'f');
 SET @inactive_messenger_message_id = LAST_INSERT_ID();
 UPDATE nv_benutzer
@@ -1025,7 +1063,7 @@ SET @release_plan_id = LAST_INSERT_ID();
 SET @estab_dv_actor_assignment_id = NULL;
 SET @estab_dv_target_assignment_id = NULL;
 INSERT INTO nv_fernmeldeplan_eintraege
-  (fernmeldeplan_id, sortierung, betriebsstelle, rufname, medium,
+  (fernmeldeplan_id, sortierung, betriebsstelle, erreichbarkeit, medium,
    kanal, bandlage, verkehrsform, besondere_vermerke, bemerkungen)
 VALUES
   (@release_plan_id, 1, 'Migration test station', 'Schema 117', 'Fu',
@@ -1192,7 +1230,7 @@ SET @end_second_plan_id = LAST_INSERT_ID();
 SET @estab_dv_actor_assignment_id = NULL;
 SET @estab_dv_target_assignment_id = NULL;
 INSERT INTO nv_fernmeldeplan_eintraege
-  (fernmeldeplan_id, sortierung, betriebsstelle, rufname, medium,
+  (fernmeldeplan_id, sortierung, betriebsstelle, erreichbarkeit, medium,
    kanal, bandlage, verkehrsform, besondere_vermerke, bemerkungen)
 VALUES
   (@end_second_plan_id, 1, 'End-second station', 'Schema end second',
@@ -1280,10 +1318,10 @@ VALUES
   (@authority_access_shift_id, 'ld118', 'schema-migrator-test'),
   (@authority_access_shift_id, 'aw119', 'schema-migrator-test');
 INSERT INTO nv_nachrichten
-  (\`04_richtung\`, \`06_befwegausw\`, \`12_betreff\`, \`12_inhalt\`,
-   \`x00_status\`, \`x01_abschluss\`)
+  (\`04_richtung\`, \`01_medium\`, \`06_befwegausw\`, \`12_betreff\`,
+   \`12_inhalt\`, \`x00_status\`, \`x01_abschluss\`)
 VALUES
-  ('A', 'Me', 'Migration 119 LOOSE messenger target',
+  ('A', 'Me', 'Me', 'Migration 119 LOOSE messenger target',
    'Inactive target with optional access-shift fixture.', 2, 'f')"
 if database_query "$fresh_database" "
 SET @estab_dv_actor_assignment_id = NULL;
@@ -1394,7 +1432,7 @@ SELECT einsatz_id, 4, 'Loose plan through additional function',
  WHERE kennung = 'SCHEMA-TELECOM-DISCARD';
 SET @loose_grant_plan_id = LAST_INSERT_ID();
 INSERT INTO nv_fernmeldeplan_eintraege
-  (fernmeldeplan_id, sortierung, betriebsstelle, rufname, medium,
+  (fernmeldeplan_id, sortierung, betriebsstelle, erreichbarkeit, medium,
    kanal, bandlage, verkehrsform, besondere_vermerke, bemerkungen)
 VALUES
   (@loose_grant_plan_id, 1, 'Additional function station', 'Schema 118',
@@ -1712,7 +1750,15 @@ SELECT CONCAT(
            WHERE singleton_id = 1)
        )")" \
     "interrupted baseline was not retried and recorded"
-assert_equal "nv_anhang,nv_benutzer,nv_bhp50,nv_einsaetze,nv_einsatz_ereignisse,nv_einsatz_status,nv_empfmtx,nv_empfmtx_standard,nv_etb,nv_etbtitel,nv_komplan,nv_masterkatego,nv_masterkategolink,nv_nachrichten,nv_protokoll,nv_tbb,nv_tbbtitel,nv_ubb" "$(database_query "$retry_database" "
+# nv_komplan steht hier nicht mehr.
+#
+# Die Grundfassung legt die Tabelle weiterhin an -- ihre Pruefsumme haengt
+# daran --, aber Migration 130 raeumt sie danach weg. Gezaehlt wird hier der
+# Zustand NACH allen Migrationen, also ohne sie. Dieselbe Anpassung hat
+# docker/db/migrate.sh schon bekommen (14 auf 13 Tabellen); hier war sie
+# vergessen worden, und es fiel nicht auf, weil dieser Test auf der CI nie
+# so weit kam.
+assert_equal "nv_anhang,nv_benutzer,nv_bhp50,nv_einsaetze,nv_einsatz_ereignisse,nv_einsatz_status,nv_empfmtx,nv_empfmtx_standard,nv_etb,nv_etbtitel,nv_masterkatego,nv_masterkategolink,nv_nachrichten,nv_protokoll,nv_tbb,nv_tbbtitel,nv_ubb" "$(database_query "$retry_database" "
 SELECT GROUP_CONCAT(table_name ORDER BY BINARY table_name SEPARATOR ',')
   FROM information_schema.tables
  WHERE table_schema = DATABASE()
@@ -1720,7 +1766,7 @@ SELECT GROUP_CONCAT(table_name ORDER BY BINARY table_name SEPARATOR ',')
    AND table_name IN (
      'nv_nachrichten', 'nv_empfmtx', 'nv_empfmtx_standard', 'nv_benutzer',
      'nv_masterkatego', 'nv_masterkategolink', 'nv_protokoll',
-     'nv_anhang', 'nv_etb', 'nv_tbb', 'nv_ubb', 'nv_komplan',
+     'nv_anhang', 'nv_etb', 'nv_tbb', 'nv_ubb',
      'nv_bhp50', 'nv_etbtitel', 'nv_tbbtitel', 'nv_einsaetze',
      'nv_einsatz_status', 'nv_einsatz_ereignisse'
    )")" \
@@ -1960,6 +2006,26 @@ ESTAB_DB_NAME="$retry_database" "$ESTAB_MIGRATOR_BIN"
 # Migration 97 may be interrupted after its autocommitted ADD COLUMN but before
 # the ledger acknowledgement. Only the exact owned VARCHAR(128) shape is
 # resumable; a same-name foreign or narrower field must remain untouched.
+#
+# Vorher muss `nv_komplan` wieder dastehen. Migration 97 liest die Tabelle in
+# einer EXISTS-Abfrage, um zu erkennen, ob ein Einsatz Altbestand hat --
+# Migration 130 hat sie inzwischen abgebaut. Diese Datenbank ist bereits an
+# 130 vorbei, die Wiederholung von 97 faende die Tabelle also nicht mehr und
+# scheiterte an ihr statt an der Kollision, die hier geprueft werden soll.
+#
+# Wiederhergestellt wird die Gestalt, die 97 vorfand: der Schluessel aus der
+# Grundfassung und der Einsatzbezug aus Migration 45. Leer, wie die Tabelle
+# es immer war -- die EXISTS-Abfrage findet nichts, genau wie im Echtbetrieb.
+#
+# In der Wirklichkeit kann diese Lage nicht entstehen: 97 kann nur abbrechen,
+# waehrend 97 laeuft, und das ist lange vor 130. Hier wird sie kuenstlich
+# hergestellt, weil die Ledger-Zeile von Hand entfernt wird.
+database_query "$retry_database" "
+CREATE TABLE IF NOT EXISTS \`nv_komplan\` (
+  \`lfd\` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  \`einsatz_id\` BIGINT UNSIGNED NULL DEFAULT NULL,
+  PRIMARY KEY (\`lfd\`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
 database_query "$retry_database" "
 DELETE FROM estab_schema_migrations
  WHERE version = '97-incident-command-post-name.sql';
@@ -2460,8 +2526,9 @@ finish_checksum=$(
     sha256sum "$ESTAB_MIGRATIONS_DIR/55-global-incidents-finish.sql" |
         awk '{print $1}'
 )
+# 38 statt 27: elf neue Migrationen (122 bis 132). Siehe oben.
 assert_equal \
-    "25|25|$prepare_checksum|$incident_predecessor_checksum|$finish_checksum" \
+    "38|38|$prepare_checksum|$incident_predecessor_checksum|$finish_checksum" \
     "$(database_query "$predecessor_database" "
 SELECT CONCAT(
          COUNT(*), '|',
@@ -2569,6 +2636,29 @@ INSERT INTO nv_masterkatego (lfd, kategorie, beschreibung) VALUES
   (41, 'Allgemein', 'Individuell beibehalten'),
   (77, 'EIGEN', 'Eigene Kategorie');
 INSERT INTO nv_masterkategolink (msg, katego) VALUES (900001, 77)"
+# Eine laufende Ausgangsnachricht aus dem Altbestand: der LdF hat disponiert
+# (Bearbeitungsstand 2, Annahme in Feld 2 gezeichnet), das Mittel steht im
+# historischen Feld 7. Feld 1 und Feld 6 gibt es hier noch gar nicht.
+# Migration 121 muss beide anlegen und die Angabe uebernehmen, sonst faellt
+# genau diese Nachricht aus der Fernmelder-Warteschlange und laesst sich
+# weder uebernehmen noch abschliessen.
+fixture_query "
+SET SESSION sql_mode = 'NO_ENGINE_SUBSTITUTION';
+INSERT INTO nv_nachrichten
+  (\`00_lfd\`, \`04_richtung\`, \`04_nummer\`, \`06_befwegausw\`,
+   \`01_datum\`, \`03_datum\`,
+   \`02_zeit\`, \`02_zeichen\`, \`05_gegenstelle\`, \`10_anschrift\`,
+   \`12_inhalt\`, \`13_abseinheit\`, \`14_zeichen\`,
+   \`15_quitdatum\`, \`15_quitzeichen\`,
+   \`x00_status\`, \`x01_abschluss\`)
+VALUES
+  (900042, 'A', 42, 'Fu',
+   '2026-01-02 08:00:00', '0000-00-00 00:00:00',
+   '2026-01-02 08:15:00', 'ldf', 'Altbestand-Gegenstelle', 'Altbestand-Ziel',
+   'Laufende Ausgangsnachricht aus dem Altbestand.', 'TZ', 's1',
+   '2026-01-02 08:05:00', 'si',
+   2, 'f')"
+
 legacy_category_snapshot="$(fixture_query "
 SELECT CONCAT(
          (SELECT GROUP_CONCAT(
@@ -2661,6 +2751,22 @@ SELECT GROUP_CONCAT(
        )
   FROM nv_nachrichten")"
 ESTAB_DB_NAME="$test_database" "$ESTAB_MIGRATOR_BIN"
+
+# Genau die vier Bedingungen, die die Fernmelderstufe abfragt, bevor sie
+# eine Nachricht anzeigt. Ohne die Uebernahme faellt die Zeile durch.
+assert_equal "Fu|Funk (aus Feld 7 uebernommen)|Fu|1" "$(fixture_query "
+SELECT CONCAT(
+         \`01_medium\`, '|',
+         \`06_befweg\`, '|',
+         \`06_befwegausw\`, '|',
+         (\`x00_status\` = 2
+           AND \`02_zeit\` IS NOT NULL
+           AND \`02_zeichen\` <> ''
+           AND \`01_medium\` <> ''
+           AND \`06_befweg\` <> '')
+       )
+  FROM nv_nachrichten WHERE \`00_lfd\` = 900042")" \
+    "legacy in-flight outgoing message lost its transport disposition"
 assert_equal "$legacy_category_snapshot" "$(fixture_query "
 SELECT CONCAT(
          (SELECT GROUP_CONCAT(
@@ -2701,7 +2807,8 @@ SELECT CONCAT(
        )")" \
     "second upgrade run changed existing global categories or links"
 
-assert_equal "25" "$(fixture_query "
+# 38 statt 27: elf neue Migrationen (122 bis 132). Siehe oben.
+assert_equal "38" "$(fixture_query "
 SELECT COUNT(*) FROM estab_schema_migrations
  WHERE state = 'applied'
    AND checksum REGEXP BINARY '^[0-9a-f]{64}$'")" \
@@ -2983,7 +3090,8 @@ fixture_query "
 DELETE FROM estab_schema_migrations
  WHERE version = '119-inactive-messenger-dispatch.sql'"
 ESTAB_DB_NAME="$test_database" "$ESTAB_MIGRATOR_BIN"
-assert_equal "$inactive_messenger_dispatch_checksum|applied|25|1" "$(fixture_query "
+# 38 statt 27: elf neue Migrationen (122 bis 132). Siehe oben.
+assert_equal "$inactive_messenger_dispatch_checksum|applied|38|1" "$(fixture_query "
 SELECT CONCAT(
          (SELECT checksum FROM estab_schema_migrations
            WHERE version = '119-inactive-messenger-dispatch.sql'), '|',
@@ -3504,7 +3612,7 @@ SELECT GROUP_CONCAT(
        )
   FROM nv_nachrichten")" \
     "official message field migration changed existing message data"
-assert_equal "1|1|10_anschrift,11_rufnummer,11_gesprnotiz,12_betreff,12_anhang:4|2|0" "$(fixture_query "
+assert_equal "1|1|10_anschrift,11_rufnummer,11_gesprnotiz,12_betreff,12_anhang:4|3|0" "$(fixture_query "
 SELECT CONCAT(
          (SELECT COUNT(*)
             FROM information_schema.columns
@@ -3874,7 +3982,9 @@ SELECT GROUP_CONCAT(
        )
   FROM estab_schema_migrations
  WHERE version <> '114-self-registration-policy.sql'")"
-assert_equal "24|24" "$(fixture_query "
+# 37 statt 26: 38 Migrationen ohne die eine, die hier ausgenommen ist.
+# Siehe die uebrigen Zaehlungen weiter oben -- 122 bis 132 sind dazugekommen.
+assert_equal "37|37" "$(fixture_query "
 SELECT CONCAT(
          COUNT(*), '|',
          SUM(state = 'applied' AND checksum REGEXP BINARY '^[0-9a-f]{64}$')
@@ -4369,7 +4479,9 @@ VALUES
 DELETE FROM estab_schema_migrations
  WHERE version IN (
    '110-etb-tbb-rules.sql', '111-logbook-shift-assignment.sql',
-   '112-optional-access-shifts.sql'
+   '112-optional-access-shifts.sql',
+   '120-single-function-relief.sql',
+   '121-transport-disposition-field-one.sql'
  );
 DROP TRIGGER estab_einsaetze_ai_logbook_heads;
 DELETE FROM nv_logbuch_koepfe

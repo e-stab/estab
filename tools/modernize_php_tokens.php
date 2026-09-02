@@ -15,8 +15,14 @@ if ($root === false) {
     exit(2);
 }
 
-$excludedTopLevels = ['.git', 'app', 'docs', 'migration', 'tmp', 'tools', 'var'];
+$excludedTopLevels = [
+    '.git', 'app', 'docs', 'migration', 'tmp', 'tools', 'var', 'vendor',
+];
 $constantKeys = ['MYSQL_ASSOC', 'MYSQL_NUM', 'MYSQL_BOTH'];
+// Eigene Konstanten dieser Anwendung tragen alle das Praefix ESTAB_.
+// Als Index sind sie gemeint, nicht vergessen zu setzen: sie zu
+// quotieren machte aus dem Wert stillschweigend seinen Namen.
+$constantKeyPattern = '~\\AESTAB_[A-Z0-9_]+\\z~D';
 $changedFiles = [];
 $changedKeys = [];
 
@@ -72,11 +78,24 @@ foreach ($iterator as $file) {
         } elseif ($id === T_END_HEREDOC) {
             $insideInterpolatedString = false;
         }
+        // `[` opens a subscript only behind something subscriptable. In every
+        // other position it opens an array literal, and quoting a constant
+        // there would silently turn ESTAB_X into the string 'ESTAB_X'.
+        $bracketOwner = significantToken($tokens, $index - 1, -1) === '['
+            ? significantToken($tokens, $index - 2, -1)
+            : null;
+        $isSubscript = in_array(
+            $bracketOwner,
+            [T_VARIABLE, T_STRING, T_CONSTANT_ENCAPSED_STRING, ']', ')', '}'],
+            true
+        );
         $isBareArrayKey = $id === T_STRING
             && !$insideInterpolatedString
+            && $isSubscript
             && significantToken($tokens, $index - 1, -1) === '['
             && significantToken($tokens, $index + 1, 1) === ']'
-            && !in_array($text, $constantKeys, true);
+            && !in_array($text, $constantKeys, true)
+            && preg_match($constantKeyPattern, $text) !== 1;
         if ($isBareArrayKey) {
             $rewritten .= "'" . str_replace(['\\', "'"], ['\\\\', "\\'"], $text) . "'";
             $fileChanges++;

@@ -5,6 +5,7 @@ require_once __DIR__ . "/../app/auth.php";
 require_once __DIR__ . "/../app/navigation.php";
 require_once __DIR__ . "/../app/read_authorization.php";
 require_once __DIR__ . "/../app/session_ui.php";
+require_once __DIR__ . "/../app/nachweisung.php";
 estab_navigation_require_session ($_SESSION, "tracking", $_SERVER);
 include ("../4fcfg/config.inc.php");  // Konfigurationseinstellungen und Vorgaben
 include ("db_operation.php");        // Datenbank operationen
@@ -93,32 +94,48 @@ echo "<h1>Nachweisung Eingang und Ausgang</h1>\n";
 echo "<p>Diese Übersicht zeigt die Nachweislisten des aktuell aktiven Einsatzes. ";
 echo "Filter und Detailaufrufe verändern keine Nachricht.</p>\n";
 echo "</header>\n";
-echo "<section class=\"estab-tool-panel\" aria-labelledby=\"tracking-list-title\">\n";
-echo "<header class=\"estab-tool-panel-heading\">\n";
-echo "<h2 id=\"tracking-list-title\">Nachrichtenübersicht</h2>\n";
-echo "<p>Breite Tabellen können innerhalb dieses Bereichs horizontal ";
-echo "gescrollt werden.</p>\n</header>\n";
+// aria-labelledby zeigte auf eine Ueberschrift, die es nicht mehr gibt. Ein
+// Verweis ins Leere benennt nichts.
+echo "<section class=\"estab-tool-panel\" aria-label=\"Nachweisung\">\n";
+/*
+ * Hier stand eine zweite Ueberschrift "Nachrichtenuebersicht" und der Satz,
+ * breite Tabellen liessen sich in diesem Bereich waagerecht scrollen. Die
+ * Ueberschrift stand neben der der Seite und benannte dasselbe; der Satz
+ * beschrieb eine Bauweise, die das Tabellenbauteil selbst mitbringt.
+ */
 echo "<div class=\"estab-tool-legacy-content\">\n";
 
+/*
+ * Die Nachweisung kommt aus dem Tabellenbauteil (app/tabelle.php).
+ *
+ * Sie hatte weder Suche noch Filter: Wer einen bestimmten Nachweis suchte,
+ * blaetterte. Was hier steht, ist nur noch die Frage, welche Liste gemeint
+ * ist -- Aufbau, Sortierung, Suche und Blaettern kommen von dort.
+ */
 try {
   if ( isset ($_GET) ) {
     if ( isset ($_GET["nwe"]) ) {
-      $list = new listen ("FmNwE", "", $trackingIncidentId);
-      $list->createlist ();
+      estab_nachweisung_ausgeben (
+        $conf_4f_db, $trackingIncidentId, "E", "Nachweisung Eingang"
+      );
     }
     if ( isset ($_GET["nwa"]) ) {
-      $list = new listen ("FmNwA", "", $trackingIncidentId);
-      $list->createlist ();
+      estab_nachweisung_ausgeben (
+        $conf_4f_db, $trackingIncidentId, "A", "Nachweisung Ausgang"
+      );
     }
     if ( isset ($_GET["nwalle"]) ) {
       if (Nachweisung == "gemeinsam"){
-        $list = new listen ("FmNw", "", $trackingIncidentId);
-        $list->createlist ();
+        estab_nachweisung_ausgeben (
+          $conf_4f_db, $trackingIncidentId, "", "Nachweisung Eingang und Ausgang"
+        );
       } elseif (Nachweisung == "getrennt") {
-        $list = new listen ("FmNwE", "", $trackingIncidentId);
-        $list->createlist ();
-        $list = new listen ("FmNwA", "", $trackingIncidentId);
-        $list->createlist ();
+        estab_nachweisung_ausgeben (
+          $conf_4f_db, $trackingIncidentId, "E", "Nachweisung Eingang"
+        );
+        estab_nachweisung_ausgeben (
+          $conf_4f_db, $trackingIncidentId, "A", "Nachweisung Ausgang"
+        );
       }
     }
   }

@@ -232,6 +232,84 @@ try {
     $hashEnvelopeRejected = true;
 }
 $assert($hashEnvelopeRejected, 'central hash boundary accepted oversized input');
+/*
+ * Die Kostenparameter stehen ausdruecklich, nicht als PHP-Vorgabe.
+ *
+ * Die Vorgabe ist m=65536 KiB. Gemessen fordert jeder Hashvorgang damit 64
+ * MB ausserhalb der PHP-Buchfuehrung an; bei einem Schichtwechsel mit zehn
+ * gleichzeitigen Anmeldungen sind das 640 MB Spitze auf einem Geraet mit
+ * einem Gigabyte Budget.
+ *
+ * Gesetzt ist die OWASP-Empfehlung fuer Argon2id: m=19456 KiB, t=2, p=1.
+ * Das ist eine bewusste Absenkung der Bremswirkung gegen Rateangriffe auf
+ * gestohlene Hashes -- eine Entscheidung des Betreibers, keine
+ * Technikfrage, und deshalb steht sie hier als Zahl und nicht als Verweis
+ * auf das, was die Laufzeit gerade fuer richtig haelt.
+ *
+ * Ein Wechsel der PHP-Fassung darf diese Werte nicht stillschweigend
+ * veraendern. Genau das taete er, solange sie aus PASSWORD_ARGON2_DEFAULT_*
+ * kaemen.
+ */
+$assert(
+    estab_auth_password_options() === [
+        'memory_cost' => 19456,
+        'time_cost' => 2,
+        'threads' => 1,
+    ],
+    'Die Argon2id-Kosten entsprechen nicht der OWASP-Empfehlung: '
+        . json_encode(estab_auth_password_options())
+);
+/*
+ * Das Abbild prueft beim Bau gegen dieselben Zahlen.
+ *
+ * Das Dockerfile bildet einen Probehash und vergleicht die zurueckgelesenen
+ * Kosten mit den erwarteten. Stuenden dort andere Werte als in auth.php,
+ * braeche entweder der Bau -- oder, schlimmer, er liefe durch und pruefte
+ * etwas anderes, als die Anwendung tut.
+ */
+$dockerfile = file_get_contents(dirname(__DIR__, 2) . '/Dockerfile');
+$assert(is_string($dockerfile), 'Das Dockerfile ist nicht lesbar.');
+$kosten = estab_auth_password_options();
+$assert(
+    str_contains(
+        (string) $dockerfile,
+        '$options = ["memory_cost" => ' . $kosten['memory_cost']
+            . ', "time_cost" => ' . $kosten['time_cost']
+            . ', "threads" => ' . $kosten['threads'] . '];'
+    ),
+    'Die Argon2id-Pruefung im Dockerfile arbeitet mit anderen Kosten als '
+        . 'die Anwendung: erwartet ' . json_encode($kosten)
+);
+$assert(
+    !str_contains((string) $dockerfile, 'PASSWORD_ARGON2_DEFAULT_MEMORY_COST'),
+    'Das Dockerfile prueft weiterhin gegen die Vorgabe der Laufzeit statt '
+        . 'gegen die gesetzten Kosten. Ein Wechsel der PHP-Fassung wuerde '
+        . 'die Pruefung stillschweigend mitverschieben.'
+);
+
+/*
+ * Und bestehende Hashes werden nicht heruntergestuft.
+ *
+ * Ein mit 64 MB gebildeter Hash ist staerker als das neue Ziel. Ihn beim
+ * naechsten Anmelden auf das schwaechere Profil umzuschreiben, waere eine
+ * stille Verschlechterung -- der Betreiber hat einer neuen Untergrenze
+ * zugestimmt, nicht der Entwertung dessen, was schon da ist.
+ */
+$starkerHash = password_hash(
+    'stark-gehashtes-kennwort',
+    PASSWORD_ARGON2ID,
+    ['memory_cost' => 65536, 'time_cost' => 4, 'threads' => 1]
+);
+$assert(
+    is_string($starkerHash)
+        && !estab_auth_password_hash_needs_upgrade(
+            $starkerHash,
+            'stark-gehashtes-kennwort'
+        ),
+    'Ein staerkerer Argon2id-Hash wird auf das neue, schwaechere Profil '
+        . 'heruntergestuft.'
+);
+
 $targetOptions = estab_auth_password_options();
 $weakerOptions = $targetOptions;
 if ($weakerOptions['time_cost'] > 1) {

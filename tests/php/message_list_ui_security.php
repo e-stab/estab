@@ -14,6 +14,7 @@ try {
 }
 require_once __DIR__ . '/../../app/message_list.php';
 require_once __DIR__ . '/../../app/message_list_ui.php';
+require_once __DIR__ . '/lib/quelltext.php';
 
 $assertions = 0;
 $assert = static function (bool $condition, string $message) use (&$assertions): void {
@@ -428,14 +429,32 @@ foreach ([
     'Meldungsübersicht' => $overviewTable,
     'Zweite Sichtung' => $secondSightingTable,
 ] as $surface => $table) {
+    /*
+     * Die Kopfzellen tragen seit der Umstellung auf das Tabellenbauteil
+     * ihre Breite als Attribut -- `<th scope="col" style="width:12%">`.
+     * Geprueft wird deshalb der Anfang, nicht die geschlossene Klammer.
+     */
     $assert(
         substr_count($table, '<caption class="estab-visually-hidden">') === 1
-            && substr_count($table, '<th scope="col">') === 7
-            && substr_count($table, 'data-label=') === 21,
+            && substr_count($table, '<th scope="col"') === 8
+            && substr_count($table, 'data-label=') === 24,
         $surface . ' result table lacks semantic or responsive labels'
     );
     $assert(
-        str_contains($table, '<th scope="col">Überschrift und Inhalt</th>')
+        // Siehe message_list_dwell_security: Der Kopf traegt ein weiches
+        // Trennzeichen, damit "Verweildauer" brechen kann statt abgeschnitten
+        // zu werden.
+        str_contains($table, ">Zeit und Verweil\u{00AD}dauer</th>")
+            && str_contains($table, '>Kenntnis</th>')
+            && substr_count($table, 'data-estab-message-dwell="') === 3
+            && substr_count(
+                $table,
+                'class="estab-message-list-awareness-group"'
+            ) === 3,
+        $surface . ' hides dwell time or reading state from the row'
+    );
+    $assert(
+        str_contains($table, '>Überschrift und Inhalt</th>')
             && substr_count(
                 $table,
                 'data-estab-message-list-heading '
@@ -467,9 +486,20 @@ foreach ([
         ) === 1,
         $surface . ' heading is missing, misplaced, or not safely escaped'
     );
+    /*
+     * Eine interne Nachrichtennummer tritt nie an die Stelle des
+     * TBB-Nachweises. Fehlt der Nachweis, sagt die Liste warum: Eine
+     * Gespraechsnotiz bekommt nie eine Nummer, ein Ausgang bekommt sie mit
+     * der Befoerderung. Frueher hiess es fuer alle drei Faelle gleich "noch
+     * kein TBB-Nachweis" -- damit sah eine Liste aus, als fehle ueberall
+     * etwas, auch dort, wo nichts fehlt.
+     */
+    $ohneNachweis = substr_count($table, 'noch kein TBB-Nachweis')
+        + substr_count($table, 'ohne TBB-Nachweis · Gesprächsnotiz')
+        + substr_count($table, 'TBB-Nachweis mit der Beförderung');
     $assert(
         str_contains($table, 'TBB-Nachweis 142')
-            && str_contains($table, 'noch kein TBB-Nachweis')
+            && $ohneNachweis >= 1
             && !str_contains($table, '9142')
             && !str_contains($table, '9143')
             && !str_contains($table, '9144'),
@@ -527,18 +557,62 @@ foreach ([
         $surface . ' reactivates conflicting legacy mobile-table CSS'
     );
 }
+/*
+ * Die Zeilen der Uebersicht tragen genau einen traegen Verweis und kein
+ * Formular: Ein Formular in einer Zeile waere ein Bedienelement, das etwas
+ * aendert, wo nur gelesen wird.
+ *
+ * Gezaehlt wird deshalb im Rumpf der Tabelle, nicht im ganzen Markup: Das
+ * Suchband des Tabellenbauteils ist ein Formular und steht ueber der
+ * Tabelle, nicht in ihr.
+ */
+$overviewBody = '';
+if (preg_match('~<tbody>(.*)</tbody>~s', $overviewTable, $overviewRows) === 1) {
+    $overviewBody = $overviewRows[1];
+}
 $assert(
-    substr_count($overviewTable, '<form') === 0
-        && substr_count($overviewTable, '<a class="estab-button '
+    $overviewBody !== ''
+        && substr_count($overviewBody, '<form') === 0
+        && substr_count($overviewBody, '<a class="estab-button '
             . 'estab-message-list-open"') === 3,
     'Overview rows do not expose exactly one inert detail link each'
 );
+/*
+ * Auch hier wird im Rumpf gezaehlt: Das Suchband des Tabellenbauteils ist
+ * ein Formular und schliesst sich vor der Tabelle -- ein Formular in einem
+ * Formular wuerfe der Browser weg, und der Knopf "Vordruck oeffnen" taete
+ * dann nichts mehr. Dass es sich schliesst, wird unten eigens geprueft.
+ */
+$secondSightingBody = '';
+if (preg_match('~<tbody>(.*)</tbody>~s', $secondSightingTable, $secondRows) === 1) {
+    $secondSightingBody = $secondRows[1];
+}
 $assert(
-    substr_count($secondSightingTable, '<form') === 3
-        && substr_count($secondSightingTable, 'name="csrf_token"') === 3
-        && substr_count($secondSightingTable, 'name="00_lfd"') === 3
-        && substr_count($secondSightingTable, 'name="fm"') === 3,
+    $secondSightingBody !== ''
+        && substr_count($secondSightingBody, '<form') === 3
+        && substr_count($secondSightingBody, 'name="csrf_token"') === 3
+        && substr_count($secondSightingBody, 'name="00_lfd"') === 3
+        && substr_count($secondSightingBody, 'name="fm"') === 3,
     'Second-sighting rows do not expose one CSRF-protected POST action each'
+);
+/*
+ * Und der Beweis, dass das Band sich schliesst: Zwischen dem oeffnenden
+ * <form> des Bandes und der Tabelle steht ein </form>. Ohne diese Pruefung
+ * waere die vorige nur noch eine Zaehlung im Rumpf -- sie saehe eine
+ * Verschachtelung nicht, die genau die Knoepfe stillstellte, die sie zaehlt.
+ */
+$bandAnfang = strpos($secondSightingTable, '<form class="estab-tabelle-suchband"');
+if ($bandAnfang === false) {
+    $bandAnfang = strpos($secondSightingTable, '<form');
+}
+$tabellenAnfang = strpos($secondSightingTable, '<table');
+$assert(
+    is_int($bandAnfang) && is_int($tabellenAnfang)
+        && $bandAnfang < $tabellenAnfang
+        && ($bandEnde = strpos($secondSightingTable, '</form>', $bandAnfang)) !== false
+        && $bandEnde < $tabellenAnfang,
+    'Das Suchband schliesst sich nicht vor der Tabelle; die Formulare in den '
+        . 'Zeilen laegen darin und waeren wirkungslos.'
 );
 
 $emptyDefault = $render(static function (): void {
@@ -554,7 +628,10 @@ $assert(
     'Empty state does not distinguish an empty incident from empty results'
 );
 
-$overviewSource = file_get_contents($root . '/4fueltg/ue_ltg.php');
+// Ohne Kommentare, siehe tests/php/lib/quelltext.php.
+$overviewSource = estab_test_ohne_kommentare(
+    (string) file_get_contents($root . '/4fueltg/ue_ltg.php')
+);
 $listSource = file_get_contents($root . '/4fach/liste.php');
 $mainSource = file_get_contents($root . '/4fach/mainindex.php');
 $toolsSource = file_get_contents($root . '/4fach/tools.php');
@@ -610,23 +687,62 @@ $withoutPhpComments = static function (string $source): string {
     return $code;
 };
 
+/*
+ * Ergebnisleiste und Blaetterer kommen seit der Umstellung aus dem
+ * Tabellenbauteil, nicht mehr aus zwei eigenen Ausgaben der
+ * Meldungsschicht. Die Uebersicht ruft sie deshalb nicht mehr auf -- sie
+ * uebergibt dem Bauteil ihre Auswahl ("fremd") samt Zaehlung, und das
+ * Bauteil zeichnet beides.
+ *
+ * Geprueft bleibt der Punkt, um den es dabei geht: Die Uebersicht baut
+ * nichts davon selbst. Traege sie wieder einen eigenen Blaetterer, stuenden
+ * auf einer Seite zwei -- und die Uneinheitlichkeit, wegen der umgestellt
+ * wurde, waere zurueck.
+ */
 $assert(
     str_contains($overviewSource, 'require_once __DIR__ . "/../app/message_list_ui.php"')
         && str_contains($overviewSource, 'data-estab-message-overview data-estab-message-list')
         && str_contains($overviewSource, 'estab_message_list_render_controls (')
-        && str_contains($overviewSource, 'estab_message_list_render_resultbar (')
-        && str_contains($overviewSource, 'estab_message_list_render_table (')
-        && str_contains($overviewSource, 'estab_message_list_render_pager ('),
+        && str_contains($overviewSource, '"nur_felder" => true')
+        && str_contains($overviewSource, 'estab_message_list_render_table ('),
     'Meldungsübersicht bypasses the shared message-list renderers'
 );
 $assert(
-    substr_count($overviewSource, 'estab_function_display_name (') >= 5
+    !str_contains($overviewSource, 'estab_message_list_render_resultbar (')
+        && !str_contains($overviewSource, 'estab_message_list_render_pager ('),
+    'Die Meldungsübersicht zeichnet Ergebnisleiste oder Blätterer wieder '
+        . 'selbst; das Tabellenbauteil bringt beide mit, und zwei nebeneinander '
+        . 'sind genau die Uneinheitlichkeit, die abgestellt werden sollte.'
+);
+/*
+ * In der Anzeige steht der Anzeigename, im Feld der gespeicherte
+ * Schluessel -- und beides an der richtigen Stelle.
+ *
+ * Geprueft wurde das einmal an der zweiten Vordruckfassung der
+ * Uebersicht. Die ist geloescht (rm_ein_vordruck); die Uebersicht baut
+ * jetzt den gepflegten Vordruck, und geprueft wird dort.
+ */
+$vordruckQuelle = (string) file_get_contents($root . '/4fach/4fachform.php')
+    . (string) file_get_contents($root . '/4fach/official_message_form.php');
+$assert(
+    // Beide Schreibweisen: Der aeltere Teil setzt ein Leerzeichen vor die
+    // Klammer, der neuere nicht. Gemeint ist dieselbe Funktion.
+    (substr_count($vordruckQuelle, 'estab_function_display_name (')
+        + substr_count($vordruckQuelle, 'estab_function_display_name(')) >= 5
         && str_contains(
-            $overviewSource,
+            $vordruckQuelle,
             'name=\"14_funktion\" value=\"".$this->safe_message_value'
         )
-        && str_contains($toolsSource, 'if ($column === "funktion")')
-        && str_contains($toolsSource, 'estab_function_display_name ($value)'),
+        && str_contains($overviewSource, '/../4fach/4fachform.php')
+        // Die Kontenliste kommt aus dem Tabellenbauteil; sie uebersetzt die
+        // Funktion beim Bauen der Zeile statt beim Ausgeben der Zelle. Die
+        // Aussage ist dieselbe: In der Liste steht der Anzeigename, nicht
+        // der gespeicherte Schluessel.
+        && str_contains($toolsSource, '"funktion" => estab_function_display_name (')
+        && !preg_match(
+            '~"funktion" => \(string\) \(\$user \["funktion"\]~',
+            $toolsSource
+        ),
     'overview detail or account list exposes the persisted function key'
 );
 $recipientInclude = strpos(
@@ -744,91 +860,73 @@ $assert(
         ) === 1,
     'Staff message rows do not show exactly one attachment badge'
 );
+/*
+ * Jede Betriebsliste zeigt an, dass eine Anlage haengt.
+ *
+ * Gezaehlt werden beide Schreibweisen. Ausgang und Disposition holen ihre
+ * Zeilen seit der Umstellung durch das Tabellenbauteil; dort heisst das
+ * Feld `$z ["anhang"]`, weil die Zeile schon aufbereitet ist. Die Zahl
+ * bleibt dieselbe -- nur die Schreibweise nicht, und eine Pruefung, die
+ * eine Zeichenkette zaehlt, darf das nicht mit einem Verlust verwechseln.
+ */
+$anlagenmarken = substr_count(
+    $listExecutableSource,
+    'estab_list_attachment_badge ($row ["12_anhang"] ?? null);'
+) + substr_count(
+    $listExecutableSource,
+    'estab_list_attachment_badge ($z ["anhang"] ?? null);'
+);
+/*
+ * Vier statt sieben: Die drei Nachweisungszweige in liste.php sind
+ * geloescht -- niemand rief sie auf (siehe ges_tabelle_einheitlich).
+ *
+ * Die Anlagenangabe ist damit nicht verschwunden, sondern umgezogen. Die
+ * lebende Nachweisung in app/nachweisung.php haengt sie an den Inhalt --
+ * als Text ("... . 2 Anlagen"), nicht als Marke: Sie liefert dem Bauteil
+ * reinen Text, damit dieses maskiert, auf zwei Zeilen kuerzt und den Rest
+ * aufklappt. Eine Seite, die fertiges Markup liefert, umgeht die
+ * Maskierung.
+ *
+ * Beide Haelften werden geprueft. Nur die erste hiesse: Die Nachweisung
+ * duerfte verschweigen, dass eine Anlage haengt -- und im Nachweis ist
+ * das keine Nebensache.
+ */
 $assert(
-    substr_count(
-        $listExecutableSource,
-        'estab_list_attachment_badge ($row ["12_anhang"] ?? null);'
-    ) === 7
-        && substr_count($listExecutableSource, '`12_anhang`') >= 7,
-    'An operational message list omits the attachment indicator'
+    $anlagenmarken === 4
+        && substr_count($listExecutableSource, '`12_anhang`') >= 4,
+    'An operational message list omits the attachment indicator ('
+        . $anlagenmarken . ' statt 4)'
+);
+$nachweisungQuelle = (string) file_get_contents($root . '/app/nachweisung.php');
+$assert(
+    str_contains($nachweisungQuelle, 'estab_message_list_attachment_tokens')
+        && str_contains($nachweisungQuelle, 'estab_message_list_attachment_label')
+        && str_contains($nachweisungQuelle, "\$zeile['12_anhang']"),
+    'Die Nachweisung verschweigt, dass eine Anlage haengt.'
 );
 
-$incomingTrackingStart = strrpos($listExecutableSource, 'case "FmNwE"');
-$outgoingTrackingStart = strrpos($listExecutableSource, 'case "FmNwA"');
-$combinedTrackingCaseStart = strrpos($listExecutableSource, 'case "FmNw"');
-$incomingTrackingCase = (
-    is_int($incomingTrackingStart)
-    && is_int($outgoingTrackingStart)
-    && $outgoingTrackingStart > $incomingTrackingStart
-) ? substr(
-    $listExecutableSource,
-    $incomingTrackingStart,
-    $outgoingTrackingStart - $incomingTrackingStart
-) : '';
-$outgoingTrackingCase = (
-    is_int($outgoingTrackingStart)
-    && is_int($combinedTrackingCaseStart)
-    && $combinedTrackingCaseStart > $outgoingTrackingStart
-) ? substr(
-    $listExecutableSource,
-    $outgoingTrackingStart,
-    $combinedTrackingCaseStart - $outgoingTrackingStart
-) : '';
-$combinedTrackingCase = is_int($combinedTrackingCaseStart)
-    ? substr($listExecutableSource, $combinedTrackingCaseStart)
-    : '';
-$combinedTrackingRowsStart = strpos(
-    $listExecutableSource,
-    'function estab_list_combined_tracking_rows ('
-);
-$combinedTrackingRowsEnd = $combinedTrackingRowsStart === false
-    ? false
-    : strpos(
-        $listExecutableSource,
-        'function estab_list_combined_tracking_data (',
-        $combinedTrackingRowsStart
-    );
-$combinedTrackingRowsSource = (
-    is_int($combinedTrackingRowsStart)
-    && is_int($combinedTrackingRowsEnd)
-    && $combinedTrackingRowsEnd > $combinedTrackingRowsStart
-) ? substr(
-    $listExecutableSource,
-    $combinedTrackingRowsStart,
-    $combinedTrackingRowsEnd - $combinedTrackingRowsStart
-) : '';
-$assert(
-    $incomingTrackingCase !== ''
-        && str_contains($incomingTrackingCase, 'm.`12_anhang`')
-        && substr_count(
-            $incomingTrackingCase,
-            'estab_list_attachment_badge ($row ["12_anhang"] ?? null);'
-        ) === 1,
-    'Incoming transmission log omits attachment data or its canonical badge'
-);
-$assert(
-    $outgoingTrackingCase !== ''
-        && str_contains($outgoingTrackingCase, 'm.`12_anhang`')
-        && substr_count(
-            $outgoingTrackingCase,
-            'estab_list_attachment_badge ($row ["12_anhang"] ?? null);'
-        ) === 1,
-    'Outgoing transmission log omits attachment data or its canonical badge'
-);
-$assert(
-    $combinedTrackingCase !== ''
-        && $combinedTrackingRowsSource !== ''
-        && str_contains($combinedTrackingRowsSource, 'm.`12_anhang`')
-        && substr_count(
-            $combinedTrackingCase,
-            'estab_list_attachment_badge ($row ["12_anhang"] ?? null);'
-        ) === 1,
-    'Combined transmission log omits attachment data or its canonical badge'
-);
+/*
+ * Hier standen drei Pruefungen an den Nachweisungszweigen von
+ * liste.php: dass jeder die Anlagendaten liest und genau eine
+ * Anlagenmarke setzt. Die Zweige sind geloescht -- niemand rief sie
+ * auf (siehe ges_tabelle_einheitlich, "kein Listenzweig ohne
+ * Aufrufer").
+ *
+ * Die Anforderung steht oben, an der lebenden Nachweisung: Sie liest
+ * 12_anhang und sagt am Inhalt, dass eine Anlage haengt.
+ */
 $secondCaseStart = strrpos($listExecutableSource, 'case "SIADMIN"');
+/*
+ * Der Abschnitt endete an 'case "FmNwE"'. Den gibt es nicht mehr.
+ *
+ * Als neues Ende dient das `break;` des Zweiges. Nicht `} // switch`:
+ * Der Quelltext ist hier ohne Kommentare, und die Marke waere darin
+ * nicht zu finden -- die Isolierung liefe bis zum Dateiende und die
+ * Pruefung saehe Dinge, die einem anderen Zweig gehoeren.
+ */
 $secondCaseEnd = $secondCaseStart === false
     ? false
-    : strpos($listExecutableSource, 'case "FmNwE"', $secondCaseStart);
+    : strpos($listExecutableSource, 'break;', $secondCaseStart);
 $secondCase = (
     is_int($secondCaseStart)
     && is_int($secondCaseEnd)
@@ -858,6 +956,45 @@ $assert(
         && !str_contains($secondCase, 'darstellungs_art')
         && !preg_match('/http-equiv=.*refresh/i', $secondCase),
     'Second-sighting result branch retains image buttons or auto-refresh'
+);
+
+/*
+ * Eine Bedienung, nicht zwei.
+ *
+ * Die zweite Sichtung und die Korrekturliste stehen im Nachrichtenteil.
+ * Dessen Steuerlauf bindet jede Anfrage mit Listenfeldern an POST, an ein
+ * Token und an die gewaehlte Ansicht -- deshalb bringen beide ihre
+ * Bedienung als POST-Formulare mit. Das Band des Tabellenbauteils spricht
+ * GET; stand es daneben, endete jede Suche darin mit "Aktion nicht
+ * erlaubt", und der Bediener sah nur eine abgewiesene Anfrage.
+ *
+ * Die Uebersicht der Uebungsleitung ist der andere Fall: Sie ist ganz auf
+ * GET gebaut und laesst die Baender des Bauteils stehen. Deshalb steht der
+ * Schalter am Aufruf und nicht im Bauteil.
+ */
+$listUiSource = (string) file_get_contents($root . '/app/message_list_ui.php');
+$korrekturStart = strrpos($listExecutableSource, 'case "KORREKTUR"');
+$korrekturEnde = $korrekturStart === false
+    ? false
+    : strpos($listExecutableSource, 'break;', $korrekturStart);
+$korrekturZweig = (
+    is_int($korrekturStart)
+    && is_int($korrekturEnde)
+    && $korrekturEnde > $korrekturStart
+) ? substr(
+    $listExecutableSource,
+    $korrekturStart,
+    $korrekturEnde - $korrekturStart
+) : '';
+$assert(
+    str_contains($secondCase, 'eigeneBedienung: true')
+        && $korrekturZweig !== ''
+        && str_contains($korrekturZweig, 'estab_message_list_render_table')
+        && str_contains($korrekturZweig, 'eigeneBedienung: true')
+        && str_contains($listUiSource, '\'baender\' => !$eigeneBedienung,'),
+    'Zweite Sichtung oder Korrekturliste zeichnet wieder das GET-Band des '
+        . 'Tabellenbauteils neben ihre eigene Bedienung; dessen Suche endet '
+        . 'im Nachrichtenteil mit "Aktion nicht erlaubt".'
 );
 
 $secondShellStart = strpos($mainSource, '2. SICHTUNG');
@@ -950,13 +1087,20 @@ $assert(
 );
 $assert(
     preg_match(
+        /*
+         * Die Luecken standen hier als Literale -- 0.5rem und 0.45rem. Seit
+         * die Masse aus Marken kommen, waere das eine Pruefung auf die
+         * Schreibweise. Geprueft wird die Sache: Blaetterer und Markenreihe
+         * legen sich auf eine Zeile, brechen um und halten Abstand aus der
+         * Skala.
+         */
         '/\.estab-message-list-pager > form\s*\{[^}]*display:\s*flex;'
-            . '[^}]*gap:\s*0\.5rem;[^}]*width:\s*100%;/s',
+            . '[^}]*gap:\s*var\(--abstand-\d\);[^}]*width:\s*100%;/s',
         $stylesheet
     ) === 1
         && preg_match(
             '/\.estab-message-list-active > div\s*\{[^}]*display:\s*flex;'
-                . '[^}]*flex-wrap:\s*wrap;[^}]*gap:\s*0\.45rem;/s',
+                . '[^}]*flex-wrap:\s*wrap;[^}]*gap:\s*var\(--abstand-\d\);/s',
             $stylesheet
         ) === 1
         && substr_count(

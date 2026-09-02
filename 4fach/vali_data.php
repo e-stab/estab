@@ -1,7 +1,9 @@
 <?php
 
 require_once __DIR__ . "/../app/message_transport.php";
+require_once __DIR__ . "/../app/permission_mode.php";
 require_once __DIR__ . "/../app/message_priority.php";
+require_once __DIR__ . "/../app/workflow.php";
 
 class vali_data_form {
 
@@ -56,6 +58,7 @@ class vali_data_form {
      $this->validate ["14_funktion"]   = false ;
      $this->validate ["15_quitdatum"]   = false ;
      $this->validate ["15_quitzeichen"]   = false ;
+     $this->validate ["16_empf"]   = false ;
      $this->validate ["17_vermerke"]   = false ;
    }
 
@@ -227,11 +230,17 @@ class vali_data_form {
         && preg_match ('//u', $value) === 1
         && preg_match ('/[\p{C}]/u', $value) !== 1;
     }
-    if (isset ($this->i_data ["06_befwegausw"])) {
+    if (array_key_exists ("06_befwegausw", $this->i_data)) {
+      // Feld 7 states a wish, so leaving it empty stays valid. An invented
+      // medium never reaches the SET column or the re-rendered form.
+      $desiredMedium = $this->i_data ["06_befwegausw"];
+      $desiredMediumValue = estab_message_medium_storage_value (
+        $desiredMedium
+      );
       $this->validate ["06_befwegausw"] =
-        estab_message_medium_storage_value (
-          $this->i_data ["06_befwegausw"]
-        ) !== null;
+        $desiredMediumValue !== null
+        || (is_string ($desiredMedium) && trim ($desiredMedium) === "");
+      $this->i_data ["06_befwegausw"] = $desiredMediumValue ?? "";
     }
     if (isset ($this->i_data ["fernmeldeplan_eintrag_id"])) {
       $routeId = $this->i_data ["fernmeldeplan_eintrag_id"];
@@ -351,6 +360,16 @@ class vali_data_form {
       $result = $this->datatest ( "kuerzel", $this->i_data ["15_quitzeichen"] ) ;
       $this->validate["15_quitzeichen"]  =  $result ["l_data"] ;
     }
+    if (array_key_exists ("16_empf", $this->i_data)) {
+      // Feld 19: Die rote Lage-/Dokumentationsdurchschrift setzt der Server
+      // bei jedem Eingang selbst. Als benannter Empfaenger zaehlt daher nur
+      // eine blaue Durchschrift, also ein Bearbeiter.
+      $this->validate ["16_empf"] =
+        is_string ($this->i_data ["16_empf"])
+        && estab_workflow_distribution_has_processor (
+          $this->i_data ["16_empf"]
+        );
+    }
     if (isset ( $this->i_data ["17_vermerke"] ))      {
       $this->validate["17_vermerke"]  = $this->datatest ( "text", $this->i_data ["17_vermerke"] ) ;
     }
@@ -370,6 +389,10 @@ class vali_data_form {
     switch ($task) {
       case "FM-Eingang":
       case "FM-Eingang_Anhang" :
+          // Die Abfassungszeit stand hier. Sie gehoert dem, der die
+          // Nachricht abgefasst hat; der Fernmelder nimmt sie auf. Das
+          // Feld ist ihm gesperrt -- eine Bedingung, die er nicht
+          // erfuellen kann, haette den Arbeitsschritt verschlossen.
           $zw = $this->validate["01_medium"] &&
                 $this->validate["01_datum"] &&
                 $this->validate["01_zeichen"] &&
@@ -378,8 +401,7 @@ class vali_data_form {
 	                $this->validate["10_anschrift"] &&
                 $this->validate["11_rufnummer"] &&
                 $this->validate["12_betreff"] &&
-	                $this->validate["12_inhalt"] &&
-                $this->validate["12_abfzeit"] ;
+	                $this->validate["12_inhalt"] ;
 
         break ;
       case "Stab_schreiben":
@@ -423,14 +445,28 @@ class vali_data_form {
                  $this->validate["13_abseinheit"]);
         break ;
       case "LdF-Ausgang":
+          // Mit veroeffentlichtem S6-Fernmeldeplan bleibt der Weg aus dem
+          // Plan Pflicht. Ohne Plan (Modus LOCKER, DV 1-101 Fuehrungsstelle
+          // ohne Stab) disponiert LdF das Mittel in Feld 1 und benennt den
+          // Befoerderungsweg in Feld 6 unmittelbar.
           $zw = ($this->validate["02_zeit"] &&
                  $this->validate["02_zeichen"] &&
                  $this->validate["05_gegenstelle"] &&
-                 $this->validate["fernmeldeplan_eintrag_id"]);
+                 ($this->validate["fernmeldeplan_eintrag_id"] ||
+                  (!estab_permission_telecom_plan_required () &&
+                   $this->validate["01_medium"] &&
+                   $this->validate["06_befweg"] &&
+                   trim ((string) ($this->i_data ["06_befweg"] ?? "")) !== "")));
         break ;
       case "Stab_sichten":
          $zw = ($this->validate["15_quitzeichen"] &&
                 $this->validate["15_quitdatum"] );
+         if (($this->i_data ["04_richtung"] ?? "") === "E") {
+           // Die Sichtung schliesst den Eingang ab. Ohne benannten
+           // Bearbeiter im Verteiler erreicht die Nachricht danach niemanden
+           // mehr, deshalb ist Feld 19 hier Pflicht.
+           $zw = $zw && $this->validate ["16_empf"];
+         }
       break ;
       case "FM-Admin": break ;
       case "SI-Admin": break ;

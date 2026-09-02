@@ -80,9 +80,6 @@ $extractFunction = static function (string $php, string $functionName): string {
 };
 
 $overviewUrlSource = $extractFunction($source, 'estab_overview_url');
-$rowStartSource = $extractFunction($source, 'estab_overview_row_start');
-$recipientCellSource = $extractFunction($source, 'estab_overview_recipient_cell');
-$emptyRowSource = $extractFunction($source, 'estab_overview_empty_row');
 $navigationSource = $extractFunction($source, 'listen_navi');
 $displayControlsSource = $extractFunction($source, 'darstellungs_art');
 $listSource = $extractFunction($source, 'createlist');
@@ -90,7 +87,16 @@ $tableSource = $extractFunction(
     $listUiSource,
     'estab_message_list_render_table'
 );
-$messageFormSource = $extractFunction($source, 'plot_form');
+/*
+ * Die Einzelansicht ist der gepflegte Nachrichtenvordruck.
+ *
+ * Hier stand einmal die zweite Fassung aus ue_ltg.php. Sie ist geloescht
+ * (rm_ein_vordruck); geprueft wird, was jetzt gezeichnet wird. Die
+ * Anforderungen darunter sind dieselben geblieben -- nur ihr Ort nicht.
+ */
+$messageFormSource = (string) file_get_contents(
+    $root . '/4fach/official_message_form.php'
+);
 $recipientMapSource = $extractFunction(
     $toolsSource,
     'estab_recipient_copy_map'
@@ -107,6 +113,24 @@ $recipientCellHtmlSource = $extractFunction(
     $toolsSource,
     'estab_recipient_copy_cell_html'
 );
+// Readable ink is resolved from the same colour table as the background, so
+// the cell helper cannot be exercised without its colour arithmetic.
+$colourChannelsSource = $extractFunction(
+    $toolsSource,
+    'estab_colour_channels'
+);
+$colourLuminanceSource = $extractFunction(
+    $toolsSource,
+    'estab_colour_relative_luminance'
+);
+$colourContrastSource = $extractFunction(
+    $toolsSource,
+    'estab_colour_contrast_ratio'
+);
+$recipientInkSource = $extractFunction(
+    $toolsSource,
+    'estab_recipient_copy_ink'
+);
 
 $assert(
     preg_match('/\$_SERVER\s*\[\s*["\']PHP_SELF["\']\s*\]/', $source) !== 1,
@@ -120,50 +144,64 @@ $assert(
 $assert(
     str_contains($source, 'estab_message_html ($url)')
         && str_contains($source, 'estab_message_html ($pageSizeUrl)')
-        && str_contains($messageFormSource, 'estab_message_html (estab_overview_url ())'),
+        && str_contains(
+            $messageFormSource,
+            'estab_message_html($conf_4f[\'MainURL\'])'
+        ),
     'overview links or form actions are emitted without HTML escaping'
 );
+$plotAnfang = strpos($messageFormSource, 'function plot_official_message_form');
+$plot = is_int($plotAnfang) ? substr($messageFormSource, $plotAnfang) : '';
 $assert(
-    substr_count($messageFormSource, 'echo "<body') === 1
-        && substr_count($messageFormSource, 'echo "</body>') === 1,
+    $plot !== ''
+        && substr_count($plot, '<body') === 1
+        && substr_count($plot, '</body>') === 1,
     'message detail view emits duplicate or unbalanced body elements'
 );
+/*
+ * Der TBB-Nachweis kommt aus der einsatzlokalen Nachweisnummer, nie aus
+ * `04_nummer`. Die ist eine technische Ablaufnummer; sie als Buchnummer zu
+ * zeigen hiesse, einen Nachweis zu behaupten, den es nicht gibt.
+ */
 $assert(
     str_contains(
         $messageFormSource,
-        'estab_message_list_tbb_evidence_label (array ('
+        '$value = $this->formdata[\'estab_ttb_lfd\'] ?? null;'
     )
+        && str_contains($messageFormSource, 'noch kein TBB-Nachweis')
+        /*
+         * `04_nummer` darf mitlaufen -- der Vordruck traegt sie als
+         * verborgenes Feld durch den Rueckweg. Verboten ist, sie zu
+         * *zeigen*: Die sichtbare Zelle nennt den Nachweistext, und die
+         * einzige Stelle, an der 04_nummer als Wert steht, ist ein
+         * type="hidden".
+         */
         && str_contains(
             $messageFormSource,
-            '"estab_tbb_book_lfd" => $this->formdata ["estab_ttb_lfd"] ?? null'
+            'estab_message_html($this->official_message_ttb_evidence_text())'
         )
-        && substr_count($messageFormSource, 'TBB-Nachweis') >= 2
-        && !str_contains(
+        && substr_count(
             $messageFormSource,
-            '$this->safe_message_value ("04_nummer")'
+            'safe_message_value(\'04_nummer\')'
+        ) === 1
+        && str_contains(
+            $messageFormSource,
+            '<input type="hidden" name="04_nummer" value="'
         ),
     'message detail view still presents the technical message number as TBB evidence'
 );
+/*
+ * Die Vorrangstufe ist eine benannte Gruppe aus Kaestchen. Ist sie nicht
+ * zu bearbeiten, steht der Wert in einem verborgenen Feld statt in
+ * anklickbaren Knoepfen -- lesbar, aber nicht aus Versehen aenderbar.
+ */
 $assert(
-    str_contains(
-        $messageFormSource,
-        'role=\"radiogroup\" aria-label=\"Vorrangstufe, schreibgeschützt\"'
-    )
-        && substr_count(
-            $messageFormSource,
-            'class=\"estab-official-box-choice\"'
-        ) >= 3
+    str_contains($messageFormSource, 'role="radiogroup" ')
+        && str_contains($messageFormSource, 'aria-label="Vorrangstufe" ')
+        && substr_count($messageFormSource, 'estab-official-box-choice') >= 3
         && str_contains(
             $messageFormSource,
-            'name=\"09_vorrangstufe\" value=\"'
-        )
-        && str_contains(
-            $messageFormSource,
-            'nur auf ausdrückliche Weisung einer berechtigten Stelle'
-        )
-        && str_contains(
-            $messageFormSource,
-            'Vorrangstufe nicht darstellbar.'
+            '<input type="hidden" name="09_vorrangstufe" value="'
         ),
     'message detail priority is not a square, labelled, read-only group'
 );
@@ -175,11 +213,22 @@ $assert(
     'overview controls contain an unbalanced or nested form'
 );
 
-$headerStart = strpos($tableSource, "echo '<thead><tr>'");
-$headerEnd = strpos($tableSource, "echo '</tr></thead><tbody>'");
-$bodyEnd = strpos($tableSource, "echo '</tbody></table></div>'");
+/*
+ * Die Uebersicht baut ihr Tabellenmarkup nicht mehr selbst -- es kommt aus
+ * dem Tabellenbauteil. Geprueft wird deshalb, dass sie es dort holt und
+ * dass die Reihenfolge im Bauteil steht: Kopf vor Rumpf. Das ist dieselbe
+ * Aussage an der Stelle, an der sie jetzt gilt.
+ */
+$bauteilSource = (string) file_get_contents(
+    __DIR__ . '/../../app/tabelle.php'
+);
+$headerStart = strpos($bauteilSource, "'<thead><tr>'");
+$headerEnd = strpos($bauteilSource, "'</thead><tbody>'");
+$bodyEnd = strpos($bauteilSource, "'</tbody></table></div>'");
 $assert(
-    $headerStart !== false
+    str_contains($tableSource, 'estab_tabelle_markup(')
+        && !str_contains($tableSource, '<thead>')
+        && $headerStart !== false
         && $headerEnd !== false
         && $bodyEnd !== false
         && $headerStart < $headerEnd
@@ -202,9 +251,13 @@ $assert(
         && str_contains($tableSource, '$openControl($row)'),
     'shared table bypasses priority, recipient or authenticated detail controls'
 );
+/*
+ * Das Schliessen der Tabelle liegt jetzt im Bauteil; die Uebersicht
+ * schliesst weiterhin ihr eigenes Dokument. Beides wird geprueft -- an der
+ * Stelle, an der es jeweils steht.
+ */
 $assert(
-    str_contains($tableSource, "echo '</td></tr>'")
-        && str_contains($tableSource, "echo '</tbody></table></div>'")
+    str_contains($bauteilSource, "'</tbody></table></div>'")
         && str_contains($listSource, '</body>\\n</html>'),
     'message table or list document is not closed'
 );
@@ -213,21 +266,23 @@ foreach ([
     'estab_recipient_copy_map',
     'estab_recipient_copy_colours',
     'estab_recipient_copy_background',
+    'estab_colour_channels',
+    'estab_colour_relative_luminance',
+    'estab_colour_contrast_ratio',
+    'estab_recipient_copy_ink',
     'estab_recipient_copy_cell_html',
     'estab_overview_url',
-    'estab_overview_row_start',
-    'estab_overview_recipient_cell',
-    'estab_overview_empty_row',
 ] as $functionName) {
     eval(match ($functionName) {
         'estab_recipient_copy_map' => $recipientMapSource,
         'estab_recipient_copy_colours' => $recipientColoursSource,
         'estab_recipient_copy_background' => $recipientBackgroundSource,
+        'estab_colour_channels' => $colourChannelsSource,
+        'estab_colour_relative_luminance' => $colourLuminanceSource,
+        'estab_colour_contrast_ratio' => $colourContrastSource,
+        'estab_recipient_copy_ink' => $recipientInkSource,
         'estab_recipient_copy_cell_html' => $recipientCellHtmlSource,
         'estab_overview_url' => $overviewUrlSource,
-        'estab_overview_row_start' => $rowStartSource,
-        'estab_overview_recipient_cell' => $recipientCellSource,
-        'estab_overview_empty_row' => $emptyRowSource,
     });
 }
 
@@ -308,49 +363,73 @@ $assert(
     ],
     'underscore recipient functions or multiple copies collapse in list parsing'
 );
-$normalRow = estab_overview_row_start(false)
-    . estab_overview_recipient_cell('', $colors)
-    . '</tr>';
-$priorityRow = estab_overview_row_start(true)
-    . estab_overview_recipient_cell('rt', $colors)
-    . '</tr>';
-$unknownColorRow = estab_overview_row_start(false)
-    . estab_overview_recipient_cell('unexpected', $colors)
-    . '</tr>';
-$multipleCopyRow = estab_overview_row_start(false)
-    . estab_overview_recipient_cell('bl,gn', $colors)
-    . '</tr>';
-$emptyRow = estab_overview_empty_row(9);
-
-$assertRowStructure($normalRow, 1, 'normal row');
-$assertRowStructure($priorityRow, 1, 'priority row');
-$assertRowStructure($unknownColorRow, 1, 'unknown recipient color row');
-$assertRowStructure($multipleCopyRow, 1, 'multiple-copy recipient row');
-$assertRowStructure($emptyRow, 1, 'empty result row');
+/*
+ * Die Zeilenbausteine der Uebersicht sind geloescht.
+ *
+ * estab_overview_row_start, estab_overview_recipient_cell und
+ * estab_overview_empty_row hatten seit der Umstellung der
+ * Meldungsuebersicht auf das Tabellenbauteil keinen Aufrufer mehr --
+ * nachgezaehlt: je ein Vorkommen, die Definition. Die erste trug dabei
+ * ein fest eingetragenes Farbpaar (Gelb auf Schwarz), das kein
+ * Kontrastwaechter erreichte.
+ *
+ * Was hier geprueft wurde, bleibt geprueft, nur an lebenden Stellen:
+ *
+ * - Die Durchschriftenzelle: estab_recipient_copy_cell_html steht
+ *   weiterhin in tools.php und wird hier unmittelbar aufgerufen. Ihre
+ *   Maskierung ist der Punkt: Eine Farbe aus der Einrichtung darf nicht
+ *   aus dem style-Attribut ausbrechen.
+ * - Die Hervorhebung dringlicher Zeilen: Sie kommt aus dem Bauteil
+ *   ueber die Zeilenmarke der Uebersicht.
+ * - Der Satz bei leerer Trefferliste: Das Bauteil setzt ihn ueber die
+ *   richtige Spaltenzahl. Die Zahl von Hand mitzufuehren war die
+ *   Fehlerquelle, gegen die sein Zerleger heute abbricht.
+ */
+$normaleZelle = estab_recipient_copy_cell_html('', $colors, '<p><img src="null.gif" alt="leer"></p>');
+$rotZelle = estab_recipient_copy_cell_html('rt', $colors, '<p><img src="null.gif" alt="leer"></p>');
+$unbekannteZelle = estab_recipient_copy_cell_html('unexpected', $colors, '<p><img src="null.gif" alt="leer"></p>');
+$mehrfachZelle = estab_recipient_copy_cell_html('bl,gn', $colors, '<p><img src="null.gif" alt="leer"></p>');
 $assert(
-    str_contains($normalRow, 'alt="leer"')
-        && str_contains($priorityRow, '>X</td>')
-        && str_contains($multipleCopyRow, 'linear-gradient(')
-        && str_contains($multipleCopyRow, 'Durchschriften: blau, grün')
-        && str_contains($unknownColorRow, 'alt="leer"')
-        && str_contains($emptyRow, 'colspan="9"'),
+    str_contains($normaleZelle, 'alt="leer"')
+        && str_contains($rotZelle, '>X</td>')
+        && str_contains($mehrfachZelle, 'linear-gradient(')
+        && str_contains($mehrfachZelle, 'Durchschriften: blau, grün')
+        && str_contains($unbekannteZelle, 'alt="leer"'),
     'representative message table branch content changed'
 );
 
-$escapedColorCell = estab_overview_recipient_cell(
+$escapedColorCell = estab_recipient_copy_cell_html(
     'rt',
-    ['rt' => 'red" onmouseover="alert(1)', 'gn' => 'green', 'bl' => 'blue']
+    ['rt' => 'red" onmouseover="alert(1)', 'gn' => 'green', 'bl' => 'blue'],
+    ''
 );
 $assert(
     str_contains($escapedColorCell, 'red&quot; onmouseover=&quot;alert(1)')
         && !str_contains($escapedColorCell, 'onmouseover="alert(1)"'),
     'recipient background escaped its style attribute'
 );
-try {
-    estab_overview_empty_row(0);
-    $assert(false, 'invalid empty-row column count accepted');
-} catch (InvalidArgumentException) {
-    $assert(true, 'invalid empty-row column count rejected');
-}
+
+/*
+ * Und die lebende Stelle: "Stab lesen" baut die Zeilenmarke aus der
+ * Durchschriftenfarbe der wirksamen Funktion. Auch dort darf eine Farbe
+ * aus der Einrichtung nicht aus dem Attribut ausbrechen.
+ */
+$listeQuelle = (string) file_get_contents($root . '/4fach/liste.php');
+$assert(
+    str_contains($listeQuelle, 'estab_message_html ($z ["grund"])')
+        && str_contains($listeQuelle, 'estab_message_html ($z ["tinte"])'),
+    'Stab lesen setzt die Durchschriftenfarbe ohne Maskierung ins '
+        . 'style-Attribut'
+);
+
+/*
+ * Und der Satz bei leerer Trefferliste kommt aus dem Bauteil.
+ */
+$uebersichtQuelle = (string) file_get_contents($root . '/app/message_list_ui.php');
+$assert(
+    str_contains($uebersichtQuelle, "'leer' =>")
+        || str_contains($uebersichtQuelle, '"leer" =>'),
+    'Die Meldungsuebersicht sagt bei leerer Trefferliste nichts.'
+);
 
 printf("Exercise leadership view security tests: OK (%d assertions)\n", $assertions);

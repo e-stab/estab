@@ -1,5 +1,8 @@
 <?php
 
+require_once __DIR__ . "/../app/legacy_mysql.php";
+require_once __DIR__ . "/../app/tabelle.php";
+
 if (!defined ("debug")) { define ("debug", false); }
 if (ob_get_level () === 0) { ob_start (); }
 /******************************************************************************\
@@ -115,12 +118,11 @@ class etb_liste {
 
     $db = mysql_connect($this->db_server,$this->db_user, $this->db_pw)
        or die ("[query_table] Konnte keine Verbindung zur Datenbank herstellen");
-    mysql_query('SET NAMES utf8mb4');
     $db_check = mysql_select_db ($this->db_name)
        or die ("[query_table] Auswahl der Datenbank fehlgeschlagen");
 
     $query_result = mysql_query ($this->sqlquery, $db) or
-       die("[query_table] 103-".mysql_error()." ".mysql_errno());
+       estab_legacy_database_failure ("etb_query_table", $query);
 
     $this->resultcount = mysql_num_rows($query_result);
 
@@ -274,9 +276,6 @@ if (debug == true){ echo "etb_tableexist==>"; var_dump($this->etb_titel_tbl); ec
     echo "<section class=\"estab-tool-panel\" aria-labelledby=\"etb-action-title\">\n";
     echo "<header class=\"estab-tool-panel-heading\">\n";
     echo "<h2 id=\"etb-action-title\">Neuer Tagebucheintrag</h2>\n";
-    echo "<p>Erfassen Sie den Vorgang in der unveränderlichen Reihenfolge des ";
-    echo "Buches und kennzeichnen Sie Aufgaben, Befehle, Erledigungen, ";
-    echo "Kräfteanforderungen oder besonders wichtige Einträge.</p>\n";
     echo "</header>\n";
     echo "<form class=\"estab-tool-actions\" action=\"".$action."\" method=\"get\">\n";
     echo "<button class=\"estab-button estab-button-primary\" ";
@@ -336,9 +335,7 @@ if (debug == true){ echo "etb_tableexist==>"; var_dump($this->etb_titel_tbl); ec
     echo "<header class=\"estab-tool-panel-heading\">\n";
     echo "<p class=\"estab-tool-eyebrow\">Schnelle Auswertung</p>\n";
     echo "<h2 id=\"etb-search-title\">ETB durchsuchen und filtern</h2>\n";
-    echo "<p>Eine leere Suche zeigt das vollständige Einsatztagebuch. ";
-    echo "Volltext, Art, Zuordnung und Bezug können einzeln oder gemeinsam verwendet ";
-    echo "werden.</p>\n</header>\n";
+    echo "</header>\n";
     echo "<form class=\"estab-tool-form\" method=\"get\" action=\"".$action."\">\n";
     echo "<div class=\"estab-tool-form-grid\">\n";
     echo "<div class=\"estab-tool-field estab-tool-field-wide\">\n";
@@ -395,9 +392,7 @@ if (debug == true){ echo "etb_tableexist==>"; var_dump($this->etb_titel_tbl); ec
     echo "<header class=\"estab-tool-panel-heading\">\n";
     echo "<p class=\"estab-tool-eyebrow\">Referenznachweis</p>\n";
     echo "<h2 id=\"etb-reference-title\">ETB-Referenzen auswerten</h2>\n";
-    echo "<p>Verfolgen Sie von einer lokalen ETB-Nummer aus alle ";
-    echo "referenzierenden Folgeeinträge oder den Bezugspfad zurück. ";
-    echo "Vorwärtssuchen zeigen auch verzweigte Zusammenhänge.</p>\n</header>\n";
+    echo "</header>\n";
     echo "<form class=\"estab-tool-form estab-tool-actions\" method=\"get\" ";
     echo "action=\"".$action."\">\n";
     echo "<div class=\"estab-tool-field\"><label for=\"etb-ref-start\">";
@@ -450,38 +445,70 @@ if (debug == true){ echo "etb_tableexist==>"; var_dump($this->etb_titel_tbl); ec
         echo "Weitere Verknüpfungen liegen außerhalb der gewählten Tiefe.";
         echo "</p>\n";
       }
-      echo "<div class=\"estab-tool-table-wrap estab-tool-table-responsive\">";
-      echo "<table class=\"estab-tool-table\"><thead><tr>";
-      echo "<th>Tiefe</th><th>ETB-Nr.</th><th>Verknüpft über</th>";
-      echo "<th>Ereigniszeit</th><th>Darstellung der Ereignisse</th>";
-      echo "<th>Bemerkung</th></tr></thead><tbody>\n";
+      /*
+       * Die Verknuepfungsauswertung kommt aus dem Tabellenbauteil.
+       *
+       * Sie zeigt, ueber welche Kette von Verweisen ein Ereignis mit einem
+       * anderen zusammenhaengt. Bei einer tiefen Auswertung sind das
+       * schnell dutzende Zeilen -- und sie waren weder sortierbar noch
+       * durchsuchbar.
+       */
+      $verknuepfungZeilen = array ();
       foreach ($rows as $row) {
         $via = (int) ($row ["estab_reference_via"] ?? 0);
         $rowReference = estab_logbook_stored_etb_reference_number (
           $row ["estab_reference"] ?? null
         );
-        echo "<tr><td>".(int) ($row ["estab_reference_depth"] ?? 0)."</td>";
-        echo "<td>".(int) ($row ["estab_book_lfd"] ?? 0)."</td><td>";
         if ($via > 0) {
-          echo "ETB-Nr. ".$via;
+          $ueber = "ETB-Nr. ".$via;
         } elseif ($rowReference !== null) {
-          echo "Referenz auf ETB-Nr. ".$rowReference;
+          $ueber = "Referenz auf ETB-Nr. ".$rowReference;
         } else {
-          echo "Start";
+          $ueber = "Start";
         }
-        echo "</td><td>".estab_auth_html ($this->konv_datetime_taktime (
-          (string) ($row ["estab_event_time"] ?? $row ["etb_time"] ?? "")
-        ))."</td><td>";
-        echo nl2br (estab_auth_html (estab_function_display_text (
-          (string) ($row ["etb_aktion"] ?? "")
-        )), false);
-        echo "</td><td>";
-        echo nl2br (estab_auth_html (estab_function_display_text (
-          (string) ($row ["etb_bemerk"] ?? "")
-        )), false);
-        echo "</td></tr>\n";
+        $verknuepfungZeilen[] = array (
+          "tiefe" => (string) (int) ($row ["estab_reference_depth"] ?? 0),
+          "nummer" => (string) (int) ($row ["estab_book_lfd"] ?? 0),
+          "ueber" => $ueber,
+          "zeit" => $this->konv_datetime_taktime (
+            (string) ($row ["estab_event_time"] ?? $row ["etb_time"] ?? "")
+          ),
+          "ereignis" => estab_function_display_text (
+            (string) ($row ["etb_aktion"] ?? "")
+          ),
+          "bemerkung" => estab_function_display_text (
+            (string) ($row ["etb_bemerk"] ?? "")
+          ),
+        );
       }
-      echo "</tbody></table></div>\n";
+      echo estab_tabelle_markup (array (
+        "id" => "etb-verknuepfung",
+        "beschriftung" => "Verknüpfte Ereignisse mit Tiefe, ETB-Nummer und "
+          . "Ereigniszeit",
+        "mindestbreite" => "52rem",
+        "spalten" => array (
+          array ("schluessel" => "tiefe", "kopf" => "Tiefe", "breite" => 7,
+            "sortierbar" => true, "suchbar" => false, "art" => "zahl"),
+          array ("schluessel" => "nummer", "kopf" => "ETB-Nr.", "breite" => 10,
+            "sortierbar" => true, "suchbar" => true, "art" => "zahl"),
+          array ("schluessel" => "ueber", "kopf" => "Verknüpft über",
+            "breite" => 18,
+            "sortierbar" => true, "suchbar" => true, "art" => "text"),
+          array ("schluessel" => "zeit", "kopf" => "Ereigniszeit",
+            "breite" => 14,
+            "sortierbar" => true, "suchbar" => true, "art" => "zeit"),
+          array ("schluessel" => "ereignis",
+            "kopf" => "Darstellung der Ereignisse", "breite" => 30,
+            "sortierbar" => false, "suchbar" => true, "art" => "text",
+            "klammern" => true),
+          array ("schluessel" => "bemerkung", "kopf" => "Bemerkung",
+            "breite" => 21,
+            "sortierbar" => false, "suchbar" => true, "art" => "text",
+            "klammern" => true),
+        ),
+        "zeilen" => $verknuepfungZeilen,
+        "leer" => "Keine Verknüpfung entspricht den gesetzten Filtern.",
+      ));
     }
     echo "</section>\n";
   }
@@ -513,9 +540,6 @@ var $task;
       ? "ETB-Eintrag erfassen"
       : "Ausgewählten ETB-Eintrag berichtigen";
     echo "</h2>\n";
-    echo "<p>Fachliche Ereigniszeit und Erfassungszeit werden getrennt und ";
-    echo "unveränderlich gespeichert. Fehler werden ausschließlich mit einem ";
-    echo "neuen Korrektureintrag berichtigt.</p>\n";
     echo "</header>\n";
     echo "<form class=\"estab-tool-form\" method=\"post\" action=\"".$action.
          "\" name=\"etbeintrag\" data-estab-dirty-guard ".
@@ -691,18 +715,19 @@ var $task;
       echo "<section class=\"estab-tool-panel\" aria-labelledby=\"etb-list-title\">\n";
       echo "<header class=\"estab-tool-panel-heading\">\n";
       echo "<h2 id=\"etb-list-title\">Einträge des aktiven Einsatzes</h2>\n";
-      echo "<p>Die neuesten Einträge stehen oben. Die laufende Nummer wird ";
-      echo "beim Speichern je Einsatz vergeben und bleibt auch bei einer ";
-      echo "rückdatierten Sachzeit unverändert.</p>\n</header>\n";
-      echo "<div class=\"estab-tool-table-wrap estab-tool-table-responsive\">\n";
-      echo "<table class=\"estab-tool-table estab-tool-logbook-table\">\n";
-      echo "<caption class=\"estab-visually-hidden\">";
-      echo "Einträge im Einsatztagebuch</caption>\n<thead>\n";
-
-      $this->headline ();
-      echo "</thead>\n<tbody>\n";
-
+      echo "</header>\n";
+      /*
+       * Das Einsatztagebuch kommt aus dem Tabellenbauteil (app/tabelle.php).
+       *
+       * Es war eine der Listen mit eigenem Markup -- und damit eine der
+       * Stellen, an denen "alle Tabellen gleich" nicht galt. Der Inhalt jeder
+       * Zelle bleibt Zeile fuer Zeile, wie er war; er wird
+       * zwischengespeichert und danach zerlegt. Gesiebt und sortiert wird
+       * ueber die Werte daneben, nicht ueber das Markup.
+       */
+      $etbZeilen = array ();
       foreach ( $daten as $line ){
+        ob_start ();
         echo "<tr>";
         echo "<td class=\"estab-tool-table-number\" data-label=\"Lfd.-Nr.\">\n";
         echo (int) ($line ["estab_book_lfd"] ?? $line ["etb_lfd-nr"]);
@@ -817,12 +842,66 @@ var $task;
           echo "<span aria-label=\"keine Aktion\">—</span>";
         }
         echo "</td>\n";
-        echo "</tr>\n";
+        $etbRoh = (string) ob_get_clean ();
+        $etbZellen = estab_tabelle_zeile_zerlegen ($etbRoh, 7);
+        $etbZeilen[] = array (
+          "nummer" => (string) (int) ($line ["estab_book_lfd"] ?? $line ["etb_lfd-nr"]),
+          "zeit" => $this->konv_datetime_taktime ($eventTime),
+          "art" => (string) $typeLabel,
+          "ereignis" => estab_function_display_text ((string) ($line ["etb_aktion"] ?? "")),
+          "bemerkung" => estab_function_display_text ((string) ($line ["etb_bemerk"] ?? "")),
+          "erfasst" => (string) ($line ["etb_benutzer"] ?? "")." · "
+            . estab_function_display_name ((string) ($line ["etb_funktion"] ?? ""))
+            . " · ".(string) ($line ["etb_kuerzel"] ?? ""),
+          "aktion" => "",
+          "z0" => $etbZellen [0], "z1" => $etbZellen [1],
+          "z2" => $etbZellen [2], "z3" => $etbZellen [3],
+          "z4" => $etbZellen [4], "z5" => $etbZellen [5],
+          "z6" => $etbZellen [6],
+        );
       }
 
-      echo "</tbody>\n";
-      echo "</table>\n";
-      echo "</div>\n</section>\n";
+      // Die Arten, die es in diesem Buch wirklich gibt.
+      $etbArten = array ();
+      foreach ($etbZeilen as $etbZeile) { $etbArten [$etbZeile ["art"]] = true; }
+      ksort ($etbArten);
+
+      // Kopf, Schluessel, Breite, Art, sortierbar, suchbar, filterbar.
+      $etbAufbau = array ();
+      foreach (array (
+        array ("Lfd.-Nr.", "nummer", 8, "zahl", true, true, false),
+        array ("Ereigniszeit", "zeit", 12, "zeit", true, true, false),
+        array ("Art", "art", 12, "text", true, true, true),
+        array ("Darstellung der Ereignisse", "ereignis", 26, "text", false, true, false),
+        array ("Bemerkung / Nachweise", "bemerkung", 20, "text", false, true, false),
+        array ("Erfasst", "erfasst", 14, "text", true, true, false),
+        array ("Aktion", "aktion", 8, "text", false, false, false),
+      ) as $etbNummer => $etbSpalte) {
+        $etbAufbau[] = array (
+          "schluessel" => $etbSpalte [1],
+          "kopf" => $etbSpalte [0],
+          "breite" => $etbSpalte [2],
+          "art" => $etbSpalte [3],
+          "sortierbar" => $etbSpalte [4],
+          "suchbar" => $etbSpalte [5],
+          "klammern" => in_array ($etbSpalte [1], array ("ereignis", "bemerkung"), true),
+          "filter" => $etbSpalte [6] ? array_keys ($etbArten) : array (),
+          "filtername" => $etbSpalte [6] ? "Alle Arten" : "",
+          "zelle" => static function (array $z) use ($etbNummer): string {
+            return $z ["z" . $etbNummer];
+          },
+        );
+      }
+
+      echo estab_tabelle_markup (array (
+        "id" => "etb",
+        "beschriftung" => "Einträge im Einsatztagebuch",
+        "mindestbreite" => "60rem",
+        "spalten" => $etbAufbau,
+        "zeilen" => $etbZeilen,
+        "leer" => "Kein Eintrag entspricht den gesetzten Filtern.",
+      ));
+      echo "</section>\n";
     } else {
       echo "<section class=\"estab-tool-panel\" aria-label=\"Keine ETB-Einträge\">\n";
       echo "<p class=\"estab-tool-empty\">Noch keine ETB-Einträge vorhanden.</p>\n";

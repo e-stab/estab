@@ -364,7 +364,7 @@ function estab_logbook_designated_writer_assignment(
     $incidentId = estab_incident_positive_id($incidentId);
     $functionClause = $kind === 'etb'
         ? "assignment.`funktion` IN ('ETB','S2')"
-        : "assignment.`funktion` = 'A/W'";
+        : "assignment.`funktion` = 'LdF'";
     $order = $kind === 'etb'
         ? "CASE assignment.`funktion` WHEN 'ETB' THEN 0 ELSE 1 END, "
         : '';
@@ -496,7 +496,7 @@ function estab_logbook_manual_writer_context(
         throw new EstabDvPermissionException(
             $kind === 'etb'
                 ? 'ETB-Einträge erfordern die Funktion ETB oder S2.'
-                : 'TBB-Einträge erfordern die Funktion Fernmelder.'
+                : 'TBB-Einträge erfordern die Funktion LdF.'
         );
     }
     return [
@@ -628,12 +628,24 @@ function estab_logbook_is_designated_writer(
             $identity,
             false
         );
+        /*
+         * Zwei Buecher, zwei Zustaendigkeiten -- und keine dritte.
+         *
+         * Das Einsatztagebuch fuehrt die Lage- und Dokumentationsfunktion
+         * oder der ausdruecklich bestimmte ETB-Fuehrer. Das Technische
+         * Betriebsbuch fuehrt der Leiter des Fernmeldebetriebs.
+         *
+         * Hier stand fuer das TBB der Annahme- und Weitergabeplatz. Das war
+         * eine Sperre gegen den Zustaendigen und eine Erlaubnis fuer den
+         * Unzustaendigen: Der LdF, der das Buch fuehrt, bekam es
+         * schreibgeschuetzt zu sehen.
+         */
         return $kind === 'etb'
             ? estab_auth_identity_has_function($selected, 'ETB', 'Stab')
                 || estab_auth_identity_has_function($selected, 'S2', 'Stab')
             : estab_auth_identity_has_function(
                 $selected,
-                'A/W',
+                'LdF',
                 'Fernmelder'
             );
     } catch (Throwable) {
@@ -1545,9 +1557,13 @@ function estab_logbook_insert_entry(
                     $connection,
                     $incidentId,
                     $identity,
+                    // Die Fachzustaendigkeit des Buches, nicht die des
+                    // Meldungsverkehrs: BEFOERDERUNG traegt der A/W, und der
+                    // fuehrt kein Buch. Das TBB fuehrt der LdF, und der traegt
+                    // FERNMELDEBETRIEB.
                     $kind === 'etb'
                         ? 'EINSATZTAGEBUCH'
-                        : 'BEFOERDERUNG'
+                        : 'FERNMELDEBETRIEB'
                 );
                 $writerContext = estab_logbook_manual_writer_context(
                     $connection,

@@ -8,7 +8,7 @@ SELECT
        AND table_name IN (
          'nv_nachrichten', 'nv_empfmtx', 'nv_empfmtx_standard', 'nv_benutzer',
          'nv_masterkatego', 'nv_masterkategolink', 'nv_protokoll',
-         'nv_anhang', 'nv_etb', 'nv_tbb', 'nv_ubb', 'nv_komplan',
+         'nv_anhang', 'nv_etb', 'nv_tbb', 'nv_ubb',
          'nv_bhp50', 'nv_etbtitel', 'nv_tbbtitel', 'nv_einsaetze',
          'nv_einsatz_status', 'nv_einsatz_ereignisse',
          'nv_nachrichten_ereignisse', 'nv_nachrichten_nachweiskopf',
@@ -18,8 +18,11 @@ SELECT
          'nv_dienstbesetzungen', 'nv_dienstuebergabe_anfragen',
          'nv_dienstuebergaben',
          'nv_fernmeldeplaene', 'nv_fernmeldeplan_eintraege',
-         'nv_melderauftraege', 'nv_selbstregistrierung'
-       )) = 32) AS `base_tables_ok`,
+         'nv_melderauftraege', 'nv_selbstregistrierung',
+         'nv_fernmeldewege', 'nv_fernmeldeweg_zuordnung',
+         'nv_fernmeldeplan_gegenstellen',
+         'nv_fernmeldeplan_nebenstellen'
+       )) = 35) AS `base_tables_ok`,
   ((SELECT COUNT(*)
       FROM information_schema.tables
      WHERE table_schema = DATABASE()
@@ -426,6 +429,69 @@ SELECT
          OR `fuehrungsstellenname` REGEXP '\\p{C}'
        )) = 0
    AND
+   (SELECT COUNT(*)
+      FROM information_schema.columns
+     WHERE table_schema = DATABASE()
+       AND table_name = 'nv_fernmeldeplan_eintraege'
+       AND column_name IN (
+         'funkart', 'band', 'relaisstelle', 'betriebsart',
+         'rufgruppe', 'anschlussart', 'datenart'
+       )
+       AND is_nullable = 'YES') = 7
+   AND
+   (SELECT COUNT(*)
+      FROM information_schema.columns
+     WHERE table_schema = DATABASE()
+       AND table_name = 'nv_fernmeldeplan_eintraege'
+       AND column_name IN ('bandlage', 'verkehrsform')
+       AND data_type = 'varchar') = 2
+   AND
+   (SELECT COUNT(*)
+      FROM information_schema.columns
+     WHERE table_schema = DATABASE()
+       AND table_name = 'nv_fernmeldeplan_eintraege'
+       AND column_name = 'erreichbarkeit'
+       AND data_type = 'varchar'
+       AND character_maximum_length = 255) = 1
+   AND
+   (SELECT COUNT(*)
+      FROM information_schema.columns
+     WHERE table_schema = DATABASE()
+       AND table_name = 'nv_fernmeldeplan_eintraege'
+       AND column_name IN ('stellenart', 'rufname')) = 1
+   AND
+   (SELECT COUNT(*)
+      FROM information_schema.referential_constraints
+     WHERE constraint_schema = DATABASE()
+       AND constraint_name = 'fk_fernmeldeweg_rueckfallebene'
+       AND delete_rule = 'RESTRICT') = 1
+   AND
+   (SELECT COUNT(*)
+      FROM information_schema.tables
+     WHERE table_schema = DATABASE()
+       AND table_name = 'nv_fernmeldeplan_gegenstellen'
+       AND table_comment =
+         'estab:migration:126-fernmeldeplan-gegenstellen:v1') = 1
+   AND
+   (SELECT COUNT(*)
+      FROM information_schema.triggers
+     WHERE trigger_schema = DATABASE()
+       AND trigger_name IN (
+         'estab_dv126_gegenstelle_insert',
+         'estab_dv126_gegenstelle_update',
+         'estab_dv126_gegenstelle_delete'
+       )) = 3
+   AND
+   (SELECT COUNT(*)
+      FROM information_schema.columns
+     WHERE table_schema = DATABASE()
+       AND table_name = 'nv_nachrichten'
+       AND column_name IN (
+         'estab_eingangsweg_bemerkung',
+         'estab_gegenstelle_id'
+       )
+       AND is_nullable = 'YES') = 2
+   AND
    (SELECT COUNT(*) FROM `nv_einsaetze`
      WHERE `fuehrungsstellenname_gesperrt` NOT IN (0, 1)
         OR (
@@ -474,9 +540,9 @@ SELECT
        AND is_nullable = 'YES'
        AND table_name IN (
          'nv_nachrichten', 'nv_anhang', 'nv_etb', 'nv_tbb', 'nv_ubb',
-         'nv_protokoll', 'nv_bhp50', 'nv_komplan',
+         'nv_protokoll', 'nv_bhp50',
          'nv_etbtitel', 'nv_tbbtitel'
-       )) = 10
+       )) = 9
    AND
    (SELECT COUNT(*)
       FROM information_schema.referential_constraints
@@ -491,10 +557,9 @@ SELECT
          'fk_ubb_einsatz',
          'fk_protokoll_einsatz',
          'fk_bhp50_einsatz',
-         'fk_komplan_einsatz',
          'fk_etbtitel_einsatz',
          'fk_tbbtitel_einsatz'
-       )) = 12)
+       )) = 11)
        AS `incident_schema_ok`,
   ((SELECT COUNT(*) FROM `nv_einsatz_status`
       WHERE `singleton_id` = 1 AND `revision` >= 0) = 1
@@ -514,9 +579,9 @@ SELECT
        AND event_manipulation IN ('INSERT', 'UPDATE', 'DELETE')
        AND event_object_table IN (
          'nv_nachrichten', 'nv_anhang', 'nv_etb', 'nv_tbb', 'nv_ubb',
-         'nv_bhp50', 'nv_komplan', 'nv_etbtitel', 'nv_tbbtitel'
+         'nv_bhp50', 'nv_etbtitel', 'nv_tbbtitel'
        )
-       AND trigger_name LIKE 'estab\\_%\\_einsatz') = 27
+       AND trigger_name LIKE 'estab\\_%\\_einsatz') = 24
    AND
    (SELECT COUNT(DISTINCT CONCAT(
         event_object_table, ':', event_manipulation
@@ -527,9 +592,9 @@ SELECT
        AND event_manipulation IN ('INSERT', 'UPDATE', 'DELETE')
        AND event_object_table IN (
          'nv_nachrichten', 'nv_anhang', 'nv_etb', 'nv_tbb', 'nv_ubb',
-         'nv_bhp50', 'nv_komplan', 'nv_etbtitel', 'nv_tbbtitel'
+         'nv_bhp50', 'nv_etbtitel', 'nv_tbbtitel'
        )
-       AND trigger_name LIKE 'estab\\_%\\_einsatz') = 27
+       AND trigger_name LIKE 'estab\\_%\\_einsatz') = 24
    AND
    (SELECT COUNT(*)
       FROM information_schema.triggers
@@ -553,7 +618,6 @@ SELECT
    + (SELECT COUNT(*) FROM `nv_tbb` WHERE `einsatz_id` IS NULL)
    + (SELECT COUNT(*) FROM `nv_ubb` WHERE `einsatz_id` IS NULL)
    + (SELECT COUNT(*) FROM `nv_bhp50` WHERE `einsatz_id` IS NULL)
-   + (SELECT COUNT(*) FROM `nv_komplan` WHERE `einsatz_id` IS NULL)
    + (SELECT COUNT(*) FROM `nv_etbtitel` WHERE `einsatz_id` IS NULL)
    + (SELECT COUNT(*) FROM `nv_tbbtitel` WHERE `einsatz_id` IS NULL) = 0)
        AS `incident_assignment_ok`,
@@ -651,6 +715,25 @@ SELECT
        )
        AND table_comment =
          'estab:migration:94-dv-organisational-controls:v1') = 10
+   AND
+   (SELECT COUNT(*)
+      FROM information_schema.tables
+     WHERE table_schema = DATABASE()
+       AND table_name IN (
+         'nv_fernmeldewege',
+         'nv_fernmeldeweg_zuordnung'
+       )
+       AND table_comment =
+         'estab:migration:122-fernmeldeweg-identitaet:v1') = 2
+   AND
+   (SELECT COUNT(*)
+      FROM `nv_fernmeldeplan_eintraege` AS entry
+     WHERE NOT EXISTS (
+       SELECT 1
+         FROM `nv_fernmeldeweg_zuordnung` AS mapping
+        WHERE mapping.`fernmeldeplan_eintrag_id`
+              = entry.`fernmeldeplan_eintrag_id`
+     )) = 0
    AND
    (SELECT COUNT(*)
       FROM information_schema.columns
@@ -1936,7 +2019,7 @@ SELECT
        BINARY 'STRICT', BINARY 'LOOSE'
      )) = 0)
        AS `incident_permission_mode_ok`,
-  ((SELECT COUNT(*) FROM `estab_schema_migrations`) = 25
+  ((SELECT COUNT(*) FROM `estab_schema_migrations`) = 38
    AND
    (SELECT COUNT(*)
       FROM `estab_schema_migrations`
@@ -1965,10 +2048,23 @@ SELECT
        '116-standard-categories.sql',
        '117-telecom-draft-discard.sql',
        '118-operational-authority.sql',
-       '119-inactive-messenger-dispatch.sql'
+       '119-inactive-messenger-dispatch.sql',
+       '120-single-function-relief.sql',
+       '121-transport-disposition-field-one.sql',
+       '122-fernmeldeweg-identitaet.sql',
+       '123-fernmeldeweg-funkart.sql',
+       '124-fernmeldeweg-erreichbarkeit.sql',
+       '125-fernmeldeweg-rueckfallebene.sql',
+       '126-fernmeldeplan-gegenstellen.sql',
+       '127-eingangsweg.sql',
+       '128-fernmeldeplan-kopfleiste.sql',
+       '129-gegenstelle-stellenart.sql',
+       '130-komplan-abbau.sql',
+       '131-fernmeldeplan-nebenstellen.sql',
+       '132-ttb-schreiber-ldf.sql'
      )
        AND `state` = 'applied'
-       AND `checksum` REGEXP BINARY '^[0-9a-f]{64}$') = 25)
+       AND `checksum` REGEXP BINARY '^[0-9a-f]{64}$') = 38)
        AS `schema_migrations_ok`;
 
 SELECT `table_name`, `engine`, `table_collation`

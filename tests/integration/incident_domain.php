@@ -1082,7 +1082,7 @@ try {
                     6,
                     'integration-test'
             )
-        ) instanceof EstabIncidentConflictException
+        ) instanceof EstabIncidentInputException
             && $queryValue(
                 $connection,
                 'SELECT `estab_permission_mode` FROM `nv_einsaetze`'
@@ -1104,7 +1104,7 @@ try {
                     . ' WHERE `einsatz_id` = ' . $looseId
                     . " AND `aktion` = 'berechtigung_geaendert'"
             ) === $looseModeAuditBeforeRejectedChange,
-        'LOOSE operational data did not freeze the mode inertly'
+        'unconfirmed growth from LOOSE to STRICT was not rejected inertly'
     );
     $sameLooseIncident = estab_incident_update_permission_mode(
         $connection,
@@ -1414,7 +1414,7 @@ try {
                 10,
                 'reverse-active-mode-integration-test'
             )
-        ) instanceof EstabIncidentConflictException
+        ) instanceof EstabIncidentInputException
             && $queryValue(
                 $connection,
                 'SELECT `estab_permission_mode` FROM `nv_einsaetze`'
@@ -1425,7 +1425,7 @@ try {
                 'SELECT `revision` FROM `nv_einsatz_status`'
                     . ' WHERE `singleton_id` = 1'
             ) === 10,
-        'opened books did not freeze the active LOOSE incident mode inertly'
+        'unconfirmed growth of the active LOOSE incident was not rejected inertly'
     );
     $permissionContextKey = ESTAB_PERMISSION_CONTEXT_KEY;
     unset($GLOBALS[$permissionContextKey]);

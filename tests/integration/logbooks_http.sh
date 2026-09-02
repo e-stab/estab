@@ -10,12 +10,19 @@ s2_password=${ESTAB_TEST_ETB_PASSWORD:-Logbook-Test-S2-20260723}
 aw_name=${ESTAB_TEST_TBB_NAME:-Logbook Integration A-W}
 aw_code=${ESTAB_TEST_TBB_CODE:-e2l001}
 aw_password=${ESTAB_TEST_TBB_PASSWORD:-Logbook-Test-AW-20260723}
+# Das Technische Betriebsbuch fuehrt der Leiter des Fernmeldebetriebs. Der
+# Annahme- und Weitergabeplatz traegt BEFOERDERUNG und liest es nur.
+ldf_name=${ESTAB_TEST_TBB_LDF_NAME:-Logbook Integration LdF}
+ldf_code=${ESTAB_TEST_TBB_LDF_CODE:-e2lldf}
+ldf_password=${ESTAB_TEST_TBB_LDF_PASSWORD:-Logbook-Test-LdF-20260828}
 
 work_dir=$(mktemp -d /tmp/estab-logbooks-http.XXXXXX)
 trap 'rm -rf -- "$work_dir"' EXIT HUP INT TERM
 body=$work_dir/body.html
+cockpit_body=$work_dir/cockpit.html
 s2_cookies=$work_dir/s2-cookies.txt
 aw_cookies=$work_dir/aw-cookies.txt
+ldf_cookies=$work_dir/ldf-cookies.txt
 
 request_status()
 {
@@ -65,17 +72,42 @@ assert_no_runtime_error()
     fi
 }
 
+# Die Sitzungsleiste steht seit dem Umbau der Huelle im Cockpit-Rahmen. Die
+# Seite bettet ihn ein -- genau einmal --, und wer angemeldet ist, wird dort
+# gelesen, wo die Leiste steht. Der Rahmen wird in eine eigene Datei geholt,
+# damit die Pruefungen danach weiter die Seite selbst befragen.
 assert_session_identity()
 {
-    expected_name=$1
-    expected_code=$2
-    expected_function=$3
-    expected_role=$4
-    bar_count=$(grep -o 'data-estab-session-bar' "$body" | wc -l | tr -d ' ')
+    identity_cookies=$1
+    expected_name=$2
+    expected_code=$3
+    expected_function=$4
+    expected_role=$5
+    frame_count=$(grep -o 'vorgaben.php?fragment=cockpit' "$body" \
+        | wc -l | tr -d ' ')
+    if [ "$frame_count" != 1 ]; then
+        printf 'Logbook HTTP: expected one cockpit frame, got %s\n' \
+            "$frame_count" >&2
+        sed -n '1,100p' "$body" >&2
+        exit 1
+    fi
+    identity_status=$(curl --silent --show-error --max-time 20 \
+        --connect-timeout 5 --cookie "$identity_cookies" \
+        --output "$cockpit_body" --write-out '%{http_code}' \
+        "$base_url/4fach/vorgaben.php?fragment=cockpit")
+    if [ "$identity_status" != 200 ]; then
+        printf 'Logbook HTTP: cockpit frame answered %s\n' \
+            "$identity_status" >&2
+        exit 1
+    fi
+    bar_count=$(grep -o 'data-estab-session-bar' "$cockpit_body" \
+        | wc -l | tr -d ' ')
     if [ "$bar_count" != 1 ]; then
         printf 'Logbook HTTP: expected one session bar, got %s\n' "$bar_count" >&2
         exit 1
     fi
+    # Der Abmeldeknopf traegt ein Sinnbild; seine Beschriftung steht als
+    # unsichtbarer Text darin und bleibt so vorlesbar.
     for marker in \
         "data-estab-user-name=\"$expected_name\"" \
         "data-estab-user-code=\"$expected_code\"" \
@@ -83,9 +115,14 @@ assert_session_identity()
         "data-estab-user-role=\"$expected_role\"" \
         'data-estab-logout-form' \
         'target="_top"' \
-        '>Abmelden</button>'
+        '>Abmelden</span></button>'
     do
-        assert_body "$marker"
+        if ! grep -Fq -- "$marker" "$cockpit_body"; then
+            printf 'Logbook HTTP: cockpit frame does not contain %s\n' \
+                "$marker" >&2
+            sed -n '1,100p' "$cockpit_body" >&2
+            exit 1
+        fi
     done
 }
 
@@ -133,6 +170,8 @@ login_user()
     assert_no_runtime_error
 }
 
+# Der Einsatzkopf steht wie die Sitzungsleiste im Cockpit-Rahmen. Die Seite
+# bettet ihn ein; gelesen wird er dort, wo er steht.
 assert_global_incident_header()
 {
     cookie_jar=$1
@@ -140,13 +179,33 @@ assert_global_incident_header()
 
     assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
         "$base_url/$endpoint"
-    assert_body 'data-estab-incident-state="active"'
-    assert_body 'data-estab-incident-code="CI-INTEGRATION"'
-    assert_body 'CI-INTEGRATION'
-    assert_body 'Automatisierter CI-Integrationstest'
-    assert_body 'CI-Führungsstelle Nord'
+    assert_body 'vorgaben.php?fragment=cockpit'
     assert_body_absent 'value="save_title"'
     assert_no_runtime_error
+
+    header_status=$(curl --silent --show-error --max-time 20 \
+        --connect-timeout 5 --cookie "$cookie_jar" \
+        --output "$cockpit_body" --write-out '%{http_code}' \
+        "$base_url/4fach/vorgaben.php?fragment=cockpit")
+    if [ "$header_status" != 200 ]; then
+        printf 'Logbook HTTP: cockpit frame answered %s\n' \
+            "$header_status" >&2
+        exit 1
+    fi
+    for marker in \
+        'data-estab-incident-state="active"' \
+        'data-estab-incident-code="CI-INTEGRATION"' \
+        'CI-INTEGRATION' \
+        'Automatisierter CI-Integrationstest' \
+        'CI-Führungsstelle Nord'
+    do
+        if ! grep -Fq -- "$marker" "$cockpit_body"; then
+            printf 'Logbook HTTP: cockpit frame does not contain %s\n' \
+                "$marker" >&2
+            sed -n '1,100p' "$cockpit_body" >&2
+            exit 1
+        fi
+    done
 }
 
 ensure_entry()
@@ -187,8 +246,8 @@ ensure_entry()
 # This HTTP suite deliberately reuses the explicitly LOOSE central incident.
 # Authentication with the fixed account function and an active incident are
 # mandatory before logbook data is rendered. Optional access shifts never
-# provide fachliche permissions. Only S2/ETB may write ETB and only A/W may
-# write TTB.
+# provide fachliche permissions. Only S2/ETB may write ETB and only the LdF
+# may write TTB.
 assert_status 303 "$base_url/stabetb/etb.php"
 assert_status 303 "$base_url/fmtbb/tbb.php"
 
@@ -196,6 +255,8 @@ sh "$repo_root/tests/integration/provision_user.sh" \
     "$s2_name" "$s2_code" S2 "$s2_password"
 sh "$repo_root/tests/integration/provision_user.sh" \
     "$aw_name" "$aw_code" A/W "$aw_password"
+sh "$repo_root/tests/integration/provision_user.sh" \
+    "$ldf_name" "$ldf_code" LdF "$ldf_password"
 login_user "$s2_cookies" "$s2_name" "$s2_code" S2 "$s2_password"
 assert_status 200 --cookie "$s2_cookies" "$base_url/stabetb/etb.php"
 assert_no_runtime_error
@@ -204,13 +265,17 @@ login_user "$aw_cookies" "$aw_name" "$aw_code" A/W "$aw_password"
 assert_status 200 --cookie "$aw_cookies" "$base_url/fmtbb/tbb.php"
 assert_no_runtime_error
 
+login_user "$ldf_cookies" "$ldf_name" "$ldf_code" LdF "$ldf_password"
+assert_status 200 --cookie "$ldf_cookies" "$base_url/fmtbb/tbb.php"
+assert_no_runtime_error
+
 assert_status 200 --cookie "$aw_cookies" "$base_url/stabetb/etb.php"
-assert_session_identity "$aw_name" "$aw_code" A/W Fernmelder
+assert_session_identity "$aw_cookies" "$aw_name" "$aw_code" A/W Fernmelder
 assert_body_absent 'value="save_title"'
 assert_body_absent 'value="save_entry"'
 assert_no_runtime_error
 assert_status 200 --cookie "$s2_cookies" "$base_url/fmtbb/tbb.php"
-assert_session_identity "$s2_name" "$s2_code" S2 Stab
+assert_session_identity "$s2_cookies" "$s2_name" "$s2_code" S2 Stab
 assert_body_absent 'value="save_title"'
 assert_body_absent 'value="save_entry"'
 assert_no_runtime_error
@@ -229,7 +294,7 @@ assert_body 'Dieses Konto darf im aktuellen Einsatz keine ETB-Einträge schreibe
 assert_body 'data-estab-error-recovery'
 assert_body_absent 'cross-role-etb-must-not-be-written'
 assert_body_absent 'value="save_entry"'
-assert_session_identity "$aw_name" "$aw_code" A/W Fernmelder
+assert_session_identity "$aw_cookies" "$aw_name" "$aw_code" A/W Fernmelder
 assert_status 403 \
     --cookie "$s2_cookies" --request POST \
     --data-urlencode 'logbook_action=save_entry' \
@@ -243,7 +308,19 @@ assert_body 'Dieses Konto darf im aktuellen Einsatz keine TTB-Einträge schreibe
 assert_body 'data-estab-error-recovery'
 assert_body_absent 'cross-role-tbb-must-not-be-written'
 assert_body_absent 'value="save_entry"'
-assert_session_identity "$s2_name" "$s2_code" S2 Stab
+assert_session_identity "$s2_cookies" "$s2_name" "$s2_code" S2 Stab
+# Auch der Annahme- und Weitergabeplatz schreibt das Buch des Fernmelde-
+# betriebs nicht: Er traegt BEFOERDERUNG, nicht FERNMELDEBETRIEB.
+assert_status 403 \
+    --cookie "$aw_cookies" --request POST \
+    --data-urlencode 'logbook_action=save_entry' \
+    --data-urlencode 'event=cross-role-tbb-aw-must-not-be-written' \
+    "$base_url/fmtbb/tbb.php"
+assert_body 'data-estab-error-status="403"'
+assert_body 'data-estab-error-context="technical-log"'
+assert_body 'Dieses Konto darf im aktuellen Einsatz keine TTB-Einträge schreiben.'
+assert_body_absent 'cross-role-tbb-aw-must-not-be-written'
+assert_body_absent 'value="save_entry"'
 
 # A write without a session-bound token remains forbidden even for the writer.
 assert_status 403 \
@@ -259,17 +336,23 @@ assert_status 403 \
 
 # Historic GET write parameters are now inert. On a fresh stack these requests
 # must leave the title tables empty; on a rerun they must not alter the title.
+# The table component carries the page's own query string into its search band
+# and its sort links, so the value is echoed back in that very response. What
+# must not happen is a write -- the plain page, asked without those parameters,
+# may not know the value.
 assert_status 200 --cookie "$s2_cookies" \
     "$base_url/stabetb/etb.php?absenden_x=1&Einsatzdaten=erfassen&einsatz=GET_WRITE_MUST_FAIL&ort=GET"
+assert_status 200 --cookie "$s2_cookies" "$base_url/stabetb/etb.php"
 assert_body_absent 'GET_WRITE_MUST_FAIL'
 assert_status 200 --cookie "$aw_cookies" \
     "$base_url/fmtbb/tbb.php?absenden_x=1&Einsatzdaten=erfassen&einsatz=GET_WRITE_MUST_FAIL&ort=GET"
+assert_status 200 --cookie "$aw_cookies" "$base_url/fmtbb/tbb.php"
 assert_body_absent 'GET_WRITE_MUST_FAIL'
 
 assert_global_incident_header "$s2_cookies" stabetb/etb.php
 assert_global_incident_header "$aw_cookies" fmtbb/tbb.php
 
-assert_status 200 --cookie "$aw_cookies" --cookie-jar "$aw_cookies" \
+assert_status 200 --cookie "$ldf_cookies" --cookie-jar "$ldf_cookies" \
     "$base_url/fmtbb/tbb.php?tbb_eintrag_x=1"
 assert_body 'das TBB auch ohne Anlagen in'
 assert_body 'Grundzügen verständlich bleibt.'
@@ -278,7 +361,7 @@ assert_no_runtime_error
 reserved_message_marker="LOGBOOK_TBB_RESERVED_MESSAGE_$$"
 csrf_token=$(csrf_from_body)
 assert_status 422 \
-    --cookie "$aw_cookies" --cookie-jar "$aw_cookies" \
+    --cookie "$ldf_cookies" --cookie-jar "$ldf_cookies" \
     --request POST \
     --data-urlencode "csrf_token=$csrf_token" \
     --data-urlencode 'logbook_action=save_entry' \
@@ -286,7 +369,7 @@ assert_status 422 \
     --data-urlencode "message_route=$reserved_message_marker" \
     "$base_url/fmtbb/tbb.php"
 assert_body 'Der TBB-Eintrag ist ungültig'
-assert_status 200 --cookie "$aw_cookies" "$base_url/fmtbb/tbb.php"
+assert_status 200 --cookie "$ldf_cookies" "$base_url/fmtbb/tbb.php"
 assert_body_absent "$reserved_message_marker"
 assert_no_runtime_error
 
@@ -311,20 +394,20 @@ ensure_entry \
     '&lt;script&gt;alert(&quot;etb&quot;)&lt;/script&gt;' \
     '<script>alert("etb")</script>'
 ensure_entry \
-    "$aw_cookies" fmtbb/tbb.php tbb_eintrag_x=1 \
+    "$ldf_cookies" fmtbb/tbb.php tbb_eintrag_x=1 \
     'LOGBOOK_TBB_ENTRY_E2E' \
     '&lt;script&gt;alert(&quot;tbb&quot;)&lt;/script&gt;' \
     '<script>alert("tbb")</script>'
 
 # Cross-role readers see the persisted content but never a write form.
 assert_status 200 --cookie "$aw_cookies" "$base_url/stabetb/etb.php"
-assert_session_identity "$aw_name" "$aw_code" A/W Fernmelder
+assert_session_identity "$aw_cookies" "$aw_name" "$aw_code" A/W Fernmelder
 assert_body 'LOGBOOK_ETB_ENTRY_E2E'
 assert_body_absent 'value="save_title"'
 assert_body_absent 'value="save_entry"'
 assert_no_runtime_error
 assert_status 200 --cookie "$s2_cookies" "$base_url/fmtbb/tbb.php"
-assert_session_identity "$s2_name" "$s2_code" S2 Stab
+assert_session_identity "$s2_cookies" "$s2_name" "$s2_code" S2 Stab
 assert_body 'LOGBOOK_TBB_ENTRY_E2E'
 assert_body_absent 'value="save_title"'
 assert_body_absent 'value="save_entry"'

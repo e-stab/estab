@@ -11,6 +11,7 @@ $assert = static function (bool $condition, string $message) use (&$assertions):
 };
 
 $root = dirname(__DIR__, 2);
+require_once __DIR__ . '/lib/quelltext.php';
 $stylesheet = file_get_contents($root . '/estab-ui.css');
 $assert(is_string($stylesheet), 'shared stylesheet is unreadable');
 
@@ -127,12 +128,23 @@ $assert(
             $stylesheet,
             '.estab-tool-table-responsive .estab-tool-table td::before'
         )
-        && str_contains($stylesheet, 'content: attr(data-label)')
-        && str_contains(
-            $stylesheet,
-            '.estab-tool-action-stack input:focus-visible'
-        ),
-    'tool pages lack responsive table cards or visible keyboard focus'
+        && str_contains($stylesheet, 'content: attr(data-label)'),
+    'tool pages lack responsive table cards'
+);
+/*
+ * Der sichtbare Tastaturfokus wurde hier frueher an einer einzelnen Regel
+ * festgemacht -- `.estab-tool-action-stack input:focus-visible`. Das war
+ * richtig, solange jedes Bauteil seinen eigenen Ring mitbrachte, und ist es
+ * nicht mehr: Die Werkzeugseiten bekommen ihn jetzt aus der einen
+ * allgemeinen Regel, die fuer die ganze Anwendung gilt. Eine Pruefung auf
+ * die alte Stelle wuerde verlangen, dass der Ring dreimal dasteht.
+ *
+ * Dass es diese eine Regel gibt und dass sie traegt, prueft
+ * tests/php/ges_fokus.php.
+ */
+$assert(
+    str_contains($stylesheet, ':focus-visible {'),
+    'the shared stylesheet no longer states a keyboard focus ring'
 );
 
 $incident = $sources['4fadm/incidents.php'];
@@ -182,11 +194,32 @@ $assert(
 );
 
 $users = $sources['4fadm/users.php'];
+/*
+ * Die Benutzertabelle kommt aus dem Tabellenbauteil. Sie schreibt deshalb
+ * kein eigenes Tabellenmarkup mehr -- und darf es auch nicht, sonst liefe
+ * sie wieder auseinander. Beschriftung und Zellenbezeichnungen, an denen
+ * ein Vorleseprogramm sich orientiert, kommen von dort; hier steht, dass
+ * diese Tabelle ihre Beschriftung mitgibt.
+ */
+$tabellenbauteil = (string) file_get_contents(
+    __DIR__ . '/../../app/tabelle.php'
+);
 $assert(
-    substr_count($users, '<table') === 1
-        && substr_count($users, '</table>') === 1
-        && str_contains($users, '<caption class="estab-visually-hidden">')
-        && substr_count($users, 'data-label=') >= 5
+    substr_count($users, '<table') === 0
+        && str_contains($users, "'beschriftung' => 'Benutzerkonten mit Status und '")
+        && str_contains(
+            $tabellenbauteil,
+            '<caption class="estab-visually-hidden">'
+        )
+        /*
+         * Die Marke der Zelle steht in einer Variablen, seit eine Spalte
+         * ihre Zeile benennen kann: Sie wird dann zu <th scope="row">,
+         * damit ein Vorleseprogramm sagt, um welche Zeile es geht. Die
+         * Bezeichnung, an der die Kartenansicht sich orientiert, traegt
+         * jede Zelle weiterhin.
+         */
+        && str_contains($tabellenbauteil, "' data-label=\"'")
+        && str_contains($tabellenbauteil, "\$marke = \$spalte['zeilenkopf'] ? 'th' : 'td';")
         && substr_count($users, 'autocomplete="new-password"') === 4
         && str_contains($users, 'aria-labelledby="estab-create-user-title"')
         && str_contains($users, 'name="admin_action" value="create"')
@@ -217,17 +250,20 @@ $assert(
 
 $forms = $sources['4fach/vordrucke.php'];
 $assert(
-    substr_count($forms, '<table') === 1
-        && substr_count($forms, '</table>') === 1
-        && str_contains($forms, '<caption class="estab-visually-hidden">')
-        && substr_count($forms, 'data-label=') >= 4
-        && str_contains($forms, 'estab-tool-table-number')
+    substr_count($forms, '<table') === 0
+        // Auch die Vordruckliste kommt aus dem Tabellenbauteil: kein
+        // eigenes Tabellenmarkup mehr, Beschriftung und
+        // Zellenbezeichnungen von dort. Was der Seite bleibt, ist ihr
+        // Verweis -- und der muss sicher und angekuendigt sein.
+        && substr_count($forms, '</table>') === 0
+        && str_contains($forms, "'beschriftung' => 'Generierte Nachrichtenvordrucke")
         && str_contains($forms, 'rel="noopener"')
         && str_contains($forms, 'target="_blank"')
         && str_contains($forms, '(öffnet in neuem Tab)')
-        && str_contains($forms, '<code><?= estab_auth_html($file[\'name\']) ?>')
-        && str_contains($forms, '<th scope="col">Aktuelles PDF</th>')
-        && str_contains($forms, '<th scope="col">Archivdatei geändert</th>')
+        && str_contains($forms, '<small>Dateiname: <code>')
+        && str_contains($forms, "estab_auth_html(\$z['datei']) . '</code>")
+        && str_contains($forms, "'kopf' => 'Aktuelles PDF'")
+        && str_contains($forms, "'kopf' => 'Archivdatei geändert'")
         && str_contains(
             $stylesheet,
             ".estab-tool-main code {\n    overflow-wrap: anywhere;"
@@ -248,10 +284,24 @@ $assert(
 );
 
 $systemStatus = $additionalSources['4fadm/system_status.php'];
+/*
+ * Die vier Bereitschaftstafeln kommen aus dem Tabellenbauteil.
+ *
+ * Der eigene Rahmen und die verborgene Bildunterschrift standen einmal
+ * als Zeichenkette hier; beides bringt das Bauteil mit. Gezaehlt werden
+ * jetzt die Tafeln selbst -- vier, so viele wie zuvor.
+ *
+ * Ohne Suchband und Blaetterer: Eine Volltextsuche ueber vier feste
+ * Zeilen waere kein Gewinn, sondern Beiwerk, das die Tafel hoeher macht
+ * als ihren Inhalt. Genau dafuer gibt es `baender => false`, und dass es
+ * gesetzt ist, wird hier festgehalten -- sonst waechst die Diagnoseseite
+ * beim naechsten Anfassen um vier Suchfelder, die niemand braucht.
+ */
 $assert(
     str_contains($systemStatus, 'data-estab-readiness=')
-        && substr_count($systemStatus, 'class="estab-tool-table-wrap') === 4
-        && substr_count($systemStatus, '<caption class="estab-visually-hidden">') === 4
+        // Vier Aufrufe, nicht fuenf Vorkommen: Die Definition zaehlt nicht mit.
+        && substr_count($systemStatus, 'echo system_status_tafel(') === 4
+        && str_contains($systemStatus, "'baender' => false")
         && str_contains($systemStatus, 'estab-tool-badge-success')
         && str_contains($systemStatus, 'estab-tool-badge-danger'),
     'system status does not expose responsive, accessible readiness groups'
@@ -262,9 +312,23 @@ $assert(
     str_contains($categories, 'aria-labelledby="category-list-title"')
         && str_contains($categories, 'for="category-name"')
         && str_contains($categories, 'for="category-description"')
-        && str_contains($categories, 'data-label="Aktionen"')
         && str_contains($categories, 'estab-tool-feedback-success'),
     'category manager lacks labelled controls or responsive status feedback'
+);
+/*
+ * Die Kartenbeschriftung `data-label` stand einmal als Zeichenkette in
+ * dieser Datei. Sie kommt jetzt aus dem Tabellenbauteil, das sie aus der
+ * Spaltenueberschrift bildet -- geprueft in message_list_ui_security.
+ *
+ * Hier bleibt der Teil, den diese Datei besitzt: dass es die Spalte
+ * ueberhaupt gibt und wie sie heisst. Unter 30rem wird die Tabelle zu
+ * Karten, und eine Karte ohne Beschriftungen ist eine Reihe nackter
+ * Werte.
+ */
+$assert(
+    str_contains($categories, "'kopf' => 'Aktionen'")
+        && str_contains($categories, "'schmal' => true"),
+    'category manager lost its action column or its card breakpoint'
 );
 
 $problemReport = $additionalSources['4fach/info.php'];
@@ -281,10 +345,19 @@ foreach ([
     'fmtbb/tbb.php' => ['ttb', 'TBB-Eintrag speichern', 'ttb-entry-type'],
 ] as $relativePath => [$kind, $saveLabel, $eventId]) {
     $logbook = str_replace('\\"', '"', $additionalSources[$relativePath]);
+    /*
+     * Beide Buecher kommen aus dem Tabellenbauteil. Der Kartenumbruch fuer
+     * schmale Fenster kommt von dort -- die Seiten brauchen ihn nicht mehr
+     * selbst mitzubringen und duerfen ihn auch nicht, sonst laufen sie
+     * wieder auseinander.
+     */
     $assert(
         str_contains($logbook, 'data-estab-logbook="' . $kind . '"')
-            && str_contains($logbook, 'class="estab-tool-table')
-            && str_contains($logbook, 'estab-tool-table-responsive')
+            && str_contains($logbook, 'estab_tabelle_markup (')
+            && str_contains(
+                (string) file_get_contents(__DIR__ . '/../../estab-ui.css'),
+                '@container (max-width: 48rem)'
+            )
             && str_contains($logbook, 'for="' . $eventId . '"')
             && str_contains($logbook, $saveLabel)
             && str_contains($logbook, 'data-estab-no-active-incident')
@@ -312,10 +385,12 @@ $tracking = str_replace(
     '"',
     $additionalSources['4fach/nachwea.php']
 );
+// Ohne Kommentare: Ein erklaerender Satz, der einen Pfad nennt, ist keine
+// Anweisung, die ihn hereinzieht. Beim Proben blieb die Pruefung sonst still.
 $overview = str_replace(
     '\\"',
     '"',
-    $additionalSources['4fueltg/ue_ltg.php']
+    estab_test_ohne_kommentare($additionalSources['4fueltg/ue_ltg.php'])
 );
 $assert(
     str_contains($tracking, 'data-estab-tracking-overview')
@@ -323,12 +398,24 @@ $assert(
         && str_contains($tracking, 'estab_session_ui_abort (')
         && !str_contains($tracking, 'Content-Type: text/plain')
         && str_contains($overview, 'data-estab-message-overview')
-        && str_contains($overview, 'data-estab-message-detail')
         && str_contains($overview, 'data-estab-message-list')
         && str_contains($overview, 'estab_message_list_render_controls')
         && str_contains($overview, 'estab_session_ui_abort (')
         && !str_contains($overview, 'Content-Type: text/plain')
-        && substr_count($overview, 'estab-tool-legacy-content') >= 1,
+        /*
+         * Die Einzelansicht der Uebersicht hatte hier zwei eigene Marken:
+         * `data-estab-message-detail` und die Huelle
+         * `estab-tool-legacy-content`. Beide gehoerten zu einer zweiten
+         * Fassung des Nachrichtenvordrucks, die geloescht ist
+         * (rm_ein_vordruck). Die Einzelansicht ist jetzt der gepflegte
+         * Vordruck; er bringt seine Huelle selbst mit.
+         *
+         * An ihre Stelle tritt der Nachweis, dass die Uebersicht ihn
+         * wirklich baut. Ersatzlos streichen hiesse: Die Uebersicht duerfte
+         * ihre Einzelansicht wieder selbst zeichnen, und niemand saehe es.
+         */
+        && str_contains($overview, '/../4fach/4fachform.php')
+        && str_contains($overview, 'new nachrichten4fach ('),
     'reporting surfaces or their access errors escape the shared page shell'
 );
 

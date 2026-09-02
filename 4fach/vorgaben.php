@@ -34,18 +34,42 @@ foreach (array_keys($_GET) as $requestKey) {
         exit;
     }
 }
+/*
+ * Drei Fragmente. "status" ist das kleine, das sich im Takt selbst erneuert;
+ * "cockpit" ist die rechte Spalte der Huelle; "aktionen" sind die
+ * Arbeitsschritte, die unten in der Menuespalte stehen.
+ *
+ * Die Arbeitsschritte kommen aus dieser Datei und nicht aus der Huelle,
+ * obwohl sie links erscheinen: Wer sie aufbauen will, braucht den
+ * aufgeloesten Einsatzbezug, die wirksamen Funktionen und die
+ * Korrekturzaehler -- alles, was hier ohnehin schon steht. Dasselbe in der
+ * Huelle noch einmal zu ermitteln waere eine zweite Verbindung zur Datenbank
+ * je Seitenaufbau und eine zweite Stelle, an der dieselbe Regel gepflegt
+ * werden muesste.
+ *
+ * Kein Fragment enthaelt ein Menue -- das steht links in der Huelle und
+ * gehoert dorthin, damit es auf jeder Seite an derselben Stelle steht.
+ */
+$cockpitFragment = false;
+$actionsFragment = false;
 if (array_key_exists('fragment', $_GET)) {
     if (
         count($_GET) !== 1
         || !is_string($_GET['fragment'])
-        || $_GET['fragment'] !== 'status'
+        || !in_array(
+            $_GET['fragment'],
+            ['status', 'cockpit', 'aktionen'],
+            true
+        )
     ) {
         http_response_code(400);
         header('Content-Type: text/plain; charset=UTF-8');
         echo 'Ungültige Statusauswahl.';
         exit;
     }
-    $statusFragment = true;
+    $statusFragment = $_GET['fragment'] === 'status';
+    $cockpitFragment = $_GET['fragment'] === 'cockpit';
+    $actionsFragment = $_GET['fragment'] === 'aktionen';
 } elseif (array_key_exists('next', $_GET)) {
     $loginDestination = estab_navigation_login_destination_key(
         $_GET['next']
@@ -80,6 +104,11 @@ if ($method === 'HEAD') {
 include __DIR__ . '/../4fcfg/config.inc.php';
 include __DIR__ . '/../4fcfg/dbcfg.inc.php';
 include __DIR__ . '/../4fcfg/e_cfg.inc.php';
+// Die Taktangaben ($cfg["itv"]) stehen hier -- und wurden bis zum
+// 30.08.2026 nie geladen. Die Abfrage unten fiel deshalb immer auf
+// ihren eingebauten Rueckfallwert zurueck: Das Cockpit lief mit 10
+// Sekunden, gleichgueltig was eingestellt war.
+include __DIR__ . '/../4fcfg/para.inc.php';
 
 $selectedIdentity = null;
 $readGateStatus = 200;
@@ -138,11 +167,14 @@ function estab_vorgaben_status_markup(
     string $messageTable,
     string $userTablePrefix,
     string $matrixTable,
-    ?array $queueProfile,
+    array $queueProfiles,
     bool $includeOutgoingForReview,
     bool $soundsEnabled,
-    ?string $soundUrl
+    ?string $soundUrl,
+    array $correctionProfiles = [],
+    array &$correctionCounts = []
 ): string {
+    $correctionCounts = [];
     $identity = estab_read_session_identity($session);
     if ($identity === null) {
         return '';
@@ -150,11 +182,9 @@ function estab_vorgaben_status_markup(
 
     $users = [];
     $positions = [];
-    $queueCount = null;
+    $queueCounts = [];
+    $dutyFunctions = [];
     $freshnessState = 'current';
-    $queueLabel = is_string($queueProfile['label'] ?? null)
-        ? $queueProfile['label']
-        : 'Offene Meldungen';
     $incidentState = [
         'availability' => 'unavailable',
         'active' => false,
@@ -202,23 +232,58 @@ function estab_vorgaben_status_markup(
                 );
             }
 
+            /*
+             * Die Korrekturzaehler reisen im selben Statement mit; eine
+             * zweite Abfrage je Seitenleistenaufbau waere reine Verdopplung.
+             * Das Budget des Stapels bleibt massgeblich, damit sehr viele
+             * getragene Funktionen die Statusanzeige nicht zum Absturz
+             * bringen.
+             */
+            $correctionBudget = ESTAB_SIDEBAR_MAX_QUEUES
+                - count($queueProfiles);
+            $measuredCorrections = $correctionBudget > 0
+                ? array_slice($correctionProfiles, 0, $correctionBudget)
+                : [];
             try {
-                $queueSessionKey = $queueProfile['session_key'] ?? null;
-                if (is_string($queueSessionKey)) {
-                    $queueCount = estab_sidebar_queue_count(
-                        $connection,
-                        $queueSessionKey,
-                        $messageTable,
-                        $userTablePrefix,
-                        (string) ($queueProfile['funktion'] ?? ''),
-                        $includeOutgoingForReview
-                    );
+                $queueCounts = estab_sidebar_queue_counts(
+                    $connection,
+                    array_merge($queueProfiles, $measuredCorrections),
+                    $messageTable,
+                    $userTablePrefix,
+                    $includeOutgoingForReview,
+                    (int) $scope['incident']['active_einsatz_id']
+                );
+                foreach ($measuredCorrections as $correctionProfile) {
+                    $pending =
+                        $queueCounts[$correctionProfile['baseline_key']] ?? null;
+                    unset($queueCounts[$correctionProfile['baseline_key']]);
+                    if (is_int($pending) && $pending > 0) {
+                        $correctionCounts[$correctionProfile['funktion']] =
+                            $pending;
+                    }
                 }
             } catch (Throwable $exception) {
-                $queueCount = null;
+                $queueCounts = [];
+                $correctionCounts = [];
                 $freshnessState = 'partial';
                 error_log(
                     'eStab sidebar queue lookup failed: '
+                    . $exception->getMessage()
+                );
+            }
+
+            try {
+                if (estab_incident_duty_shift_required($scope['incident'])) {
+                    $dutyFunctions = estab_dv_active_duty_functions(
+                        $connection,
+                        (int) $scope['incident']['active_einsatz_id']
+                    );
+                }
+            } catch (Throwable $exception) {
+                $dutyFunctions = [];
+                $freshnessState = 'partial';
+                error_log(
+                    'eStab sidebar duty occupancy lookup failed: '
                     . $exception->getMessage()
                 );
             }
@@ -240,12 +305,39 @@ function estab_vorgaben_status_markup(
         }
     }
 
-    $notificationSoundUrl = estab_sidebar_queue_notification(
+    $primaryQueue = $queueProfiles[0] ?? null;
+    $queueCount = $primaryQueue === null
+        ? null
+        : ($queueCounts[$primaryQueue['baseline_key']] ?? null);
+    $queueLabel = 'Offene Meldungen';
+    if ($primaryQueue !== null) {
+        // Wer zwei Funktionen traegt, muss am grossen Zaehler erkennen,
+        // welche gemeint ist; allein bleibt es beim bisherigen Wortlaut.
+        $queueLabel = $primaryQueue['session_key'] === 'old_que_stab'
+            && count($queueProfiles) > 1
+            ? $primaryQueue['label'] . ' · ' . $primaryQueue['short_label']
+            : $primaryQueue['label'];
+    }
+    $measurements = [];
+    $secondaryQueues = [];
+    foreach ($queueProfiles as $index => $profile) {
+        $measurements[] = [
+            'baseline_key' => $profile['baseline_key'],
+            'count' => $queueCounts[$profile['baseline_key']] ?? null,
+        ];
+        if ($index === 0) {
+            continue;
+        }
+        $secondaryQueues[] = [
+            'baseline_key' => $profile['baseline_key'],
+            'label' => $profile['label'],
+            'short_label' => $profile['short_label'],
+            'count' => $queueCounts[$profile['baseline_key']] ?? null,
+        ];
+    }
+    $notificationSoundUrl = estab_sidebar_queue_notifications(
         $session,
-        is_string($queueProfile['session_key'] ?? null)
-            ? $queueProfile['session_key']
-            : null,
-        $queueCount,
+        $measurements,
         $soundsEnabled,
         $soundUrl
     );
@@ -260,16 +352,38 @@ function estab_vorgaben_status_markup(
         $notificationSoundUrl,
         $freshnessState,
         estab_incident_ui_markup($incidentState, true, true),
-        $identity
+        $identity,
+        $secondaryQueues,
+        $dutyFunctions,
+        // Anmeldung und Abmelden stehen oben mit in der Statuszeile. Die
+        // Marke faellt weg: Sie steht links im Menue der Huelle.
+        estab_session_ui_current_markup(
+            $session,
+            true,
+            null,
+            false,
+            true,
+            false,
+            false,
+            null,
+            false
+        )
     );
 }
 
-$queueProfile = $selectedIdentity === null
-    ? null
-    : estab_sidebar_queue_profile($selectedIdentity);
+$queueProfiles = $selectedIdentity === null
+    ? []
+    : estab_sidebar_queue_profiles($selectedIdentity);
+$correctionProfiles = $selectedIdentity === null
+    ? []
+    : estab_sidebar_correction_profiles($selectedIdentity);
+$correctionCounts = [];
 $soundsEnabled = (bool) ($conf_4f['sounds'] ?? false);
-$soundUrl = $soundsEnabled && is_string($queueProfile['sound_file'] ?? null)
-    ? estab_application_url('4fach/audio/' . $queueProfile['sound_file'])
+$soundUrl = $soundsEnabled
+    && is_string($queueProfiles[0]['sound_file'] ?? null)
+    ? estab_application_url(
+        '4fach/audio/' . $queueProfiles[0]['sound_file']
+    )
     : null;
 $statusMarkup = $selectedIdentity === null
     ? ''
@@ -280,10 +394,12 @@ $statusMarkup = $selectedIdentity === null
         (string) $conf_4f_tbl['nachrichten'],
         (string) $conf_4f_tbl['usrtblprefix'],
         (string) $conf_4f_tbl['empfmtx'],
-        $queueProfile,
+        $queueProfiles,
         (bool) ($conf_4f['si_in_out'] ?? false),
         $soundsEnabled,
-        $soundUrl
+        $soundUrl,
+        $correctionProfiles,
+        $correctionCounts
     );
 
 if ($statusFragment) {
@@ -292,7 +408,11 @@ if ($statusFragment) {
 }
 
 $menuState = $_SESSION['menue'] ?? '';
-$actions = estab_sidebar_workflow_actions($selectedIdentity, $menuState);
+$actions = estab_sidebar_workflow_actions(
+    $selectedIdentity,
+    $menuState,
+    $correctionCounts
+);
 $navigationIdentity = $selectedIdentity ?? $identity;
 
 $refreshInterval = isset($cfg['itv']['status'])
@@ -304,53 +424,18 @@ $refreshScript = $selectedIdentity === null
         estab_application_url('4fach/vorgaben.php?fragment=status'),
         $refreshInterval
     );
+if ($actionsFragment):
 ?>
 <!doctype html>
 <html lang="de">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>eStab Navigation</title>
+  <title>Arbeitsschritte</title>
   <?= estab_session_ui_stylesheet() ?>
 </head>
-<body class="estab-navigation-frame estab-message-sidebar-page">
-  <div class="estab-message-sidebar" data-estab-sidebar-root>
-    <?= $statusMarkup ?>
-    <?php
-    // The renderer returns a complete trusted HTML component and escapes every
-    // session-derived text/attribute value at its own context boundary.
-    // nosemgrep: php.lang.security.injection.echoed-request.echoed-request
-    echo estab_session_ui_current_markup(
-        $_SESSION,
-        true,
-        $loginDestination,
-        false,
-        true,
-        false,
-        false
-    );
-    ?>
-    <?= estab_sidebar_account_function_markup($_SESSION, $selectedIdentity) ?>
-    <?php if ($identity !== null && $selectedIdentity === null): ?>
-      <aside
-        class="estab-sidebar-duty-required"
-        role="alert"
-      >
-        <strong>Operativer Zugriff nicht verfügbar</strong>
-        <p>
-          <?= estab_auth_html($readGateMessage !== ''
-              ? $readGateMessage
-              : 'Aktivieren Sie zuerst einen Einsatz.') ?>
-        </p>
-        <a
-          class="estab-button estab-button-primary"
-          href="<?= estab_auth_html(
-              estab_navigation_url_for_key('command-post')
-          ) ?>"
-          target="_top"
-        >Status und Hinweise öffnen</a>
-      </aside>
-    <?php endif; ?>
+<body class="estab-navigation-frame estab-actions-page">
+  <div class="estab-shell-actions-inner" data-estab-actions-root>
     <?php if ($selectedIdentity !== null): ?>
       <main class="estab-sidebar-workflow" data-estab-workflow-menu>
         <div class="estab-sidebar-section-heading">
@@ -400,6 +485,10 @@ $refreshScript = $selectedIdentity === null
                 >
                   <span class="estab-sidebar-action-title">
                     <?= estab_auth_html($action['label']) ?>
+                    <?php if (is_string($action['badge'] ?? null)): ?>
+                      <span class="estab-sidebar-action-badge"
+                        ><?= estab_auth_html($action['badge']) ?></span>
+                    <?php endif; ?>
                   </span>
                   <span class="estab-sidebar-action-description">
                     <?= estab_auth_html($action['description']) ?>
@@ -415,17 +504,68 @@ $refreshScript = $selectedIdentity === null
         <?php endif; ?>
       </main>
     <?php endif; ?>
-    <?= estab_navigation_markup(
-        $identity !== null,
-        $_SERVER,
-        true,
-        true,
-        $navigationIdentity
-    ) ?>
+  </div>
+  <script<?= estab_csp_script_attribute() ?> data-estab-sidebar-workspace-link>
+    document.addEventListener('submit', function (event) {
+      if (
+        event.target instanceof HTMLFormElement
+        && event.target.matches('.estab-sidebar-action-form')
+        && window.parent !== window
+      ) {
+        window.parent.postMessage('estab:show-content', window.location.origin);
+      }
+    });
+  </script>
+</body>
+</html>
+<?php
+    exit;
+endif;
+?>
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>eStab Navigation</title>
+  <?= estab_session_ui_stylesheet() ?>
+</head>
+<body class="estab-navigation-frame estab-cockpit-page">
+  <div class="estab-message-sidebar" data-estab-sidebar-root>
+    <?= $statusMarkup ?>
+    <?php
+    /*
+     * Die Anmeldeleiste stand hier als eigenes Feld. Sie steht jetzt oben in
+     * der Statuszeile: Wer angemeldet ist, die Glocke und der Weg hinaus sind
+     * drei kurze Angaben, und ein eigener Kasten dafuer kostete mehr Platz
+     * als sie selbst.
+     */
+    ?>
+    <?= estab_sidebar_account_function_markup($_SESSION, $selectedIdentity) ?>
+    <?php if ($identity !== null && $selectedIdentity === null): ?>
+      <aside
+        class="estab-sidebar-duty-required"
+        role="alert"
+      >
+        <strong>Operativer Zugriff nicht verfügbar</strong>
+        <p>
+          <?= estab_auth_html($readGateMessage !== ''
+              ? $readGateMessage
+              : 'Aktivieren Sie zuerst einen Einsatz.') ?>
+        </p>
+        <a
+          class="estab-button estab-button-primary"
+          href="<?= estab_auth_html(
+              estab_navigation_url_for_key('command-post')
+          ) ?>"
+          target="_top"
+        >Status und Hinweise öffnen</a>
+      </aside>
+    <?php endif; ?>
   </div>
   <?= estab_sidebar_audio_markup($soundUrl) ?>
   <?= $refreshScript ?>
-  <script data-estab-sidebar-workspace-link>
+  <script<?= estab_csp_script_attribute() ?> data-estab-sidebar-workspace-link>
     document.addEventListener('submit', function (event) {
       if (
         event.target instanceof HTMLFormElement

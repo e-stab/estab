@@ -10,6 +10,7 @@
  */
 
 require_once __DIR__ . '/attachment.php';
+require_once __DIR__ . '/anlage_darstellbar.php';
 require_once __DIR__ . '/../4fach/upload_class.php';
 
 final class EstabAttachmentUploadUserException extends RuntimeException
@@ -317,6 +318,33 @@ function estab_attachment_upload_browser_file(
             throw estab_attachment_upload_user_failure($uploader);
         }
         $uploadedPath = $uploader->upload_dir . $uploader->file_copy;
+        /*
+         * Passt der Inhalt zur Endung?
+         *
+         * Geprueft wird hier und nicht frueher: Erst jetzt hat der Uploader
+         * bestaetigt, dass die Datei wirklich aus diesem Antrag stammt, und
+         * sie liegt unter dem reservierten Namen im Speicher. Schlaegt die
+         * Pruefung an, raeumt der finally-Zweig Datei und Reservierung wieder
+         * ab -- es bleibt nichts liegen.
+         *
+         * Der Massstab ist derselbe, den das Einsatzdossier spaeter anlegt.
+         * Eine Datei, die den Widerspruch traegt, kam bisher durch, lag
+         * monatelang im Einsatz und liess das Dossier scheitern, wenn es
+         * gebraucht wurde.
+         */
+        $erkannterInhalt = estab_anlage_inhaltstyp_der_datei($uploadedPath);
+        if (
+            estab_anlage_befund($requestedExtension, $erkannterInhalt)
+                === ESTAB_ANLAGE_WIDERSPRUCH
+        ) {
+            throw new EstabAttachmentUploadUserException(
+                estab_anlage_widerspruch_satz(
+                    $originalName,
+                    $requestedExtension,
+                    $erkannterInhalt
+                )
+            );
+        }
         if (!hash_equals($fullPath, $uploadedPath)) {
             throw new RuntimeException(
                 'The staged attachment path changed unexpectedly'

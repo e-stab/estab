@@ -70,6 +70,7 @@ class nachrichten4fach {
         "12_betreff", "12_abfzeit", "12_anhang",
         "12_inhalt", "13_abseinheit", "14_funktion", "14_zeichen",
         "15_quitdatum", "15_quitzeichen", "16_empf", "17_vermerke",
+        "estab_eingangsweg_bemerkung", "estab_gegenstelle_id",
         "estab_route_error", "estab_attachment_error",
         "estab_attachment_notice", "estab_attachment_comment"
       ), "");
@@ -77,6 +78,21 @@ class nachrichten4fach {
         $formDefaults,
         is_array ($formulardaten) ? $formulardaten : array ()
       );
+      // Die Datenbankspalte traegt den Anwendungspraefix, das Formularfeld
+      // nicht -- so ist an jeder Stelle sichtbar, ob eine Angabe zum Vordruck
+      // gehoert oder zur Anwendung. Die Uebersetzung steht deshalb hier, an
+      // einer Stelle, und nicht in jedem Aufrufer.
+      if (
+        is_array ($formulardaten)
+        && !array_key_exists ("fernmeldeplan_eintrag_id", $formulardaten)
+        && ($formulardaten ["estab_fernmeldeplan_eintrag_id"] ?? null) !== null
+      ) {
+        // Geprueft wird auf ABWESENHEIT, nicht auf Leere: Hat der LdF den Weg
+        // bewusst herausgenommen, sendet er ein leeres Feld. Ein Abgleich auf
+        // "" machte diese Entscheidung nach einem Formularfehler rueckgaengig.
+        $this->formdata ["fernmeldeplan_eintrag_id"] =
+          (string) $formulardaten ["estab_fernmeldeplan_eintrag_id"];
+      }
       if (
         $this->task === "LdF-Eingang"
         && $this->formdata ["incoming_transport_original_medium"] === ""
@@ -128,9 +144,22 @@ class nachrichten4fach {
         $editableTimestampField !== ""
         && $this->formdata [$editableTimestampField] === ""
       ) {
-        // Der sichtbare Standard entspricht dem bisherigen serverseitigen
-        // Leerwert-Fallback, bleibt im Formular aber frei korrigierbar.
-        $this->formdata [$editableTimestampField] = date ("Hi");
+        // Der sichtbare Standard bleibt im Formular frei korrigierbar; er
+        // ist ein Vorschlag, keine Feststellung.
+        //
+        // Hier stand date ("Hi") -- Stunde und Minute, sonst nichts. Die
+        // Datumszelle des Vermerks blieb damit leer, obwohl sie als
+        // Pflichtangabe gekennzeichnet ist. Am selben Tag faellt das nicht
+        // auf, am naechsten sehr wohl: Ein Einsatz laeuft ueber Mitternacht,
+        // und "2110" sagt nicht, welcher Tag gemeint ist.
+        //
+        // Vorbelegt wird deshalb die taktische Zeitgruppe TThhmmMMMyyyy --
+        // dieselbe Schreibweise, in der Annahme- und Befoerderungsvermerk
+        // aus der Datenbank kommen. Der Annahmevermerk (02_zeit) stellt
+        // davon nur die Uhrzeit dar; das ist seine Bauart, keine
+        // Auslassung.
+        $this->formdata [$editableTimestampField] =
+          konv_datetime_taktime (date ("Y-m-d H:i:s"));
       }
       if ((!isset($this->formdata ["17_vermerke"]))  or ($this->formdata ["17_vermerke"] == "0000-00-00 00:00:00")) { $this->formdata ["17_vermerke"] = ""; }
       $conversationNote = $this->formdata ["11_gesprnotiz"] ?? "";
@@ -146,9 +175,20 @@ class nachrichten4fach {
       if (debug){
         echo "<br><big>4fach data 087="; var_dump ($this->formdata); echo "</big><br>";
       }
-      if ($this->task === "LdF-Ausgang") {
+      if (in_array (
+        $this->task,
+        array (
+          "LdF-Ausgang", "FM-Eingang", "FM-Eingang_Anhang", "LdF-Eingang"
+        ),
+        true
+      )) {
+        // Der Ausgang WAEHLT einen Weg, der Eingang BENENNT den, ueber den
+        // die Nachricht hereinkam. Beide brauchen dieselbe Liste aus dem
+        // gueltigen S6-Plan; nur der Zwang unterscheidet sie: der Ausgang
+        // muss waehlen, der Eingang darf.
         $this->activeTelecomRoutes = $this->load_active_telecom_routes ();
       }
+      $this->load_incoming_counterpart ();
       $this->load_message_suggestions ();
       $this->load_attachment_previews ();
       $this->load_message_timeline ();
@@ -161,6 +201,7 @@ class nachrichten4fach {
     var $errorselect; // array, Felder die falsch eingegeben wurden.
     var $hasUnsavedValidationData = false;
     var $activeTelecomRoutes = array ();
+    var $incomingCounterpart = null;
     var $messageSuggestionField = "";
     var $messageSuggestions = array ();
     var $messageSuggestionMetadata = array ();
@@ -379,6 +420,48 @@ class nachrichten4fach {
       }
     }
 
+    /**
+     * Feld 15 aus der vom Fernmelder gewaehlten Gegenstelle vorbelegen.
+     *
+     * Der Fernmelder waehlt in Feld 6 eine Gegenstelle des Plans; gespeichert
+     * wird ihre KENNUNG, nicht ihr Text. Zwei Gegenstellen mit demselben
+     * Rufnamen auf verschiedenen Wegen waeren fuer einen Textvergleich
+     * mehrdeutig und sind es fuer einen Verweis nicht.
+     *
+     * Vorbelegt wird nur, was leer ist. Der LdF uebersetzt den Absender; die
+     * Vorbelegung nimmt ihm die Schreibarbeit ab, nicht die Entscheidung.
+     */
+    function load_incoming_counterpart () {
+      if ($this->task !== "LdF-Eingang") {
+        return;
+      }
+      $counterpartId = trim (
+        (string) ($this->formdata ["estab_gegenstelle_id"] ?? "")
+      );
+      if ($counterpartId === "" || $counterpartId === "0") {
+        return;
+      }
+      foreach ($this->activeTelecomRoutes as $route) {
+        foreach (($route ["gegenstellen"] ?? array ()) as $counterpart) {
+          if (
+            (string) ($counterpart ["gegenstelle_id"] ?? "") !== $counterpartId
+          ) {
+            continue;
+          }
+          $this->incomingCounterpart = array (
+            "name" => (string) ($counterpart ["name"] ?? ""),
+            "erreichbarkeit" =>
+              (string) ($counterpart ["erreichbarkeit"] ?? ""),
+          );
+          if (trim ((string) $this->formdata ["13_abseinheit"]) === "") {
+            $this->formdata ["13_abseinheit"] =
+              $this->incomingCounterpart ["name"];
+          }
+          return;
+        }
+      }
+    }
+
     function load_message_suggestions () {
       global $conf_4f_db, $conf_4f_tbl;
       $field = match ($this->task) {
@@ -450,6 +533,47 @@ class nachrichten4fach {
               (string) ($mapping ["context"] ?? "");
           }
         }
+        /*
+         * Der Plan steht vor der Historie.
+         *
+         * Beim Aufnehmen gibt es noch keine Nachricht, an der ein Paar
+         * haengen koennte -- die Zuordnung oben bleibt leer. Trotzdem weiss
+         * die Anwendung, wer ueber die eigenen Wege erreichbar ist: es steht
+         * im freigegebenen Fernmeldeplan. Diese Gegenstellen kommen deshalb
+         * vor den Werten, die aus frueheren Nachrichten stammen.
+         *
+         * Beides wird angezeigt und beides ist gekennzeichnet. Wer waehlt,
+         * soll sehen, ob ein Vorschlag geplant oder gewachsen ist.
+         */
+        try {
+          $planned = estab_read_plan_counterpart_suggestion_details (
+            $connection,
+            $identity,
+            $field,
+            30
+          );
+        } catch (Throwable $exception) {
+          $planned = array ();
+          error_log ("eStab plan counterparts are temporarily unavailable");
+        }
+        foreach ($planned as $eintrag) {
+          $value = (string) $eintrag ["value"];
+          $key = function_exists ("mb_strtolower")
+            ? mb_strtolower ($value, "UTF-8")
+            : strtolower ($value);
+          if (isset ($seen [$key])) {
+            continue;
+          }
+          $seen [$key] = true;
+          $this->messageSuggestions [] = $value;
+          $this->messageSuggestionMetadata [$value] = array (
+            "source" => "plan",
+            "match" => "exact",
+            // Der Weg, ueber den dieser Vorschlag gilt. Ein Rufname allein
+            // sagt nicht, worueber man ihn erreicht.
+            "matched_context" => (string) $eintrag ["context"],
+          );
+        }
         foreach ($history as $value) {
           $key = function_exists ("mb_strtolower")
             ? mb_strtolower ($value, "UTF-8")
@@ -515,6 +639,7 @@ class nachrichten4fach {
           "quality" => "",
           "label" => "",
           "matched_context" => "",
+          "context_label" => "",
         );
       }
       $source = (string) ($metadata ["source"] ?? "");
@@ -535,9 +660,16 @@ class nachrichten4fach {
           "quality" => "",
           "label" => "",
           "matched_context" => "",
+          "context_label" => "",
         );
       }
-      $matchedContext = $match === "related"
+      /*
+       * Der Zusatz stand frueher nur an aehnlichen Treffern -- dort erklaert
+       * er, WORUEBER der Bezug lief. Ein Planvorschlag ist exakt und traegt
+       * trotzdem einen: den Weg, ueber den er gilt. Beides ist dieselbe
+       * Frage ("woher kommt das?") und bekommt denselben Platz.
+       */
+      $matchedContext = ($match === "related" || $source === "plan")
         ? (string) ($metadata ["matched_context"] ?? "")
         : "";
       return array (
@@ -547,6 +679,15 @@ class nachrichten4fach {
           ? $sourceLabel
           : $matchLabel." · ".$sourceLabel,
         "matched_context" => $matchedContext,
+        /*
+         * "Bezug" fuer einen aehnlichen Treffer aus der Historie -- dort ist
+         * der Zusatz der Wert, ueber den die Aehnlichkeit lief. "Erreichbar
+         * ueber" fuer den Plan: dort ist er der Weg. Dasselbe Feld, zwei
+         * Saetze; ein gemeinsames Wort waere fuer beide falsch.
+         */
+        "context_label" => $source === "plan"
+          ? "Erreichbar über"
+          : "Bezug",
       );
     }
 
@@ -564,8 +705,9 @@ class nachrichten4fach {
         $sourceLabel = (string) $presentation ["label"];
         $matchedContext = (string) $presentation ["matched_context"];
         $nativeLabel = $sourceLabel;
+        $contextLabel = (string) $presentation ["context_label"];
         if ($nativeLabel !== "" && $matchedContext !== "") {
-          $nativeLabel .= " · Bezug: ".$matchedContext;
+          $nativeLabel .= " · ".$contextLabel.": ".$matchedContext;
         }
         echo "<option value=\"".estab_auth_html ($suggestion)."\"".
           ($nativeLabel === ""
@@ -584,6 +726,7 @@ class nachrichten4fach {
         $quality = (string) $presentation ["quality"];
         $sourceLabel = (string) $presentation ["label"];
         $matchedContext = (string) $presentation ["matched_context"];
+        $contextLabel = (string) $presentation ["context_label"];
         echo "<div id=\"".$id."-option-".$index."\" ".
           "class=\"estab-message-suggestion-option".
           ($sourceLabel === "" ? "" : " estab-message-mapping-option").
@@ -606,7 +749,8 @@ class nachrichten4fach {
                 ? ""
                 : "<br><span ".
                   "class=\"estab-message-suggestion-match-context\">".
-                  "Bezug: „".estab_auth_html ($matchedContext)."“</span>").
+                  estab_auth_html ($contextLabel).": „".
+                  estab_auth_html ($matchedContext)."“</span>").
               "</small>").
           "</div>\n";
       }
@@ -628,8 +772,8 @@ class nachrichten4fach {
       if ($this->messageSuggestionField === "") {
         return;
       }
+      echo '<script' . estab_csp_script_attribute() . ' data-estab-message-suggestion-picker>';
       echo <<<'HTML'
-<script data-estab-message-suggestion-picker>
 (function () {
   "use strict";
   var inputs = document.querySelectorAll(
@@ -861,6 +1005,13 @@ HTML;
     $this->feldbg [16]["i"] = $this->bg_color_inaktv;
     $this->feldbg [17]["a"] = $this->bg_color_si_a;
     $this->feldbg [17]["i"] = $this->bg_color_inaktv;
+
+    // Zugriffsindex 18: die Abfassungszeit. Sie liegt hinter der gedruckten
+    // Zaehlung, weil sie sich ihren Index bis dahin mit Betreff und
+    // Nachrichtentext teilte und deshalb nicht einzeln zu schliessen war.
+    // Sie gehoert zum Nachrichtenteil und traegt dessen Farbe.
+    $this->feldbg [18]["a"] = $this->bg_color_tx_a;
+    $this->feldbg [18]["i"] = $this->bg_color_inaktv;
   }
 
   // Zuordnung der notwendigen Farben
@@ -877,7 +1028,7 @@ HTML;
 \*****************************************************************************/
   function get_access_by_task (){
     // Alle Felder auf inaktiv setzen
-    for ( $i = 1; $i <= 17; $i++ ){
+    for ( $i = 1; $i <= 18; $i++ ){
       $this->bg [$i] = $this->feldbg [$i]["i"] ;
       $this->feld [$i] = false;
     }
@@ -897,8 +1048,18 @@ HTML;
         }
         $this->bg   [11] = $this->feldbg [11]["i"] ;
         $this->feld [11] = false;
-        $this->bg   [13] = $this->feldbg [13]["i"] ;
-        $this->feld [13] = false;
+        // Der Absender stand hier gesperrt. Der Fernmelder kennt ihn aber --
+        // bei einer eingehenden Nachricht steht er im Spruchkopf --, und der
+        // LdF musste ihn danach von Hand nachtragen. Die Angabe bleibt
+        // freiwillig; der LdF prueft sie nur noch.
+        //
+        // Verfasserzeichen und Abfassungszeit gehoeren dagegen dem, der die
+        // Nachricht abgefasst hat. Der Fernmelder nimmt sie auf, er verfasst
+        // sie nicht.
+        $this->bg   [14] = $this->feldbg [14]["i"] ;
+        $this->feld [14] = false;
+        $this->bg   [18] = $this->feldbg [18]["i"] ;
+        $this->feld [18] = false;
 
       break;
       case "LdF-Eingang":
@@ -932,11 +1093,21 @@ HTML;
           $this->bg [$i] = $this->feldbg [$i]["a"] ;
           $this->feld [$i] = true;
         }
+        // Die Abfassungszeit -- wer abfasst, traegt sie ein.
+        $this->bg [18] = $this->feldbg [18]["a"];
+        $this->feld [18] = true;
         // Verfasserzeichen und ausgeübte Funktion come from the login.
         $this->bg [14] = $this->feldbg [14]["a"];
         $this->feld [14] = false;
         // The local organisation is derived from server configuration.
         $this->feld [13] = false;
+        // Feld 19 des Vordrucks, hier Zugriffsindex 16: der Verteiler.
+        // Der Verfasser legt den innerdienstlichen Laufweg seiner
+        // Nachricht selbst fest.
+        // Die rote Lage-/Dokumentationsdurchschrift und seine eigene grüne
+        // Durchschrift ergänzt der Server beim Speichern unabwählbar.
+        $this->bg [16] = $this->feldbg [16]["a"];
+        $this->feld [16] = true;
         if ($this->task === "Stab_korrigieren") {
           // A formally returned outgoing message remains an outgoing message.
           // Its author may correct content, but may not convert the object into
@@ -947,7 +1118,7 @@ HTML;
       break;
 
       case "Stab_lesen" :
-        for ($i=1;$i<=17;$i++){
+        for ($i=1;$i<=18;$i++){
           $this->bg [$i] = $this->formbgcolor ;
           $this->feld [$i] = false;
         }
@@ -983,6 +1154,11 @@ HTML;
         $this->feld [14] = false;
         $this->bg [15] = $this->feldbg [15]["i"];
         $this->feld [15] = false;
+        // Wer ein Gespraech aufnimmt, ist dessen Verfasser -- die
+        // Abfassungszeit gehoert ihm, anders als beim Eingang einer fremden
+        // Nachricht.
+        $this->bg [18] = $this->feldbg [18]["a"];
+        $this->feld [18] = true;
       break;
 
       case "FM-Admin" :
@@ -992,7 +1168,7 @@ HTML;
       break;
 
       default :
-        for ($i=1;$i<=17;$i++){
+        for ($i=1;$i<=18;$i++){
           $this->feld [$i] = false;
         }
     } // switch $rolle
@@ -1117,7 +1293,7 @@ HTML;
       echo "<TBODY>\n";
       echo "<TD>\n";
         // Druckersymbol
-      echo "<a href=\"javascript:window.print()\">
+      echo "<a href=\"#\" data-estab-print>
             <img src=\"".$conf_design_path."/print.gif\" alt=\"Drucken\" width=\"32\"height=\"32\" border=\"0\" title=\"Drucken\"></a>\n";
       echo "</TD>\n";
 
@@ -1374,7 +1550,7 @@ HTML;
   function showerrorinfo ($errorat)
   {   include ("../4fcfg/config.inc.php");
     echo "<a href=\"../language/german/helptext.php?Errorart=".$errorat.
-         "\" onclick=\"FensterOeffnen(this.href); return false\"><img src=\"".
+         "\" data-estab-help-window><img src=\"".
          $conf_design_path."/warning.gif\" alt=\"Fehler\" width=\"24\"height=\"24\" title=\"Fehler\"></a>";
   }
 
@@ -1424,7 +1600,7 @@ HTML;
     }
 
     pre_html ("N","Formular ".$this->task." ".$conf_4f ["Titelkurz"]." ".$conf_4f ["Version"], ""); // Normaler Seitenaufbau ohne Auffrischung
-    echo "<body style=\"text-align: left; background-color: rgb(220,220,255); \">\n"; //".$this->formbgcolor.";\">\n";
+    echo "<body class=\"estab-legacy-page\">\n";
     if ((string) $this->formdata ["estab_route_error"] !== "") {
       echo "<div class=\"estab-alert estab-alert--danger\" role=\"alert\">".
         estab_message_html ($this->formdata ["estab_route_error"]).
@@ -1722,7 +1898,7 @@ HTML;
         $routeId = (string) $route ["fernmeldeplan_eintrag_id"];
         $routeParts = array_values (array_filter (array (
           trim ((string) ($route ["betriebsstelle"] ?? "")),
-          trim ((string) ($route ["rufname"] ?? "")),
+          trim ((string) ($route ["erreichbarkeit"] ?? "")),
           trim ((string) ($route ["kanal"] ?? "")),
           trim ((string) ($route ["bandlage"] ?? "")),
           trim ((string) ($route ["verkehrsform"] ?? "")),

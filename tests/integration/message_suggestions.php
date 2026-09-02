@@ -411,9 +411,11 @@ try {
         'LdF gained history through a forged fixed account function'
     );
 
-    // Pair-aware LdF mappings use completed messages first and the currently
-    // valid active S6 plan second. The pending current message is locked by the
-    // fixed LdF account and supplies its context from the database.
+    // Pair-aware LdF mappings lead with the currently valid active S6 plan and
+    // follow with completed messages. PDV 800 Nr. 2.6 verlangt, Abweichungen
+    // vom Kommunikationsplan zu vermeiden -- deshalb steht er oben. The pending
+    // current message is locked by the fixed LdF account and supplies its
+    // context from the database.
     $plan = estab_dv_create_telecom_plan(
         $connection,
         $incidentCId,
@@ -427,21 +429,58 @@ try {
         ]
     );
     $planId = (int) $plan['fernmeldeplan_id'];
-    estab_dv_add_telecom_entry(
+    $entryId = estab_dv_add_telecom_entry(
         $connection,
         $incidentCId,
         $planId,
         $identities['s6'],
         [
-            'betriebsstelle' => 'Mapping Einheit',
-            'rufname' => 'Mapping Rufname',
-            'medium' => 'Fu',
+            'betriebsstelle' => 'Eigene Fm-Zentrale',
+            // Migration 124 hat `rufname` in `erreichbarkeit` umbenannt, und
+            // der Weg traegt seit der Trennung von Analog- und Digitalfunk
+            // eine Wegart statt eines blossen Mittels. Analogfunk verlangt
+            // zusaetzlich ein Band.
+            'erreichbarkeit' => 'Eigener Rufname',
+            'wegart' => 'Fu:ANALOG',
+            'band' => '2m',
             'kanal' => 'Mapping-1',
             'bandlage' => 'G/U',
             'verkehrsform' => 'Gegenverkehr',
             'besondere_vermerke' => '',
             'bemerkungen' => '',
         ]
+    );
+    /*
+     * Der Vorschlag kommt aus der Gegenstelle, nicht aus dem Weg. Der Weg
+     * traegt seit der Trennung von Weg und Gegenstelle nur noch die eigene
+     * Stelle; wer die Zuordnung aus ihm liest, schlaegt dem LdF den eigenen
+     * Rufnamen als Gegenstelle vor. Die andere Seite steht deshalb hier.
+     */
+    $planDraft = null;
+    foreach (estab_dv_telecom_plans($connection, $incidentCId) as $candidate) {
+        if ((int) ($candidate['fernmeldeplan_id'] ?? 0) === $planId) {
+            $planDraft = $candidate;
+            break;
+        }
+    }
+    if ($planDraft === null) {
+        throw new RuntimeException(
+            'Der Fernmeldeplan der Zuordnungsvorlage wurde nicht gefunden.'
+        );
+    }
+    estab_dv_add_telecom_counterpart(
+        $connection,
+        $incidentCId,
+        $planId,
+        $entryId,
+        $identities['s6'],
+        [
+            'name' => 'Mapping Einheit',
+            'stellenart' => 'UNTER',
+            'erreichbarkeit' => 'Mapping Rufname',
+            'bemerkungen' => '',
+        ],
+        (string) $planDraft['revision']
     );
     estab_dv_activate_telecom_plan(
         $connection,
@@ -548,6 +587,13 @@ try {
     $assert(
         $incomingMappings === [
             [
+                'value' => 'Mapping Einheit',
+                'source' => 'plan',
+                'context' => 'Mapping Rufname',
+                'match' => 'exact',
+                'matched_context' => 'Mapping Rufname',
+            ],
+            [
                 'value' => 'Historischer Absender',
                 'source' => 'message',
                 'context' => 'Mapping Rufname',
@@ -561,16 +607,9 @@ try {
                 'match' => 'exact',
                 'matched_context' => 'Mapping Rufname',
             ],
-            [
-                'value' => 'Mapping Einheit',
-                'source' => 'plan',
-                'context' => 'Mapping Rufname',
-                'match' => 'exact',
-                'matched_context' => 'Mapping Rufname',
-            ],
         ],
-        'incoming LdF mapping did not prefer completed callsign/sender pairs '
-            . 'before the active S6 plan'
+        'incoming LdF mapping did not prefer the active S6 plan before '
+            . 'completed callsign/sender pairs'
     );
     $outgoingMappings = estab_read_ldf_mapping_suggestions(
         $connection,
@@ -582,6 +621,13 @@ try {
     $assert(
         $outgoingMappings === [
             [
+                'value' => 'Mapping Rufname',
+                'source' => 'plan',
+                'context' => 'Mapping Einheit Einsatzabschnitt',
+                'match' => 'related',
+                'matched_context' => 'Mapping Einheit',
+            ],
+            [
                 'value' => 'Historischer Rufname',
                 'source' => 'message',
                 'context' => 'Mapping Einheit Einsatzabschnitt',
@@ -591,13 +637,6 @@ try {
             [
                 'value' => 'Alternativer Rufname',
                 'source' => 'message',
-                'context' => 'Mapping Einheit Einsatzabschnitt',
-                'match' => 'related',
-                'matched_context' => 'Mapping Einheit',
-            ],
-            [
-                'value' => 'Mapping Rufname',
-                'source' => 'plan',
                 'context' => 'Mapping Einheit Einsatzabschnitt',
                 'match' => 'related',
                 'matched_context' => 'Mapping Einheit',

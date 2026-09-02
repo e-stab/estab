@@ -119,7 +119,8 @@ assert_png() {
 assert_status 200 "$base_url/"
 for label in \
     'Nachrichtenvordruck' \
-    'Führungsstellenbetrieb' \
+    'Fernmeldeplan' \
+    'Melderaufträge' \
     'Meldungsübersicht' \
     'Vordrucke' \
     'BOS-Info' \
@@ -183,22 +184,22 @@ assert_status 200 "$base_url/handbuch/"
 assert_header_fixed 'Content-Type: text/html; charset=UTF-8'
 assert_header_fixed 'Cache-Control: private, no-store, max-age=0'
 assert_header_fixed 'Vary: Cookie'
-assert_body_fixed '<title>eStab Web-Handbuch</title>'
+assert_body_fixed '<title>eStab Handbuch</title>'
 assert_body_fixed 'data-estab-handbook-version='
 assert_body_fixed 'data-estab-handbook-search'
 assert_body_fixed 'data-estab-handbook-status'
 assert_body_fixed 'data-estab-handbook-toc'
 assert_body_fixed 'href="./handbuch.css"'
 assert_body_fixed 'src="./handbuch.js"'
-assert_body_fixed 'data-estab-public-bar'
+assert_body_fixed 'data-estab-shell-menu'
 assert_body_fixed 'data-estab-nav-key="handbook" aria-current="page"'
 assert_body_absent_fixed 'data-estab-session-bar'
 assert_body_absent_fixed 'data-estab-logout-form'
 handbook_chapter_count=$(
     grep -o 'data-estab-handbook-section' "$body" | wc -l | tr -d ' '
 )
-if [ "$handbook_chapter_count" != 19 ]; then
-    printf 'HTTP surface: web handbook has %s chapters, expected 19\n' \
+if [ "$handbook_chapter_count" != 21 ]; then
+    printf 'HTTP surface: web handbook has %s chapters, expected 21\n' \
         "$handbook_chapter_count" >&2
     exit 1
 fi
@@ -241,13 +242,25 @@ if [ "$iframe_count" != 2 ]; then
 fi
 assert_body_fixed 'data-estab-message-workspace'
 assert_body_fixed 'name="vorgaben"'
-assert_body_fixed 'src="./vorgaben.php"'
+assert_body_fixed 'src="/4fach/vorgaben.php?fragment=cockpit"'
 assert_body_fixed 'name="mainframe"'
 assert_body_fixed 'src="./mainindex.php"'
 assert_body_fixed 'data-estab-mobile-menu-return'
 assert_body_fixed 'data-estab-mobile-workspace-navigation'
+assert_body_fixed 'data-estab-shell-menu'
+assert_body_fixed 'data-estab-navigation-mode="sidebar"'
+assert_body_fixed '<h2>Bereiche</h2>'
+assert_body_fixed '<p>Arbeitsbereich wechseln</p>'
+shell_navigation_item_count=$(
+    grep -o 'data-estab-navigation-item' "$body" | wc -l | tr -d ' '
+)
+if [ "$shell_navigation_item_count" != 12 ]; then
+    printf 'HTTP surface: anonymous shell contains %s navigation items, expected 12\n' \
+        "$shell_navigation_item_count" >&2
+    exit 1
+fi
 assert_body_fixed "event.data === 'estab:show-content'"
-assert_body_fixed 'event.source === sidebar.contentWindow'
+assert_body_fixed 'event.source === cockpit.contentWindow'
 assert_body_fixed "content.scrollIntoView({block: 'start'})"
 assert_body_absent_fixed './counter.php?embedded=1'
 assert_body_absent_fixed './status.php?embedded=1'
@@ -258,30 +271,19 @@ assert_status 200 "$base_url/4fach/index.php?login_flow=new"
 assert_body_fixed 'src="./mainindex.php?login_flow=new"'
 assert_status 200 "$base_url/4fach/index.php?next=incident-log"
 assert_body_fixed 'src="./mainindex.php?next=incident-log"'
-assert_body_fixed 'src="./vorgaben.php?next=incident-log"'
+assert_body_fixed "href=\"$expected_app_root/4fach/index.php?login_flow=existing&amp;next=incident-log\""
+assert_body_fixed 'data-estab-navigation-mode="sidebar"'
 assert_status 200 "$base_url/4fach/index.php?login_flow=existing&next=tracking"
 assert_body_fixed 'src="./mainindex.php?login_flow=existing&amp;next=tracking"'
-assert_body_fixed 'src="./vorgaben.php?next=tracking"'
 assert_status 400 "$base_url/4fach/index.php?login_flow=unknown"
 assert_status 400 "$base_url/4fach/index.php?next=administration"
 assert_status 400 "$base_url/4fach/index.php?next=https%3A%2F%2Fattacker.invalid"
 assert_status 403 "$base_url/4fach/counter.php"
 assert_status 200 "$base_url/4fach/vorgaben.php"
 assert_body_fixed 'data-estab-sidebar-root'
-assert_body_fixed 'data-estab-public-bar'
-assert_body_fixed 'estab-session-bar-sidebar'
-assert_body_fixed 'data-estab-navigation-mode="sidebar"'
-assert_body_fixed '<h2>Bereiche</h2>'
-assert_body_fixed '<p>Arbeitsbereich wechseln</p>'
-assert_body_fixed '>Anmelden</a>'
-navigation_item_count=$(
-    grep -o 'data-estab-navigation-item' "$body" | wc -l | tr -d ' '
-)
-if [ "$navigation_item_count" != 11 ]; then
-    printf 'HTTP surface: anonymous sidebar contains %s navigation items, expected 11\n' \
-        "$navigation_item_count" >&2
-    exit 1
-fi
+# Die Bereichsnavigation steckt seit der Umstellung in der Schale und nicht
+# mehr im Vorgabenrahmen; der Rahmen darf sie deshalb nicht doppeln.
+assert_body_absent_fixed 'data-estab-navigation-item'
 for forbidden in \
     '<details' \
     '<summary' \
@@ -300,8 +302,6 @@ if grep -Fq 'data-estab-session-bar' "$body"; then
     exit 1
 fi
 assert_status 200 "$base_url/4fach/vorgaben.php?next=incident-log"
-assert_body_fixed "href=\"$expected_app_root/4fach/index.php?login_flow=existing&amp;next=incident-log\""
-assert_body_fixed 'data-estab-navigation-mode="sidebar"'
 assert_body_absent_fixed '<summary'
 assert_status 400 "$base_url/4fach/vorgaben.php?next=administration"
 assert_status 400 "$base_url/4fach/vorgaben.php?unexpected=1"
@@ -454,10 +454,12 @@ assert_status 403 --request POST --data-urlencode 'login_flow=unknown' \
     "$base_url/4fach/mainindex.php"
 
 assert_status 200 "$base_url/stabinfo/index.php"
-assert_body_fixed './l_index.php'
+assert_body_fixed 'data-estab-shell-menu'
+assert_body_fixed 'data-estab-nav-key="bos-info"'
+assert_body_fixed 'data-estab-bos-document-shell'
+assert_body_fixed 'data-estab-bos-document-link'
 assert_body_fixed './f_info.php'
 assert_body_fixed 'data-estab-bos-workspace'
-assert_body_fixed 'name="status"'
 assert_body_fixed 'name="mainframe"'
 assert_body_fixed 'data-estab-mobile-menu-return'
 assert_body_fixed 'data-estab-bos-responsive-style'
@@ -467,8 +469,7 @@ assert_nonempty_200 "$base_url/stabinfo/f_info.php"
 assert_body_fixed 'data-estab-bos-welcome'
 assert_no_insecure_resource
 assert_status 200 "$base_url/stabinfo/l_index.php"
-assert_body_fixed 'data-estab-public-bar'
-assert_body_fixed 'data-estab-navigation-mode="sidebar"'
+assert_body_absent_fixed 'data-estab-navigation-item'
 assert_body_fixed 'data-estab-bos-document-navigation'
 assert_body_fixed 'data-estab-bos-document-link'
 assert_body_absent_fixed '<details'
@@ -569,9 +570,13 @@ if grep -Fq '<script>alert(1)</script>' "$body"; then
     printf 'HTTP surface: info.php reflected executable markup\n' >&2
     exit 1
 fi
-if ! grep -Eiq "^Content-Security-Policy:.*script-src 'self' 'unsafe-inline'" "$headers" ||
-    grep -Fiq "'unsafe-eval'" "$headers"; then
-    printf 'HTTP surface: CSP does not enforce the eval-free script policy\n' >&2
+# Seit a5452f5 traegt jedes eigene Skript einen Nonce. 'unsafe-inline' darf
+# deshalb nicht mehr dastehen -- der Browser wuerde es neben einem Nonce
+# ohnehin verwerfen, aber ein Kopf, der es noch nennt, verraet einen Rueckfall.
+if ! grep -Eiq "^Content-Security-Policy:.*script-src 'self' 'nonce-[^']+'" "$headers" ||
+    grep -Fiq "'unsafe-eval'" "$headers" ||
+    grep -Eiq "^Content-Security-Policy:.*script-src[^;]*'unsafe-inline'" "$headers"; then
+    printf 'HTTP surface: CSP does not enforce the nonce-based, eval-free script policy\n' >&2
     sed -n '1,30p' "$headers" >&2
     exit 1
 fi

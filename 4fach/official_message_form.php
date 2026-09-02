@@ -7,6 +7,10 @@
  * controls. This preserves the official visual hierarchy while the legacy
  * controller continues to receive the field names it already authorises.
  */
+require_once __DIR__ . '/../app/nv_field_numbers.php';
+require_once __DIR__ . '/../app/nv_verteiler.php';
+require_once __DIR__ . '/../app/ui_elements.php';
+
 trait EstabOfficialMessageFormView
 {
     /** Carry one server-selected Stab/FB workspace through form round-trips. */
@@ -444,8 +448,8 @@ trait EstabOfficialMessageFormView
             echo '</div>';
         }
         if ($hasAttachmentFeedback || $hasEmbeddedPdf || $hasEmbeddedEmail) {
+            echo '<script' . estab_csp_script_attribute() . ' data-estab-attachment-presentation>';
             echo <<<'HTML'
-<script data-estab-attachment-presentation>
 (function () {
   "use strict";
   document.querySelectorAll(
@@ -470,8 +474,8 @@ trait EstabOfficialMessageFormView
 HTML;
         }
         if ($editable && is_string($directActionToken)) {
+            echo '<script' . estab_csp_script_attribute() . ' data-estab-attachment-upload-limit>';
             echo <<<'HTML'
-<script data-estab-attachment-upload-limit>
 (function () {
   "use strict";
   var input = document.getElementById("message-attachment-upload");
@@ -557,7 +561,15 @@ HTML;
         return [
             1 => [
                 'title' => 'Tatsächlich verwendetes Übermittlungsmittel',
-                'text' => 'Geben Sie an, über welches TK-Mittel die Nachricht tatsächlich empfangen oder gesendet wurde: Funk, Telefon, Telefax, DFÜ oder Kurier/Melder. Feld 1 dokumentiert den tatsächlichen Weg; Feld 7 enthält nur den gewünschten Weg.',
+                'text' => 'Geben Sie an, über welches TK-Mittel die Nachricht '
+                    . 'tatsächlich empfangen oder gesendet wurde. Der Vordruck '
+                    . 'kennt fünf: Funk, Telefon, Telefax, DFÜ und '
+                    . 'Kurier/Melder. Internet, E-Mail und Messenger sind '
+                    . 'DFÜ; kreuzen Sie dieses Kästchen an und benennen Sie '
+                    . 'den genauen Weg im Beförderungsweg (Feld 6). Ein '
+                    . 'Fernschreiben teilt sich das Kästchen der DFÜ. Feld 1 '
+                    . 'dokumentiert den tatsächlichen Weg; Feld 7 enthält nur '
+                    . 'den gewünschten.',
             ],
             2 => [
                 'title' => 'Aufnahmevermerk',
@@ -581,11 +593,16 @@ HTML;
             ],
             7 => [
                 'title' => 'Gewünschtes TK-Mittel',
-                'text' => 'Sie können hier einen Hinweis geben, über welches TK-Mittel die Nachricht befördert werden soll. Der tatsächlich benutzte Weg wird in Feld 1 nachgewiesen.',
+                'text' => 'Sie können hier einen Hinweis geben, über welches '
+                    . 'Mittel die Nachricht befördert werden soll: Funk, '
+                    . 'Telefon, Telefax, DFÜ oder Kurier/Melder. Internet, '
+                    . 'E-Mail und Messenger sind DFÜ; den genauen Weg benennt '
+                    . 'der Beförderungsweg (Feld 6). Der tatsächlich benutzte '
+                    . 'Weg wird in Feld 1 nachgewiesen.',
             ],
             8 => [
                 'title' => 'DURCHSAGE / Spruch',
-                'text' => 'Kennzeichnen Sie die Nachricht als DURCHSAGE oder als Spruch (Ausnahme).',
+                'text' => 'Kreuzen Sie nur an, wenn die Nachricht eine der beiden Sonderformen ist. Ein Spruch ist 1:1 im selben Wortlaut aufzuschreiben – Wort für Wort, ohne Kürzung oder Umformulierung. Eine Durchsage geht an eine Gruppe von Empfängern statt an jeden einzeln. Eine gewöhnliche Nachricht ist weder das eine noch das andere; dann bleibt dieses Feld frei.',
             ],
             9 => [
                 'title' => 'Vorrangstufe',
@@ -601,7 +618,7 @@ HTML;
             ],
             12 => [
                 'title' => 'Gesprächsnotiz',
-                'text' => 'Kreuzen Sie Gesprächsnotiz an, wenn Sie ein Gespräch eigenständig übermittelt, aufgenommen oder notiert haben. Die oben gewählte Übermittlungsart dokumentiert dieses ursprüngliche Gespräch. Nach der formalen Sichtung ergänzt LdF Rufname und Beförderungsweg; der Fernmelder übernimmt anschließend den Beförderungsnachweis.',
+                'text' => 'Kreuzen Sie Gesprächsnotiz an, wenn Sie ein Gespräch eigenständig übermittelt, aufgenommen oder notiert haben. Die oben gewählte Übermittlungsart dokumentiert dieses ursprüngliche Gespräch. Die Notiz hält fest, was bereits gesprochen wurde: mit der formalen Sichtung ist sie abgeschlossen, eine Disposition durch den LdF und eine Beförderung finden nicht statt.',
             ],
             13 => [
                 'title' => 'Inhalt – Betreff',
@@ -609,7 +626,44 @@ HTML;
             ],
             14 => [
                 'title' => 'Nachricht / Text',
-                'text' => 'Der Bereich Inhalt ist immer auszufüllen. Fassen Sie den Nachrichtentext so kurz wie möglich. Schreiben Sie klar und lesbar, bei Bedarf in Blockschrift; Zeilenumbrüche bleiben in der digitalen Fassung erhalten.',
+                'text' => 'Der Bereich Inhalt ist immer auszufüllen. Fassen '
+                    . 'Sie den Nachrichtentext so kurz wie möglich. Schreiben '
+                    . 'Sie klar und lesbar, bei Bedarf in Blockschrift; '
+                    . 'Zeilenumbrüche bleiben in der digitalen Fassung '
+                    . 'erhalten. Beantworten Sie wo, wann, was, wie und wer, '
+                    . 'und trennen Sie, was Sie selbst festgestellt haben, '
+                    . 'was Ihnen gemeldet wurde und was Sie vermuten. '
+                    . 'Eine Meldung berichtet an die vorgesetzte '
+                    . 'Führungsstelle; der Meldeweg führt von unten nach '
+                    . 'oben. Eine Orientierung unterrichtet nachgeordnete '
+                    . 'oder gleichgestellte Stellen. Ein Antrag fordert '
+                    . 'etwas an; er geht an die vorgesetzte Führungsstelle '
+                    . 'oder an einen Nachbarn, der aushelfen kann, und '
+                    . 'beantwortet wo, wann, was und '
+                    . 'warum, wie viele beziehungsweise wie beschaffen, und '
+                    . 'wer anfordert. Die Art steht im Text; die Anwendung '
+                    . 'führt sie nicht gesondert mit und hindert Sie an '
+                    . 'keinem Weg. Sofort und ohne Aufforderung zu melden '
+                    . 'sind: Gefahrstoffe und Gefahrgüter, der Abschluss des '
+                    . 'Auftrages und jede Abweichung vom Auftrag. Wählen Sie '
+                    . 'dafür eine Vorrangstufe in Feld 9, die zum Fall '
+                    . 'passt. Eine Lagemeldung arbeitet die folgenden acht '
+                    . 'Punkte ab, in dieser Reihenfolge, mit Angaben nur zu '
+                    . 'zutreffenden Punkten. Sie nimmt denselben Laufweg wie '
+                    . 'jede andere Nachricht. Sie ergeht auf Anforderung, '
+                    . 'regelmäßig auf Anordnung, bei umfassender '
+                    . 'Lageänderung, als Lageinformation nach unten und als '
+                    . 'Lageorientierung zur Seite.',
+                'liste' => [
+                    'Allgemeine Lage',
+                    'Schaden- und Gefahrenlage',
+                    'Eigene Lage',
+                    'Lageentwicklung',
+                    'Presse- und Öffentlichkeitsarbeit',
+                    'Besondere Vorkommnisse',
+                    'Anforderungen',
+                    'Sonstiges',
+                ],
             ],
             15 => [
                 'title' => 'Absender',
@@ -662,17 +716,614 @@ HTML;
             . '</strong>';
         echo '<span id="' . $descriptionId . '">'
             . estab_message_html($definition['text']) . '</span>';
+        /*
+         * Eine Aufzaehlung gehoert in eine Liste. Acht Punkte in einem
+         * Fliesstext sind acht Punkte, die niemand zaehlt -- und wer in
+         * einer Lagemeldung den dritten sucht, findet ihn dort nicht.
+         */
+        if (($definition['liste'] ?? []) !== []) {
+            echo '<ol class="estab-official-help-list">';
+            foreach ($definition['liste'] as $entry) {
+                echo '<li>' . estab_message_html((string) $entry) . '</li>';
+            }
+            echo '</ol>';
+        }
         echo '<button type="button" class="estab-official-help-close" '
             . 'data-estab-form-help-close="' . $number . '">Schließen</button>';
         echo '</span></span>';
     }
 
+    /** @var array<string,bool> Felder, die im Raster eine Marke tragen. */
+    public array $officialMessageMarkedFields = [];
+
+    /**
+     * Feldnummer, Feldname, kurze Marke und voller Grund je geprüftem Feld.
+     *
+     * 4fach/vali_data.php reicht nur ein Ja oder Nein bis zum Vordruck durch.
+     * Deshalb trug jedes Feld dieselbe Marke "Eingabe prüfen", und wer sie
+     * las, musste den Grund raten. Diese Tabelle sagt, was dort tatsächlich
+     * geprüft wird: die Nummer des amtlichen Rasters, den Feldnamen der
+     * Ausfüllanleitung, die kurze Marke am Feld und den vollen Satz für
+     * Fehlerübersicht und Vorlesehilfe. Nummer 0 trägt kein Feld des
+     * Rasters, sondern die digitale Bearbeitung daneben.
+     *
+     * @return array<string,array{
+     *     number: int,
+     *     label: string,
+     *     hint: string,
+     *     reason: string
+     * }>
+     */
+    function official_message_field_guidance(): array
+    {
+        $timeHint = 'Zeit vierstellig';
+        $timeReason = 'Uhrzeit vierstellig eintragen, zum Beispiel 0730; '
+            . 'mit Tag sechsstellig (TThhmm), taktisch vollständig '
+            . 'dreizehnstellig (TThhmmMMMJJJJ).';
+        $markHint = 'Zeichen';
+        $markReason = 'Namenszeichen eintragen, höchstens sechs Zeichen.';
+        return [
+            '01_medium' => [
+                'number' => 1,
+                'label' => 'Übermittlungsmittel',
+                'hint' => 'Mittel wählen',
+                'reason' => 'Tatsächlich verwendetes Übermittlungsmittel '
+                    . 'ankreuzen.',
+            ],
+            '01_datum' => [
+                'number' => 2,
+                'label' => 'Aufnahmevermerk, Zeit',
+                'hint' => $timeHint,
+                'reason' => $timeReason,
+            ],
+            '01_zeichen' => [
+                'number' => 2,
+                'label' => 'Aufnahmevermerk, Zeichen',
+                'hint' => $markHint,
+                'reason' => $markReason,
+            ],
+            '02_zeit' => [
+                'number' => 3,
+                'label' => 'Annahmevermerk, Zeit',
+                'hint' => $timeHint,
+                'reason' => $timeReason,
+            ],
+            '02_zeichen' => [
+                'number' => 3,
+                'label' => 'Annahmevermerk, Zeichen',
+                'hint' => $markHint,
+                'reason' => $markReason,
+            ],
+            '03_datum' => [
+                'number' => 4,
+                'label' => 'Beförderungsvermerk, Zeit',
+                'hint' => $timeHint,
+                'reason' => $timeReason,
+            ],
+            '03_zeichen' => [
+                'number' => 4,
+                'label' => 'Beförderungsvermerk, Zeichen',
+                'hint' => $markHint,
+                'reason' => $markReason,
+            ],
+            '05_gegenstelle' => [
+                'number' => 6,
+                'label' => 'Rufname der Gegenstelle',
+                'hint' => 'Rufname fehlt',
+                'reason' => 'Rufname der Gegenstelle eintragen, einzeilig '
+                    . 'und höchstens 128 Zeichen.',
+            ],
+            '06_befwegausw' => [
+                'number' => 7,
+                'label' => 'Gewünschtes Übermittlungsmittel',
+                'hint' => 'Auswahl prüfen',
+                'reason' => 'Nur eines der angebotenen Übermittlungsmittel '
+                    . 'ist zulässig; das Feld darf frei bleiben.',
+            ],
+            '09_vorrangstufe' => [
+                'number' => 9,
+                'label' => 'Vorrangstufe',
+                'hint' => 'Auswahl prüfen',
+                'reason' => 'Nur die angebotenen Vorrangstufen sind '
+                    . 'zulässig; ohne besondere Vorrangstufe bleibt das Feld '
+                    . 'frei.',
+            ],
+            '10_anschrift' => [
+                'number' => 10,
+                'label' => 'Anschrift',
+                'hint' => 'Anschrift fehlt',
+                'reason' => 'Anschrift eintragen: Dienststelle, Teileinheit '
+                    . 'oder Einheit, kein Eigenname.',
+            ],
+            '11_rufnummer' => [
+                'number' => 11,
+                'label' => 'Ruf Nr.',
+                'hint' => 'Rufnummer prüfen',
+                'reason' => 'Rufnummer einzeilig und höchstens 128 Zeichen; '
+                    . 'das Feld darf frei bleiben.',
+            ],
+            '12_betreff' => [
+                'number' => 13,
+                'label' => 'Inhalt, Betreff',
+                'hint' => 'Betreff fehlt',
+                'reason' => 'Betreff eintragen, einzeilig und höchstens 255 '
+                    . 'Zeichen.',
+            ],
+            '12_inhalt' => [
+                'number' => 14,
+                'label' => 'Nachricht, Text',
+                'hint' => 'Text fehlt',
+                'reason' => 'Nachrichtentext eintragen.',
+            ],
+            '13_abseinheit' => [
+                'number' => 15,
+                'label' => 'Absender',
+                'hint' => 'Absender fehlt',
+                'reason' => 'Absender als Dienststellen-, Teileinheits- oder '
+                    . 'Einheitsbezeichnung eintragen, kein Eigenname, '
+                    . 'höchstens 128 Zeichen.',
+            ],
+            '12_abfzeit' => [
+                'number' => 16,
+                'label' => 'Abfassungszeit',
+                'hint' => $timeHint,
+                'reason' => $timeReason,
+            ],
+            '14_zeichen' => [
+                'number' => 17,
+                'label' => 'Zeichen des Verfassers',
+                'hint' => $markHint,
+                'reason' => $markReason,
+            ],
+            '14_funktion' => [
+                'number' => 17,
+                'label' => 'Funktion des Verfassers',
+                'hint' => 'Funktion fehlt',
+                'reason' => 'Funktion des Verfassers eintragen.',
+            ],
+            '15_quitdatum' => [
+                'number' => 18,
+                'label' => 'Quittung, Zeit',
+                'hint' => $timeHint,
+                'reason' => $timeReason,
+            ],
+            '15_quitzeichen' => [
+                'number' => 18,
+                'label' => 'Quittung, Zeichen',
+                'hint' => $markHint,
+                'reason' => $markReason,
+            ],
+            '16_empf' => [
+                'number' => 19,
+                'label' => 'Verteiler',
+                'hint' => 'Empfänger fehlt',
+                'reason' => 'Mindestens einen Bearbeiter im Verteiler '
+                    . 'ankreuzen; die rote Lagedurchschrift allein genügt '
+                    . 'nicht.',
+            ],
+            '17_vermerke' => [
+                'number' => 20,
+                'label' => 'Vermerke',
+                'hint' => 'Eintrag fehlt',
+                'reason' => 'Vermerk zur Bearbeitung eintragen.',
+            ],
+            '06_befweg' => [
+                'number' => 0,
+                'label' => 'Beförderungsweg',
+                'hint' => 'Weg fehlt',
+                'reason' => 'Beförderungsweg benennen, einzeilig und '
+                    . 'höchstens 128 Zeichen.',
+            ],
+            'fernmeldeplan_eintrag_id' => [
+                'number' => 0,
+                'label' => 'Fernmeldeweg aus dem S6-Plan',
+                'hint' => 'Weg wählen',
+                'reason' => 'Einen freigegebenen Weg aus dem gültigen '
+                    . 'S6-Fernmeldeplan auswählen.',
+            ],
+            'incoming_transport_confirmed' => [
+                'number' => 0,
+                'label' => 'Eingangsweg',
+                'hint' => 'Bestätigung fehlt',
+                'reason' => 'Eingangsweg prüfen und bestätigen.',
+            ],
+            'incoming_transport_correction_reason' => [
+                'number' => 0,
+                'label' => 'Begründung der Änderung',
+                'hint' => 'Begründung prüfen',
+                'reason' => 'Begründung höchstens 500 Zeichen, ohne '
+                    . 'Steuerzeichen.',
+            ],
+        ];
+    }
+
+    /**
+     * Felder, ohne die der laufende Arbeitsschritt nicht abschließbar ist.
+     *
+     * Die Liste bildet den Zweig ab, den vali_data_form::checkdata() für
+     * diesen Arbeitsschritt auswertet, beschränkt auf die Felder, deren
+     * eigene Prüfung einen leeren Eintrag zurückweist. Feld 9 und Feld 11
+     * stehen deshalb nicht darin: die Prüfung lässt sie leer zu. Damit
+     * verspricht die Kennzeichnung im Vordruck genau das, was der Server
+     * annimmt. tests/php/official_message_guidance.php leitet dieselbe Liste
+     * aus 4fach/vali_data.php ab und vergleicht sie.
+     *
+     * @return list<string>
+     */
+    /**
+     * Disponiert der LdF hier selbst Mittel und Weg?
+     *
+     * Ohne veröffentlichten S6-Plan gibt es keinen Weg zum Auswählen.
+     * Die Prüfung nimmt die unmittelbare Angabe aber nur an, solange
+     * kein Plan verlangt wird (4fach/vali_data.php, LdF-Ausgang). Im
+     * Modus STRENG ohne gültigen Plan böte die Maske sonst Felder an,
+     * verlangte sie und liesse sich anschliessend nie speichern.
+     */
+    function official_message_manual_disposition(): bool
+    {
+        return $this->activeTelecomRoutes === []
+            && !estab_permission_telecom_plan_required();
+    }
+
+    /**
+     * Die Wege des gueltigen S6-Plans als Auswahlliste.
+     *
+     * Ausgang und Eingang brauchen dieselbe Liste. Sie unterscheiden sich
+     * allein im Zwang: der Ausgang muss einen Weg waehlen, der Eingang darf
+     * -- der Fernmelder kennt das Mittel immer, den Weg meistens. Deshalb
+     * traegt der leere Eintrag hier seine eigene Beschriftung.
+     */
+    function official_message_route_options(
+        string $selected,
+        string $emptyLabel
+    ): string {
+        /*
+         * Der Platzhalter sagt ausdruecklich, dass er gewaehlt ist.
+         *
+         * Ohne `selected` waehlt der Browser die erste Zeile von sich aus.
+         * Fuer den Waechter gegen Datenverlust ist das eine Aenderung --
+         * `selected` weicht dann von `defaultSelected` ab --, und ein
+         * frisch geoeffneter Vordruck warnte beim Abmelden oder beim
+         * Bereichswechsel vor ungespeicherten Eingaben, die es nicht gab.
+         * Eine Warnung, die immer kommt, wird ueberlesen; dann fehlt sie,
+         * wenn wirklich etwas auf dem Spiel steht.
+         */
+        $markup = '<option value=""'
+            . ($selected === '' ? ' selected' : '') . '>'
+            . estab_message_html($emptyLabel) . '</option>';
+        foreach ($this->activeTelecomRoutes as $route) {
+            $parts = array_values(array_filter([
+                trim((string)($route['betriebsstelle'] ?? '')),
+                trim((string)($route['erreichbarkeit'] ?? '')),
+                trim((string)($route['kanal'] ?? '')),
+                trim((string)($route['bandlage'] ?? '')),
+                trim((string)($route['rufgruppe'] ?? '')),
+                trim((string)($route['verkehrsform'] ?? '')),
+            ], static fn(string $part): bool => $part !== ''));
+            $routeId = (string)$route['fernmeldeplan_eintrag_id'];
+            $routeLabel = 'Plan v' . (int)$route['plan_version']
+                . ' · ' . estab_dv_telecom_route_label(
+                    $route['medium'] ?? null,
+                    $route['funkart'] ?? null
+                )
+                . ' · ' . implode(' · ', $parts);
+            $markup .= '<option value="' . estab_message_html($routeId) . '"'
+                . ($selected === $routeId ? ' selected' : '') . '>'
+                . estab_message_html($routeLabel) . '</option>';
+        }
+        return $markup;
+    }
+
+    /**
+     * Der vom Fernmelder erfasste Eingangsweg, in Worten.
+     *
+     * Gelesen wird aus derselben Liste, aus der er gewaehlt wurde. Steht der
+     * Weg nicht mehr darin -- weil der S6 inzwischen eine neue Fassung
+     * freigegeben hat --, sagt die Ansicht das, statt zu schweigen.
+     */
+    function official_message_recorded_route_text(string $routeId): string
+    {
+        if ($routeId === '') {
+            return 'kein Weg angegeben';
+        }
+        foreach ($this->activeTelecomRoutes as $route) {
+            if ((string)$route['fernmeldeplan_eintrag_id'] !== $routeId) {
+                continue;
+            }
+            $parts = array_values(array_filter([
+                trim((string)($route['betriebsstelle'] ?? '')),
+                trim((string)($route['erreichbarkeit'] ?? '')),
+            ], static fn(string $part): bool => $part !== ''));
+            return estab_dv_telecom_route_label(
+                $route['medium'] ?? null,
+                $route['funkart'] ?? null
+            ) . ($parts === [] ? '' : ' · ' . implode(' · ', $parts));
+        }
+        return 'nicht mehr im gültigen Plan';
+    }
+
+    /**
+     * Steht dieses gedruckte Feld dem laufenden Arbeitsschritt offen?
+     *
+     * Die Ansicht spricht die Zählung, die sie druckt. Welchen Zugriffsindex
+     * ein gedrucktes Feld trägt, weiss allein app/nv_field_numbers.php --
+     * sonst stünde in jeder zweiten Zeile eine Übersetzung, die niemand
+     * nachschlagen kann.
+     */
+    function official_message_field_access(int $number): bool
+    {
+        return (bool)($this->feld[estab_nv_access_index($number)] ?? false);
+    }
+
+    function official_message_required_fields(): array
+    {
+        return match ((string) $this->task) {
+            'FM-Eingang', 'FM-Eingang_Anhang' => [
+                '01_medium',
+                '01_datum',
+                '01_zeichen',
+                '05_gegenstelle',
+                '10_anschrift',
+                '12_betreff',
+                '12_inhalt',
+                // Die Abfassungszeit stand hier als Pflichtangabe. Sie
+                // gehoert dem, der die Nachricht abgefasst hat; der
+                // Fernmelder nimmt sie auf. Das Feld ist ihm jetzt gesperrt
+                // -- eine Pflicht, die er nicht erfuellen kann, haette den
+                // Arbeitsschritt verschlossen.
+            ],
+            'Stab_schreiben', 'Stab_korrigieren' => [
+                '10_anschrift',
+                '12_betreff',
+                '12_inhalt',
+                '12_abfzeit',
+                '13_abseinheit',
+                '14_zeichen',
+                '14_funktion',
+            ],
+            'Stab_gesprnoti' => [
+                '01_medium',
+                '01_datum',
+                '10_anschrift',
+                '12_betreff',
+                '12_inhalt',
+                '12_abfzeit',
+                '13_abseinheit',
+                '14_zeichen',
+                '14_funktion',
+            ],
+            'FM-Ausgang' => ['03_datum', '03_zeichen'],
+            'LdF-Eingang' => [
+                '01_medium',
+                'incoming_transport_confirmed',
+                '02_zeit',
+                '02_zeichen',
+                '13_abseinheit',
+            ],
+            // Ohne veröffentlichten S6-Plan gibt es keinen Auswahlkasten:
+            // dann disponiert LdF Mittel und Weg unmittelbar.
+            'LdF-Ausgang' => $this->official_message_manual_disposition()
+                ? [
+                    '02_zeit',
+                    '02_zeichen',
+                    '05_gegenstelle',
+                    '01_medium',
+                    '06_befweg',
+                ]
+                : [
+                    '02_zeit',
+                    '02_zeichen',
+                    '05_gegenstelle',
+                    'fernmeldeplan_eintrag_id',
+                ],
+            // Die Sichtung eines Eingangs schließt den Nachweis ab; ohne
+            // benannten Bearbeiter erreicht die Nachricht danach niemanden.
+            'Stab_sichten' => ($this->formdata['04_richtung'] ?? '') === 'E'
+                ? ['15_quitdatum', '15_quitzeichen', '16_empf']
+                : ['15_quitdatum', '15_quitzeichen'],
+            default => [],
+        };
+    }
+
+    function official_message_field_required(string $field): bool
+    {
+        return in_array(
+            $field,
+            $this->official_message_required_fields(),
+            true
+        );
+    }
+
+    /** Sprungziel eines Feldes: das Bedienelement, nicht nur die Zelle. */
+    function official_message_field_anchor(string $field): string
+    {
+        return match ($field) {
+            '01_medium' => 'f_01_medium_fu',
+            '09_vorrangstufe' => 'f_09_vorrangstufe_keine',
+            default => 'f_' . $field,
+        };
+    }
+
+    function official_message_error_id(string $field): string
+    {
+        return 'estab-field-error-' . $field;
+    }
+
+    /**
+     * Attribute eines ausfüllbaren Feldes um die Fehlermarke ergänzen.
+     *
+     * Rufname und Absender tragen bereits ein aria-describedby der
+     * Vorschlagsliste. Ein zweites gleichnamiges Attribut verwirft der
+     * Browser, deshalb tritt die Marke der vorhandenen Liste bei.
+     */
+    function official_message_described_by(
+        string $field,
+        bool $invalid,
+        string $extraAttributes
+    ): string {
+        if (!$invalid) {
+            return $extraAttributes;
+        }
+        $marker = $this->official_message_error_id($field);
+        if (str_contains($extraAttributes, ' aria-describedby="')) {
+            return str_replace(
+                ' aria-describedby="',
+                ' aria-describedby="' . $marker . ' ',
+                $extraAttributes
+            );
+        }
+        return $extraAttributes . ' aria-describedby="' . $marker . '"';
+    }
+
+    /** Kennzeichnung eines Pflichtfeldes am ausfüllbaren Bedienelement. */
+    function official_message_required_attributes(
+        string $field,
+        bool $editable
+    ): string {
+        return $editable && $this->official_message_field_required($field)
+            ? ' aria-required="true" data-estab-required="true"'
+            : '';
+    }
+
+    /**
+     * In welchem Zustand ist dieses Feld für den laufenden Arbeitsschritt?
+     *
+     * "pflicht" heisst: gehört mir und muss ausgefüllt werden. "zustaendig":
+     * gehört mir, darf frei bleiben. "fremd": gehört einer anderen Station
+     * und bleibt nur sichtbar, damit der Vordruck einer bleibt.
+     *
+     * Der Zustand steht als Merkmal am Feld und nicht nur als Farbe, weil
+     * eine Farbe im Sonnenlicht, bei Farbfehlsichtigkeit und auf einem
+     * Schwarzweissausdruck verschwindet -- und eine Fuehrungsstelle arbeitet
+     * in allen drei Lagen.
+     */
+    function official_message_field_state(string $field, bool $editable): string
+    {
+        if (!$editable) {
+            return 'fremd';
+        }
+        return $this->official_message_field_required($field)
+            ? 'pflicht'
+            : 'zustaendig';
+    }
+
+    /** Das Merkmal, das den Zustand traegt. */
+    function official_message_state_attribute(
+        string $field,
+        bool $editable
+    ): string {
+        return ' data-estab-field-state="'
+            . $this->official_message_field_state($field, $editable) . '"';
+    }
+
+    /**
+     * Die sichtbare Marke am Pflichtfeld.
+     *
+     * Ein Stern an jedem Feld benennt nichts mehr, deshalb steht er nur dort,
+     * wo dieser Arbeitsschritt wirklich etwas verlangt. Vorlesehilfen lesen
+     * ihn nicht mit -- fuer sie steht bereits aria-required am Feld, und ein
+     * vorgelesener Stern waere nur Laerm.
+     */
+    function official_message_required_mark(
+        string $field,
+        bool $editable
+    ): void {
+        if ($this->official_message_field_state($field, $editable) !== 'pflicht') {
+            return;
+        }
+        echo '<span class="estab-official-required-mark" aria-hidden="true">'
+            . '*</span>';
+    }
+
+    /**
+     * Marke am Feld: kurz sichtbar, vollständig für die Vorlesehilfe.
+     *
+     * Die Marke meldet sich nicht selbst als Alarm. Bei acht offenen Feldern
+     * spräche der Screenreader acht Alarme; die Übersicht am Seitenkopf ist
+     * die eine Meldung, die Marke der Hinweis am Feld.
+     */
     function official_message_error(string $field): void
     {
-        if (($this->errorselect[$field] ?? true) === false) {
-            echo '<span class="estab-official-field-error" role="alert">'
-                . 'Eingabe prüfen</span>';
+        if (($this->errorselect[$field] ?? true) !== false) {
+            return;
         }
+        $this->officialMessageMarkedFields[$field] = true;
+        $guidance = $this->official_message_field_guidance()[$field] ?? null;
+        $hint = is_array($guidance) ? $guidance['hint'] : 'Eintrag prüfen';
+        $reason = is_array($guidance)
+            ? $guidance['reason']
+            : 'Eintrag prüfen.';
+        echo '<span id="' . $this->official_message_error_id($field) . '" '
+            . 'class="estab-official-field-error">'
+            . estab_message_html($hint)
+            . '<span class="estab-visually-hidden">. '
+            . estab_message_html($reason) . '</span></span>';
+    }
+
+    /**
+     * Fehlerübersicht am Seitenkopf mit Sprungmarke je Feld.
+     *
+     * Aufgeführt wird, was im Raster eine Marke trägt, und zusätzlich jedes
+     * Pflichtfeld dieses Arbeitsschritts, das die Prüfung zurückgewiesen hat.
+     * Der zweite Teil ist nötig, weil Ankreuzfelder wie das
+     * Übermittlungsmittel oder der Verteiler keine Marke am Feld tragen.
+     */
+    function official_message_error_summary(): void
+    {
+        $guidance = $this->official_message_field_guidance();
+        $fields = array_keys($this->officialMessageMarkedFields);
+        foreach ($this->official_message_required_fields() as $field) {
+            if (
+                ($this->errorselect[$field] ?? true) === false
+                && !in_array($field, $fields, true)
+            ) {
+                $fields[] = $field;
+            }
+        }
+        $entries = [];
+        foreach ($fields as $field) {
+            if (!isset($guidance[$field])) {
+                continue;
+            }
+            $entries[] = [
+                'number' => $guidance[$field]['number'],
+                'anchor' => $this->official_message_field_anchor($field),
+                'title' => ($guidance[$field]['number'] > 0
+                    ? 'Feld ' . $guidance[$field]['number'] . ' · '
+                    : '') . $guidance[$field]['label'],
+                'reason' => $guidance[$field]['reason'],
+            ];
+        }
+        if ($entries === []) {
+            return;
+        }
+        // In der Reihenfolge des Vordrucks lesen; die Angaben neben dem
+        // Raster tragen die Nummer 0 und stehen wie im Ablauf voran.
+        usort(
+            $entries,
+            static function (array $first, array $second): int {
+                return [$first['number'], $first['title']]
+                    <=> [$second['number'], $second['title']];
+            }
+        );
+        $count = count($entries);
+        echo '<section class="estab-message-error-summary" '
+            . 'id="estab-nachrichtenfehler" role="alert" tabindex="-1" '
+            . 'aria-labelledby="estab-nachrichtenfehler-title" '
+            . 'data-estab-form-error-summary="' . $count . '" '
+            . 'data-estab-form-error-focus="'
+            . estab_message_html($entries[0]['anchor']) . '">'
+            . '<h2 id="estab-nachrichtenfehler-title">Noch nicht gespeichert: '
+            . $count . ($count === 1 ? ' Feld' : ' Felder') . ' prüfen</h2>'
+            . '<p>Ihre Eingaben stehen unverändert im Vordruck. '
+            . 'Ein Klick springt in das Feld.</p><ol>';
+        foreach ($entries as $entry) {
+            echo '<li><a href="#' . estab_message_html($entry['anchor']) . '">'
+                . '<strong>' . estab_message_html($entry['title']) . '</strong>'
+                . '<span>' . estab_message_html($entry['reason'])
+                . '</span></a></li>';
+        }
+        echo '</ol></section>';
     }
 
     function official_message_text_input(
@@ -696,8 +1347,15 @@ HTML;
                 . 'name="' . $field . '" value="' . $value . '" '
                 . 'maxlength="' . $maxlength . '" '
                 . 'aria-label="' . estab_message_html($label) . '"'
+                . $this->official_message_required_attributes($field, true)
+                . $this->official_message_state_attribute($field, true)
                 . ($invalid ? ' aria-invalid="true"' : '')
-                . $extraAttributes . '>';
+                . $this->official_message_described_by(
+                    $field,
+                    $invalid,
+                    $extraAttributes
+                ) . '>';
+            $this->official_message_required_mark($field, true);
             $this->official_message_error($field);
             return;
         }
@@ -706,7 +1364,9 @@ HTML;
                 . 'name="' . $field . '" value="' . $value . '">';
         }
         echo '<span id="f_' . $field . '" class="estab-official-readonly" '
-            . 'data-estab-readonly="true" aria-label="'
+            . 'data-estab-readonly="true"'
+            . $this->official_message_state_attribute($field, false)
+            . ' aria-label="'
             . estab_message_html($label . ' schreibgeschützt') . '">'
             . ($displayValue === '' ? '&nbsp;' : $displayValue) . '</span>';
     }
@@ -725,8 +1385,12 @@ HTML;
                 . 'class="estab-official-textarea" '
                 . 'aria-label="' . estab_message_html($label) . '"'
                 . ($maxlength > 0 ? ' maxlength="' . $maxlength . '"' : '')
+                . $this->official_message_required_attributes($field, true)
+                . $this->official_message_state_attribute($field, true)
                 . ($invalid ? ' aria-invalid="true"' : '')
+                . $this->official_message_described_by($field, $invalid, '')
                 . ' name="' . $field . '">' . $value . '</textarea>';
+            $this->official_message_required_mark($field, true);
             $this->official_message_error($field);
             return;
         }
@@ -736,7 +1400,9 @@ HTML;
         }
         echo '<span id="f_' . $field . '" '
             . 'class="estab-official-readonly estab-official-readonly--multiline" '
-            . 'data-estab-readonly="true" aria-label="'
+            . 'data-estab-readonly="true"'
+            . $this->official_message_state_attribute($field, false)
+            . ' aria-label="'
             . estab_message_html($label . ' schreibgeschützt') . '">'
             . ($value === '' ? '&nbsp;' : nl2br($value)) . '</span>';
     }
@@ -772,7 +1438,11 @@ HTML;
                     . estab_message_html($describedBy) . '"'
                 : '')
             . ($disabled ? ' aria-disabled="true"' : '')
-            . ($editable && $required ? ' aria-required="true"' : '')
+            . ($editable
+                && ($required
+                    || $this->official_message_field_required($field))
+                ? ' aria-required="true"'
+                : '')
             . '>';
         foreach ($options as $option) {
             $checked = hash_equals($current, $option['value'])
@@ -901,8 +1571,7 @@ HTML;
 
     function official_message_timestamp_block(
         string $title,
-        int $printedNumber,
-        int $helpNumber,
+        int $number,
         string $timeField,
         string $markField,
         bool $editable,
@@ -912,7 +1581,7 @@ HTML;
         echo '<section class="estab-official-stamp">'
             . '<div class="estab-official-cell-heading">'
             . estab_message_html($title);
-        $this->official_message_help($helpNumber);
+        $this->official_message_help($number);
         echo '</div><div class="estab-official-stamp-entry">';
         $markBound = in_array(
             $this->task,
@@ -988,12 +1657,93 @@ HTML;
             . '<div class="estab-official-stamp-labels" aria-hidden="true">'
             . '<span>Datum</span><span>Uhrzeit</span><span>Hdz.</span>'
             . '</div><span class="estab-official-print-number">'
-            . $printedNumber . '</span></section>';
+            . $number . '</span></section>';
+    }
+
+    /**
+     * Feld 8: keine der beiden Formen ist vorbelegt.
+     *
+     * Ein Spruch ist eine Nachricht, die 1:1 im selben Wortlaut
+     * aufzuschreiben ist. Eine Durchsage geht an eine Gruppe von Empfängern
+     * statt an jeden einzeln. Beides sind Sonderfälle; eine normale Meldung
+     * ist weder das eine noch das andere.
+     *
+     * Hier stand die Durchsage vorbelegt, mit der Begründung, sie sei die
+     * Regel und der Spruch die Ausnahme. Das war eine Auslegung der
+     * Ausfüllanleitung, nicht ihr Wortlaut. Ein vorbelegtes Kästchen ist eine
+     * Angabe, die niemand gemacht hat -- und sie steht später als Aussage des
+     * Verfassers im Nachweis.
+     *
+     * Die Methode bleibt, weil der Vordruck sie vor der Auswahl aufruft und
+     * ein Feld ohne Vorbelegung trotzdem eines ist, das nichts vorbelegt
+     * bekommt. Was sie tut, ist gerade nichts zu tun.
+     */
+    function official_message_preselect_form_type(): void
+    {
+    }
+
+    /**
+     * Feld 14: die Leitfragen und die Herkunft der Angaben.
+     *
+     * Eine Meldung, die nicht sagt wo, wann, was, wie und wer, erzwingt eine
+     * Rückfrage, und eine Rückfrage kostet im Einsatz mehr Zeit als die
+     * Meldung selbst. Der gedruckte Vordruck trägt die Leitfragen als Merke
+     * am Textfeld; die Maske trägt sie ebenso, sichtbar und vorlesbar. Wer
+     * sie erst in einer Hilfe suchen muss, sucht sie nicht.
+     *
+     * Die zweite Zeile ist folgenschwerer. Eine Lage entsteht aus Meldungen,
+     * und eine Vermutung, die als Feststellung ankommt, führt zu
+     * Entscheidungen über eine Lage, die es nicht gibt. Der Hinweis steht
+     * neben dem Feld und nicht darin: Was der Verfasser absetzt, hat er
+     * geschrieben, und ein vorgesetzter Text stünde später als seine Aussage
+     * im Nachweis.
+     *
+     * Beides erscheint nur dort, wo geschrieben wird. Ein gesichteter
+     * Vordruck zeigt, was gemeldet wurde, nicht mehr, wie man meldet.
+     */
+    function official_message_text_guidance(): void
+    {
+        if (!$this->official_message_text_guidance_visible()) {
+            return;
+        }
+        echo '<p class="estab-official-text-guidance">'
+            . '<span class="estab-official-text-questions">'
+            . 'Wo? Wann? Was? Wie? Wer?</span>'
+            . '<span class="estab-official-text-provenance">'
+            . 'Trennen: selbst festgestellt, von anderen gemeldet, '
+            . 'vermutet.</span>'
+            . '<span class="estab-official-text-kinds">'
+            . 'Meldung berichtet nach oben · Orientierung unterrichtet nach '
+            . 'unten oder zur Seite · Antrag fordert an.</span></p>';
+    }
+
+    /**
+     * Wer die Merkhilfe am Nachrichtentext sieht.
+     *
+     * Wer schreibt, braucht sie beim Ausfuellen. Fernmeldezentrale und
+     * Leiter des Fernmeldebetriebes lesen sie als passives Prueforgan: Wer
+     * weiss, wie eine vollstaendige Meldung aussieht, stellt die richtige
+     * Rueckfrage, bevor die Nachricht hinausgeht.
+     *
+     * Wo weder geschrieben noch befoerdert wird, steht sie nicht. Ein
+     * abgeschlossener Nachweis zeigt, was gemeldet wurde, nicht mehr, wie
+     * man meldet.
+     */
+    function official_message_text_guidance_visible(): bool
+    {
+        if ($this->official_message_field_access(14)) {
+            return true;
+        }
+        return in_array(
+            $this->task,
+            ['LdF-Eingang', 'LdF-Ausgang', 'FM-Ausgang'],
+            true
+        );
     }
 
     function official_message_priority(): void
     {
-        $editable = (bool)$this->feld[9];
+        $editable = $this->official_message_field_access(9);
         $current = (string)($this->formdata['09_vorrangstufe'] ?? '');
         if (!$editable) {
             echo '<input type="hidden" name="09_vorrangstufe" value="'
@@ -1003,15 +1753,14 @@ HTML;
             . 'estab-official-priority-choices" role="radiogroup" '
             . 'aria-label="Vorrangstufe" '
             . 'aria-describedby="estab-form-help-9-description">';
-        $options = [
-            [
-                'value' => $current === 'eee' ? 'eee' : '',
-                'label' => 'keine',
-                'id' => 'keine',
-                'warning' => '',
-                'clear' => true,
-            ],
-        ];
+        /*
+         * Hier stand ein viertes Kästchen mit der Aufschrift „keine", und es
+         * war angekreuzt. Der amtliche Vordruck hat kein solches Kästchen:
+         * „keine Vorrangstufe" ist die Abwesenheit eines Kreuzes, keine
+         * eigene Aussage. Und ein vorbelegtes Kreuz ist eine Angabe, die
+         * niemand gemacht hat.
+         */
+        $options = [];
         foreach (estab_message_priority_options() as $option) {
             if ($option['value'] === '') {
                 continue;
@@ -1026,18 +1775,21 @@ HTML;
                     default => $option['value'],
                 },
                 'warning' => $option['warning'],
-                'clear' => false,
+                // Der amtliche Vordruck hat zwei Kästchen: Sofort und Blitz.
+                // Staatsnot ist wählbar, weil eine eingegangene Nachricht sie
+                // tragen kann -- ein gedrucktes Kästchen dafür wäre erfunden.
+                'extra' => !in_array($option['value'], ['sss', 'bbb'], true),
             ];
         }
         foreach ($options as $option) {
-            $isNone = in_array($current, ['', 'eee'], true)
-                && $option['clear'];
-            $isSelected = $isNone
-                || (!$option['clear'] && $current === $option['value']);
+            $isSelected = $current === $option['value'];
+            $labelClasses = $option['extra']
+                ? ['estab-official-priority-extra']
+                : [];
             echo '<label'
-                . ($option['clear']
-                    ? ' class="estab-official-priority-clear"'
-                    : '')
+                . ($labelClasses === []
+                    ? ''
+                    : ' class="' . implode(' ', $labelClasses) . '"')
                 . ' for="f_09_vorrangstufe_' . $option['id'] . '">'
                 . '<input id="f_09_vorrangstufe_' . $option['id'] . '" '
                 . 'class="estab-official-box-choice" type="radio" '
@@ -1052,6 +1804,23 @@ HTML;
                     : '')
                 . '><span>' . $option['label'] . '</span></label>';
         }
+        /*
+         * Eine Stufe ohne Kästchen darf im Ausdruck nicht verschwinden. Sie
+         * wird als Vermerk gesetzt: kein Kreuz an einer Stelle, an der der
+         * Vordruck keine vorsieht, aber auch keine verlorene Angabe.
+         */
+        $documented = estab_message_priority_document_label($current);
+        if (
+            $documented !== ''
+            && !in_array(
+                estab_message_priority_storage_value($current),
+                ['sss', 'bbb'],
+                true
+            )
+        ) {
+            echo '<span class="estab-official-priority-note">Vorrangstufe: '
+                . estab_message_html($documented) . '</span>';
+        }
         echo '</span>';
     }
 
@@ -1063,7 +1832,7 @@ HTML;
             true
         );
         return $immutableAdmin
-            || !$this->feld[16]
+            || !$this->official_message_field_access(19)
             || (
                 $this->task === 'Stab_sichten'
                 && ($this->formdata['04_richtung'] ?? '') === 'A'
@@ -1075,34 +1844,9 @@ HTML;
      */
     function official_message_stored_recipients(): array
     {
-        $distribution = (string)($this->formdata['16_empf'] ?? '');
-        $recipients = [];
-        foreach (explode(',', $distribution) as $token) {
-            $token = trim($token);
-            if (
-                preg_match(
-                    '/\A(.+)_(bl|gn|rt|ge|gb)\z/Di',
-                    $token,
-                    $parts
-                ) !== 1
-            ) {
-                continue;
-            }
-            $function = trim($parts[1]);
-            $colour = strtolower($parts[2]);
-            if ($function === '') {
-                continue;
-            }
-            $key = strtoupper($function);
-            $recipients[$key] ??= [
-                'function' => $function,
-                'copies' => [],
-            ];
-            if (!in_array($colour, $recipients[$key]['copies'], true)) {
-                $recipients[$key]['copies'][] = $colour;
-            }
-        }
-        return $recipients;
+        return estab_nv_gespeicherte_empfaenger(
+            (string)($this->formdata['16_empf'] ?? '')
+        );
     }
 
     /** @return list<string> */
@@ -1126,126 +1870,10 @@ HTML;
      */
     function official_message_distribution_model(): array
     {
-        $groups = ['lead' => [], 'adviser' => [], 'liaison' => []];
-        $extras = [];
-        $all = [];
-        $storedRecipients = $this->official_message_stored_recipients();
-        $representedFunctions = [];
-        $leadDefinitions = [
-            0 => ['display' => 'Leiter', 'keys' => ['LS', 'LEITER']],
-            1 => ['display' => 'S1', 'keys' => ['S1']],
-            2 => ['display' => 'S2', 'keys' => ['S2']],
-            3 => ['display' => 'S3', 'keys' => ['S3']],
-            4 => ['display' => 'S4', 'keys' => ['S4']],
-            5 => ['display' => 'S5', 'keys' => ['S5']],
-            6 => ['display' => 'S6', 'keys' => ['S6']],
-        ];
-        $leadSlots = array_fill(0, count($leadDefinitions), null);
-        for ($row = 1; $row <= 5; $row++) {
-            for ($column = 1; $column <= 4; $column++) {
-                $cell = $this->empfarray[$row][$column] ?? [];
-                $function = trim((string)($cell['fkt'] ?? ''));
-                if ($function === '') {
-                    continue;
-                }
-                $entry = [
-                    'row' => $row,
-                    'column' => $column,
-                    'function' => $function,
-                    'role' => (string)($cell['rolle'] ?? ''),
-                    'copies' => $this->official_message_recipient_copies(
-                        $function
-                    ),
-                ];
-                $representedFunctions[strtoupper($function)] = true;
-                $all[] = $entry;
-                if ($entry['role'] === 'FB') {
-                    $groups['adviser'][] = $entry;
-                } elseif (
-                    str_starts_with(strtoupper($function), 'VB')
-                    || str_starts_with(strtoupper($function), 'VERB')
-                ) {
-                    $groups['liaison'][] = $entry;
-                } else {
-                    $leadKey = strtoupper(
-                        preg_replace('/\s+/u', '', $function) ?? $function
-                    );
-                    $leadPosition = null;
-                    foreach ($leadDefinitions as $position => $definition) {
-                        if (in_array($leadKey, $definition['keys'], true)) {
-                            $leadPosition = $position;
-                            break;
-                        }
-                    }
-                    if (
-                        $leadPosition !== null
-                        && $leadSlots[$leadPosition] === null
-                    ) {
-                        $entry['display'] =
-                            $leadDefinitions[$leadPosition]['display'];
-                        $leadSlots[$leadPosition] = $entry;
-                    } else {
-                        $entry['display'] = $function;
-                        $extras[] = $entry;
-                    }
-                }
-            }
-        }
-        foreach ($leadDefinitions as $position => $definition) {
-            if ($leadSlots[$position] !== null) {
-                $groups['lead'][] = $leadSlots[$position];
-                continue;
-            }
-            $storedLead = null;
-            foreach ($definition['keys'] as $leadKey) {
-                if (isset($storedRecipients[$leadKey])) {
-                    $storedLead = $storedRecipients[$leadKey];
-                    $representedFunctions[$leadKey] = true;
-                    break;
-                }
-            }
-            $groups['lead'][] = [
-                'display' => $definition['display'],
-                'function' => (string)(
-                    $storedLead['function'] ?? $definition['display']
-                ),
-                'copies' => is_array($storedLead['copies'] ?? null)
-                    ? $storedLead['copies']
-                    : [],
-                'unavailable' => true,
-            ];
-        }
-        foreach (['adviser', 'liaison'] as $group) {
-            if (count($groups[$group]) > 6) {
-                $extras = array_merge(
-                    $extras,
-                    array_slice($groups[$group], 6)
-                );
-                $groups[$group] = array_slice($groups[$group], 0, 6);
-            }
-            while (count($groups[$group]) < 6) {
-                $groups[$group][] = [
-                    'display' => '',
-                    'function' => '',
-                    'copies' => [],
-                    'unavailable' => true,
-                ];
-            }
-        }
-        foreach ($storedRecipients as $key => $storedRecipient) {
-            if (isset($representedFunctions[$key])) {
-                continue;
-            }
-            $extras[] = [
-                'display' => $storedRecipient['function'],
-                'function' => $storedRecipient['function'],
-                'copies' => $storedRecipient['copies'],
-                'historical' => true,
-                'unavailable' => true,
-            ];
-            $representedFunctions[$key] = true;
-        }
-        return ['groups' => $groups, 'extras' => $extras, 'all' => $all];
+        return estab_nv_verteiler_modell(
+            is_array($this->empfarray) ? $this->empfarray : [],
+            $this->official_message_stored_recipients()
+        );
     }
 
     /** @param array<string,mixed> $entry */
@@ -1313,11 +1941,7 @@ HTML;
     {
         $readonly = $this->official_message_distribution_readonly();
         $model = $this->official_message_distribution_model();
-        $headings = [
-            'lead' => 'TEL/EL/EAL/UEAL',
-            'adviser' => 'Fachberater',
-            'liaison' => 'Verb.stellen',
-        ];
+        $headings = estab_nv_verteiler_ueberschriften();
         echo '<div class="estab-official-distribution-grid">';
         foreach ($headings as $group => $heading) {
             echo '<section data-estab-recipient-group="' . $group . '">'
@@ -1377,6 +2001,17 @@ HTML;
         echo '</div></section>';
     }
 
+    /**
+     * Die Aktionsleiste des Vordrucks.
+     *
+     * Der Arbeitsschritt sagt, welche Knoepfe es gibt; der Katalog in
+     * app/ui_elements.php sagt, wie sie aussehen und in welcher Reihenfolge
+     * sie stehen. Diese Trennung ist der Punkt: Frueher bestimmte die
+     * Reihenfolge, in der ein Zweig seine Knoepfe ausgab, auch ihre Stelle
+     * auf dem Bildschirm -- und so stand Abbrechen bei der Sichtung hinter
+     * der Rueckgabe und bei der Befoerderung davor. Jetzt kann ein Zweig
+     * einen Knopf weglassen, ohne die uebrigen zu verschieben.
+     */
     function official_message_actions(string $position): void
     {
         $isTop = $position === 'top';
@@ -1391,18 +2026,54 @@ HTML;
                 . '"';
         }
         echo '>';
-        echo '<button type="button" class="estab-button estab-button-secondary" '
-            . 'onclick="window.print()">Drucken</button>';
+
+        $actions = [];
+        $outgoing = ($this->formdata['04_richtung'] ?? '') === 'A';
+
+        // Ein Ereignisattribut im Markup laeuft unter der Richtlinie nicht
+        // mehr; der Knopf traegt seine Absicht als Datenmerkmal.
+        $actions[] = [
+            'role' => 'drucken',
+            'markup' => $this->official_message_action_button(
+                'drucken',
+                'Drucken',
+                'button',
+                '',
+                ' data-estab-print'
+            ),
+        ];
+
         switch ($this->task) {
             case 'Stab_lesen':
-                echo '<button type="submit" name="gelesen_x" value="1" '
-                    . 'class="estab-button estab-button-primary">Gelesen / OK</button>';
-                if (($this->formdata['04_richtung'] ?? '') === 'E') {
-                    echo '<button type="submit" name="antwort_x" value="1" '
-                        . 'class="estab-button estab-button-secondary">Antworten</button>';
+                if (!$outgoing) {
+                    $actions[] = [
+                        'role' => 'nebenaktion',
+                        'markup' => $this->official_message_action_button(
+                            'nebenaktion',
+                            'Antworten',
+                            'submit',
+                            'antwort_x'
+                        ),
+                    ];
                 }
-                echo '<button type="submit" name="weiterleiten_x" value="1" '
-                    . 'class="estab-button estab-button-secondary">Weiterleiten</button>';
+                $actions[] = [
+                    'role' => 'nebenaktion',
+                    'markup' => $this->official_message_action_button(
+                        'nebenaktion',
+                        'Weiterleiten',
+                        'submit',
+                        'weiterleiten_x'
+                    ),
+                ];
+                $actions[] = [
+                    'role' => 'hauptaktion',
+                    'markup' => $this->official_message_action_button(
+                        'hauptaktion',
+                        'Gelesen / OK',
+                        'submit',
+                        'gelesen_x'
+                    ),
+                ];
                 break;
             case 'FM-Eingang':
             case 'Stab_schreiben':
@@ -1412,76 +2083,156 @@ HTML;
                 $attachmentCount = count(
                     $this->official_message_attachment_references()
                 );
-                echo '<a href="#nachrichtenanlagen" '
-                    . 'class="estab-button estab-button-secondary '
-                    . 'estab-message-attachment-jump">'
-                    . ($attachmentCount > 0
-                        ? $attachmentCount . ' '
-                            . ($attachmentCount === 1 ? 'Anlage' : 'Anlagen')
-                        : 'Anlage hinzufügen')
-                    . '</a>';
-                echo '<button type="submit" name="absenden_x" value="1" '
-                    . 'class="estab-button estab-button-primary">'
-                    . ($this->task === 'Stab_gesprnoti'
-                        ? 'Zur Sichtung geben'
-                        : 'Absenden')
-                    . '</button>';
-                echo '<button type="submit" name="abbrechen_x" value="1" '
-                    . 'class="estab-button estab-button-ghost" formnovalidate>'
-                    . 'Abbrechen</button>';
+                $actions[] = [
+                    'role' => 'nebenaktion',
+                    'markup' => '<a href="#nachrichtenanlagen" '
+                        . 'data-estab-action-role="nebenaktion" '
+                        . 'class="estab-button estab-button-secondary '
+                        . 'estab-message-attachment-jump">'
+                        . ($attachmentCount > 0
+                            ? $attachmentCount . ' '
+                                . ($attachmentCount === 1 ? 'Anlage' : 'Anlagen')
+                            : 'Anlage hinzufügen')
+                        . '</a>',
+                ];
+                $actions[] = [
+                    'role' => 'hauptaktion',
+                    'markup' => $this->official_message_action_button(
+                        'hauptaktion',
+                        $this->task === 'Stab_gesprnoti'
+                            ? 'Zur Sichtung geben'
+                            : 'Absenden',
+                        'submit',
+                        'absenden_x'
+                    ),
+                ];
+                $actions[] = [
+                    'role' => 'abbrechen',
+                    'markup' => $this->official_message_action_button(
+                        'abbrechen',
+                        'Abbrechen',
+                        'submit',
+                        'abbrechen_x',
+                        ' formnovalidate'
+                    ),
+                ];
                 break;
             case 'FM-Ausgang':
             case 'LdF-Eingang':
             case 'LdF-Ausgang':
-                echo '<button type="submit" name="absenden_x" value="1" '
-                    . 'class="estab-button estab-button-primary">Bearbeitung abschließen</button>';
-                echo '<button type="submit" name="abbrechen_x" value="1" '
-                    . 'class="estab-button estab-button-ghost" formnovalidate>'
-                    . 'Abbrechen</button>';
+                $actions[] = [
+                    'role' => 'hauptaktion',
+                    'markup' => $this->official_message_action_button(
+                        'hauptaktion',
+                        'Bearbeitung abschließen',
+                        'submit',
+                        'absenden_x'
+                    ),
+                ];
                 if ($this->task === 'LdF-Ausgang') {
-                    echo '<button type="submit" '
-                        . 'name="ldf_zurueckweisen_x" value="1" '
-                        . 'class="estab-button estab-button-danger" formnovalidate>'
-                        . 'An Verfasser zurückgeben</button>';
+                    $actions[] = [
+                        'role' => 'rueckgabe',
+                        'markup' => $this->official_message_action_button(
+                            'rueckgabe',
+                            'An Verfasser zurückgeben',
+                            'submit',
+                            'ldf_zurueckweisen_x',
+                            ' formnovalidate'
+                        ),
+                    ];
                 }
                 if ($this->task === 'FM-Ausgang') {
-                    echo '<button type="submit" '
-                        . 'name="transport_nicht_moeglich_x" value="1" '
-                        . 'class="estab-button estab-button-danger" formnovalidate>'
-                        . 'Beförderung nicht möglich</button>';
-                    if (($this->formdata['04_richtung'] ?? '') === 'A') {
-                        echo '<button type="submit" name="antwort_x" value="1" '
-                            . 'class="estab-button estab-button-secondary">'
-                            . 'Antworten</button>';
+                    $actions[] = [
+                        'role' => 'rueckgabe',
+                        'markup' => $this->official_message_action_button(
+                            'rueckgabe',
+                            'Beförderung nicht möglich',
+                            'submit',
+                            'transport_nicht_moeglich_x',
+                            ' formnovalidate'
+                        ),
+                    ];
+                    if ($outgoing) {
+                        $actions[] = [
+                            'role' => 'nebenaktion',
+                            'markup' => $this->official_message_action_button(
+                                'nebenaktion',
+                                'Antworten',
+                                'submit',
+                                'antwort_x'
+                            ),
+                        ];
                     }
                 }
+                $actions[] = [
+                    'role' => 'abbrechen',
+                    'markup' => $this->official_message_action_button(
+                        'abbrechen',
+                        'Abbrechen',
+                        'submit',
+                        'abbrechen_x',
+                        ' formnovalidate'
+                    ),
+                ];
                 break;
             case 'Stab_sichten':
-                $outgoing = ($this->formdata['04_richtung'] ?? '') === 'A';
-                echo '<button type="submit" name="absenden_x" value="1" '
-                    . 'class="estab-button estab-button-primary">'
-                    . ($outgoing
-                        ? 'Formal geprüft – an FmZt'
-                        : 'Sichtung abschließen')
-                    . '</button>';
+                $actions[] = [
+                    'role' => 'hauptaktion',
+                    'markup' => $this->official_message_action_button(
+                        'hauptaktion',
+                        $outgoing
+                            ? 'Formal geprüft – an FmZt'
+                            : 'Sichtung abschließen',
+                        'submit',
+                        'absenden_x'
+                    ),
+                ];
                 if ($outgoing) {
-                    echo '<button type="submit" name="zurueckweisen_x" value="1" '
-                        . 'class="estab-button estab-button-danger">'
-                        . 'An Verfasser zurückgeben</button>';
+                    $actions[] = [
+                        'role' => 'rueckgabe',
+                        'markup' => $this->official_message_action_button(
+                            'rueckgabe',
+                            'An Verfasser zurückgeben',
+                            'submit',
+                            'zurueckweisen_x'
+                        ),
+                    ];
                 }
-                echo '<button type="submit" name="abbrechen_x" value="1" '
-                    . 'class="estab-button estab-button-ghost" formnovalidate>'
-                    . 'Abbrechen</button>';
+                $actions[] = [
+                    'role' => 'abbrechen',
+                    'markup' => $this->official_message_action_button(
+                        'abbrechen',
+                        'Abbrechen',
+                        'submit',
+                        'abbrechen_x',
+                        ' formnovalidate'
+                    ),
+                ];
                 break;
             case 'FM-Admin':
             case 'SI-Admin':
-                echo '<strong class="estab-message-readonly-badge">'
-                    . 'Abgeschlossener Nachweis – schreibgeschützt</strong>';
+                $actions[] = [
+                    'role' => 'hinweis',
+                    'markup' => '<strong '
+                        . 'data-estab-action-role="hinweis" '
+                        . 'class="estab-message-readonly-badge">'
+                        . 'Abgeschlossener Nachweis – schreibgeschützt</strong>',
+                ];
                 break;
         }
+
         if (!$isTop) {
-            echo '<a class="estab-button estab-button-ghost" href="#nachrichtenvordruck">'
-                . 'Zum Formularanfang</a>';
+            $actions[] = [
+                'role' => 'zurueck',
+                'markup' => '<a data-estab-action-role="zurueck" '
+                    . 'class="estab-button estab-button-ghost" '
+                    . 'href="#nachrichtenvordruck">'
+                    . 'Zum Formularanfang</a>',
+            ];
+        }
+
+        foreach (estab_ui_actions_in_order($actions) as $action) {
+            echo $action['markup'];
         }
         echo '</nav>';
         if ($isTop && $this->task === 'Stab_lesen') {
@@ -1489,10 +2240,82 @@ HTML;
         }
     }
 
+    /**
+     * Einen Knopf der Aktionsleiste setzen.
+     *
+     * Aussehen und Rolle kommen aus dem Katalog, nicht aus der Zeile, die ihn
+     * schreibt. Wer einen Knopf ergaenzt, kann ihn nicht versehentlich anders
+     * aussehen lassen als seinen Zwilling im naechsten Arbeitsschritt.
+     */
+    function official_message_action_button(
+        string $role,
+        string $label,
+        string $type = 'submit',
+        string $name = '',
+        string $extra = ''
+    ): string {
+        $definition = estab_ui_action_roles()[$role] ?? null;
+        if ($definition === null) {
+            throw new InvalidArgumentException(
+                'Unbekannte Rolle in der Aktionsleiste: ' . $role
+            );
+        }
+        return '<button type="' . estab_message_html($type) . '"'
+            . ($name === ''
+                ? ''
+                : ' name="' . estab_message_html($name) . '" value="1"')
+            . ' data-estab-action-role="' . estab_message_html($role) . '"'
+            . ' class="estab-button ' . $definition['klasse'] . '"'
+            . $extra . '>'
+            . estab_message_html($label)
+            . '</button>';
+    }
+
+    /**
+     * Ob die handelnde Dienstfunktion einen eigenen Kategorienraum besitzt.
+     *
+     * Die Ablagetabellen einer Dienstfunktion entstehen nur fuer Stab und
+     * Fachberatung; estab_dynamic_schema_hat_requires_tables() entscheidet
+     * das beim Anlegen eines Kontos. Gefragt hat danach bisher allein die
+     * Seite, die sie ANLEGT. Die Seite, die sie LIEST, fragte nicht -- und
+     * eine Fernmeldefunktion (A/W, LdF) lief gegen eine Tabelle, die es fuer
+     * sie nie gab. Der Fernmeldebetrieb konnte damit keine einzige Meldung
+     * der Meldungsuebersicht oeffnen.
+     *
+     * Dieselbe Frage, dieselbe Antwort, an beiden Enden.
+     */
+    function official_message_has_category_workspace(): bool
+    {
+        require_once __DIR__ . '/../app/dynamic_schema.php';
+        $identity = estab_auth_session_identity($_SESSION);
+        if (!is_array($identity)) {
+            return false;
+        }
+        try {
+            $identity = estab_category_route_identity(
+                $identity,
+                $GLOBALS['workflowSelectedIdentity'] ?? null
+            );
+        } catch (Throwable $exception) {
+            error_log('eStab category identity is unavailable');
+            return false;
+        }
+        return estab_dynamic_schema_hat_requires_tables(
+            (string) ($identity['funktion'] ?? ''),
+            (string) ($identity['rolle'] ?? '')
+        );
+    }
+
     function official_message_categories(): void
     {
         include_once __DIR__ . '/katego.php';
         include __DIR__ . '/../4fcfg/fkt_rolle.inc.php';
+        // Ohne eigenen Kategorienraum gibt es hier nichts zu tun: kein
+        // Ablagefach, keine Auswahl, kein Knopf. Der Kasten bleibt fort,
+        // statt leer dazustehen.
+        if (!$this->official_message_has_category_workspace()) {
+            return;
+        }
         $recordId = (string)($this->formdata['00_lfd'] ?? '');
         $definitions = [
             'master' => [
@@ -1508,14 +2331,44 @@ HTML;
                 'manager' => 'Persönliche Kategorien verwalten',
             ],
         ];
+        /*
+         * Erst lesen, dann zeichnen.
+         *
+         * Gelesen wurde bisher mitten im Zeichnen. Schlug ein Lesevorgang
+         * fehl, stand der Kasten schon halb auf der Seite -- und weil der
+         * Vordruck an dieser Stelle im Zwischenspeicher gebaut wird, ging
+         * mit dem Abbruch der ganze Vordruck verloren: Der Bearbeiter sah
+         * Kopfzeile und Knopfleiste und kein einziges Feld, ohne Hinweis,
+         * woran es liegt.
+         *
+         * Getrennt kann die Ablage ausfallen, ohne die Meldung
+         * mitzunehmen -- so, wie es der Bearbeitungsweg und die Anlagen
+         * schon halten.
+         */
+        $scopes = [];
+        try {
+            foreach (array_keys($definitions) as $type) {
+                $categories = new kategorien($type);
+                $scopes[$type] = [
+                    'categories' => $categories,
+                    'selected' => $categories->db_get_kategobymsg($recordId),
+                ];
+            }
+        } catch (Throwable $exception) {
+            error_log('eStab message categories are unavailable');
+            echo '<p class="estab-tool-notice" role="status">'
+                . 'Kategorien und Ablage stehen derzeit nicht zur Verfügung. '
+                . 'Der Nachrichtenvordruck bleibt vollständig lesbar.</p>';
+            return;
+        }
         echo '<details class="estab-message-categories">'
             . '<summary>Kategorien und Ablage</summary>'
             . '<div class="estab-message-category-grid">';
         $actingFunction = '';
         foreach ($definitions as $type => $definition) {
-            $categories = new kategorien($type);
+            $categories = $scopes[$type]['categories'];
             $actingFunction = (string) $categories->stab_fkt;
-            $selected = $categories->db_get_kategobymsg($recordId);
+            $selected = $scopes[$type]['selected'];
             $managerUrl = 'katgoedt.php?' . http_build_query(
                 [
                     'dbtyp' => $type,
@@ -1572,13 +2425,61 @@ HTML;
         echo '</div></details>';
     }
 
+    /**
+     * Worauf sich die Sichtung im Ausgang erstreckt.
+     *
+     * Die Dienstvorschrift beschraenkt die Pruefung des Sichters bei
+     * ausgehenden Nachrichten auf Anschrift, Absender sowie Zeichen und
+     * Funktion des Verfassers: "eine inhaltliche Pruefung der Nachricht
+     * entfaellt". Der Grund ist eine Zustaendigkeitsfrage. Was in einer
+     * Meldung steht, verantwortet der Verfasser mit seinem Namenszeichen;
+     * pruefte der Sichter den Inhalt mit, entstuende eine zweite, unbenannte
+     * Instanz zwischen Sachgebiet und Gegenstelle -- und im Zweifel eine
+     * Verzoegerung ohne Zustaendigen.
+     *
+     * Die Anwendung sperrt deshalb nicht, sondern fuehrt. Der Sichter kann
+     * weiterhin aus jedem Grund zurueckgeben; eine Maske, die im Einsatz
+     * eine begruendete Rueckgabe verweigert, waere schlimmer als eine
+     * ueberschiessende. Er liest hier aber, worauf seine Pruefung zielt.
+     *
+     * Im Eingang steht der Hinweis nicht: Dort verteilt der Sichter die
+     * Nachricht an die zustaendigen Sachgebiete, und das geht nur
+     * inhaltlich.
+     */
+    function official_message_review_scope(): void
+    {
+        if ($this->task !== 'Stab_sichten') {
+            return;
+        }
+        if (($this->formdata['04_richtung'] ?? '') !== 'A') {
+            return;
+        }
+        echo '<p class="estab-official-review-scope">'
+            . '<span class="estab-official-review-scope-title">'
+            . 'Formale Sichtung</span>'
+            . '<span>Geprüft werden Anschrift (10), Absender (15) sowie '
+            . 'Zeichen und Funktion des Verfassers (17). Eine inhaltliche '
+            . 'Prüfung der Nachricht entfällt: Für den Inhalt steht der '
+            . 'Verfasser mit seinem Namenszeichen ein.</span>'
+            . '<span>Eine Rückgabe braucht einen Vermerk in Feld 20 -- '
+            . 'sonst erfährt der Verfasser nicht, was zu ändern ist.</span>'
+            . '</p>';
+    }
+
     function official_message_workflow_controls(): void
     {
+        // Der Eingang steht hier ausdruecklich mit drin. Frueher haing die
+        // Anzeige an Feld 7 -- das galt, solange die Betriebsangaben nur den
+        // Durchspruch betrafen. Der Eingangsweg haengt nicht daran: er wird
+        // erfasst, ob durchgesprochen wurde oder nicht.
         $hasTransport = in_array(
             $this->task,
-            ['Stab_gesprnoti', 'LdF-Eingang', 'LdF-Ausgang', 'FM-Ausgang'],
+            [
+                'Stab_gesprnoti', 'LdF-Eingang', 'LdF-Ausgang', 'FM-Ausgang',
+                'FM-Eingang', 'FM-Eingang_Anhang',
+            ],
             true
-        ) || (bool)($this->feld[6] ?? false);
+        ) || $this->official_message_field_access(7);
         if (!$hasTransport) {
             return;
         }
@@ -1588,8 +2489,8 @@ HTML;
             echo '<div><span class="estab-section-kicker">Weiterer Nachrichtenlauf</span>'
                 . '<h2 id="estab-message-workflow-title">Gesprächsnotiz zur Sichtung geben</h2>'
                 . '<p>Die im Vordruck ausgewählte Übermittlungsart beschreibt das '
-                . 'ursprüngliche Gespräch. Rufname und Beförderungsweg werden erst '
-                . 'in den folgenden Bearbeitungsschritten ergänzt.</p></div>';
+                . 'ursprüngliche Gespräch. Die Sichtung schliesst die Notiz ab; '
+                . 'eine Disposition und eine Beförderung folgen nicht.</p></div>';
         } else {
             echo '<div><span class="estab-section-kicker">Digitale Bearbeitung</span>'
                 . '<h2 id="estab-message-workflow-title">Betriebliche Ergänzungen</h2>'
@@ -1606,6 +2507,114 @@ HTML;
                 . '<li><strong>Fernmelder</strong> übernimmt die Nachricht und '
                 . 'führt den Beförderungsnachweis.</li>'
                 . '</ol></fieldset>';
+        }
+        if (
+            $this->task === 'FM-Eingang'
+            || $this->task === 'FM-Eingang_Anhang'
+        ) {
+            /*
+             * Der Weg steht NEBEN dem Vordruck, nicht darin.
+             *
+             * Feld 1 traegt das Mittel und wird im Vordruck angekreuzt; der
+             * Weg ist eine Angabe der Anwendung und hat im amtlichen Raster
+             * keinen Platz. Die Doppelangabe ist Absicht: das Repository
+             * leitet Feld 1 nicht ab, es PRUEFT es gegen das Mittel des
+             * gewaehlten Weges.
+             */
+            $selectedRoute = (string)(
+                $this->formdata['fernmeldeplan_eintrag_id'] ?? ''
+            );
+            echo '<fieldset><legend>Eingangsweg</legend>';
+            if ($this->activeTelecomRoutes === []) {
+                echo '<p>Kein freigegebener S6-Fernmeldeplan verfügbar. '
+                    . 'Der Eingangsweg bleibt offen; das Übermittlungsmittel '
+                    . 'in Feld 1 wird davon nicht berührt.</p>';
+            } else {
+                echo '<label for="f_fernmeldeplan_eintrag_id">'
+                    . 'Über welchen Weg kam die Nachricht herein? '
+                    . '(freiwillig)</label>'
+                    . '<select id="f_fernmeldeplan_eintrag_id" '
+                    . 'name="fernmeldeplan_eintrag_id">'
+                    . $this->official_message_route_options(
+                        $selectedRoute,
+                        '— kein Weg angegeben —'
+                    )
+                    . '</select>';
+            }
+            if ($this->activeTelecomRoutes !== []) {
+                /*
+                 * Die Gegenstelle wird GEWAEHLT, nicht abgetippt.
+                 *
+                 * Gespeichert wird ihre Kennung. Nur deshalb kann der LdF
+                 * Feld 15 vorbelegt bekommen: ein Textvergleich waere bei
+                 * zwei gleichnamigen Rufnamen auf verschiedenen Wegen
+                 * mehrdeutig, ein Verweis ist es nicht. Feld 6 bleibt davon
+                 * unberuehrt und traegt weiter freien Text -- eine
+                 * Gegenstelle, die nicht im Plan steht, ruft trotzdem an.
+                 */
+                $selectedCounterpart = (string)(
+                    $this->formdata['estab_gegenstelle_id'] ?? ''
+                );
+                $counterpartMarkup = '';
+                foreach ($this->activeTelecomRoutes as $route) {
+                    $counterparts = $route['gegenstellen'] ?? [];
+                    if ($counterparts === []) {
+                        continue;
+                    }
+                    $counterpartMarkup .= '<optgroup label="'
+                        . estab_message_html(
+                            estab_dv_telecom_route_label(
+                                $route['medium'] ?? null,
+                                $route['funkart'] ?? null
+                            )
+                            . ' · '
+                            . trim((string)($route['betriebsstelle'] ?? ''))
+                        ) . '">';
+                    foreach ($counterparts as $counterpart) {
+                        $counterpartId =
+                            (string)($counterpart['gegenstelle_id'] ?? '');
+                        $counterpartMarkup .= '<option value="'
+                            . estab_message_html($counterpartId) . '"'
+                            . ($selectedCounterpart === $counterpartId
+                                ? ' selected'
+                                : '')
+                            . '>'
+                            . estab_message_html(
+                                trim((string)($counterpart['name'] ?? ''))
+                                . ' · '
+                                . trim((string)(
+                                    $counterpart['erreichbarkeit'] ?? ''
+                                ))
+                            ) . '</option>';
+                    }
+                    $counterpartMarkup .= '</optgroup>';
+                }
+                if ($counterpartMarkup !== '') {
+                    echo '<label for="f_estab_gegenstelle_id">'
+                        . 'Gegenstelle aus dem Fernmeldeplan (freiwillig)'
+                        . '</label>'
+                        . '<select id="f_estab_gegenstelle_id" '
+                        . 'name="estab_gegenstelle_id">'
+                        . '<option value="">— keine Gegenstelle des Plans '
+                        . '—</option>'
+                        . $counterpartMarkup
+                        . '</select>'
+                        . '<p class="estab-field-hint">Die Auswahl muss zum '
+                        . 'oben gewählten Weg gehören. Der LdF bekommt Feld 15 '
+                        . 'daraus vorbelegt.</p>';
+                }
+            }
+            echo '<label for="f_estab_eingangsweg_bemerkung">'
+                . 'Bemerkung des Fernmelders zum Eingangsweg</label>'
+                . '<textarea id="f_estab_eingangsweg_bemerkung" '
+                . 'name="estab_eingangsweg_bemerkung" maxlength="2000" '
+                . 'rows="2" '
+                . 'data-estab-incoming-route-note="fernmelder">'
+                . $this->safe_message_value('estab_eingangsweg_bemerkung')
+                . '</textarea>'
+                . '<p class="estab-field-hint">Diese Bemerkung gehört Ihnen. '
+                . 'Der LdF sieht sie, kann sie aber nicht ändern.</p>'
+                . '</fieldset>';
         }
         if ($this->task === 'LdF-Eingang') {
             $original = (string)(
@@ -1632,40 +2641,98 @@ HTML;
                 . 'rows="2">'
                 . $this->safe_message_value(
                     'incoming_transport_correction_reason'
-                ) . '</textarea></fieldset>';
+                ) . '</textarea>';
+            /*
+             * Der eine sagt aus, der andere prueft.
+             *
+             * Die Bemerkung des Fernmelders steht hier als Text, nicht als
+             * Eingabefeld -- und zwar nicht aus Hoeflichkeit: koennte der
+             * Pruefer die Aussage umschreiben, waere die Pruefung wertlos
+             * und der Nachweis koennte nicht mehr sagen, wer was behauptet
+             * hat. Die Feldfreigabe erzwingt dasselbe noch einmal serverseitig.
+             */
+            $recordedRoute = (string)(
+                $this->formdata['fernmeldeplan_eintrag_id'] ?? ''
+            );
+            $recordedNote = trim((string)(
+                $this->formdata['estab_eingangsweg_bemerkung'] ?? ''
+            ));
+            echo '<p data-estab-incoming-route-recorded="'
+                . estab_message_html($recordedRoute)
+                . '">Vom Fernmelder benannter Weg: <strong>'
+                . estab_message_html(
+                    $this->official_message_recorded_route_text($recordedRoute)
+                )
+                . '</strong></p>';
+            if ($recordedNote !== '') {
+                echo '<p data-estab-incoming-route-note="fernmelder">'
+                    . 'Bemerkung des Fernmelders: <em>'
+                    . estab_message_html($recordedNote)
+                    . '</em></p>';
+            }
+            if (is_array($this->incomingCounterpart)) {
+                echo '<p data-estab-incoming-counterpart="fernmeldeplan">'
+                    . 'Gegenstelle laut Fernmeldeplan: <strong>'
+                    . estab_message_html(
+                        $this->incomingCounterpart['name']
+                        . ' · '
+                        . $this->incomingCounterpart['erreichbarkeit']
+                    )
+                    . '</strong> — Feld 15 ist daraus vorbelegt.</p>';
+            }
+            if ($this->activeTelecomRoutes !== []) {
+                echo '<label for="f_fernmeldeplan_eintrag_id">'
+                    . 'Weg bestätigen oder richtigstellen</label>'
+                    . '<select id="f_fernmeldeplan_eintrag_id" '
+                    . 'name="fernmeldeplan_eintrag_id">'
+                    . $this->official_message_route_options(
+                        $recordedRoute,
+                        '— kein Weg angegeben —'
+                    )
+                    . '</select>';
+            }
+            echo '</fieldset>';
         }
         if ($this->task === 'LdF-Ausgang') {
             echo '<fieldset><legend>Gültiger S6-Fernmeldeweg</legend>'
                 . '<label for="f_fernmeldeplan_eintrag_id">'
                 . 'Freigegebenen Fernmeldeweg auswählen</label>'
                 . '<select id="f_fernmeldeplan_eintrag_id" '
-                . 'name="fernmeldeplan_eintrag_id" required>'
-                . '<option value="">Bitte Fernmeldeweg auswählen</option>';
-            $selected = (string)(
-                $this->formdata['fernmeldeplan_eintrag_id'] ?? ''
-            );
-            foreach ($this->activeTelecomRoutes as $route) {
-                $parts = array_values(array_filter([
-                    trim((string)($route['betriebsstelle'] ?? '')),
-                    trim((string)($route['rufname'] ?? '')),
-                    trim((string)($route['kanal'] ?? '')),
-                    trim((string)($route['bandlage'] ?? '')),
-                    trim((string)($route['verkehrsform'] ?? '')),
-                ], static fn(string $part): bool => $part !== ''));
-                $routeId = (string)$route['fernmeldeplan_eintrag_id'];
-                $routeLabel = 'Plan v' . (int)$route['plan_version']
-                    . ' · ' . estab_dv_telecom_medium_label(
-                        $route['medium'] ?? null
-                    )
-                    . ' · ' . implode(' · ', $parts);
-                echo '<option value="' . estab_message_html($routeId) . '"'
-                    . ($selected === $routeId ? ' selected' : '') . '>'
-                    . estab_message_html($routeLabel) . '</option>';
-            }
-            echo '</select>';
-            if ($this->activeTelecomRoutes === []) {
+                . 'name="fernmeldeplan_eintrag_id"'
+                . ($this->activeTelecomRoutes === [] ? '' : ' required')
+                . '>'
+                . $this->official_message_route_options(
+                    (string)(
+                        $this->formdata['fernmeldeplan_eintrag_id'] ?? ''
+                    ),
+                    'Bitte Fernmeldeweg auswählen'
+                )
+                . '</select>';
+            if ($this->official_message_manual_disposition()) {
                 echo '<p class="estab-field-error">Kein aktuell gültiger, '
-                    . 'freigegebener S6-Fernmeldeplan verfügbar.</p>';
+                    . 'freigegebener S6-Fernmeldeplan verfügbar.</p>'
+                    . '<p>Ohne veröffentlichten Fernmeldeplan disponieren Sie '
+                    . 'das Übermittlungsmittel in Feld 1 und benennen den '
+                    . 'Beförderungsweg hier.</p>'
+                    . '<label for="f_06_befweg">Beförderungsweg</label>';
+                $this->official_message_text_input(
+                    '06_befweg',
+                    true,
+                    128,
+                    'Beförderungsweg'
+                );
+            } elseif ($this->activeTelecomRoutes === []) {
+                // Modus STRENG verlangt den Plan. Ohne ihn nimmt die Prüfung
+                // auch eine unmittelbare Angabe nicht an, deshalb wird hier
+                // kein Feld angeboten, das sich nie speichern liesse.
+                echo '<p class="estab-field-error estab-message-plan-blocked">'
+                    . 'Kein aktuell gültiger, freigegebener '
+                    . 'S6-Fernmeldeplan verfügbar. In der Betriebsart '
+                    . '„streng“ ist der Plan verbindlich; eine Ausgangs'
+                    . 'nachricht lässt sich erst nach seiner Freigabe '
+                    . 'disponieren.</p>'
+                    . '<p>S6 veröffentlicht den Fernmeldeplan. Bis dahin '
+                    . 'bleibt die Nachricht beim LdF liegen.</p>';
             }
             echo '</fieldset>'
                 . '<fieldset data-estab-ldf-return>'
@@ -1678,7 +2745,7 @@ HTML;
                 . 'name="ldf_rueckgabegrund" maxlength="2000" rows="3">'
                 . $this->safe_message_value('ldf_rueckgabegrund')
                 . '</textarea></fieldset>';
-        } elseif ((bool)($this->feld[6] ?? false)) {
+        } elseif ($this->official_message_field_access(7)) {
             echo '<fieldset><legend>Beförderungsweg</legend>';
             $this->official_message_text_input(
                 '06_befweg',
@@ -1690,7 +2757,7 @@ HTML;
         }
         if ($this->task === 'FM-Ausgang') {
             $summary = implode(' · ', array_values(array_filter([
-                trim((string)$this->formdata['06_befwegausw']),
+                trim((string)$this->formdata['01_medium']),
                 trim((string)$this->formdata['06_befweg']),
             ], static fn(string $part): bool => $part !== '')));
             echo '<fieldset data-estab-transport-confirmation="required">'
@@ -1714,10 +2781,73 @@ HTML;
         echo '</div></section>';
     }
 
+    /**
+     * Ein Kreuz laesst sich wieder wegnehmen.
+     *
+     * Die Ankreuzfelder des Vordrucks sind Auswahlknoepfe: Wer sich
+     * vertippt, bekommt sie mit den Mitteln des Browsers nicht mehr weg --
+     * ein Auswahlknopf laesst sich anwaehlen, aber nicht abwaehlen. Bei
+     * einem Feld, in dem "nichts angekreuzt" eine Aussage ist -- die
+     * Vorrangstufe, die Nachrichtenform --, ist das keine Kleinigkeit: Ein
+     * versehentliches Kreuz steht spaeter als Angabe des Verfassers im
+     * Nachweis.
+     *
+     * Ein zweiter Klick auf ein gesetztes Kreuz nimmt es deshalb wieder weg.
+     *
+     * Ohne Skript bleibt es beim Verhalten des Browsers. Das ist zulaessig:
+     * UX-OHNE-JAVASCRIPT verlangt, dass der Nachrichtenlauf ohne Skript
+     * funktioniert, und laesst zu, dass Komfort daran haengt. Wer ohne
+     * Skript arbeitet, laedt den Vordruck neu -- ein Weg, den er vorher
+     * auch schon nehmen musste.
+     */
+    function official_message_choice_script(): void
+    {
+        echo '<script' . estab_csp_script_attribute()
+            . ' data-estab-official-choice-toggle>';
+        echo <<<'HTML'
+(function () {
+  "use strict";
+  var form = document.querySelector("[data-estab-official-message-form]");
+  if (!form) {
+    return;
+  }
+  // Gemerkt wird der Zustand *vor* dem Klick: Beim Klick auf einen
+  // Auswahlknopf setzt der Browser ihn, bevor das Ereignis ankommt.
+  var vorher = null;
+  form.addEventListener("pointerdown", function (ereignis) {
+    var ziel = ereignis.target;
+    if (!ziel || ziel.type !== "radio" || ziel.disabled) {
+      vorher = null;
+      return;
+    }
+    vorher = ziel.checked ? ziel : null;
+  });
+  form.addEventListener("keydown", function () {
+    // Mit der Tastatur waehlt man in einer Gruppe weiter, nicht ab.
+    vorher = null;
+  });
+  form.addEventListener("click", function (ereignis) {
+    var ziel = ereignis.target;
+    if (!ziel || ziel.type !== "radio" || ziel.disabled) {
+      return;
+    }
+    if (vorher !== ziel) {
+      vorher = null;
+      return;
+    }
+    vorher = null;
+    ziel.checked = false;
+    ziel.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+})();
+HTML;
+        echo '</script>';
+    }
+
     function official_message_help_script(): void
     {
+        echo '<script' . estab_csp_script_attribute() . ' data-estab-official-form-help>';
         echo <<<'HTML'
-<script data-estab-official-form-help>
 (function () {
   "use strict";
   var buttons = Array.prototype.slice.call(
@@ -1774,6 +2904,22 @@ HTML;
       return;
     }
     closeAll(button);
+    /*
+     * Das Blatt verlaesst den Vordruck, bevor es sichtbar wird.
+     *
+     * Der Vordruck traegt container-type und zoom, damit er sich der Spalte
+     * anpasst, ohne gestaucht zu werden. Beides macht ihn zum enthaltenden
+     * Block fuer fest gestellte Nachfahren und zu einem eigenen
+     * Stapelkontext: Die z-index 1000 des Blattes gilt dann nur innerhalb
+     * des Vordrucks, und die Aktionsleiste daneben gewinnt mit 30.
+     *
+     * Am Dokument gelten beide wieder -- die 1000 und die
+     * Bildschirmkoordinaten, mit denen positionDialog rechnet. Das Blatt
+     * bleibt dort; die Bedienung findet es ueber seine Kennung.
+     */
+    if (dialog.parentNode !== document.body) {
+      document.body.appendChild(dialog);
+    }
     dialog.hidden = false;
     button.setAttribute("aria-expanded", "true");
     positionDialog(button, dialog);
@@ -2034,6 +3180,155 @@ HTML;
 HTML;
     }
 
+    /**
+     * Führung ohne Mausweg: Fokus auf das erste Feld, das an der Reihe ist.
+     *
+     * Im DOM stehen Aktionsleiste und betriebliche Ergänzungen vor dem
+     * Raster; ohne Fokus kostete das erste Datenfeld sieben und mehr
+     * Tabulatorschritte. Nach einer Rückweisung springt der Fokus auf das
+     * erste beanstandete Feld, sonst auf das erste ausfüllbare. Wer über
+     * eine Sprungmarke kommt oder bereits ein Feld gewählt hat, behält
+     * seinen Platz.
+     */
+    function official_message_guidance_script(): void
+    {
+        echo '<script' . estab_csp_script_attribute() . ' data-estab-official-form-focus>';
+        echo <<<'HTML'
+(function () {
+  "use strict";
+  if (window.location.hash) {
+    return;
+  }
+  var active = document.activeElement;
+  if (
+    active
+    && active !== document.body
+    && active !== document.documentElement
+  ) {
+    return;
+  }
+  var form = document.querySelector("form[name='4fach']");
+  if (!form) {
+    return;
+  }
+  var summary = document.querySelector("[data-estab-form-error-summary]");
+  var target = null;
+  if (summary) {
+    target = document.getElementById(
+      summary.getAttribute("data-estab-form-error-focus") || ""
+    );
+  }
+  var rejected = target !== null;
+  if (!target) {
+    var candidates = form.querySelectorAll(
+      "input:not([type=hidden]):not([disabled]):not([readonly]),"
+        + "textarea:not([disabled]):not([readonly]),"
+        + "select:not([disabled])"
+    );
+    for (var index = 0; index < candidates.length; index++) {
+      var candidate = candidates[index];
+      if (
+        candidate.closest
+        && candidate.closest(
+          ".estab-message-categories, .estab-message-attachments"
+        )
+      ) {
+        continue;
+      }
+      target = candidate;
+      break;
+    }
+  }
+  if (!target || typeof target.focus !== "function") {
+    if (summary && typeof summary.focus === "function") {
+      summary.focus();
+    }
+    return;
+  }
+  try {
+    target.focus({ preventScroll: !rejected });
+  } catch (error) {
+    target.focus();
+  }
+  if (rejected && typeof target.scrollIntoView === "function") {
+    target.scrollIntoView({ block: "center" });
+  }
+})();
+</script>
+HTML;
+    }
+
+    /**
+     * Record annex for the printout.
+     *
+     * The paper form has room for the twenty official fields and nothing
+     * else. Attachments and additional recipients are part of the record all
+     * the same, and the print rules hid their interactive panels entirely, so
+     * a printed message form silently lost them. The annex prints them as a
+     * plain list on its own page, without the controls that only make sense
+     * on screen. It stays hidden while working.
+     */
+    function official_message_print_annex(): void
+    {
+        $references = $this->official_message_attachment_references();
+        $model = $this->official_message_distribution_model();
+        $extras = [];
+        foreach ($model['extras'] as $entry) {
+            $function = trim((string)($entry['display'] ?? $entry['function'] ?? ''));
+            $copies = $entry['copies'] ?? [];
+            if ($function === '' || !is_array($copies) || $copies === []) {
+                continue;
+            }
+            $extras[] = ['function' => $function, 'copies' => $copies];
+        }
+        if ($references === [] && $extras === []) {
+            return;
+        }
+
+        $number = trim((string)($this->formdata['04_nummer'] ?? ''));
+        $subject = trim((string)($this->formdata['12_betreff'] ?? ''));
+        echo '<section class="estab-message-print-annex" '
+            . 'aria-hidden="true" data-estab-print-annex>';
+        echo '<h2>Anlage zum Nachrichtenvordruck'
+            . ($number === ''
+                ? ''
+                : ' Nr. ' . estab_message_html($number))
+            . '</h2>';
+        if ($subject !== '') {
+            echo '<p class="estab-message-print-annex-subject">Betreff: '
+                . estab_message_html($subject) . '</p>';
+        }
+        if ($references !== []) {
+            echo '<h3>Anlagen (' . count($references) . ')</h3><ol>';
+            foreach ($references as $reference) {
+                echo '<li>' . estab_message_html($reference) . '</li>';
+            }
+            echo '</ol>';
+        }
+        if ($extras !== []) {
+            echo '<h3>Weitere Empfänger</h3><ul>';
+            $names = [
+                'bl' => 'blau',
+                'gn' => 'grün',
+                'rt' => 'rot',
+                'ge' => 'gelb',
+                'gb' => 'gelb',
+            ];
+            foreach ($extras as $entry) {
+                $labels = [];
+                foreach ($entry['copies'] as $copy) {
+                    $labels[] = $names[(string) $copy] ?? (string) $copy;
+                }
+                echo '<li>' . estab_message_html($entry['function'])
+                    . ' — Durchschrift ' . estab_message_html(
+                        implode(', ', $labels)
+                    ) . '</li>';
+            }
+            echo '</ul>';
+        }
+        echo '</section>';
+    }
+
     function plot_official_message_form(): void
     {
         include __DIR__ . '/../4fcfg/config.inc.php';
@@ -2079,35 +3374,52 @@ HTML;
         );
         echo '<body class="estab-message-form-body">';
         echo '<main class="estab-message-form-page">';
-        $attachmentCount = count(
-            $this->official_message_attachment_references()
-        );
         echo '<header class="estab-message-page-header">'
             . '<div><span class="estab-section-kicker">Nachrichtenwesen</span>'
             . '<h1>Nachrichtenvordruck</h1>'
             . '<p>Amtliches Raster mit feldbezogenen Ausfüllhinweisen. '
-            . 'Das Symbol <strong>i</strong> öffnet die jeweilige Anleitung.</p>'
-            . '</div><div class="estab-message-header-badges">'
-            . '<span class="estab-message-task-badge">'
-            . estab_message_html($this->task) . '</span>';
-        if ($attachmentCount > 0 || $this->official_message_attachments_editable()) {
-            echo '<a class="estab-message-attachment-badge'
-                . ($attachmentCount === 0
-                    ? ' estab-message-attachment-badge--empty'
-                    : '')
-                . '" '
-                . 'href="#nachrichtenanlagen">'
-                . ($attachmentCount > 0
-                    ? $attachmentCount . ' '
-                        . ($attachmentCount === 1 ? 'Anlage' : 'Anlagen')
-                    : 'Anlage hinzufügen')
-                . '</a>';
-        }
-        echo '</div></header>';
+            . 'Das Symbol <strong>i</strong> öffnet die jeweilige Anleitung.'
+            . ($this->official_message_required_fields() === []
+                ? ''
+                : ' Felder mit Stern und Randstreifen gehören zu diesem '
+                    . 'Arbeitsschritt und sind auszufüllen.')
+            . '</p>'
+            /*
+             * Hier standen zwei runde Marken: der Arbeitsschritt und ein
+             * Verweis auf die Anlagen. Beide sagten nichts, was nicht
+             * daneben schon stand -- der Arbeitsschritt ist links im Menue
+             * hervorgehoben, und der Verweis auf die Anlagen ist ein Knopf
+             * in der Aktionsleiste, der dasselbe Sprungziel hat und dabei
+             * die Zahl der Anlagen nennt.
+             */
+            . '</div></header>';
+        /*
+         * Eine abgewiesene Handlung sagt es dort, wo hingesehen wird.
+         *
+         * Der Grund stand als schmaler Streifen am oberen Rand eines
+         * Dokuments, das erheblich laenger ist als der Bildschirm. Wer unten
+         * am Vordruck arbeitet und absendet, landet wieder unten -- und
+         * sieht eine Seite, die aussieht wie vorher. Er glaubt, die Handlung
+         * sei durchgelaufen. Sie ist es nicht, und im Einsatz bleibt eine
+         * Nachricht liegen, von der jemand annimmt, sie sei weiter.
+         *
+         * Der Kasten liegt deshalb fest im Blickfeld und mittig. Beides
+         * ohne Skript -- `autofocus` bringt den Fokus hinein, und der
+         * Schliessen-Weg zeigt auf den Kasten selbst, den `:target` dann
+         * ausblendet. Ein Fragment ueberlebt keine Formularsendung -- eine
+         * neue Abweisung erscheint also verlaesslich wieder.
+         */
         if ((string)$this->formdata['estab_route_error'] !== '') {
-            echo '<div class="estab-alert estab-alert--danger" role="alert">'
+            echo '<div class="estab-rueckweisung" id="estab-rueckweisung" '
+                . 'role="alert" tabindex="-1" autofocus>'
+                . '<div class="estab-rueckweisung-blatt">'
+                . '<strong>Die Handlung wurde nicht ausgeführt</strong>'
+                . '<p>'
                 . estab_message_html($this->formdata['estab_route_error'])
-                . '</div>';
+                . '</p>'
+                . '<a class="estab-button estab-rueckweisung-schliessen" '
+                . 'href="#estab-rueckweisung">Verstanden</a>'
+                . '</div></div>';
         }
         echo (string)$this->messageTimelineHtml;
         include_once __DIR__ . '/katego.php';
@@ -2142,6 +3454,11 @@ HTML;
             echo '<input type="hidden" name="task" value="'
                 . estab_message_html($this->task) . '">';
         }
+        // Die Übersicht der Rückweisungen kennt erst nach dem Rendern
+        // jedes Feld, gehört aber an den Kopf des Formulars. Der Vordruck
+        // wird deshalb zwischengespeichert und danach ausgegeben.
+        $officialFormBufferLevel = ob_get_level();
+        ob_start();
         $this->official_message_actions('top');
         $this->official_message_workflow_controls();
 
@@ -2159,8 +3476,14 @@ HTML;
         $conversationDraft = $this->task === 'Stab_schreiben';
         $conversationSelected =
             ($this->formdata['11_gesprnotiz'] ?? false) === true;
-        $actualMediumEditable = (bool)$this->feld[1]
+        // Mit veröffentlichtem S6-Plan leitet der Server Feld 1 zwingend aus
+        // dem gewählten Weg ab; ein eigenes Auswahlfeld wäre dort eine
+        // Eingabe, die still verworfen wird. Ohne Plan disponiert LdF das
+        // Übermittlungsmittel hier unmittelbar.
+        $actualMediumEditable = $this->official_message_field_access(1)
             || $this->task === 'LdF-Eingang'
+            || ($this->task === 'LdF-Ausgang'
+                && $this->official_message_manual_disposition())
             || $conversationDraft;
         $actualMediumEnabled = !$conversationDraft || $conversationSelected;
         $actualMediumRequired = $this->task === 'Stab_gesprnoti'
@@ -2202,7 +3525,7 @@ HTML;
                 ? 'estab-conversation-medium-status'
                 : ''
         );
-        echo '</div>';
+        echo '<span class="estab-official-print-number">1</span></div>';
 
         echo '<section class="estab-official-ttb">'
             . '<div class="estab-official-cell-heading">'
@@ -2223,38 +3546,35 @@ HTML;
             false,
             'Richtung im Technischen Betriebsbuch'
         );
-        echo '<span class="estab-official-print-number">4</span></section>';
+        echo '<span class="estab-official-print-number">5</span></section>';
 
         echo '<div class="estab-official-direction-headings" aria-hidden="true">'
             . '<strong>Eingang</strong><strong>Ausgang</strong></div>';
         echo '<div class="estab-official-stamps">';
         $this->official_message_timestamp_block(
             'Aufnahmevermerk',
-            1,
             2,
             '01_datum',
             '01_zeichen',
-            (bool)$this->feld[1],
+            $this->official_message_field_access(2),
             'Datum und Uhrzeit des Eingangs',
             'Namenszeichen der Aufnahme'
         );
         $this->official_message_timestamp_block(
             'Annahmevermerk',
-            2,
             3,
             '02_zeit',
             '02_zeichen',
-            (bool)$this->feld[2],
+            $this->official_message_field_access(3),
             'Zeit der Annahme',
             'Namenszeichen der Annahme'
         );
         $this->official_message_timestamp_block(
             'Beförderungsvermerk',
-            3,
             4,
             '03_datum',
             '03_zeichen',
-            (bool)$this->feld[3],
+            $this->official_message_field_access(4),
             'Datum und Quittungszeit der Gegenstelle',
             'Namenszeichen der Beförderung'
         );
@@ -2265,7 +3585,7 @@ HTML;
             . 'Rufname der Gegenstelle<br><span>Spruchkopf</span>';
         $this->official_message_help(6);
         echo '</div><div class="estab-official-field-value">';
-        if ((bool)$this->feld[5]) {
+        if ($this->official_message_field_access(6)) {
             echo '<div class="estab-message-suggestion-control">';
             $this->official_message_text_input(
                 '05_gegenstelle',
@@ -2284,7 +3604,7 @@ HTML;
                 'Rufname der Gegenstelle'
             );
         }
-        echo '</div><span class="estab-official-print-number">5</span></section>';
+        echo '</div><span class="estab-official-print-number">6</span></section>';
         echo '</div></section>';
 
         echo '<div class="estab-official-section-rule" aria-hidden="true"></div>';
@@ -2315,49 +3635,53 @@ HTML;
         $this->official_message_radio_group(
             '06_befwegausw',
             $this->official_message_medium_options('06_befwegausw'),
-            (bool)$this->feld[6] && $this->task !== 'LdF-Ausgang',
+            estab_message_desired_medium_editable($this->task),
             'Gewünschtes Übermittlungsmittel',
             $this->task !== 'LdF-Ausgang'
         );
-        echo '<span class="estab-official-print-number">6</span></section>';
+        echo '<span class="estab-official-print-number">7</span></section>';
 
         echo '<section class="estab-official-type-priority">'
             . '<div class="estab-official-type">';
         $this->official_message_help(8);
+        $this->official_message_preselect_form_type();
         $this->official_message_radio_group(
             '07_durchspruch',
             [
                 ['value' => 'D', 'label' => 'DURCHSAGE', 'id' => 'durchsage'],
                 ['value' => 'S', 'label' => 'Spruch', 'id' => 'spruch'],
             ],
-            (bool)$this->feld[7],
+            $this->official_message_field_access(8),
             'Nachrichtenform'
         );
-        echo '<span class="estab-official-print-number">7</span></div>'
+        echo '<span class="estab-official-print-number">8</span></div>'
             . '<div class="estab-official-priority">';
         $this->official_message_help(9);
         $this->official_message_priority();
-        echo '<span class="estab-official-print-number">8</span></div></section>';
+        echo '<span class="estab-official-print-number">9</span></div></section>';
 
         echo '<section class="estab-official-address-block">'
             . '<div class="estab-official-address-label">'
-            . '<div class="estab-official-cell-heading">Anschrift:';
+            . '<div class="estab-official-cell-heading">Anschrift:'
+            . '<br><span class="estab-official-designation-hint">'
+            . 'Dienststelle, Teileinheit oder Einheit</span>';
         $this->official_message_help(10);
-        echo '</div><span class="estab-official-print-number">9</span></div>'
+        echo '</div><span class="estab-official-print-number">10</span></div>'
             . '<div class="estab-official-address-value">';
         $this->official_message_textarea(
             '10_anschrift',
-            (bool)$this->feld[10],
+            $this->official_message_field_access(10),
             'Anschrift',
             255
         );
         echo '</div><div class="estab-official-phone-label">'
             . '<div class="estab-official-cell-heading">Ruf Nr.';
         $this->official_message_help(11);
-        echo '</div></div><div class="estab-official-phone-value">';
+        echo '</div><span class="estab-official-print-number">11</span>'
+            . '</div><div class="estab-official-phone-value">';
         $this->official_message_text_input(
             '11_rufnummer',
-            (bool)$this->feld[10],
+            $this->official_message_field_access(11),
             128,
             'Rufnummer der Gegenstelle',
             ' inputmode="tel" autocomplete="tel"'
@@ -2368,7 +3692,8 @@ HTML;
         echo '</div><div class="estab-official-conversation-control">';
         $this->official_message_checkbox(
             '11_gesprnotiz',
-            (bool)$this->feld[11] && $this->task !== 'Stab_gesprnoti',
+            $this->official_message_field_access(12)
+                && $this->task !== 'Stab_gesprnoti',
             'Gesprächsnotiz',
             $this->task !== 'Stab_korrigieren'
         );
@@ -2385,7 +3710,7 @@ HTML;
                             . 'DFÜ oder Kurier/Melder.'))
                 . '</span>';
         }
-        echo '</div><span class="estab-official-print-number">10</span>'
+        echo '</div><span class="estab-official-print-number">12</span>'
             . '</div></section>';
 
         echo '<section class="estab-official-subject">'
@@ -2394,20 +3719,21 @@ HTML;
         echo '</div><div class="estab-official-field-value">';
         $this->official_message_text_input(
             '12_betreff',
-            (bool)$this->feld[12],
+            $this->official_message_field_access(13),
             255,
             'Betreff der Nachricht'
         );
-        echo '</div><span class="estab-official-print-number">11</span></section>';
+        echo '</div><span class="estab-official-print-number">13</span></section>';
 
         echo '<section class="estab-official-message-text">';
         $this->official_message_help(14);
+        $this->official_message_text_guidance();
         $this->official_message_textarea(
             '12_inhalt',
-            (bool)$this->feld[12],
+            $this->official_message_field_access(14),
             'Nachrichtentext'
         );
-        echo '</section>';
+        echo '<span class="estab-official-print-number">14</span></section>';
 
         $senderAssignedByLead = in_array(
             $this->task,
@@ -2416,14 +3742,16 @@ HTML;
         );
         echo '<section class="estab-official-sender">'
             . '<div class="estab-official-sender-label">'
-            . '<div class="estab-official-cell-heading">Absender:';
+            . '<div class="estab-official-cell-heading">Absender:'
+            . '<br><span class="estab-official-designation-hint">'
+            . 'Dienststelle, Teileinheit oder Einheit</span>';
         $this->official_message_help(15);
         echo '</div></div><div class="estab-official-sender-value">';
         if ($senderAssignedByLead) {
             echo '<span id="f_13_abseinheit" '
                 . 'class="estab-official-readonly" data-estab-readonly="true">'
                 . 'Wird durch LdF aus dem Rufnamen ergänzt</span>';
-        } elseif ((bool)$this->feld[13]) {
+        } elseif ($this->official_message_field_access(15)) {
             echo '<div class="estab-message-suggestion-control">';
             $this->official_message_text_input(
                 '13_abseinheit',
@@ -2442,7 +3770,7 @@ HTML;
                 'Absender'
             );
         }
-        echo '</div><span class="estab-official-print-number">12</span></section>';
+        echo '</div><span class="estab-official-print-number">15</span></section>';
 
         echo '<section class="estab-official-composition">'
             . '<div class="estab-official-composition-label">'
@@ -2451,21 +3779,21 @@ HTML;
         echo '</div></div><div class="estab-official-composition-value">';
         $this->official_message_text_input(
             '12_abfzeit',
-            (bool)$this->feld[12],
+            $this->official_message_field_access(16),
             19,
             'Abfassungszeit',
             ' inputmode="numeric" autocomplete="off"'
         );
-        echo '</div></section>';
+        echo '</div>'
+            . '<span class="estab-official-print-number">16</span></section>';
 
         echo '<section class="estab-official-author">'
             . '<div class="estab-official-author-unit">'
-            . '<span class="estab-official-print-number">13</span>'
             . '<span>Einheit/Einrichtung/Stelle</span></div>'
             . '<div class="estab-official-author-mark">'
-            . '<span class="estab-official-print-number">14</span>';
+            . '<span class="estab-official-print-number">17</span>';
         $this->official_message_help(17);
-        if ((bool)$this->feld[14]) {
+        if ($this->official_message_field_access(17)) {
             $this->official_message_text_input(
                 '14_zeichen',
                 true,
@@ -2484,7 +3812,7 @@ HTML;
             . '<div class="estab-official-author-function">';
         $this->official_message_text_input(
             '14_funktion',
-            (bool)$this->feld[14],
+            $this->official_message_field_access(17),
             128,
             'Funktion des Verfassers'
         );
@@ -2518,7 +3846,8 @@ HTML;
                 . 'aria-label="Sichterzeichen wird aus der Anmeldung übernommen">'
                 . $this->safe_message_value('15_quitzeichen') . '</strong>';
         } else {
-            $editableReceipt = (bool)$this->feld[15] && !$immutableAdmin;
+            $editableReceipt = $this->official_message_field_access(18)
+                && !$immutableAdmin;
             $this->official_message_text_input(
                 '15_quitdatum',
                 $editableReceipt,
@@ -2538,35 +3867,45 @@ HTML;
         }
         echo '</div><div class="estab-official-receipt-labels" '
             . 'aria-hidden="true"><span>Uhrzeit</span><span>Zeichen</span></div>'
-            . '<span class="estab-official-print-number">15</span></section>';
+            . '<span class="estab-official-print-number">18</span></section>';
 
-        echo '<section class="estab-official-distribution">'
+        echo '<section class="estab-official-distribution" '
+            . 'id="f_16_empf" tabindex="-1">'
             . '<div class="estab-official-cell-heading">';
         $this->official_message_help(19);
         echo '</div>';
         $this->official_message_distribution();
-        echo '<span class="estab-official-print-number">16</span></section>';
+        echo '<span class="estab-official-print-number">19</span></section>';
 
         echo '<section class="estab-official-notes">'
             . '<div class="estab-official-cell-heading">Vermerke:';
         $this->official_message_help(20);
         echo '</div>';
+        $this->official_message_review_scope();
         $this->official_message_textarea(
             '17_vermerke',
-            (bool)$this->feld[17],
+            $this->official_message_field_access(20),
             'Vermerke',
             0,
             false
         );
-        echo '<span class="estab-official-print-number">17</span></section>';
+        echo '<span class="estab-official-print-number">20</span></section>';
         echo '</div></section></article></div>';
         $this->official_message_extra_distribution();
 
         $this->official_message_attachments();
+        $this->official_message_print_annex();
         $this->official_message_actions('bottom');
+        $officialFormBody = ob_get_level() > $officialFormBufferLevel
+            ? (string) ob_get_clean()
+            : '';
+        $this->official_message_error_summary();
+        echo $officialFormBody;
         echo '</form></main>';
         $this->show_message_suggestion_script();
         $this->official_message_help_script();
+        $this->official_message_choice_script();
+        $this->official_message_guidance_script();
         echo '</body></html>';
     }
 }

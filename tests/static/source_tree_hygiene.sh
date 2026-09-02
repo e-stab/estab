@@ -112,6 +112,17 @@ is_allowed_menu_asset()
         4fsym/null.gif)
             return 0
             ;;
+        # Die taktischen Zeichen (CC-BY-4.0, THIRD_PARTY_NOTICES.md).
+        #
+        # Ein eigenes Verzeichnis statt zweiundzwanzig Einzeleintraege, aber
+        # NUR fuer SVG: die Zusage dieser Pruefung ist "keine unerklaerte
+        # Bilddatei im Menuebestand", und die haelt sie weiter -- ein
+        # eingeschmuggeltes PNG oder eine Schriftdatei faellt nach wie vor
+        # auf. Der Zeichensatz ist quelltextfoermig, versionierbar und
+        # nachlesbar; ein Binaerbild waere keines von dreien.
+        4fsym/taktische-zeichen/*.svg)
+            return 0
+            ;;
     esac
     return 1
 }

@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 $root = dirname(__DIR__, 2);
+require_once $root . '/app/ui_elements.php';
 $previousDirectory = getcwd();
 if (!chdir($root . '/4fach')) {
     throw new RuntimeException('Could not enter the message controller directory');
@@ -397,12 +398,133 @@ $assert(
         && str_contains($formControllerSource, '"ldf_rueckgabegrund",'),
     'Outgoing LdF form lacks its bounded, escaped and rehydratable return-reason field'
 );
+/*
+ * Die Aktionsleiste setzt ihre Knoepfe ueber den Elementkatalog. Geprueft
+ * wird deshalb dieselbe Tatsache an ihrer neuen Stelle: genau eine Rueckgabe
+ * mit diesem Namen, in der Rolle "rueckgabe" -- der Katalog gibt ihr
+ * estab-button-danger -- und ohne Pflichtfeldpruefung, damit eine Rueckgabe
+ * nicht an einem leeren Feld scheitert.
+ */
 $assert(
-    substr_count($formSource, 'name="ldf_zurueckweisen_x"') === 1
-        && str_contains($formSource, 'An Verfasser zurückgeben</button>')
-        && str_contains($formSource, 'estab-button-danger')
-        && str_contains($formSource, 'formnovalidate'),
+    substr_count($formSource, "'ldf_zurueckweisen_x'") === 1
+        && str_contains($formSource, "'An Verfasser zurückgeben',")
+        && preg_match(
+            "~'rueckgabe',\s*\n\s*'An Verfasser zurückgeben',\s*\n"
+                . "\s*'submit',\s*\n\s*'ldf_zurueckweisen_x',\s*\n"
+                . "\s*' formnovalidate'~u",
+            $formSource
+        ) === 1
+        && estab_ui_action_roles()['rueckgabe']['klasse']
+            === 'estab-button-danger',
     'Outgoing LdF form lacks one explicit non-destructive return action'
+);
+
+// Feld 20 sammelt die Vermerke des gesamten Laufwegs: Die Rückgabe an den
+// Verfasser ergänzt den vorhandenen Sichtervermerk, statt ihn zu ersetzen.
+require_once $root . '/app/dv_rules.php';
+
+$assert(
+    function_exists('estab_message_note_with_entry')
+        && defined('ESTAB_MESSAGE_NOTE_MAX_LENGTH'),
+    estab_dv_requirement(
+        'NV-20-VERMERKE-ERHALT',
+        'Für Feld 20 gibt es keine anfügende, begrenzte Schreiboperation'
+    )
+);
+
+$previousNote = 'Vorheriger Prüfvermerk';
+$returnMarker = 'Rückgabe an den Verfasser durch LdF ldf001';
+$mergedNote = estab_message_note_with_entry(
+    $previousNote,
+    $returnMarker,
+    $submittedReason,
+    '02.08.2026 10:15'
+);
+$assert(
+    str_starts_with($mergedNote, $previousNote . "\n")
+        && str_contains($mergedNote, $submittedReason)
+        && str_contains($mergedNote, $returnMarker)
+        && str_contains($mergedNote, '02.08.2026 10:15'),
+    estab_dv_requirement(
+        'NV-20-VERMERKE-ERHALT',
+        'Der Rückgabegrund überschreibt den vorhandenen Vermerk, statt ihn '
+            . 'mit Zeitpunkt und Stelle darunter zu ergänzen'
+    )
+);
+
+$secondReturnNote = estab_message_note_with_entry(
+    $mergedNote,
+    'Rückgabe an den Verfasser durch LdF ldf002',
+    'Anschrift weiterhin unvollständig.',
+    '02.08.2026 11:20'
+);
+$assert(
+    str_starts_with($secondReturnNote, $mergedNote . "\n")
+        && str_contains($secondReturnNote, $previousNote)
+        && str_contains($secondReturnNote, $submittedReason)
+        && substr_count($secondReturnNote, 'Rückgabe an den Verfasser') === 2,
+    estab_dv_requirement(
+        'NV-20-VERMERKE-ERHALT',
+        'Eine zweite Rückgabe löscht die Vermerke der ersten'
+    )
+);
+
+$firstNote = estab_message_note_with_entry(
+    '',
+    $returnMarker,
+    $submittedReason,
+    '02.08.2026 10:15'
+);
+$assert(
+    !str_starts_with($firstNote, "\n")
+        && str_contains($firstNote, $submittedReason),
+    estab_dv_requirement(
+        'NV-20-VERMERKE-ERHALT',
+        'Der erste Vermerk eines Laufwegs beginnt mit einer leeren Zeile'
+    )
+);
+
+$filledNote = str_repeat('a', ESTAB_MESSAGE_NOTE_MAX_LENGTH - 100);
+$boundedNote = estab_message_note_with_entry(
+    $filledNote,
+    $returnMarker,
+    str_repeat('b', 2000),
+    '02.08.2026 10:15'
+);
+$assert(
+    str_starts_with($boundedNote, $filledNote)
+        && estab_auth_text_length($boundedNote)
+            <= ESTAB_MESSAGE_NOTE_MAX_LENGTH
+        && estab_auth_text_length($boundedNote)
+            > estab_auth_text_length($filledNote),
+    estab_dv_requirement(
+        'NV-20-VERMERKE-ERHALT',
+        'Die Längenbegrenzung von Feld 20 verkürzt die bereits '
+            . 'eingetragenen Vermerke'
+    )
+);
+
+$mergePosition = strpos($repositoryReturn, 'estab_message_note_with_entry(');
+$assert(
+    is_int($selectPosition)
+        && is_int($mergePosition)
+        && is_int($updatePosition)
+        && $selectPosition < $mergePosition
+        && $mergePosition < $updatePosition
+        && str_contains($repositoryReturn, "\$message['17_vermerke'] ?? ''")
+        && str_contains(
+            $repositoryReturn,
+            '[$mergedNote, $recordId, $incidentId],'
+        )
+        && !str_contains(
+            $repositoryReturn,
+            '[$reason, $recordId, $incidentId],'
+        ),
+    estab_dv_requirement(
+        'NV-20-VERMERKE-ERHALT',
+        'Die LdF-Rückgabe schreibt den Rückgabegrund roh in Feld 20, statt '
+            . 'den unter FOR UPDATE gelesenen Vermerk zu ergänzen'
+    )
 );
 
 printf("LdF return security: OK (%d assertions)\n", $assertions);

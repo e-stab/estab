@@ -4,9 +4,58 @@ services:
   db:
     image: mariadb:11.8.8@sha256:efb4959ef2c835cd735dbc388eb9ad6aab0c78dd64febcd51bc17481111890c4
     init: true
+    # Eine harte Grenze, damit ein Ausreisser nur seinen eigenen Dienst
+    # trifft und nicht das ganze Geraet.
+    #
+    # Nachgemessen mit dem echten Schema und echten Daten: Bei 24
+    # gleichzeitigen Verbindungen -- der Obergrenze oben -- laeuft der
+    # Verbrauch auf 170 MB und bleibt dort, ueber drei Durchgaenge zu je
+    # 40 Laeufen, ohne ein einziges OOM-Ereignis.
+    #
+    # 192 MB haetten daraus 11 Prozent Reserve gemacht. Das ist zu wenig:
+    # MariaDB streut ueber Tage im Speicherallokator -- auf der laufenden
+    # Instanz lag es nach 3,9 Tagen rund 190 MB ueber dem, was es selbst
+    # als belegt meldete. 256 MB lassen ein Drittel Luft und bleiben mit
+    # dem app-Dienst zusammen deutlich unter dem Geraetebudget.
+    #
+    # Wird die Grenze doch zu knapp, startet der Dienst neu statt langsam
+    # zu werden -- das ist gewollt und sichtbar.
+    mem_limit: ${ESTAB_DB_MEM_LIMIT:-256m}
     restart: unless-stopped
     command:
       - --sql-mode=STRICT_TRANS_TABLES,NO_ZERO_DATE,NO_ZERO_IN_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION
+      # Auf den gemessenen Bedarf statt auf die Vorgabewerte.
+      #
+      # Der Datenbestand umfasst 11,4 MB in 104 Tabellen, alle InnoDB.
+      # Reserviert waren dafuer 400 MB Puffer, von denen die Datenbank
+      # selbst meldete, sie nicht zu brauchen: KEY_BLOCKS_USED = 0 (der
+      # MyISAM-Cache wird nie angefasst), 292 von 15.924 Aria-Bloecken
+      # belegt, 1.058 Plattenlesungen auf 10.011.157 Anfragen. In 3,9
+      # Tagen standen hoechstens 7 der 151 Verbindungen gleichzeitig.
+      #
+      # Im Lasttest mit 20.000 Nachrichten und 20 gleichzeitigen
+      # Verbindungen war dieses Profil zugleich das schnellste: 0,591 s
+      # je Durchlauf gegen 0,689 s bei den Vorgabewerten.
+      #
+      # Waechst der Bestand ueber etwa 60 MB, muss der Pufferpool wieder
+      # mitwachsen -- dann ist er der erste Wert, den man anhebt.
+      - --key-buffer-size=1M
+      - --aria-pagecache-buffer-size=8M
+      - --innodb-buffer-pool-size=64M
+      - --innodb-log-buffer-size=2M
+      - --innodb-log-file-size=32M
+      - --max-connections=24
+      - --thread-cache-size=8
+      - --table-open-cache=256
+      - --table-definition-cache=256
+      - --tmp-table-size=8M
+      - --max-heap-table-size=8M
+      - --sort-buffer-size=256K
+      - --join-buffer-size=128K
+      - --read-rnd-buffer-size=128K
+      - --innodb-read-io-threads=2
+      - --innodb-write-io-threads=2
+      - --innodb-purge-threads=1
     environment:
       MARIADB_DATABASE: ${ESTAB_DB_NAME:-estab}
       MARIADB_USER: ${ESTAB_DB_USER:-estab}
@@ -66,6 +115,11 @@ services:
   app:
     image: ${ESTAB_APP_IMAGE:?Set ESTAB_APP_IMAGE to an immutable release tag or digest}
     init: true
+    # 12 Arbeitsprozesse zu je 128 MB. Im Regelfall traegt das eine
+    # laufende PDF-Ausgabe (rund 90 MB) plus elf gewoehnliche
+    # Seitenaufbauten. Mehrere gleichzeitige Ausgaben schliesst die
+    # Anwendung selbst aus (siehe app/incident_pdf.php).
+    mem_limit: 448m
     restart: unless-stopped
     depends_on:
       db:

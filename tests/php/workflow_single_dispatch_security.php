@@ -61,8 +61,18 @@ $identities = [
         'funktion' => 'LdF',
         'rolle' => 'Fernmelder',
         'default' => 'telecommunications-lead-list',
+        // Der LdF vertritt den Fernmelder. Er ist fuer den Betrieb
+        // zustaendig, ueberwacht dessen Kennzahlen und uebernimmt im
+        // Problemfall einzelne Aufgaben -- ohne dabei ein zweiter A/W zu
+        // werden. Dass die Identitaeten getrennt bleiben, prueft
+        // workflow_security; dass er weiterhin eine Warteschlange traegt,
+        // dv_double_hat_queues.
         'allowed_actions' => [
             'ldf_nachrichten_x',
+            'fm_eingang_x',
+            'fm_ausgang_x',
+            'fm_admin_x',
+            'fm_anhang_x',
         ],
     ],
     'POL/FB' => [
