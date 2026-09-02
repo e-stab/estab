@@ -8723,9 +8723,11 @@ class BrowserAcceptance:
         )
 
         def click_overview_and_handle_dialog(accept: bool, action: str) -> None:
+            # Die Ziele stehen im Menue der Huelle, nicht im Cockpit.
             dialog = self.cdp.click(
-                "vorgaben",
-                '[data-estab-navigation] a[data-estab-nav-key="overview"]',
+                None,
+                '[data-estab-shell-menu] [data-estab-navigation] '
+                'a[data-estab-nav-key="overview"]',
                 f"Übersichtslink zum {action} des Bereichswechsels",
                 dialog_accept=accept,
             )

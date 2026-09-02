@@ -6,6 +6,7 @@ require_once __DIR__ . '/bootstrap.php';
 require_once __DIR__ . '/auth.php';
 require_once __DIR__ . '/navigation.php';
 require_once __DIR__ . '/csp.php';
+require_once __DIR__ . '/session_ui.php';
 
 /**
  * Die eine Hülle, in der jede Seite der Anwendung steht.
@@ -103,7 +104,20 @@ function estab_shell_menu_markup(
         )
         . $contextMarkup
         . ($withActions ? estab_shell_actions_markup($identity) : '')
-        . '</div>';
+        . '</div>'
+        /*
+         * Die Verlustwarnung gehoert dorthin, wo die Ziele stehen.
+         *
+         * Sie haengt am Dokument, das sie ausgibt -- und das war die
+         * Sitzungsleiste. Seit die Ziele im Menue der Huelle stehen und die
+         * Leiste im Cockpit-Rahmen, horchte niemand mehr auf einen Klick ins
+         * Menue: Ein ausgefuellter Nachrichtenvordruck ging beim Wechsel auf
+         * die Uebersicht ohne Rueckfrage verloren.
+         *
+         * Sie sucht die geaenderten Formulare ohnehin ueber alle
+         * gleichstaemmigen Rahmen; sie braucht nur diesen Zuhoerer.
+         */
+        . estab_session_ui_dirty_guard_script();
 }
 
 /**
