@@ -334,7 +334,19 @@ try {
         ],
         $identityFor($unassigned)
     );
-    $unassignedAw = $accountRow($connection, 'blk001');
+    /*
+     * Das TBB fuehrt der LdF, nicht der A/W.
+     *
+     * Geprueft wird hier, dass ein festes Konto OHNE formale Dienstschicht
+     * schreiben darf -- nicht, welche Funktion das Buch fuehrt. Dafuer muss
+     * das Konto aber die Fachzustaendigkeit des Buches tragen, und die liegt
+     * fuer das Technische Betriebsbuch bei LdF / Fernmelder. Der A/W
+     * befoerdert; er fuehrt kein Buch.
+     *
+     * 'off001' ist an dieser Stelle ein gewoehnliches aktives Konto -- offline
+     * gesetzt wird es erst viel spaeter in dieser Pruefung.
+     */
+    $unassignedLdf = $accountRow($connection, 'off001');
     $ttbId = estab_logbook_insert_entry(
         $databaseConfig,
         'nv_tbb',
@@ -342,11 +354,11 @@ try {
         [
             'entry_type' => 'betrieb_personal',
             'event_time' => date('Y-m-d H:i:s'),
-            'personnel_duty' => 'A/W im Dienst ohne formale Dienstschicht',
+            'personnel_duty' => 'LdF im Dienst ohne formale Dienstschicht',
             'operations' => 'Fester Kontozugang nachgewiesen',
             'comment' => 'Keine Dienstschicht als Eingabesperre.',
         ],
-        $identityFor($unassignedAw)
+        $identityFor($unassignedLdf)
     );
     $provenance = $connection->query(
         'SELECT '

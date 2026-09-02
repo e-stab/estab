@@ -3011,7 +3011,19 @@ try {
                     $looseTtbId
                 ) === $s3Identity['benutzer'] . '|'
                     . $s3Identity['kuerzel'] . '|'
-                    . 'A/W'
+                    /*
+                     * LdF, nicht mehr A/W.
+                     *
+                     * Eingetragen wird die Funktion, die die Fachzustaendigkeit
+                     * des Buches traegt -- nicht die Kontofunktion des
+                     * Schreibers. Fuer das Technische Betriebsbuch ist das seit
+                     * der Klarstellung FERNMELDEBETRIEB, und die traegt allein
+                     * LdF / Fernmelder. Der A/W befoerdert; er fuehrt kein Buch.
+                     *
+                     * Der eingetragene Wert ist damit der richtige -- diese
+                     * Erwartung war die alte.
+                     */
+                    . 'LdF'
                 && (string) $scalar(
                     $connection,
                     'SELECT CONCAT(job.`beauftragt_von`, ?, supervisor.`benutzer`,'
@@ -3454,7 +3466,17 @@ try {
         $looseDirectEtbIdentity['funktion'] = 'ETB';
         $looseDirectEtbIdentity['rolle'] = 'Stab';
         $looseDirectTtbIdentity = $s3Identity;
-        $looseDirectTtbIdentity['funktion'] = 'A/W';
+        /*
+         * LdF, nicht A/W.
+         *
+         * Diese Einfuegungen gehen absichtlich am Programm vorbei, um die
+         * Ausloeser der Datenbank zu pruefen -- und sie SOLLEN scheitern, aber
+         * an einer bestimmten Schranke: am fehlenden maschinellen Nachweis und
+         * am fremden Einsatz. Seit Migration 132 verlangt der Ausloeser des
+         * TBB einen Schreiber mit LdF / Fernmelder. Mit A/W griffe diese
+         * Schranke zuerst, und die Probe traefe nie die Grenze, die sie meint.
+         */
+        $looseDirectTtbIdentity['funktion'] = 'LdF';
         $looseDirectTtbIdentity['rolle'] = 'Fernmelder';
         $directEtbInsert = static function (
             int $targetIncidentId,
@@ -4629,6 +4651,13 @@ try {
         $incidentId,
         $messengerIdentity
     );
+    /*
+     * Der benannte Schreiber des TBB ist der LdF, nicht der A/W.
+     *
+     * Das Buch gehoert dem Fernmeldebetrieb, und dessen Fachzustaendigkeit
+     * traegt allein LdF / Fernmelder. Der A/W befoerdert Nachrichten; er
+     * fuehrt kein Buch. Diese Pruefung stammt aus der Zeit davor.
+     */
     $assert(
         !estab_logbook_is_designated_writer(
             $connection,
@@ -4639,10 +4668,10 @@ try {
             && estab_logbook_is_designated_writer(
                 $connection,
                 $incidentId,
-                $awIdentity,
+                $ldfIdentity,
                 'tbb'
             ),
-        'STRICT no longer retains one exact designated A/W assignment for TTB'
+        'STRICT no longer retains one exact designated LdF assignment for TTB'
     );
     $tbbEntryId = estab_logbook_insert_entry(
         $databaseConfig,
@@ -4651,13 +4680,13 @@ try {
         [
             'entry_type' => 'betrieb_personal',
             'personnel_duty' => 'Melder zurück in der Führungsstelle',
-            'comment' => 'TBB-Nachtrag durch ein festes A/W-Konto.',
+            'comment' => 'TBB-Nachtrag durch ein festes LdF-Konto.',
         ],
-        $awIdentity
+        $ldfIdentity
     );
     $assert(
         $tbbEntryId > 0,
-        'fixed A/W account could not record the returned messenger in the TBB'
+        'fixed LdF account could not record the returned messenger in the TBB'
     );
     $expect(
         EstabDvConflictException::class,
