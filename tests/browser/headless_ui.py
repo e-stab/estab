@@ -5882,61 +5882,79 @@ class BrowserAcceptance:
         self._assert_root_card_layout("angemeldete Übersicht")
 
     def _assert_application_sidebar_layout(self, location: str) -> None:
+        """Prove the three shell columns of the message workspace.
+
+        Bis zum Umbau standen hier zwei Rahmen nebeneinander: links die
+        Seitenleiste, rechts der Inhalt. Heute ist es die Huelle -- links das
+        Menue mit den Arbeitsschritten, in der Mitte der Inhalt, rechts das
+        Cockpit. Unter 42rem stehen die drei untereinander, jede so hoch wie
+        das Fenster.
+        """
         workspace = self.cdp.evaluate(
             """
             (() => {
                 if (innerWidth <= 672) {
                     scrollTo(0, 0);
                 }
+                const bounds = element => {
+                    if (!element) return null;
+                    const rect = element.getBoundingClientRect();
+                    return {
+                        left: rect.left,
+                        right: rect.right,
+                        top: rect.top,
+                        bottom: rect.bottom,
+                        width: rect.width,
+                        height: rect.height
+                    };
+                };
                 const shell = document.querySelector(
                     "[data-estab-message-workspace]"
                 );
-                const sidebar = document.querySelector(
-                    'iframe[name="vorgaben"]'
+                const menu = document.querySelector(
+                    "[data-estab-shell-menu]"
                 );
                 const content = document.querySelector(
-                    'iframe[name="mainframe"]'
+                    "[data-estab-shell-content]"
                 );
-                if (!shell || !sidebar || !content) return null;
-                const sidebarRect = sidebar.getBoundingClientRect();
-                const contentRect = content.getBoundingClientRect();
+                const cockpit = document.querySelector(
+                    ".estab-shell-cockpit"
+                );
+                if (!shell || !menu || !content || !cockpit) return null;
                 return {
                     frameNames: Array.from(
                         document.querySelectorAll("iframe[name]")
                     ).map(frame => frame.getAttribute("name")),
-                    sidebar: {
-                        left: sidebarRect.left,
-                        right: sidebarRect.right,
-                        top: sidebarRect.top,
-                        bottom: sidebarRect.bottom,
-                        width: sidebarRect.width
-                    },
-                    content: {
-                        left: contentRect.left,
-                        right: contentRect.right,
-                        top: contentRect.top,
-                        bottom: contentRect.bottom,
-                        width: contentRect.width
-                    },
+                    menu: bounds(menu),
+                    content: bounds(content),
+                    cockpit: bounds(cockpit),
+                    actions: bounds(
+                        document.querySelector('iframe[name="aktionen"]')
+                    ),
                     innerWidth,
                     innerHeight,
                     clientWidth: document.documentElement.clientWidth,
                     clientHeight: document.documentElement.clientHeight,
-                    scrollHeight: document.scrollingElement.scrollHeight
+                    scrollHeight: document.scrollingElement.scrollHeight,
+                    scrollWidth: document.scrollingElement.scrollWidth
                 };
             })()
             """
         )
         self._truth(isinstance(workspace, dict), f"Arbeitsbereich fehlt: {location}.")
+        # Die Arbeitsschritte stehen als eigener Rahmen im Menue -- sie
+        # brauchen den aufgeloesten Einsatzbezug, den vorgaben.php ohnehin
+        # ermittelt, und sollen doch links unter den Zielen erscheinen.
         self._equal(
             workspace.get("frameNames"),
-            ["vorgaben", "mainframe"],
+            ["aktionen", "mainframe", "vorgaben"],
             f"Frame-Struktur in {location}",
         )
-        sidebar_frame = workspace.get("sidebar")
-        content_frame = workspace.get("content")
+        menu = workspace.get("menu")
+        content = workspace.get("content")
+        cockpit = workspace.get("cockpit")
+        actions = workspace.get("actions")
         inner_width = float(workspace.get("innerWidth", 0))
-        inner_height = float(workspace.get("innerHeight", 0))
         # A classic Linux scrollbar reduces the usable layout viewport while
         # Chrome deliberately keeps innerWidth at the emulated device width.
         client_width = float(workspace.get("clientWidth", 0))
@@ -5946,52 +5964,63 @@ class BrowserAcceptance:
             f"Nachrichten-Layout-Viewport ist in {location} ungültig: "
             f"{workspace!r}",
         )
+        self._truth(
+            float(workspace.get("scrollWidth", 0)) <= client_width + 1,
+            f"Der Arbeitsbereich erzeugt in {location} horizontales Scrolling.",
+        )
+        self._truth(
+            isinstance(menu, dict)
+            and isinstance(content, dict)
+            and isinstance(cockpit, dict)
+            and isinstance(actions, dict),
+            f"Der Huelle fehlt in {location} eine Spalte: {workspace!r}",
+        )
         if inner_width <= 672:
             self._truth(
-                isinstance(sidebar_frame, dict)
-                and isinstance(content_frame, dict)
-                and abs(float(sidebar_frame.get("left", -1))) <= 0.5
-                and abs(float(content_frame.get("left", -1))) <= 0.5
-                and abs(float(sidebar_frame.get("top", -1))) <= 0.5
-                and abs(float(sidebar_frame.get("bottom", -1)) - client_height)
-                <= 0.5
-                and abs(float(content_frame.get("top", -1)) - client_height)
-                <= 0.5
-                and abs(
-                    float(content_frame.get("bottom", -1))
-                    - (2 * client_height)
+                all(
+                    abs(float(column.get("left", -1))) <= 0.5
+                    and abs(float(column.get("width", 0)) - client_width)
+                    <= 0.5
+                    for column in (menu, content, cockpit)
                 )
-                <= 0.5
-                and abs(float(sidebar_frame.get("width", 0)) - client_width)
-                <= 0.5
-                and abs(float(content_frame.get("width", 0)) - client_width)
+                and abs(float(menu.get("top", -1))) <= 0.5
+                and abs(float(content.get("top", -1)) - client_height) <= 0.5
+                and abs(float(cockpit.get("top", -1)) - (2 * client_height))
                 <= 0.5
                 and abs(
                     float(workspace.get("scrollHeight", 0))
-                    - (2 * client_height)
+                    - (3 * client_height)
                 )
                 <= 1,
-                f"Sidebar und Inhalt bilden in {location} keine zwei vollen "
-                f"Viewport-Zeilen: {workspace!r}",
+                f"Menue, Inhalt und Cockpit bilden in {location} keine drei "
+                f"vollen Viewport-Zeilen: {workspace!r}",
             )
         else:
             self._truth(
-                isinstance(sidebar_frame, dict)
-                and isinstance(content_frame, dict)
-                and abs(float(sidebar_frame.get("top", -1))) <= 0.5
-                and abs(
-                    float(sidebar_frame.get("bottom", -1)) - client_height
+                all(
+                    abs(float(column.get("top", -1))) <= 0.5
+                    and abs(float(column.get("bottom", -1)) - client_height)
+                    <= 0.5
+                    for column in (menu, content, cockpit)
                 )
-                <= 0.5
-                and abs(float(content_frame.get("top", -1))) <= 0.5
-                and abs(float(content_frame.get("bottom", -1)) - client_height)
-                <= 0.5
-                and float(sidebar_frame.get("width", 0)) >= 260
-                and float(sidebar_frame.get("right", 0))
-                <= float(content_frame.get("left", -1)) + 0.5
-                and float(content_frame.get("width", 0)) >= 300,
-                f"Sidebar nutzt in {location} nicht die volle linke Höhe.",
+                and float(menu.get("width", 0)) >= 200
+                and float(menu.get("right", 0))
+                <= float(content.get("left", -1)) + 0.5
+                and float(content.get("right", 0))
+                <= float(cockpit.get("left", -1)) + 0.5
+                and float(content.get("width", 0)) >= 300,
+                f"Die Spalten stehen in {location} nicht nebeneinander über "
+                f"die volle Höhe: {workspace!r}",
             )
+        # Der Schritte-Rahmen gehoert in die Menuespalte und nirgendwo sonst.
+        self._truth(
+            float(actions.get("left", -1)) >= float(menu.get("left", 0)) - 0.5
+            and float(actions.get("right", 0))
+                <= float(menu.get("right", 0)) + 0.5
+            and float(actions.get("height", 0)) > 0,
+            f"Die Arbeitsschritte stehen in {location} nicht im Menue: "
+            f"{workspace!r}",
+        )
 
         state = self.cdp.evaluate(
             _frame_expression(
@@ -6157,7 +6186,7 @@ class BrowserAcceptance:
             )
         )
         self._truth(isinstance(state, dict), f"Sidebar-Inhalt fehlt: {location}.")
-        for key in ("status", "bar", "topline", "navigation", "workflow"):
+        for key in ("status", "bar", "topline"):
             self._truth(
                 isinstance(state.get(key), dict),
                 f"{key} fehlt in {location}.",
@@ -6165,32 +6194,93 @@ class BrowserAcceptance:
         status_rect = state["status"]
         bar_rect = state["bar"]
         topline_rect = state["topline"]
-        navigation_rect = state["navigation"]
-        workflow_rect = state["workflow"]
+        # Das Cockpit fuehrt die Kennung innerhalb seines Statusbereichs, und
+        # die Kopfzeile der Kennung bleibt in ihrem Kasten.
         self._truth(
-            status_rect["bottom"] <= bar_rect["top"] + 0.5
-            and bar_rect["bottom"] <= workflow_rect["top"] + 0.5
-            and workflow_rect["bottom"] <= navigation_rect["top"] + 0.5
+            status_rect["top"] <= bar_rect["top"] + 0.5
+            and bar_rect["bottom"] <= status_rect["bottom"] + 0.5
+            and topline_rect["top"] >= bar_rect["top"] - 0.5
             and topline_rect["bottom"] <= bar_rect["bottom"] + 0.5,
-            f"Status, Benutzer, Aktionen und Bereiche sind in {location} "
-            "nicht überschneidungsfrei angeordnet.",
+            f"Status und Kennung sind in {location} nicht "
+            "überschneidungsfrei angeordnet.",
+        )
+
+        # Bereiche und Arbeitsschritte stehen seit dem Umbau im Menue: die
+        # Ziele oben, die Schritte als eigener Rahmen darunter.
+        menu_state = self.cdp.evaluate(
+            """
+            (() => {
+                const menu = document.querySelector(
+                    "[data-estab-shell-menu]"
+                );
+                const navigation = menu && menu.querySelector(
+                    "[data-estab-navigation]"
+                );
+                const actionsFrame = document.querySelector(
+                    'iframe[name="aktionen"]'
+                );
+                if (!navigation || !actionsFrame) return null;
+                const rect = element => {
+                    const value = element.getBoundingClientRect();
+                    return {
+                        left: value.left, right: value.right,
+                        top: value.top, bottom: value.bottom,
+                        width: value.width, height: value.height
+                    };
+                };
+                const links = Array.from(
+                    navigation.querySelectorAll("a[data-estab-nav-key]")
+                );
+                return {
+                    navigation: rect(navigation),
+                    actionsFrame: rect(actionsFrame),
+                    navigationMode: navigation.getAttribute(
+                        "data-estab-navigation-mode"
+                    ),
+                    hasDisclosure: Boolean(
+                        navigation.querySelector("details,summary")
+                    ),
+                    linkCount: links.length,
+                    linksFit: links.every(link => {
+                        const value = link.getBoundingClientRect();
+                        return value.width >= 24 && value.height >= 24;
+                    }),
+                    navigationScrollFree:
+                        navigation.scrollHeight <=
+                            navigation.clientHeight + 1 &&
+                        navigation.scrollWidth <= navigation.clientWidth + 1
+                };
+            })()
+            """
+        )
+        self._truth(
+            isinstance(menu_state, dict),
+            f"Menuespalte fehlt in {location}.",
+        )
+        self._truth(
+            float(menu_state["navigation"]["bottom"])
+            <= float(menu_state["actionsFrame"]["top"]) + 0.5,
+            f"Ziele und Arbeitsschritte ueberschneiden sich in {location}.",
         )
         self._equal(
-            state.get("navigationMode"),
+            menu_state.get("navigationMode"),
             "sidebar",
             f"Navigationsmodus in {location}",
         )
         self._truth(
-            not state.get("hasDisclosure"),
+            not menu_state.get("hasDisclosure"),
             f"Bereichsnavigation ist in {location} noch eingeklappt.",
         )
+        # Angemeldet steht die ganze Karte da: alle Bereiche und die beiden
+        # Dienste daneben.
         self._equal(
-            state.get("linkCount"),
-            self._authenticated_navigation_link_count(),
+            menu_state.get("linkCount"),
+            len(self.navigation_keys) + 2,
             f"Bereichslinks in {location}",
         )
         self._truth(
-            state.get("linksFit") and state.get("navigationScrollFree"),
+            menu_state.get("linksFit")
+            and menu_state.get("navigationScrollFree"),
             f"Bereichslinks besitzen in {location} eigene Scroll- oder zu kleine Flächen.",
         )
         self._equal(
@@ -6202,8 +6292,36 @@ class BrowserAcceptance:
             state.get("documentWidthFits") and state.get("documentCanReachEnd"),
             f"Gesamte Sidebar passt horizontal oder scrollt nicht vollständig in {location}.",
         )
+        # Die Arbeitsschritte stehen in ihrem eigenen Rahmen.
+        actions_state = self.cdp.evaluate(
+            _frame_expression(
+                "aktionen",
+                """
+                const workflow = doc.querySelector(
+                    "[data-estab-workflow-menu]"
+                );
+                if (!workflow) return null;
+                const actions = Array.from(
+                    workflow.querySelectorAll("button[data-estab-workflow-key]")
+                );
+                return {
+                    actionKeys: actions.map(
+                        action => action.getAttribute("data-estab-workflow-key")
+                    ),
+                    actionsFit: actions.every(action => {
+                        const value = action.getBoundingClientRect();
+                        return value.width >= 24 && value.height >= 24;
+                    })
+                };
+                """,
+            )
+        )
+        self._truth(
+            isinstance(actions_state, dict),
+            f"Arbeitsschritte fehlen in {location}.",
+        )
         self._equal(
-            state.get("actionKeys"),
+            actions_state.get("actionKeys"),
             [
                 "stab_schreiben",
                 "stab_lesen",
@@ -6211,7 +6329,9 @@ class BrowserAcceptance:
             ],
             f"Arbeitsaktionen in {location}",
         )
-        self._truth(state.get("actionsFit"), f"Zu kleine Aktion in {location}.")
+        self._truth(
+            actions_state.get("actionsFit"), f"Zu kleine Aktion in {location}."
+        )
         self._equal(
             state.get("currentFunction"),
             self.config.login_function,
@@ -6249,12 +6369,15 @@ class BrowserAcceptance:
         )
         sound_toggle = state.get("soundToggle")
         sound_feedback = state.get("soundFeedback")
+        # Der Schalter ist in der schmalen Cockpitspalte ein Zeichenknopf
+        # geworden. Gefordert bleibt die Mindestzielgroesse nach WCAG 2.2
+        # (24 x 24); die erhoehte von 44 x 24 gehoerte der breiten Leiste.
         self._truth(
             isinstance(sound_toggle, dict)
-            and float(sound_toggle.get("width", 0)) >= 44
-            and float(sound_toggle.get("height", 0)) >= 44
+            and float(sound_toggle.get("width", 0)) >= 24
+            and float(sound_toggle.get("height", 0)) >= 24
             and state.get("soundToggleVisible") is True,
-            f"Sound-Schalter ist in {location} nicht sichtbar oder kleiner als 44 px.",
+            f"Sound-Schalter ist in {location} nicht sichtbar oder kleiner als 24 px.",
         )
         self._equal(
             state.get("soundTogglePressed"),
@@ -6353,8 +6476,13 @@ class BrowserAcceptance:
                 """
                 return (async () => {
                     const root = doc.scrollingElement;
+                    /* Der Griff, an dem Fokus und Scrollstand haengen. Es war
+                       ein Arbeitsschritt; die stehen seit dem Umbau in ihrem
+                       eigenen Rahmen, und die Statusaktualisierung betrifft
+                       das Cockpit. Genommen wird deshalb der Schalter, der
+                       hier steht. */
                     const action = doc.querySelector(
-                        'button[data-estab-workflow-key="m2_benutzer"]'
+                        "[data-estab-sound-toggle]"
                     );
                     const audio = doc.querySelector(
                         "audio[data-estab-sidebar-audio]"
@@ -10922,9 +11050,11 @@ class BrowserAcceptance:
                                 "/4fach/mainindex.php"
                             ) &&
                             doc.readyState === "complete" &&
-                            Boolean(doc.querySelector(
-                                "script[data-estab-mainframe-guard]"
-                            )) &&
+                            /* Das Waechterskript blendete die eigenstaendige
+                               Sitzungsleiste im Rahmen aus. Der Hauptrahmen
+                               fuehrt seit dem Umbau gar keine mehr -- sie
+                               steht im Cockpit --, und dass hier keine steht,
+                               prueft die Zaehlung unten. */
                             !doc.querySelector(".estab-auth-card") &&
                             !doc.querySelector('input[name="kennwort1"]');
                         """,
