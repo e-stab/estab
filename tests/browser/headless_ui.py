@@ -1228,14 +1228,14 @@ class BrowserAcceptance:
         )
         self._truth(
             isinstance(desktop, dict)
-            and desktop.get("title") == "eStab Web-Handbuch"
+            and desktop.get("title") == "eStab Handbuch"
             and desktop.get("h1") == 1
             and desktop.get("publicBars") == 1
             and desktop.get("sessionBars") == 0
             and desktop.get("active") == ["handbook"]
-            and desktop.get("sections") == 19
-            and desktop.get("uniqueIds") == 19
-            and desktop.get("tocLinks") == 19
+            and desktop.get("sections") == 21
+            and desktop.get("uniqueIds") == 21
+            and desktop.get("tocLinks") == 21
             and desktop.get("tocVisible") is True
             and desktop.get("tocOverflow") not in ("auto", "scroll")
             and desktop.get("searchVisible") is True

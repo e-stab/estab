@@ -904,7 +904,7 @@ assert_status 200 "$base_url/stabinfo/index.php"
 assert_status 200 "$base_url/handbuch/"
 assert_header_fixed 'Content-Type: text/html; charset=UTF-8'
 assert_header_fixed 'Cache-Control: private, no-store, max-age=0'
-assert_body '<title>eStab Web-Handbuch</title>'
+assert_body '<title>eStab Handbuch</title>'
 assert_body 'data-estab-handbook-search'
 assert_body 'data-estab-handbook-toc'
 assert_body 'href="./handbuch.css"'
@@ -2196,7 +2196,7 @@ assert_body 'Meldung/Seite:'
 assert_session_bar "$test_name" "$test_code" "$test_function" "$test_role"
 assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     "$base_url/handbuch/"
-assert_body '<title>eStab Web-Handbuch</title>'
+assert_body '<title>eStab Handbuch</title>'
 assert_body 'data-estab-handbook-search'
 assert_body 'data-estab-nav-key="handbook" aria-current="page"'
 assert_body_absent 'data-estab-public-bar'
