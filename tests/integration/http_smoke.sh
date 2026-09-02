@@ -4987,7 +4987,7 @@ if [ -n "${ESTAB_TEST_ADMIN_USER:-}" ] && [ -n "$admin_password" ]; then
     # Sitzungsleiste hat sie nicht: Der Administrationszugang ist kein
     # eStab-Funktionskonto, und die Anmeldung liegt bei HTTP Basic.
     assert_body 'data-estab-shell-menu'
-    assert_body 'Technischer Administrationszugang'
+    assert_body 'Administration · Diagnose'
     assert_body_absent 'Prüfung erforderlich'
 
     readiness_probe_state=$(printf '%s\n' \
