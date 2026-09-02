@@ -100,16 +100,16 @@ async function openQueuedMessage(page, actionName, contentMarker, expectedTask) 
   // eigenen Zelle. Die noch nicht umgestellten Stab-Listen machen den Text
   // selbst zum Knopf. Getroffen wird in beiden Faellen ueber die Zeile, die
   // den Text traegt -- die ist eindeutig, die Aufschrift ist es nicht.
+  // Nicht zwei Zweige ueber count(): count() fragt einmal und wartet nicht.
+  // Faellt die Abfrage in den Augenblick, in dem der Rahmen neu laedt, zaehlt
+  // sie null und der Ersatzzweig wartet in die Zeitgrenze. or() dagegen sucht
+  // beide Bauarten so lange, bis eine von ihnen dasteht.
   const row = content.locator('tr', { hasText: contentMarker }).first();
-  const openButton = row.getByRole('button', { name: 'Vordruck öffnen' });
-  if (await openButton.count()) {
-    await openButton.first().click();
-  } else {
-    await row
-      .getByRole('button', { name: contentMarker, exact: true })
-      .first()
-      .click();
-  }
+  await row
+    .getByRole('button', { name: 'Vordruck öffnen' })
+    .or(row.getByRole('button', { name: contentMarker, exact: true }))
+    .first()
+    .click();
   await expect(
     content.locator(`input[name="task"][value="${expectedTask}"]`)
   ).toHaveCount(1);
