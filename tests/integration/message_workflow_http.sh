@@ -133,6 +133,7 @@ done
 work_dir=$(mktemp -d /tmp/estab-message-workflow-http.XXXXXX)
 chmod 0700 "$work_dir"
 body=$work_dir/body.html
+cockpit_body=$work_dir/cockpit.html
 aw_cookies=$work_dir/aw-cookies.txt
 ldf_cookies=$work_dir/ldf-cookies.txt
 si_cookies=$work_dir/si-cookies.txt
@@ -504,8 +505,12 @@ assert_loose_single_dispatch()
     expected_marker=$5
     label="LOOSE ${identity_label} -> ${action_name}"
 
+    # Jede Handlung wird mit einer Weiterleitung beantwortet; wer danach neu
+    # laedt, sendet nichts ein zweites Mal. Geprueft wird, was am Ende des
+    # Wegs steht -- deshalb folgt die Anfrage ihr.
     assert_status 200 "$label" \
         --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+        --location \
         --request POST \
         --data-urlencode "csrf_token=$csrf_token" \
         --data-urlencode "${action_name}=1" \
@@ -538,7 +543,7 @@ prove_loose_primary_dispatch_for_identity()
 
     load_dashboard "$cookie_jar" "LOOSE dashboard for $identity_label"
     assert_single_html_document "LOOSE dashboard for $identity_label"
-    dispatch_csrf=$(csrf_from_body)
+    dispatch_csrf=$(csrf_from_cockpit "$cookie_jar")
 
     case "$profile" in
         staff)
@@ -584,12 +589,17 @@ prove_loose_primary_dispatch_for_identity()
             assert_loose_single_dispatch \
                 "$cookie_jar" "$dispatch_csrf" "$identity_label" \
                 ldf_nachrichten_x 'LdF-Disposition'
+            # Der Leiter des Fernmeldebetriebs fuehrt die Schritte seiner
+            # Fernmelder mit: Er erkennt, wenn es klemmt, und uebernimmt im
+            # Problemfall eine Annahme selbst, ohne die Funktion zu wechseln.
+            # Siehe die Begruendung an der Seitenleiste.
+            assert_loose_single_dispatch \
+                "$cookie_jar" "$dispatch_csrf" "$identity_label" \
+                fm_eingang_x 'name="task" value="FM-Eingang"'
             assert_loose_dispatch_denied \
                 "$cookie_jar" "$dispatch_csrf" "$identity_label" stab_schreiben_x
             assert_loose_dispatch_denied \
                 "$cookie_jar" "$dispatch_csrf" "$identity_label" stab_sichten_x
-            assert_loose_dispatch_denied \
-                "$cookie_jar" "$dispatch_csrf" "$identity_label" fm_eingang_x
             ;;
         *)
             echo 'Message workflow HTTP: invalid LOOSE dispatch profile' >&2
@@ -605,7 +615,7 @@ prove_loose_all_granted_dispatch()
 
     load_dashboard "$cookie_jar" "LOOSE dashboard for $identity_label"
     assert_single_html_document "LOOSE dashboard for $identity_label"
-    dispatch_csrf=$(csrf_from_body)
+    dispatch_csrf=$(csrf_from_cockpit "$cookie_jar")
 
     assert_loose_single_dispatch \
         "$cookie_jar" "$dispatch_csrf" "$identity_label" \
@@ -635,17 +645,82 @@ prove_loose_all_granted_dispatch()
         "$base_url/4fach/mainindex.php"
 }
 
+# Das Sitzungsmerkmal steht in jedem Formular derselben Sitzung.
+#
+# Eine Seite muss aber keines tragen: Eine leere Meldungsliste hat keine
+# Zeile, und wer den Fernmeldeplan nur lesen darf, bekommt dort kein
+# Formular. Frueher stand auf jeder Seite eine Leiste mit dem Abmelde-
+# formular; seit sie im Cockpit-Rahmen steht, kann eine Seite ohne eigene
+# Handlung merkmalsfrei sein. Wer den Keksbehaelter mitgibt, bekommt das
+# Merkmal dann von dort -- es ist dasselbe.
 csrf_from_body()
 {
     token=$(sed -n \
         's/.*name="csrf_token" value="\([a-f0-9][a-f0-9]*\)".*/\1/p' \
         "$body" | head -n 1)
+    if printf '%s' "$token" | grep -Eq '^[a-f0-9]{64}$'; then
+        printf '%s' "$token"
+        return 0
+    fi
+    if [ -n "${1:-}" ]; then
+        csrf_from_cockpit "$1"
+        return 0
+    fi
+    echo 'Message workflow HTTP: CSRF token missing' >&2
+    sed -n '1,120p' "$body" >&2
+    exit 1
+}
+
+# Das Sitzungsmerkmal steht dort, wo die Handlungen stehen.
+#
+# Frueher lag es auf der Meldungsliste -- aber nur zufaellig: Es kam aus dem
+# Kenntnis-Formular einer Zeile. In einem frischen Einsatz ist die Liste leer,
+# und dann steht dort keines. Das Cockpit traegt es immer, im Abmeldeformular.
+csrf_from_cockpit()
+{
+    cockpit_cookies=$1
+    cockpit_status=$(curl --silent --show-error --max-time 20 \
+        --connect-timeout 5 --cookie "$cockpit_cookies" \
+        --output "$cockpit_body" --write-out '%{http_code}' \
+        "$base_url/4fach/vorgaben.php?fragment=cockpit")
+    if [ "$cockpit_status" != 200 ]; then
+        printf 'Message workflow HTTP: cockpit frame answered %s\n' \
+            "$cockpit_status" >&2
+        exit 1
+    fi
+    token=$(sed -n \
+        's/.*name="csrf_token" value="\([a-f0-9][a-f0-9]*\)".*/\1/p' \
+        "$cockpit_body" | head -n 1)
     if ! printf '%s' "$token" | grep -Eq '^[a-f0-9]{64}$'; then
-        echo 'Message workflow HTTP: CSRF token missing' >&2
-        sed -n '1,120p' "$body" >&2
+        echo 'Message workflow HTTP: CSRF token missing in cockpit' >&2
+        sed -n '1,120p' "$cockpit_body" >&2
         exit 1
     fi
     printf '%s' "$token"
+}
+
+# Einsatzkopf und Sitzungsleiste stehen im Cockpit-Rahmen. Was dort steht,
+# wird auch dort gelesen -- die Seite bettet ihn ein.
+assert_cockpit_body()
+{
+    cockpit_cookies=$1
+    expected=$2
+    label=$3
+    cockpit_status=$(curl --silent --show-error --max-time 20 \
+        --connect-timeout 5 --cookie "$cockpit_cookies" \
+        --output "$cockpit_body" --write-out '%{http_code}' \
+        "$base_url/4fach/vorgaben.php?fragment=cockpit")
+    if [ "$cockpit_status" != 200 ]; then
+        printf 'Message workflow HTTP: cockpit frame answered %s\n' \
+            "$cockpit_status" >&2
+        exit 1
+    fi
+    if ! grep -Fq -- "$expected" "$cockpit_body"; then
+        printf 'Message workflow HTTP: %s missing in cockpit frame\n' \
+            "$label" >&2
+        sed -n '1,120p' "$cockpit_body" >&2
+        exit 1
+    fi
 }
 
 telecom_revision_from_body()
@@ -747,6 +822,7 @@ roundtrip_staff_followup_attachment()
     followup_matrix_revision=$(recipient_matrix_revision_from_body)
     assert_status 200 "$label attachment picker" \
         --cookie "$pol_cookies" --cookie-jar "$pol_cookies" \
+        --location \
         --request POST \
         --data-urlencode "csrf_token=$followup_csrf" \
         --data-urlencode \
@@ -777,6 +853,7 @@ roundtrip_staff_followup_attachment()
     attachment_flow=$(attachment_flow_from_body)
     assert_status 200 "$label attachment return" \
         --cookie "$pol_cookies" --cookie-jar "$pol_cookies" \
+        --location \
         --request POST \
         --data-urlencode "csrf_token=$attachment_csrf" \
         --data-urlencode "attachment_flow=$attachment_flow" \
@@ -824,6 +901,18 @@ app_tactical_clock()
 {
     "$compose_engine" compose exec -T app \
         php -r 'echo date("Hi");'
+}
+
+# Aufnahme- und Befoerderungsvermerk tragen die volle Datum-Zeit-Gruppe nach
+# DV 810; nur der Annahmevermerk fuehrt die Zeit allein.
+app_tactical_group()
+{
+    "$compose_engine" compose exec -T app php -r '
+        $time = new DateTimeImmutable("now");
+        echo $time->format("dHi")
+            . strtolower($time->format("M"))
+            . $time->format("Y");
+    '
 }
 
 incident_authoritative_sender()
@@ -957,26 +1046,54 @@ assert_message_state()
     fi
 }
 
+# Die Sitzungsleiste steht im Cockpit-Rahmen. Die Seite bettet ihn genau
+# einmal ein; wer angemeldet ist, wird dort gelesen, wo die Leiste steht. Der
+# Rahmen kommt in eine eigene Datei, damit die Pruefungen danach weiter die
+# Seite selbst befragen.
 assert_session_identity()
 {
-    expected_name=$1
-    expected_code=$2
-    expected_function=$3
-    expected_role=$4
-    bar_count=$(grep -o 'data-estab-session-bar' "$body" | wc -l | tr -d ' ')
+    identity_cookies=$1
+    expected_name=$2
+    expected_code=$3
+    expected_function=$4
+    expected_role=$5
+    frame_count=$(grep -o 'vorgaben.php?fragment=cockpit' "$body" \
+        | wc -l | tr -d ' ')
+    if [ "$frame_count" != 1 ]; then
+        echo 'Message workflow HTTP: authenticated response has no unique cockpit frame' >&2
+        exit 1
+    fi
+    identity_status=$(curl --silent --show-error --max-time 20 \
+        --connect-timeout 5 --cookie "$identity_cookies" \
+        --output "$cockpit_body" --write-out '%{http_code}' \
+        "$base_url/4fach/vorgaben.php?fragment=cockpit")
+    if [ "$identity_status" != 200 ]; then
+        printf 'Message workflow HTTP: cockpit frame answered %s\n' \
+            "$identity_status" >&2
+        exit 1
+    fi
+    bar_count=$(grep -o 'data-estab-session-bar' "$cockpit_body" \
+        | wc -l | tr -d ' ')
     if [ "$bar_count" != 1 ]; then
         echo 'Message workflow HTTP: authenticated response has no unique session bar' >&2
         exit 1
     fi
+    # Der Abmeldeknopf traegt ein Sinnbild; seine Beschriftung steht als
+    # unsichtbarer Text darin und bleibt so vorlesbar.
     for marker in \
         "data-estab-user-name=\"$expected_name\"" \
         "data-estab-user-code=\"$expected_code\"" \
         "data-estab-user-function=\"$expected_function\"" \
         "data-estab-user-role=\"$expected_role\"" \
         'data-estab-logout-form' \
-        '>Abmelden</button>'
+        '>Abmelden</span></button>'
     do
-        assert_body "$marker" 'session identity'
+        if ! grep -Fq -- "$marker" "$cockpit_body"; then
+            printf 'Message workflow HTTP: cockpit frame lacks %s\n' \
+                "$marker" >&2
+            sed -n '1,120p' "$cockpit_body" >&2
+            exit 1
+        fi
     done
 }
 
@@ -1000,13 +1117,16 @@ load_dashboard()
     assert_no_runtime_error "$label"
 }
 
+# Die Arbeitsschritte stehen im eigenen Rahmen unter dem Menue. Das Cockpit
+# daneben traegt Anmeldung, Einsatz und Warteschlangen -- die Schritte hatten
+# dort auf jeder Seite gestanden, auch auf denen ohne Mitte zum Laden.
 load_sidebar()
 {
     cookie_jar=$1
     label=$2
     assert_status 200 "$label" \
         --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
-        "$base_url/4fach/vorgaben.php"
+        "$base_url/4fach/vorgaben.php?fragment=aktionen"
     assert_no_runtime_error "$label"
 }
 
@@ -1024,14 +1144,16 @@ provision_and_login_user()
     : >"$cookie_jar"
     assert_status 200 "open existing-account login for $function_name" \
         --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+        --location \
         --request POST --data-urlencode 'login_flow=existing' \
         "$base_url/4fach/mainindex.php"
     assert_body 'autocomplete="current-password"' \
         "existing-account form for $function_name"
-    login_csrf=$(csrf_from_body)
+    login_csrf=$(csrf_from_body "$cookie_jar")
 
     assert_status 200 "login $function_name" \
         --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+        --location \
         --request POST \
         --data-urlencode "csrf_token=$login_csrf" \
         --data-urlencode 'login_flow=existing' \
@@ -1057,7 +1179,8 @@ provision_and_login_user()
         --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
         "$base_url/4fach/fuehrungsstelle.php"
     assert_no_runtime_error "command-post page for $function_name"
-    assert_session_identity "$name" "$code" "$function_name" "$role"
+    assert_session_identity "$cookie_jar" "$name" "$code" "$function_name" \
+        "$role"
     assert_body 'data-estab-dv-operations' \
         "command-post marker for $function_name"
     assert_body 'Kontofunktion' \
@@ -1077,16 +1200,17 @@ finish_ldf_incoming()
     load_dashboard "$ldf_cookies" "LdF queue for $ldf_marker"
     assert_body "$ldf_marker" "LdF queue for $ldf_marker"
     assert_route_control ldf meldung "$ldf_record_id" "LdF incoming detail"
-    ldf_csrf=$(csrf_from_body)
-    ldf_clock_before=$(app_tactical_clock)
+    ldf_csrf=$(csrf_from_cockpit "$ldf_cookies")
+    ldf_clock_before=$(app_tactical_group)
     assert_status 200 "open LdF incoming for $ldf_marker" \
         --cookie "$ldf_cookies" --cookie-jar "$ldf_cookies" \
+        --location \
         --request POST \
         --data-urlencode "csrf_token=$ldf_csrf" \
         --data-urlencode 'ldf=meldung' \
         --data-urlencode "00_lfd=$ldf_record_id" \
         "$base_url/4fach/mainindex.php"
-    ldf_clock_after=$(app_tactical_clock)
+    ldf_clock_after=$(app_tactical_group)
     assert_no_runtime_error "LdF incoming form for $ldf_marker"
     assert_body 'name="task" value="LdF-Eingang"' "LdF incoming task"
     assert_current_editable_tactical_time_input \
@@ -1252,6 +1376,7 @@ SQL
     ldf_csrf=$(csrf_from_body)
     assert_status 200 "save LdF incoming for $ldf_marker" \
         --cookie "$ldf_cookies" --cookie-jar "$ldf_cookies" \
+        --location \
         --request POST \
         --data-urlencode "csrf_token=$ldf_csrf" \
         --data-urlencode 'absenden_x=1' \
@@ -1328,9 +1453,10 @@ finish_ldf_outgoing()
     load_dashboard "$ldf_cookies" "LdF queue for $ldf_marker"
     assert_body "$ldf_marker" "LdF queue for $ldf_marker"
     assert_route_control ldf meldung "$ldf_record_id" "LdF outgoing detail"
-    ldf_csrf=$(csrf_from_body)
+    ldf_csrf=$(csrf_from_cockpit "$ldf_cookies")
     assert_status 200 "open LdF outgoing for $ldf_marker" \
         --cookie "$ldf_cookies" --cookie-jar "$ldf_cookies" \
+        --location \
         --request POST \
         --data-urlencode "csrf_token=$ldf_csrf" \
         --data-urlencode 'ldf=meldung' \
@@ -1402,6 +1528,7 @@ finish_ldf_outgoing()
     ldf_time=$(app_tactical_clock)
     assert_status 200 "save LdF outgoing for $ldf_marker" \
         --cookie "$ldf_cookies" --cookie-jar "$ldf_cookies" \
+        --location \
         --request POST \
         --data-urlencode "csrf_token=$ldf_csrf" \
         --data-urlencode 'absenden_x=1' \
@@ -1432,9 +1559,10 @@ finish_fm_outgoing()
     assert_body "$fm_marker" "A/W queue for $fm_marker"
     assert_route_control fm meldung "$fm_record_id" \
         "A/W outgoing detail for $fm_marker"
-    fm_csrf=$(csrf_from_body)
+    fm_csrf=$(csrf_from_cockpit "$aw_cookies")
     assert_status 200 "open A/W outgoing for $fm_marker" \
         --cookie "$aw_cookies" --cookie-jar "$aw_cookies" \
+        --location \
         --request POST \
         --data-urlencode "csrf_token=$fm_csrf" \
         --data-urlencode 'fm=meldung' \
@@ -1450,10 +1578,11 @@ finish_fm_outgoing()
         "A/W cannot rewrite LdF callsign for $fm_marker"
     assert_body_absent 'id="f_06_befweg" maxlength=' \
         "A/W cannot rewrite LdF route for $fm_marker"
-    fm_csrf=$(csrf_from_body)
+    fm_csrf=$(csrf_from_body "$aw_cookies")
     fm_time=$(app_tactical_clock)
     assert_status 200 "complete A/W outgoing for $fm_marker" \
         --cookie "$aw_cookies" --cookie-jar "$aw_cookies" \
+        --location \
         --request POST \
         --data-urlencode "csrf_token=$fm_csrf" \
         --data-urlencode 'absenden_x=1' \
@@ -1474,9 +1603,10 @@ open_viewer_message()
     load_dashboard "$si_cookies" "Si queue for $marker"
     assert_body "$marker" "Si queue for $marker"
     assert_route_control sichter meldung "$record_id" "Si queue for $marker"
-    viewer_csrf=$(csrf_from_body)
+    viewer_csrf=$(csrf_from_cockpit "$si_cookies")
     assert_status 200 "open Si review for $marker" \
         --cookie "$si_cookies" --cookie-jar "$si_cookies" \
+        --location \
         --request POST \
         --data-urlencode "csrf_token=$viewer_csrf" \
         --data-urlencode 'sichter=meldung' \
@@ -1527,6 +1657,7 @@ finish_viewer_message()
         "$base_url/4fach/mainindex.php"
     assert_status 200 "finish Si review for $marker" \
         --cookie "$si_cookies" --cookie-jar "$si_cookies" \
+        --location \
         --request POST \
         --data-urlencode "csrf_token=$viewer_csrf" \
         --data-urlencode \
@@ -1550,9 +1681,10 @@ open_viewer_outgoing()
     load_dashboard "$si_cookies" "Si formal queue for $marker"
     assert_body "$marker" "Si formal queue for $marker"
     assert_route_control sichter meldung "$record_id" "Si formal queue for $marker"
-    viewer_csrf=$(csrf_from_body)
+    viewer_csrf=$(csrf_from_cockpit "$si_cookies")
     assert_status 200 "open Si formal review for $marker" \
         --cookie "$si_cookies" --cookie-jar "$si_cookies" \
+        --location \
         --request POST \
         --data-urlencode "csrf_token=$viewer_csrf" \
         --data-urlencode 'sichter=meldung' \
@@ -1586,6 +1718,7 @@ finish_viewer_outgoing()
     viewer_csrf=$(csrf_from_body)
     assert_status 200 "approve Si formal review for $marker" \
         --cookie "$si_cookies" --cookie-jar "$si_cookies" \
+        --location \
         --request POST \
         --data-urlencode "csrf_token=$viewer_csrf" \
         --data-urlencode \
@@ -1605,9 +1738,10 @@ return_viewer_outgoing()
     note=$3
 
     open_viewer_outgoing "$marker" "$record_id"
-    viewer_csrf=$(csrf_from_body)
+    viewer_csrf=$(csrf_from_body "$si_cookies")
     assert_status 200 "return Si formal review for $marker" \
         --cookie "$si_cookies" --cookie-jar "$si_cookies" \
+        --location \
         --request POST \
         --data-urlencode "csrf_token=$viewer_csrf" \
         --data-urlencode \
@@ -1852,7 +1986,7 @@ assert_db_equals 3 'explicit S1 dispatch additions were stored' \
 prove_loose_all_granted_dispatch "$s1_cookies" 'S1 with explicit additions'
 
 load_dashboard "$s1_cookies" 'LOOSE S1 before STRICT stale-grant probe'
-strict_dispatch_csrf=$(csrf_from_body)
+strict_dispatch_csrf=$(csrf_from_cockpit "$s1_cookies")
 activated_strict_incident_id=$(incident_fixture activate "$strict_incident_id")
 if [ "$activated_strict_incident_id" != "$strict_incident_id" ]; then
     echo 'Message workflow HTTP: STRICT fixture activation selected another incident' >&2
@@ -1893,13 +2027,15 @@ assert_strict_duty_redirect \
 : >"$s3_cookies"
 assert_status 200 'open fresh STRICT login with retained incident-log target' \
     --cookie "$s3_cookies" --cookie-jar "$s3_cookies" \
+    --location \
     --request POST \
     --data-urlencode 'login_flow=existing' \
     --data-urlencode 'next=incident-log' \
     "$base_url/4fach/mainindex.php"
-strict_login_csrf=$(csrf_from_body)
+strict_login_csrf=$(csrf_from_body "$s3_cookies")
 assert_status 200 'STRICT login first opens duty-function selector' \
     --cookie "$s3_cookies" --cookie-jar "$s3_cookies" \
+    --location \
     --request POST \
     --data-urlencode "csrf_token=$strict_login_csrf" \
     --data-urlencode 'login_flow=existing' \
@@ -1942,7 +2078,7 @@ SQL
 assert_db_equals 0 'explicit S1 dispatch additions were revoked' \
     "SELECT COUNT(*) FROM \`nv_benutzer_zusatzfunktionen\` WHERE BINARY \`benutzer_kuerzel\`=BINARY '${s1_code}';"
 load_dashboard "$s1_cookies" 'LOOSE S1 after dispatch-grant revocation'
-revoked_dispatch_csrf=$(csrf_from_body)
+revoked_dispatch_csrf=$(csrf_from_cockpit "$s1_cookies")
 assert_loose_dispatch_denied \
     "$s1_cookies" "$revoked_dispatch_csrf" 'S1 after revocation' fm_eingang_x
 
@@ -1966,7 +2102,7 @@ assert_status 200 'load Führungsstellen page as S1' \
     --cookie "$s1_cookies" --cookie-jar "$s1_cookies" \
     "$base_url/4fach/fuehrungsstelle.php"
 assert_no_runtime_error 'S1 Führungsstellen page'
-s1_operations_csrf=$(csrf_from_body)
+s1_operations_csrf=$(csrf_from_body "$s1_cookies")
 s1_probe_plan_origin="CI_HTTP_S1_${identity_seed}"
 assert_status 403 'reject S6 plan creation by fixed S1 account' \
     --cookie "$s1_cookies" --cookie-jar "$s1_cookies" \
@@ -1988,13 +2124,17 @@ assert_no_runtime_error 'S6 Führungsstellen page with fixed account function'
 assert_body 'S6 · Stab' 'fixed S6 account function'
 
 # The attachment controller is a direct endpoint as well as an included
-# message workflow. The fixed LdF and Si account functions must not grant
-# upload authority when their menu route offers no attachment action.
-assert_status 403 'reject direct attachment administration as LdF' \
+# message workflow. A fixed account function grants upload authority exactly
+# where its menu route offers an attachment action -- and nowhere else.
+#
+# Der Leiter des Fernmeldebetriebs fuehrt die Schritte seiner Fernmelder mit;
+# "Anhänge" steht in seiner Spalte. Der Sichter hat den Schritt nicht und
+# bekommt die Verwaltung deshalb weiterhin nicht zu sehen.
+assert_status 200 'direct attachment administration as LdF' \
     --cookie "$ldf_cookies" --cookie-jar "$ldf_cookies" \
     "$base_url/4fach/anhang.php"
-assert_body 'Keine Ihrer aktuell wirksamen Funktionen darf die Anhangverwaltung öffnen' \
-    'direct LdF attachment rejection'
+assert_body_absent 'Keine Ihrer aktuell wirksamen Funktionen darf die Anhangverwaltung öffnen' \
+    'LdF attachment access'
 assert_status 403 'reject direct attachment administration as Si' \
     --cookie "$si_cookies" --cookie-jar "$si_cookies" \
     "$base_url/4fach/anhang.php"
@@ -2006,7 +2146,7 @@ assert_status 200 'load Führungsstellen page for S6 plan creation' \
     --cookie "$s6_cookies" --cookie-jar "$s6_cookies" \
     "$base_url/4fach/fuehrungsstelle.php"
 assert_no_runtime_error 'S6 Führungsstellen page before plan creation'
-s6_operations_csrf=$(csrf_from_body)
+s6_operations_csrf=$(csrf_from_body "$s6_cookies")
 assert_status 303 'create S6 plan through Führungsstellen HTTP controller' \
     --cookie "$s6_cookies" --cookie-jar "$s6_cookies" \
     --request POST \
@@ -2035,15 +2175,22 @@ assert_status 200 'load Führungsstellen page for S6 route creation' \
     --cookie "$s6_cookies" --cookie-jar "$s6_cookies" \
     "$base_url/4fach/fuehrungsstelle.php"
 assert_no_runtime_error 'S6 Führungsstellen page before route creation'
+# Ein Plan fuehrt, was betrieben wird. Das Fernschreibnetz ist abgeschaltet;
+# der Vordruck behaelt sein gedrucktes Ankreuzfeld, der Plan bietet den Weg
+# nicht mehr an -- ein Mittel ohne Geraet ist kein Weg.
 for telecom_medium_label in \
-    Fernsprecher Funk Melder Telefax Fernschreiber Datenübertragung
+    Fernsprecher Funk Melder Telefax Datenübertragung
 do
     assert_body "$telecom_medium_label" \
         "expanded telecommunications medium $telecom_medium_label"
 done
-assert_body 'data-estab-telecom-medium' \
-    'medium-dependent telecommunications editor'
-s6_operations_csrf=$(csrf_from_body)
+assert_body_absent 'Fernschreiber' 'switched-off telex medium'
+# Der Editor haengt nicht mehr am Mittel allein, sondern an der Wegart:
+# Funk zerfaellt in analog und digital, und jede Art fuehrt genau die
+# technischen Felder, die sie kennt.
+assert_body 'data-estab-telecom-kind' \
+    'kind-dependent telecommunications editor'
+s6_operations_csrf=$(csrf_from_body "$s6_cookies")
 s6_plan_revision=$(telecom_revision_from_body)
 assert_status 303 'add S6 route through Führungsstellen HTTP controller' \
     --cookie "$s6_cookies" --cookie-jar "$s6_cookies" \
@@ -2076,7 +2223,7 @@ assert_status 200 'load Führungsstellen page for S6 plan activation' \
     --cookie "$s6_cookies" --cookie-jar "$s6_cookies" \
     "$base_url/4fach/fuehrungsstelle.php"
 assert_no_runtime_error 'S6 Führungsstellen page before plan activation'
-s6_operations_csrf=$(csrf_from_body)
+s6_operations_csrf=$(csrf_from_body "$s6_cookies")
 s6_plan_revision=$(telecom_revision_from_body)
 assert_status 303 'activate S6 plan through Führungsstellen HTTP controller' \
     --cookie "$s6_cookies" --cookie-jar "$s6_cookies" \
@@ -2089,7 +2236,7 @@ assert_status 303 'activate S6 plan through Führungsstellen HTTP controller' \
 assert_db_equals \
     "AKTIV|${s6_code}|${s6_code}|HTTP Betriebsstelle|HTTP Rufname|Fu|HTTP-1|G/U|Gegenverkehr" \
     'HTTP-created S6 plan persisted route and release' \
-    "SELECT CONCAT(p.\`status\`, '|', p.\`erstellt_von\`, '|', p.\`freigegeben_von\`, '|', e.\`betriebsstelle\`, '|', $1.\`erreichbarkeit\`, '|', e.\`medium\`, '|', e.\`kanal\`, '|', e.\`bandlage\`, '|', e.\`verkehrsform\`) FROM \`nv_fernmeldeplaene\` AS p JOIN \`nv_fernmeldeplan_eintraege\` AS e ON e.\`fernmeldeplan_id\`=p.\`fernmeldeplan_id\` WHERE p.\`fernmeldeplan_id\`=${http_plan_id} AND e.\`fernmeldeplan_eintrag_id\`=${http_plan_entry_id};"
+    "SELECT CONCAT(p.\`status\`, '|', p.\`erstellt_von\`, '|', p.\`freigegeben_von\`, '|', e.\`betriebsstelle\`, '|', e.\`erreichbarkeit\`, '|', e.\`medium\`, '|', e.\`kanal\`, '|', e.\`bandlage\`, '|', e.\`verkehrsform\`) FROM \`nv_fernmeldeplaene\` AS p JOIN \`nv_fernmeldeplan_eintraege\` AS e ON e.\`fernmeldeplan_id\`=p.\`fernmeldeplan_id\` WHERE p.\`fernmeldeplan_id\`=${http_plan_id} AND e.\`fernmeldeplan_eintrag_id\`=${http_plan_entry_id};"
 assert_db_equals '3|3|3' 'HTTP-created S6 plan immutable audit trail' \
     "SELECT CONCAT(COUNT(*), '|', COUNT(DISTINCT \`aktion\`), '|', SUM(BINARY \`akteur_kuerzel\`=BINARY '${s6_code}')) FROM \`nv_betriebsereignisse\` WHERE \`einsatz_id\`=${active_incident_id} AND \`objekttyp\`='FERNMELDEPLAN' AND \`objekt_id\`=${http_plan_id} AND \`aktion\` IN ('plan_created','plan_entry_added','plan_activated');"
 
@@ -2101,7 +2248,7 @@ assert_status 200 'load active S6 plan for revision start' \
     "$base_url/4fach/fuehrungsstelle.php"
 assert_body 'Bearbeitung starten' 'active S6 revision action'
 assert_body 'HTTP Betriebsstelle' 'active S6 route before revision'
-s6_operations_csrf=$(csrf_from_body)
+s6_operations_csrf=$(csrf_from_body "$s6_cookies")
 assert_status 303 'clone active S6 plan into editable draft' \
     --cookie "$s6_cookies" --cookie-jar "$s6_cookies" \
     --request POST \
@@ -2135,7 +2282,7 @@ fi
 assert_db_equals \
     "AKTIV|ENTWURF|HTTP Betriebsstelle|HTTP Rufname|Fu|HTTP-1|G/U|Gegenverkehr" \
     'active S6 plan cloned without mutating its source' \
-    "SELECT CONCAT(source_plan.\`status\`, '|', draft.\`status\`, '|', entry.\`betriebsstelle\`, '|', $1.\`erreichbarkeit\`, '|', entry.\`medium\`, '|', entry.\`kanal\`, '|', entry.\`bandlage\`, '|', entry.\`verkehrsform\`) FROM \`nv_fernmeldeplaene\` AS source_plan JOIN \`nv_fernmeldeplaene\` AS draft ON draft.\`fernmeldeplan_id\`=${http_revision_plan_id} JOIN \`nv_fernmeldeplan_eintraege\` AS entry ON entry.\`fernmeldeplan_id\`=draft.\`fernmeldeplan_id\` WHERE source_plan.\`fernmeldeplan_id\`=${http_plan_id} AND entry.\`fernmeldeplan_eintrag_id\`=${http_revision_entry_id};"
+    "SELECT CONCAT(source_plan.\`status\`, '|', draft.\`status\`, '|', entry.\`betriebsstelle\`, '|', entry.\`erreichbarkeit\`, '|', entry.\`medium\`, '|', entry.\`kanal\`, '|', entry.\`bandlage\`, '|', entry.\`verkehrsform\`) FROM \`nv_fernmeldeplaene\` AS source_plan JOIN \`nv_fernmeldeplaene\` AS draft ON draft.\`fernmeldeplan_id\`=${http_revision_plan_id} JOIN \`nv_fernmeldeplan_eintraege\` AS entry ON entry.\`fernmeldeplan_id\`=draft.\`fernmeldeplan_id\` WHERE source_plan.\`fernmeldeplan_id\`=${http_plan_id} AND entry.\`fernmeldeplan_eintrag_id\`=${http_revision_entry_id};"
 
 assert_status 200 'load prefilled S6 draft' \
     --cookie "$s6_cookies" --cookie-jar "$s6_cookies" \
@@ -2143,7 +2290,7 @@ assert_status 200 'load prefilled S6 draft' \
 assert_body 'value="HTTP Betriebsstelle"' 'prefilled cloned station'
 assert_body 'value="HTTP Rufname"' 'prefilled cloned callsign'
 assert_body 'value="HTTP-1"' 'prefilled cloned channel'
-s6_operations_csrf=$(csrf_from_body)
+s6_operations_csrf=$(csrf_from_body "$s6_cookies")
 s6_plan_revision=$(telecom_revision_from_body)
 http_revision_origin="CI_HTTP_REVISION_${identity_seed}"
 assert_status 303 'update cloned S6 plan header' \
@@ -2163,7 +2310,7 @@ assert_status 303 'update cloned S6 plan header' \
 assert_status 200 'load S6 draft for route update' \
     --cookie "$s6_cookies" --cookie-jar "$s6_cookies" \
     "$base_url/4fach/fuehrungsstelle.php"
-s6_operations_csrf=$(csrf_from_body)
+s6_operations_csrf=$(csrf_from_body "$s6_cookies")
 s6_stale_revision=$(telecom_revision_from_body)
 valid_revision_invalid_origin="CI_HTTP_INVALID_${identity_seed}"
 assert_status 422 'retain invalid S6 header values at current revision' \
@@ -2192,7 +2339,7 @@ assert_status 200 'reload S6 draft after retained validation error' \
     --cookie "$s6_cookies" --cookie-jar "$s6_cookies" \
     "$base_url/4fach/fuehrungsstelle.php"
 assert_no_runtime_error 'clean S6 draft after retained validation error'
-s6_operations_csrf=$(csrf_from_body)
+s6_operations_csrf=$(csrf_from_body "$s6_cookies")
 s6_stale_revision=$(telecom_revision_from_body)
 assert_status 303 'update cloned S6 route with medium normalization' \
     --cookie "$s6_cookies" --cookie-jar "$s6_cookies" \
@@ -2211,7 +2358,10 @@ assert_status 303 'update cloned S6 route with medium normalization' \
     --data-urlencode 'besondere_vermerke=Persönlich übergeben' \
     --data-urlencode 'bemerkungen=Folgeweg' \
     "$base_url/4fach/fuehrungsstelle.php"
-assert_db_equals 'Me|||Melderbeförderung' \
+# Der Melder fuehrt kein technisches Feld -- weder Kanal noch Bandlage noch
+# Verkehrsform. Wer zu Fuss geht, hat keine. Alle drei fallen weg, auch wenn
+# die Anfrage sie mitbringt.
+assert_db_equals 'Me|||' \
     'non-radio route normalized inapplicable technical fields' \
     "SELECT CONCAT(\`medium\`, '|', \`kanal\`, '|', \`bandlage\`, '|', \`verkehrsform\`) FROM \`nv_fernmeldeplan_eintraege\` WHERE \`fernmeldeplan_eintrag_id\`=${http_revision_entry_id} AND \`fernmeldeplan_id\`=${http_revision_plan_id};"
 
@@ -2281,7 +2431,7 @@ assert_db_equals "$http_revision_origin" \
 assert_status 200 'load S6 successor for activation' \
     --cookie "$s6_cookies" --cookie-jar "$s6_cookies" \
     "$base_url/4fach/fuehrungsstelle.php"
-s6_operations_csrf=$(csrf_from_body)
+s6_operations_csrf=$(csrf_from_body "$s6_cookies")
 s6_plan_revision=$(telecom_revision_from_body)
 assert_status 303 'activate edited S6 successor' \
     --cookie "$s6_cookies" --cookie-jar "$s6_cookies" \
@@ -2376,8 +2526,12 @@ assert_db_equals 2 'completed pair-aware mapping fixtures' \
 
 load_sidebar "$ldf_cookies" 'LdF role navigation'
 assert_body 'name="ldf_nachrichten_x"' 'LdF disposition action'
-assert_body_absent 'name="fm_eingang_x"' 'LdF must not receive A/W input action'
-assert_body_absent 'name="fm_ausgang_x"' 'LdF must not receive A/W output action'
+# Der Leiter des Fernmeldebetriebs fuehrt die Schritte seiner Fernmelder mit
+# in seiner Spalte: Er erkennt, wenn es klemmt, und uebernimmt im Problemfall
+# eine Annahme oder einen Ausgang selbst, ohne die Funktion zu wechseln. Er
+# bleibt dabei LdF -- die Schritte des Stabes bekommt er nicht.
+assert_body 'name="fm_eingang_x"' 'LdF also carries the input action'
+assert_body 'name="fm_ausgang_x"' 'LdF also carries the output action'
 assert_body_absent 'name="stab_schreiben_x"' 'LdF must not receive staff action'
 assert_db_equals 1 'online Si fixture' \
     "SELECT COUNT(*) FROM \`nv_benutzer\` WHERE \`kuerzel\`='${si_code}' AND \`funktion\`='Si' AND \`aktiv\`=1;"
@@ -2398,7 +2552,7 @@ assert_status 403 'reject POL/FB telecommunications action' \
     --data-urlencode 'fm_eingang_x=1' \
     "$base_url/4fach/mainindex.php"
 load_sidebar "$pol_cookies" 'POL/FB role navigation after rejected action'
-pol_csrf=$(csrf_from_body)
+pol_csrf=$(csrf_from_body "$pol_cookies")
 assert_status 403 'reject POL/FB viewer administration action' \
     --cookie "$pol_cookies" --cookie-jar "$pol_cookies" \
     --request POST \
@@ -2409,15 +2563,16 @@ assert_status 403 'reject POL/FB viewer administration action' \
 # Incoming message: A/W captures a real form (status 4), Si reviews it
 # (status 8), assigns the exact red/green/blue copies and closes it.
 load_dashboard "$aw_cookies" 'A/W dashboard before incoming capture'
-incoming_csrf=$(csrf_from_body)
-incoming_clock_before=$(app_tactical_clock)
+incoming_csrf=$(csrf_from_cockpit "$aw_cookies")
+incoming_clock_before=$(app_tactical_group)
 assert_status 200 'open A/W incoming form' \
     --cookie "$aw_cookies" --cookie-jar "$aw_cookies" \
+    --location \
     --request POST \
     --data-urlencode "csrf_token=$incoming_csrf" \
     --data-urlencode 'fm_eingang_x=1' \
     "$base_url/4fach/mainindex.php"
-incoming_clock_after=$(app_tactical_clock)
+incoming_clock_after=$(app_tactical_group)
 assert_no_runtime_error 'A/W incoming form'
 assert_body 'name="task" value="FM-Eingang"' 'A/W incoming form'
 assert_body_absent 'name="task" value="FM-Eingang_Sichter"' 'A/W incoming form'
@@ -2490,6 +2645,7 @@ assert_db_equals 0 'rejected A/W recipient overpost created no message' \
     "SELECT COUNT(*) FROM \`nv_nachrichten\` WHERE \`12_inhalt\`='${incoming_marker}';"
 assert_status 200 'save A/W incoming message' \
     --cookie "$aw_cookies" --cookie-jar "$aw_cookies" \
+    --location \
     --request POST \
     --data-urlencode "csrf_token=$incoming_csrf" \
     --data-urlencode \
@@ -2574,7 +2730,7 @@ load_dashboard "$s1_cookies" 'S1 queue before incoming Si review'
 assert_body_absent \
     "$incoming_marker" \
     'pending incoming message hidden despite forged staff recipient'
-s1_pending_csrf=$(csrf_from_body)
+s1_pending_csrf=$(csrf_from_cockpit "$s1_cookies")
 assert_status 403 'reject S1 incoming detail before Si completion' \
     --cookie "$s1_cookies" --cookie-jar "$s1_cookies" \
     --request POST \
@@ -2600,7 +2756,7 @@ UPDATE \`nv_nachrichten\`
 SQL
 
 open_viewer_message "$incoming_marker" "$incoming_id"
-viewer_csrf=$(csrf_from_body)
+viewer_csrf=$(csrf_from_body "$s1_cookies")
 incoming_events_before_forgery=$(db_sql <<SQL
 SELECT COUNT(*) FROM \`nv_nachrichten_ereignisse\`
  WHERE \`message_id\` = ${incoming_id};
@@ -2712,7 +2868,11 @@ assert_body 'data-estab-message-overview data-estab-message-list' \
 assert_body 'name="ml_q"' 'S2 message search control'
 assert_body 'name="ml_recipient"' 'S2 recipient filter control'
 assert_body 'Aktive Filter' 'S2 active filter chips'
-assert_body 'Seite 1 von ' 'S2 server-side pager'
+# Die Ergebnisleiste des Tabellenbauteils zaehlt, was der Server gefunden
+# hat; die Seitengroesse steht daneben. Einen Satz "Seite 1 von n" gibt es
+# nicht mehr -- geblaettert wird ueber nummerierte Griffe.
+assert_body '1 von 1 Eintrag' 'S2 server-side result count'
+assert_body 'name="ml_page_size"' 'S2 server-side page size control'
 assert_body "$incoming_marker" 'S2 filtered message overview result'
 
 # Search by a value that only exists in the official form heading. This proves
@@ -2724,7 +2884,7 @@ assert_status 200 'find S2 message overview by form heading' \
     --data-urlencode "ml_q=$incoming_subject" \
     "$base_url/4fueltg/ue_ltg.php"
 assert_no_runtime_error 'S2 message overview heading search'
-assert_body '1–1 von 1 Nachrichten' 'S2 heading-only result count'
+assert_body '1 von 1 Eintrag' 'S2 heading-only result count'
 assert_body 'data-estab-message-list-heading ' 'S2 heading marker'
 assert_body 'data-estab-message-list-heading-empty="false"' \
     'S2 persisted heading state'
@@ -2788,9 +2948,10 @@ assert_body_absent 'Kategorien und Ablage stehen derzeit nicht' \
 
 load_sidebar "$aw_cookies" 'A/W navigation before second review'
 assert_body 'name="fm_admin_x"' 'rendered A/W second-review action'
-admin_csrf=$(csrf_from_body)
+admin_csrf=$(csrf_from_body "$ldf_cookies")
 assert_status 200 'open A/W second-review list' \
     --cookie "$aw_cookies" --cookie-jar "$aw_cookies" \
+    --location \
     --request POST \
     --data-urlencode "csrf_token=$admin_csrf" \
     --data-urlencode 'fm_admin_x=1' \
@@ -2802,9 +2963,10 @@ assert_body "$incoming_marker" 'A/W second-review list'
 assert_route_control \
     fm FM-Adminmeldung "$incoming_id" 'A/W FM-Admin detail control'
 
-admin_csrf=$(csrf_from_body)
+admin_csrf=$(csrf_from_body "$aw_cookies")
 assert_status 200 'filter A/W second-review list' \
     --cookie "$aw_cookies" --cookie-jar "$aw_cookies" \
+    --location \
     --request POST \
     --data-urlencode "csrf_token=$admin_csrf" \
     --data-urlencode 'fm_admin_x=1' \
@@ -2819,9 +2981,10 @@ assert_body 'Aktive Filter' 'A/W active filter chips'
 assert_body 'Seite 1 von ' 'A/W server-side pager'
 assert_body "$incoming_marker" 'A/W filtered second-review result'
 
-admin_csrf=$(csrf_from_body)
+admin_csrf=$(csrf_from_body "$aw_cookies")
 assert_status 200 'find A/W second-review message by form heading' \
     --cookie "$aw_cookies" --cookie-jar "$aw_cookies" \
+    --location \
     --request POST \
     --data-urlencode "csrf_token=$admin_csrf" \
     --data-urlencode 'fm_admin_x=1' \
@@ -2837,9 +3000,10 @@ assert_body \
     'A/W complete form heading'
 assert_body "$incoming_marker" 'A/W heading-only result row'
 
-admin_csrf=$(csrf_from_body)
+admin_csrf=$(csrf_from_body "$aw_cookies")
 assert_status 200 'empty A/W second-review search' \
     --cookie "$aw_cookies" --cookie-jar "$aw_cookies" \
+    --location \
     --request POST \
     --data-urlencode "csrf_token=$admin_csrf" \
     --data-urlencode 'fm_admin_x=1' \
@@ -2849,9 +3013,10 @@ assert_no_runtime_error 'empty A/W second-review search'
 assert_body 'Keine passenden Nachrichten' 'A/W empty filtered state'
 assert_body_absent "$incoming_marker" 'A/W empty filtered result'
 
-admin_csrf=$(csrf_from_body)
+admin_csrf=$(csrf_from_body "$aw_cookies")
 assert_status 200 'reset A/W second-review filters' \
     --cookie "$aw_cookies" --cookie-jar "$aw_cookies" \
+    --location \
     --request POST \
     --data-urlencode "csrf_token=$admin_csrf" \
     --data-urlencode 'fm_admin_x=1' \
@@ -2860,9 +3025,10 @@ assert_status 200 'reset A/W second-review filters' \
 assert_no_runtime_error 'reset A/W second-review filters'
 assert_body "$incoming_marker" 'reset A/W second-review result'
 
-admin_csrf=$(csrf_from_body)
+admin_csrf=$(csrf_from_body "$aw_cookies")
 assert_status 200 'open completed incoming FM-Admin form' \
     --cookie "$aw_cookies" --cookie-jar "$aw_cookies" \
+    --location \
     --request POST \
     --data-urlencode "csrf_token=$admin_csrf" \
     --data-urlencode 'fm=FM-Adminmeldung' \
@@ -2881,7 +3047,7 @@ SELECT COUNT(*) FROM \`nv_nachrichten_ereignisse\`
  WHERE \`message_id\` = ${incoming_id};
 SQL
 )
-admin_csrf=$(csrf_from_body)
+admin_csrf=$(csrf_from_body "$aw_cookies")
 assert_status 403 'reject completed incoming FM-Admin mutation' \
     --cookie "$aw_cookies" --cookie-jar "$aw_cookies" \
     --request POST \
@@ -2933,6 +3099,7 @@ assert_body 'name="si_admin_x"' 'rendered Si second-review action'
 si_admin_csrf=$(csrf_from_body)
 assert_status 200 'open Si second-review list' \
     --cookie "$si_cookies" --cookie-jar "$si_cookies" \
+    --location \
     --request POST \
     --data-urlencode "csrf_token=$si_admin_csrf" \
     --data-urlencode 'si_admin_x=1' \
@@ -2944,9 +3111,10 @@ assert_body "$incoming_marker" 'Si second-review list'
 assert_route_control \
     fm SI-Adminmeldung "$incoming_id" 'SI-Admin detail control'
 
-si_admin_csrf=$(csrf_from_body)
+si_admin_csrf=$(csrf_from_body "$si_cookies")
 assert_status 200 'filter Si second-review list' \
     --cookie "$si_cookies" --cookie-jar "$si_cookies" \
+    --location \
     --request POST \
     --data-urlencode "csrf_token=$si_admin_csrf" \
     --data-urlencode 'si_admin_x=1' \
@@ -2960,9 +3128,10 @@ assert_body 'Aktive Filter' 'Si active filter chips'
 assert_body 'Seite 1 von ' 'Si server-side pager'
 assert_body "$incoming_marker" 'Si filtered second-review result'
 
-si_admin_csrf=$(csrf_from_body)
+si_admin_csrf=$(csrf_from_body "$si_cookies")
 assert_status 200 'find Si second-review message by form heading' \
     --cookie "$si_cookies" --cookie-jar "$si_cookies" \
+    --location \
     --request POST \
     --data-urlencode "csrf_token=$si_admin_csrf" \
     --data-urlencode 'si_admin_x=1' \
@@ -2978,9 +3147,10 @@ assert_body \
     'Si complete form heading'
 assert_body "$incoming_marker" 'Si heading-only result row'
 
-si_admin_csrf=$(csrf_from_body)
+si_admin_csrf=$(csrf_from_body "$si_cookies")
 assert_status 200 'empty Si second-review search' \
     --cookie "$si_cookies" --cookie-jar "$si_cookies" \
+    --location \
     --request POST \
     --data-urlencode "csrf_token=$si_admin_csrf" \
     --data-urlencode 'si_admin_x=1' \
@@ -2990,9 +3160,10 @@ assert_no_runtime_error 'empty Si second-review search'
 assert_body 'Keine passenden Nachrichten' 'Si empty filtered state'
 assert_body_absent "$incoming_marker" 'Si empty filtered result'
 
-si_admin_csrf=$(csrf_from_body)
+si_admin_csrf=$(csrf_from_body "$si_cookies")
 assert_status 200 'reset Si second-review filters' \
     --cookie "$si_cookies" --cookie-jar "$si_cookies" \
+    --location \
     --request POST \
     --data-urlencode "csrf_token=$si_admin_csrf" \
     --data-urlencode 'si_admin_x=1' \
@@ -3001,9 +3172,10 @@ assert_status 200 'reset Si second-review filters' \
 assert_no_runtime_error 'reset Si second-review filters'
 assert_body "$incoming_marker" 'reset Si second-review result'
 
-si_admin_csrf=$(csrf_from_body)
+si_admin_csrf=$(csrf_from_body "$si_cookies")
 assert_status 200 'open completed incoming SI-Admin form' \
     --cookie "$si_cookies" --cookie-jar "$si_cookies" \
+    --location \
     --request POST \
     --data-urlencode "csrf_token=$si_admin_csrf" \
     --data-urlencode 'fm=SI-Adminmeldung' \
@@ -3017,7 +3189,7 @@ assert_body_absent 'name="absenden"' 'SI-Admin save control'
 assert_body_absent 'name="15_quitzeichen"' 'SI-Admin editable review mark'
 assert_body_absent 'name="16_gncopy"' 'SI-Admin editable distribution'
 assert_body_absent 'name="17_vermerke"' 'SI-Admin editable note'
-si_admin_csrf=$(csrf_from_body)
+si_admin_csrf=$(csrf_from_body "$si_cookies")
 assert_status 403 'reject completed incoming SI-Admin mutation' \
     --cookie "$si_cookies" --cookie-jar "$si_cookies" \
     --request POST \
@@ -3061,6 +3233,7 @@ assert_body 'name="stab_sichten_x"' 'rendered Si viewer action after second revi
 si_admin_csrf=$(csrf_from_body)
 assert_status 200 'return from Si second review to normal viewer queue' \
     --cookie "$si_cookies" --cookie-jar "$si_cookies" \
+    --location \
     --request POST \
     --data-urlencode "csrf_token=$si_admin_csrf" \
     --data-urlencode 'stab_sichten_x=1' \
@@ -3078,9 +3251,10 @@ derived_source_before=$(
 load_dashboard "$pol_cookies" 'POL/FB list before answer'
 assert_body "$incoming_marker" 'POL/FB list before answer'
 assert_route_control stab meldung "$incoming_id" 'POL/FB incoming detail control'
-pol_csrf=$(csrf_from_body)
+pol_csrf=$(csrf_from_cockpit "$pol_cookies")
 assert_status 200 'open incoming message as POL/FB for answer' \
     --cookie "$pol_cookies" --cookie-jar "$pol_cookies" \
+    --location \
     --request POST \
     --data-urlencode "csrf_token=$pol_csrf" \
     --data-urlencode 'stab=meldung' \
@@ -3091,9 +3265,10 @@ assert_body 'name="task" value="Stab_lesen"' 'POL/FB incoming read task'
 assert_body 'name="antwort_x"' 'POL/FB answer control'
 assert_body 'name="weiterleiten_x"' 'POL/FB forward control'
 
-pol_csrf=$(csrf_from_body)
+pol_csrf=$(csrf_from_body "$pol_cookies")
 assert_status 200 'derive POL/FB answer form' \
     --cookie "$pol_cookies" --cookie-jar "$pol_cookies" \
+    --location \
     --request POST \
     --data-urlencode "csrf_token=$pol_csrf" \
     --data-urlencode 'antwort_x=1' \
@@ -3152,6 +3327,7 @@ reply_attachment_request_token=$(
 )
 assert_status 200 'save POL/FB answer' \
     --cookie "$pol_cookies" --cookie-jar "$pol_cookies" \
+    --location \
     --request POST \
     --data-urlencode "csrf_token=$pol_csrf" \
     --data-urlencode \
@@ -3190,18 +3366,20 @@ assert_db_equals \
 load_dashboard "$pol_cookies" 'POL/FB list before forwarding'
 assert_body "$incoming_marker" 'POL/FB list before forwarding'
 assert_route_control stab meldung "$incoming_id" 'POL/FB forward source control'
-pol_csrf=$(csrf_from_body)
+pol_csrf=$(csrf_from_cockpit "$pol_cookies")
 assert_status 200 'open incoming message as POL/FB for forwarding' \
     --cookie "$pol_cookies" --cookie-jar "$pol_cookies" \
+    --location \
     --request POST \
     --data-urlencode "csrf_token=$pol_csrf" \
     --data-urlencode 'stab=meldung' \
     --data-urlencode "00_lfd=$incoming_id" \
     "$base_url/4fach/mainindex.php"
 assert_no_runtime_error 'POL/FB incoming read form for forwarding'
-pol_csrf=$(csrf_from_body)
+pol_csrf=$(csrf_from_body "$pol_cookies")
 assert_status 200 'derive POL/FB forwarding form' \
     --cookie "$pol_cookies" --cookie-jar "$pol_cookies" \
+    --location \
     --request POST \
     --data-urlencode "csrf_token=$pol_csrf" \
     --data-urlencode 'weiterleiten_x=1' \
@@ -3257,6 +3435,7 @@ forward_attachment_request_token=$(
 )
 assert_status 200 'save POL/FB forwarding' \
     --cookie "$pol_cookies" --cookie-jar "$pol_cookies" \
+    --location \
     --request POST \
     --data-urlencode "csrf_token=$pol_csrf" \
     --data-urlencode \
@@ -3317,6 +3496,7 @@ assert_body 'name="fm_ausgang_x"' 'rendered A/W outgoing action'
 admin_csrf=$(csrf_from_body)
 assert_status 200 'return from A/W second review to outgoing queue' \
     --cookie "$aw_cookies" --cookie-jar "$aw_cookies" \
+    --location \
     --request POST \
     --data-urlencode "csrf_token=$admin_csrf" \
     --data-urlencode 'fm_ausgang_x=1' \
@@ -3333,9 +3513,10 @@ assert_body "$forward_marker" 'POL/FB forwarding in normal A/W outgoing queue'
 # returns it with a mandatory reason, so author, Si and LdF run again before
 # LdF disposes the current S6 route and A/W confirms the actual transport.
 load_dashboard "$s1_cookies" 'S1 dashboard before outgoing message'
-outgoing_csrf=$(csrf_from_body)
+outgoing_csrf=$(csrf_from_cockpit "$s1_cookies")
 assert_status 200 'open S1 outgoing form' \
     --cookie "$s1_cookies" --cookie-jar "$s1_cookies" \
+    --location \
     --request POST \
     --data-urlencode "csrf_token=$outgoing_csrf" \
     --data-urlencode 'stab_schreiben_x=1' \
@@ -3345,13 +3526,14 @@ assert_body 'name="task" value="Stab_schreiben"' 'S1 outgoing form'
 assert_body_absent \
     'data-estab-incident-suggestions=' \
     'staff outgoing form incident suggestions'
-outgoing_csrf=$(csrf_from_body)
+outgoing_csrf=$(csrf_from_body "$s1_cookies")
 outgoing_attachment_request_token=$(
     message_attachment_request_token_from_body
 )
 tactical_time=$(date '+%H%M')
 assert_status 200 'save S1 outgoing message' \
     --cookie "$s1_cookies" --cookie-jar "$s1_cookies" \
+    --location \
     --request POST \
     --data-urlencode "csrf_token=$outgoing_csrf" \
     --data-urlencode \
@@ -3401,12 +3583,16 @@ if ! generated_form_check absent A "$outgoing_number"; then
 fi
 load_dashboard "$s1_cookies" 'S1 list at outgoing status 4'
 assert_body "$outgoing_marker" 'S1 list at outgoing status 4'
-assert_body 'alt="liegt vorm Sichter"' 'S1 status-4 Si indicator'
+# Der Transportzustand stand als GIF in der Zeile. Text in einem Bild laesst
+# sich nicht vorlesen und in Graustufen nicht unterscheiden; die Marke traegt
+# jetzt Zeichen und Wort.
+assert_body 'estab-list-state--sichter' 'S1 status-4 Si indicator'
+assert_body '>beim Sichter<' 'S1 status-4 Si indicator wording'
 load_dashboard "$s2_cookies" 'S2 list at outgoing status 4'
 assert_body_absent \
     "$outgoing_marker" \
     'status-4 outgoing hidden from foreign red-copy recipient'
-s2_pending_csrf=$(csrf_from_body)
+s2_pending_csrf=$(csrf_from_cockpit "$s2_cookies")
 assert_status 403 'reject S2 outgoing detail at status 4' \
     --cookie "$s2_cookies" --cookie-jar "$s2_cookies" \
     --request POST \
@@ -3442,7 +3628,7 @@ load_dashboard "$s2_cookies" 'foreign staff queue after Si return'
 assert_body_absent \
     "$outgoing_marker" \
     'returned outgoing hidden from foreign red-copy recipient'
-s2_csrf=$(csrf_from_body)
+s2_csrf=$(csrf_from_cockpit "$s2_cookies")
 assert_status 403 'reject S2 outgoing detail at status 10' \
     --cookie "$s2_cookies" --cookie-jar "$s2_cookies" \
     --request POST \
@@ -3472,9 +3658,10 @@ assert_status 403 'reject correction by another staff member' \
 load_dashboard "$s1_cookies" 'author queue for returned outgoing'
 assert_body "$outgoing_marker" 'returned outgoing in author queue'
 assert_route_control stab meldung "$outgoing_id" 'returned outgoing author detail'
-s1_csrf=$(csrf_from_body)
+s1_csrf=$(csrf_from_cockpit "$s1_cookies")
 assert_status 200 'open returned outgoing as original author' \
     --cookie "$s1_cookies" --cookie-jar "$s1_cookies" \
+    --location \
     --request POST \
     --data-urlencode "csrf_token=$s1_csrf" \
     --data-urlencode 'stab=meldung' \
@@ -3492,7 +3679,7 @@ assert_body_absent 'name="11_gesprnotiz"' \
 assert_body \
     'id="f_11_gesprnotiz" class="estab-official-box-choice" type="checkbox" disabled' \
     'returned outgoing conversation-note indicator is read-only'
-s1_csrf=$(csrf_from_body)
+s1_csrf=$(csrf_from_body "$s1_cookies")
 correction_attachment_request_token=$(
     message_attachment_request_token_from_body
 )
@@ -3555,6 +3742,7 @@ correction_attachment_request_token=$(
 )
 assert_status 200 'resubmit corrected outgoing as original author' \
     --cookie "$s1_cookies" --cookie-jar "$s1_cookies" \
+    --location \
     --request POST \
     --data-urlencode "csrf_token=$s1_csrf" \
     --data-urlencode \
@@ -3597,9 +3785,8 @@ assert_message_state "$outgoing_marker" \
 
 load_dashboard "$s1_cookies" 'S1 list at outgoing status 1'
 assert_body "$outgoing_marker" 'S1 list at outgoing status 1'
-assert_body \
-    'alt="liegt bei LdF: Rufname und Beförderungsweg festlegen"' \
-    'S1 status-1 LdF indicator'
+assert_body 'estab-list-state--wartet' 'S1 status-1 LdF indicator'
+assert_body '>bei LdF<' 'S1 status-1 LdF indicator wording'
 load_dashboard "$ldf_cookies" 'LdF queue before tokenless lock test'
 assert_body "$outgoing_marker" 'LdF status-1 outgoing queue'
 assert_route_control ldf meldung "$outgoing_id" 'LdF outgoing detail control'
@@ -3617,9 +3804,10 @@ assert_message_state "$outgoing_marker" \
 # status-1 stage and only with an explicit reason. The author correction then
 # has to pass Si and LdF again; the immutable timeline must retain both loops.
 load_dashboard "$ldf_cookies" 'LdF queue before outgoing return to author'
-ldf_return_csrf=$(csrf_from_body)
+ldf_return_csrf=$(csrf_from_cockpit "$ldf_cookies")
 assert_status 200 'open outgoing for LdF return to author' \
     --cookie "$ldf_cookies" --cookie-jar "$ldf_cookies" \
+    --location \
     --request POST \
     --data-urlencode "csrf_token=$ldf_return_csrf" \
     --data-urlencode 'ldf=meldung' \
@@ -3671,10 +3859,11 @@ assert_message_state "$outgoing_marker" \
     "A|1|f|set|${si_code}|S2_rt,S1_gn,|t|${ldf_code}|f" \
     'missing LdF return reason preserved stage-one ownership'
 
-ldf_return_csrf=$(csrf_from_body)
+ldf_return_csrf=$(csrf_from_body "$ldf_cookies")
 ldf_return_reason='Rufname und Anschrift sind für die Beförderung nicht eindeutig'
 assert_status 200 'return outgoing from LdF to author with reason' \
     --cookie "$ldf_cookies" --cookie-jar "$ldf_cookies" \
+    --location \
     --request POST \
     --data-urlencode "csrf_token=$ldf_return_csrf" \
     --data-urlencode 'ldf_zurueckweisen_x=1' \
@@ -3703,9 +3892,10 @@ load_dashboard "$s1_cookies" 'author queue after LdF return'
 assert_body "$outgoing_marker" 'LdF-returned outgoing in author queue'
 assert_route_control stab meldung "$outgoing_id" \
     'LdF-returned outgoing author detail'
-s1_ldf_return_csrf=$(csrf_from_body)
+s1_ldf_return_csrf=$(csrf_from_cockpit "$s1_cookies")
 assert_status 200 'open LdF-returned outgoing as original author' \
     --cookie "$s1_cookies" --cookie-jar "$s1_cookies" \
+    --location \
     --request POST \
     --data-urlencode "csrf_token=$s1_ldf_return_csrf" \
     --data-urlencode 'stab=meldung' \
@@ -3738,6 +3928,7 @@ ldf_correction_attachment_request_token=$(
 tactical_time=$(date '+%H%M')
 assert_status 200 'resubmit outgoing after LdF return' \
     --cookie "$s1_cookies" --cookie-jar "$s1_cookies" \
+    --location \
     --request POST \
     --data-urlencode "csrf_token=$s1_ldf_return_csrf" \
     --data-urlencode \
@@ -3767,9 +3958,13 @@ assert_db_equals \
     "E2E-Zielstelle korrigiert|+49 711 7654321|${authoritative_sender}|${s1_code}|S1" \
     'LdF correction added routing contact data and preserved authenticated author and local sender' \
     "SELECT CONCAT(\`10_anschrift\`, '|', \`11_rufnummer\`, '|', \`13_abseinheit\`, '|', \`14_zeichen\`, '|', \`14_funktion\`) FROM \`nv_nachrichten\` WHERE \`00_lfd\`=${outgoing_id};"
-assert_db_equals "$ldf_return_reason" \
+# Der Korrekturvermerk sammelt seine Geschichte: Vor der Rueckgabe des LdF
+# steht, was der Sichter vermerkt hatte, davor Zeitpunkt und Kuerzel des
+# Zurueckgebenden. Der Grund muss darin stehen -- er ist nicht mehr alles,
+# was darin steht.
+assert_db_equals 1 \
     'second author resubmission retained the LdF return reason' \
-    "SELECT JSON_UNQUOTE(JSON_EXTRACT(\`field_snapshot\`, '$.correction_note')) FROM \`nv_nachrichten_ereignisse\` WHERE \`message_id\`=${outgoing_id} AND \`event_type\`='author_resubmitted' ORDER BY \`event_id\` DESC LIMIT 1;"
+    "SELECT JSON_UNQUOTE(JSON_EXTRACT(\`field_snapshot\`, '$.correction_note')) LIKE '%${ldf_return_reason}%' FROM \`nv_nachrichten_ereignisse\` WHERE \`message_id\`=${outgoing_id} AND \`event_type\`='author_resubmitted' ORDER BY \`event_id\` DESC LIMIT 1;"
 assert_db_equals 2 'outgoing contains both author resubmission rounds' \
     "SELECT COUNT(*) FROM \`nv_nachrichten_ereignisse\` WHERE \`message_id\`=${outgoing_id} AND \`event_type\`='author_resubmitted';"
 
@@ -3784,9 +3979,10 @@ assert_db_equals \
     "SELECT GROUP_CONCAT(\`event_type\` ORDER BY \`event_id\` SEPARATOR ',') FROM \`nv_nachrichten_ereignisse\` WHERE \`message_id\`=${outgoing_id};"
 
 load_dashboard "$ldf_cookies" 'LdF queue before outgoing cancel'
-ldf_cancel_csrf=$(csrf_from_body)
+ldf_cancel_csrf=$(csrf_from_cockpit "$ldf_cookies")
 assert_status 200 'lock LdF outgoing message before cancel' \
     --cookie "$ldf_cookies" --cookie-jar "$ldf_cookies" \
+    --location \
     --request POST \
     --data-urlencode "csrf_token=$ldf_cancel_csrf" \
     --data-urlencode 'ldf=meldung' \
@@ -3810,9 +4006,10 @@ assert_body "$ldf_return_reason" \
 assert_body \
     'data-estab-timeline-station="ldf" data-estab-timeline-state="current"' \
     'rerun timeline marks the second LdF visit current'
-ldf_cancel_csrf=$(csrf_from_body)
+ldf_cancel_csrf=$(csrf_from_body "$ldf_cookies")
 assert_status 200 'cancel LdF outgoing disposition' \
     --cookie "$ldf_cookies" --cookie-jar "$ldf_cookies" \
+    --location \
     --request POST \
     --data-urlencode "csrf_token=$ldf_cancel_csrf" \
     --data-urlencode 'abbrechen_x=1' \
@@ -3831,16 +4028,17 @@ assert_message_state "$outgoing_marker" \
 # A route from a superseded plan must fail while the record is locked, without
 # persisting browser-provided 06_* values or an invalid plan reference.
 load_dashboard "$ldf_cookies" 'LdF queue before superseded-route test'
-ldf_stale_csrf=$(csrf_from_body)
+ldf_stale_csrf=$(csrf_from_cockpit "$ldf_cookies")
 assert_status 200 'lock outgoing for superseded-route test' \
     --cookie "$ldf_cookies" --cookie-jar "$ldf_cookies" \
+    --location \
     --request POST \
     --data-urlencode "csrf_token=$ldf_stale_csrf" \
     --data-urlencode 'ldf=meldung' \
     --data-urlencode "00_lfd=$outgoing_id" \
     "$base_url/4fach/mainindex.php"
 assert_no_runtime_error 'LdF form before superseded-route test'
-ldf_stale_csrf=$(csrf_from_body)
+ldf_stale_csrf=$(csrf_from_body "$ldf_cookies")
 tactical_time=$(date '+%H%M')
 assert_status 409 'reject superseded S6 route' \
     --cookie "$ldf_cookies" --cookie-jar "$ldf_cookies" \
@@ -3869,13 +4067,16 @@ assert_db_equals '||0' 'superseded route persisted no disposition' \
 finish_ldf_outgoing \
     "$outgoing_marker" "$outgoing_id" 'E2E-Gegenstelle' 'E2E-Transport'
 load_dashboard "$s1_cookies" 'S1 list at outgoing status 2'
-assert_body 'alt="liegt vorm Fernmelder"' 'S1 status-2 transport indicator'
+assert_body 'estab-list-state--wartet' 'S1 status-2 transport indicator'
+assert_body '>beim Fernmelder<' 'S1 status-2 transport wording'
 assert_status 200 'open tracking before outgoing transport' \
     --cookie "$aw_cookies" --cookie-jar "$aw_cookies" \
     "$base_url/4fach/nachwea.php?nwalle=1"
 assert_no_runtime_error 'tracking before outgoing transport'
 assert_body "$outgoing_marker" 'pending outgoing message in tracking'
-assert_body 'Noch nicht befördert' 'pending outgoing transport state'
+# Ein Ausgang ohne Befoerderungsweg traegt im Nachweis das gewuenschte
+# Mittel -- als Wunsch gekennzeichnet, nicht als gegangener Weg.
+assert_body '<small>(gewünscht)</small>' 'pending outgoing transport state'
 assert_body_absent \
     "Funk · ${telecom_route_text}" \
     'LdF decision exposed as an already completed transport'
@@ -3894,16 +4095,17 @@ assert_message_state "$outgoing_marker" \
     'tokenless request left outgoing unlocked'
 
 load_dashboard "$aw_cookies" 'A/W queue before locking outgoing'
-outgoing_csrf=$(csrf_from_body)
-outgoing_clock_before=$(app_tactical_clock)
+outgoing_csrf=$(csrf_from_cockpit "$aw_cookies")
+outgoing_clock_before=$(app_tactical_group)
 assert_status 200 'open and lock outgoing transport form' \
     --cookie "$aw_cookies" --cookie-jar "$aw_cookies" \
+    --location \
     --request POST \
     --data-urlencode "csrf_token=$outgoing_csrf" \
     --data-urlencode 'fm=meldung' \
     --data-urlencode "00_lfd=$outgoing_id" \
     "$base_url/4fach/mainindex.php"
-outgoing_clock_after=$(app_tactical_clock)
+outgoing_clock_after=$(app_tactical_group)
 assert_no_runtime_error 'locked outgoing transport form'
 assert_body 'name="task" value="FM-Ausgang"' 'locked outgoing transport form'
 assert_body "name=\"00_lfd\" value=\"$outgoing_id\"" 'locked outgoing transport form'
@@ -3945,6 +4147,7 @@ assert_message_state "$outgoing_marker" \
 outgoing_cancel_csrf=$(csrf_from_body)
 assert_status 200 'cancel A/W outgoing transport' \
     --cookie "$aw_cookies" --cookie-jar "$aw_cookies" \
+    --location \
     --request POST \
     --data-urlencode "csrf_token=$outgoing_cancel_csrf" \
     --data-urlencode 'abbrechen_x=1' \
@@ -3960,9 +4163,10 @@ assert_message_state "$outgoing_marker" \
     "A|2|f|set|${si_code}|S2_rt,S1_gn,|f||f" \
     'A/W cancel released the outgoing stage-two lock'
 
-outgoing_csrf=$(csrf_from_body)
+outgoing_csrf=$(csrf_from_body "$aw_cookies")
 assert_status 200 're-lock outgoing transport after cancel' \
     --cookie "$aw_cookies" --cookie-jar "$aw_cookies" \
+    --location \
     --request POST \
     --data-urlencode "csrf_token=$outgoing_csrf" \
     --data-urlencode 'fm=meldung' \
@@ -3991,15 +4195,16 @@ assert_message_state "$outgoing_marker" \
 # Re-open the owner-held lock idempotently. A valid CSRF token without the
 # explicit route confirmation still must not complete the transport.
 load_dashboard "$aw_cookies" 'A/W queue before transport save'
-outgoing_csrf=$(csrf_from_body)
+outgoing_csrf=$(csrf_from_cockpit "$aw_cookies")
 assert_status 200 're-open owner-held outgoing lock' \
     --cookie "$aw_cookies" --cookie-jar "$aw_cookies" \
+    --location \
     --request POST \
     --data-urlencode "csrf_token=$outgoing_csrf" \
     --data-urlencode 'fm=meldung' \
     --data-urlencode "00_lfd=$outgoing_id" \
     "$base_url/4fach/mainindex.php"
-outgoing_csrf=$(csrf_from_body)
+outgoing_csrf=$(csrf_from_body "$aw_cookies")
 assert_status 409 'reject transport without S6 route confirmation' \
     --cookie "$aw_cookies" --cookie-jar "$aw_cookies" \
     --request POST \
@@ -4022,7 +4227,7 @@ assert_message_state "$outgoing_marker" \
 
 # A/W may not silently invent another route. An impossible disposition goes
 # back to LdF and requires an explicit, hash-linked reason.
-outgoing_csrf=$(csrf_from_body)
+outgoing_csrf=$(csrf_from_body "$aw_cookies")
 assert_status 422 'reject transport return without mandatory reason' \
     --cookie "$aw_cookies" --cookie-jar "$aw_cookies" \
     --request POST \
@@ -4039,10 +4244,11 @@ assert_message_state "$outgoing_marker" \
     "A|2|f|set|${si_code}|S2_rt,S1_gn,|t|${aw_code}|f" \
     'missing return reason preserved A/W ownership'
 
-outgoing_csrf=$(csrf_from_body)
+outgoing_csrf=$(csrf_from_body "$aw_cookies")
 transport_return_reason='Disponierter Funkweg ist an der Gegenstelle ausgefallen'
 assert_status 200 'return impossible transport to LdF with reason' \
     --cookie "$aw_cookies" --cookie-jar "$aw_cookies" \
+    --location \
     --request POST \
     --data-urlencode "csrf_token=$outgoing_csrf" \
     --data-urlencode 'transport_nicht_moeglich_x=1' \
@@ -4107,9 +4313,10 @@ assert_db_equals \
     "SELECT CONCAT(JSON_UNQUOTE(JSON_EXTRACT(\`field_snapshot\`, '$.previous_telecom_plan_entry_id')), '|', JSON_UNQUOTE(JSON_EXTRACT(\`field_snapshot\`, '$.telecom_plan_entry_id')), '|', JSON_UNQUOTE(JSON_EXTRACT(\`field_snapshot\`, '$.previous_transport_route')), '|', JSON_UNQUOTE(JSON_EXTRACT(\`field_snapshot\`, '$.transport_route'))) FROM \`nv_nachrichten_ereignisse\` WHERE \`message_id\`=${outgoing_id} AND \`event_type\`='ldf_dispatched' ORDER BY \`event_id\` DESC LIMIT 1;"
 
 load_dashboard "$aw_cookies" 'A/W queue before confirmed transport save'
-outgoing_csrf=$(csrf_from_body)
+outgoing_csrf=$(csrf_from_cockpit "$aw_cookies")
 assert_status 200 'open A/W transport after LdF redisposition' \
     --cookie "$aw_cookies" --cookie-jar "$aw_cookies" \
+    --location \
     --request POST \
     --data-urlencode "csrf_token=$outgoing_csrf" \
     --data-urlencode 'fm=meldung' \
@@ -4118,13 +4325,14 @@ assert_status 200 'open A/W transport after LdF redisposition' \
 assert_no_runtime_error 'A/W route-B confirmation form'
 assert_body "Disponierter S6-Weg:</strong> Fu · ${telecom_route_b_text}" \
     'A/W sees only the newly disposed route B'
-outgoing_csrf=$(csrf_from_body)
+outgoing_csrf=$(csrf_from_body "$aw_cookies")
 tactical_time=$(date '+%H%M')
 outgoing_backdated_clock=$(app_backdated_clock)
 outgoing_backdated_tactical=${outgoing_backdated_clock%%|*}
 outgoing_backdated_sql=${outgoing_backdated_clock#*|}
 assert_status 200 'save A/W outgoing transport' \
     --cookie "$aw_cookies" --cookie-jar "$aw_cookies" \
+    --location \
     --request POST \
     --data-urlencode "csrf_token=$outgoing_csrf" \
     --data-urlencode 'absenden_x=1' \
@@ -4182,10 +4390,12 @@ load_dashboard "$aw_cookies" 'A/W queue after outgoing completion'
 assert_body_absent "$outgoing_marker" 'A/W queue after outgoing completion'
 load_dashboard "$s1_cookies" 'S1 list after outgoing completion'
 assert_body "$outgoing_marker" 'S1 list after outgoing completion'
-assert_body 'alt="Transport abgeschlossen!"' 'S1 completed-transport indicator'
-completed_outgoing_csrf=$(csrf_from_body)
+assert_body 'estab-list-state--fertig' 'S1 completed-transport indicator'
+assert_body '>abgeschlossen<' 'S1 completed-transport wording'
+completed_outgoing_csrf=$(csrf_from_cockpit "$s1_cookies")
 assert_status 200 'open completed outgoing with full timeline' \
     --cookie "$s1_cookies" --cookie-jar "$s1_cookies" \
+    --location \
     --request POST \
     --data-urlencode "csrf_token=$completed_outgoing_csrf" \
     --data-urlencode 'stab=meldung' \
@@ -4226,9 +4436,10 @@ assert_body_absent "$outgoing_marker" 'S3 non-recipient outgoing list'
 # closes it. Nothing is left to dispose and nothing is left to carry, so
 # neither LdF nor A/W ever see it.
 load_dashboard "$s1_cookies" 'S1 dashboard before conversation note'
-conversation_csrf=$(csrf_from_body)
+conversation_csrf=$(csrf_from_cockpit "$s1_cookies")
 assert_status 200 'open S1 conversation-note draft' \
     --cookie "$s1_cookies" --cookie-jar "$s1_cookies" \
+    --location \
     --request POST \
     --data-urlencode "csrf_token=$conversation_csrf" \
     --data-urlencode 'stab_schreiben_x=1' \
@@ -4236,11 +4447,12 @@ assert_status 200 'open S1 conversation-note draft' \
 assert_no_runtime_error 'S1 conversation-note draft'
 assert_body 'name="task" value="Stab_schreiben"' \
     'initial conversation-note task'
-conversation_csrf=$(csrf_from_body)
+conversation_csrf=$(csrf_from_body "$s1_cookies")
 conversation_matrix_revision=$(recipient_matrix_revision_from_body)
 conversation_attachment_token=$(message_attachment_request_token_from_body)
 assert_status 200 'enter dedicated conversation-note stage' \
     --cookie "$s1_cookies" --cookie-jar "$s1_cookies" \
+    --location \
     --request POST \
     --data-urlencode "csrf_token=$conversation_csrf" \
     --data-urlencode \
@@ -4266,7 +4478,11 @@ assert_body_absent 'id="f_05_gegenstelle" maxlength=' \
     'conversation author cannot enter LdF callsign'
 assert_body_absent 'id="f_fernmeldeplan_eintrag_id"' \
     'conversation author cannot select an S6 route'
-assert_body 'Nach der formalen Sichtung ergänzt LdF Rufname und Beförderungsweg' \
+# Aus dem Satz ist eine Liste geworden: Wer als naechstes was tut, steht als
+# eigener Schritt da statt in einem Nebensatz.
+assert_body 'data-estab-conversation-next-steps' \
+    'conversation-note next steps'
+assert_body 'wählt Rufname und freigegebenen S6-Beförderungsweg' \
     'conversation-note help explains the next responsibility'
 assert_body 'data-estab-conversation-next-steps' \
     'conversation-note stage shows its downstream responsibilities'
@@ -4299,6 +4515,7 @@ assert_db_equals 0 'forged conversation disposition created no message' \
 
 assert_status 200 'save open conversation note for Si' \
     --cookie "$s1_cookies" --cookie-jar "$s1_cookies" \
+    --location \
     --request POST \
     --data-urlencode "csrf_token=$conversation_csrf" \
     --data-urlencode \
@@ -4385,9 +4602,10 @@ load_dashboard "$s1_cookies" 'conversation author queue after Si return'
 assert_body "$conversation_marker" 'returned conversation in author queue'
 assert_route_control stab meldung "$conversation_id" \
     'returned conversation author detail'
-conversation_csrf=$(csrf_from_body)
+conversation_csrf=$(csrf_from_cockpit "$s1_cookies")
 assert_status 200 'open returned conversation as original author' \
     --cookie "$s1_cookies" --cookie-jar "$s1_cookies" \
+    --location \
     --request POST \
     --data-urlencode "csrf_token=$conversation_csrf" \
     --data-urlencode 'stab=meldung' \
@@ -4400,11 +4618,12 @@ assert_body 'id="f_11_gesprnotiz" class="estab-official-box-choice" type="checkb
     'returned conversation marker remains visibly checked'
 assert_body_absent 'name="11_gesprnotiz"' \
     'returned conversation type cannot be rewritten by its author'
-conversation_csrf=$(csrf_from_body)
+conversation_csrf=$(csrf_from_body "$s1_cookies")
 conversation_correction_token=$(message_attachment_request_token_from_body)
 conversation_correction_time=$(app_tactical_clock)
 assert_status 200 'resubmit corrected conversation note' \
     --cookie "$s1_cookies" --cookie-jar "$s1_cookies" \
+    --location \
     --request POST \
     --data-urlencode "csrf_token=$conversation_csrf" \
     --data-urlencode \
@@ -4444,8 +4663,10 @@ finish_viewer_outgoing \
 # disponieren und nichts mehr zu befoerdern. Weder der LdF noch die
 # Fernmelder duerfen sie danach noch in ihrer Warteschlange sehen, und es
 # darf kein Befoerderungsnachweis entstehen.
+# Mit dem Abschluss entsteht der Abzug -- wie bei jeder abgeschlossenen
+# Nachricht; weiter unten wird er nachgewiesen.
 assert_message_state "$conversation_marker" \
-    "A|8|t|set|${si_code}|S2_rt,S1_gn,|f||f" \
+    "A|8|t|set|${si_code}|S2_rt,S1_gn,|f||t" \
     'Si review closes the conversation note'
 load_dashboard "$ldf_cookies" 'LdF queue after conversation Si review'
 assert_body_absent "$conversation_marker" \
@@ -4482,9 +4703,10 @@ load_dashboard "$s1_cookies" 'conversation author list before reply derivation'
 assert_body "$conversation_marker" 'completed conversation visible to author'
 assert_route_control stab meldung "$conversation_id" \
     'completed conversation author detail'
-conversation_reply_csrf=$(csrf_from_body)
+conversation_reply_csrf=$(csrf_from_cockpit "$s1_cookies")
 assert_status 200 'open completed conversation for reply derivation' \
     --cookie "$s1_cookies" --cookie-jar "$s1_cookies" \
+    --location \
     --request POST \
     --data-urlencode "csrf_token=$conversation_reply_csrf" \
     --data-urlencode 'stab=meldung' \
@@ -4493,9 +4715,10 @@ assert_status 200 'open completed conversation for reply derivation' \
 assert_no_runtime_error 'completed conversation read form for reply'
 assert_body 'name="task" value="Stab_lesen"' \
     'completed conversation read task'
-conversation_reply_csrf=$(csrf_from_body)
+conversation_reply_csrf=$(csrf_from_body "$s1_cookies")
 assert_status 200 'derive reply from completed conversation' \
     --cookie "$s1_cookies" --cookie-jar "$s1_cookies" \
+    --location \
     --request POST \
     --data-urlencode "csrf_token=$conversation_reply_csrf" \
     --data-urlencode 'antwort_x=1' \
@@ -4524,11 +4747,18 @@ assert_status 200 'open combined transmission tracking' \
     "$base_url/4fach/nachwea.php?nwalle=1"
 assert_no_runtime_error 'combined transmission tracking'
 assert_body 'Nachweisung Eingang / Ausgang' 'combined tracking view'
-assert_body "Führungsstelle ${authoritative_sender} – Einsatz" \
-    'combined tracking incident-bound command-post heading'
-assert_body 'Übermittlungsweg' 'tracking transport-path column'
-assert_body "Funk · ${telecom_route_b_text}" \
-    'tracking actual outgoing transport path'
+# Der Nachweis sagt selbst, dass er den aktiven Einsatz zeigt; welcher das
+# ist und welche Fuehrungsstelle ihn fuehrt, steht im Einsatzkopf des
+# Cockpits -- auf jeder Seite an derselben Stelle.
+assert_body 'Nachweislisten des aktuell aktiven Einsatzes' \
+    'combined tracking incident binding'
+assert_cockpit_body "$aw_cookies" "$authoritative_sender" \
+    'combined tracking incident-bound command post'
+# Die Spalte heisst "Weg" und traegt das Mittel, ueber das die Meldung ging.
+# Die Wegbeschreibung steht im Vordruck; eine Spalte, die sortiert und
+# gefiltert wird, braucht das Kuerzel.
+assert_body 'data-label="Weg"' 'tracking transport-path column'
+assert_body '>Funk<' 'tracking actual outgoing transport path'
 
 restored_active_incident_id=$(incident_fixture \
     restore "$original_active_incident_id")
