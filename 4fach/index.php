@@ -116,13 +116,19 @@ $mainFrameUrl = './mainindex.php'
   <script<?= estab_csp_script_attribute() ?> data-estab-mobile-workspace-navigation>
     (function () {
       /*
-       * Der Wechsel auf den Inhalt wird vom Cockpit angestossen: Dort liegen
-       * die Arbeitsschritte, und wer auf einem schmalen Bildschirm einen
-       * davon waehlt, will danach den Vordruck sehen und nicht die Spalte,
-       * aus der er kam. Das Menue links braucht das nicht -- seine Verweise
-       * ersetzen ohnehin das ganze Fenster.
+       * Der Wechsel auf den Inhalt wird von den Arbeitsschritten angestossen:
+       * Wer auf einem schmalen Bildschirm einen davon waehlt, will danach den
+       * Vordruck sehen und nicht die Spalte, aus der er kam. Die Ziele im
+       * Menue brauchen das nicht -- ihre Verweise ersetzen ohnehin das ganze
+       * Fenster.
+       *
+       * Die Schritte standen im Cockpit und stehen seit 5abd596 in einem
+       * eigenen Rahmen links unter den Zielen. Beide Rahmen senden das
+       * Signal; angenommen werden muss es von beiden. Solange nur das
+       * Cockpit galt, blieb ein Griff auf dem Telefon ohne Wirkung.
        */
       var cockpit = document.querySelector('.estab-shell-cockpit');
+      var actions = document.querySelector('.estab-shell-actions');
       var menu = document.querySelector('.estab-shell-menu');
       var content = document.querySelector('.estab-message-content-frame');
       var returnButton = document.querySelector(
@@ -144,9 +150,11 @@ $mainFrameUrl = './mainindex.php'
       window.addEventListener('message', function (event) {
         if (
           event.origin === window.location.origin
-          && cockpit
-          && event.source === cockpit.contentWindow
           && event.data === 'estab:show-content'
+          && (
+            (cockpit && event.source === cockpit.contentWindow)
+            || (actions && event.source === actions.contentWindow)
+          )
         ) {
           showContent();
         }

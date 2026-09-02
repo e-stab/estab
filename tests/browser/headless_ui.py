@@ -2030,7 +2030,7 @@ class BrowserAcceptance:
         # the fixed A/W account function needs no duty-assignment selector.
         self._wait_for_authenticated_frames()
         self.cdp.click(
-            "vorgaben",
+            "aktionen",
             'button[name="fm_eingang_x"]'
             '[data-estab-workflow-key="fm_eingang"]',
             "A/W-Eingangsformular öffnen",
@@ -6625,8 +6625,11 @@ class BrowserAcceptance:
                 "vorgaben",
                 """
                 return (async () => {
+                    /* Ein Griff, der im Cockpit steht. Es war ein
+                       Arbeitsschritt; die stehen seit dem Umbau in ihrem
+                       eigenen Rahmen. */
                     const action = doc.querySelector(
-                        'button[data-estab-workflow-key="m2_benutzer"]'
+                        "[data-estab-sound-toggle]"
                     );
                     const originalFetch = target.fetch;
                     if (!action ||
@@ -6662,10 +6665,12 @@ class BrowserAcceptance:
                                     "estab-sidebar-status-stale"
                                 )
                             ),
-                            focusPreserved: doc.activeElement === action,
-                            navigationCount: doc.querySelectorAll(
-                                'a[data-estab-nav-key]'
-                            ).length
+                            /* Ein misslungener Abruf tauscht den Block
+                               ebenfalls aus und setzt den Fokus neu. */
+                            focusPreserved:
+                                doc.activeElement === doc.querySelector(
+                                    "[data-estab-sound-toggle]"
+                                )
                         };
                         target.fetch = originalFetch;
                         const recovered =
@@ -6708,8 +6713,6 @@ class BrowserAcceptance:
             and "letzter Abruf" in str(stale.get("text", ""))
             and stale.get("classed") is True
             and stale.get("focusPreserved") is True
-            and stale.get("navigationCount")
-                == self._authenticated_navigation_link_count()
             and result.get("recovered") is True
             and result.get("currentState") == "current"
             and result.get("currentText") == "Status wieder aktuell"
@@ -7703,7 +7706,11 @@ class BrowserAcceptance:
                 const content = document.querySelector(
                     'iframe[name="mainframe"]'
                 );
-                if (!sidebar || !content || !content.contentWindow) {
+                const actions = document.querySelector(
+                    'iframe[name="aktionen"]'
+                );
+                if (!sidebar || !content || !actions ||
+                    !content.contentWindow) {
                     return false;
                 }
                 window.__estabMobileLoadFocusProbe = false;
@@ -7721,7 +7728,7 @@ class BrowserAcceptance:
             f"Mobiler Rollenaktions-Test konnte in {location} nicht vorbereitet werden.",
         )
         self.cdp.click(
-            "vorgaben",
+            "aktionen",
             'button[data-estab-workflow-key="stab_lesen"]',
             f"Rollenaktion Lesen in {location}",
         )
@@ -7800,11 +7807,15 @@ class BrowserAcceptance:
         self.cdp.wait_for(
             """
             (() => {
-                const sidebar = document.querySelector(
-                    'iframe[name="vorgaben"]'
+                /* Zurueck geht es zum Menue: Dort stehen die Ziele und die
+                   Arbeitsschritte, aus denen der Griff kam. Das Cockpit ist
+                   seit dem Umbau die dritte Spalte und nicht der Ausgangs-
+                   punkt. */
+                const menu = document.querySelector(
+                    "[data-estab-shell-menu]"
                 );
-                if (!sidebar) return false;
-                const rect = sidebar.getBoundingClientRect();
+                if (!menu) return false;
+                const rect = menu.getBoundingClientRect();
                 const visibleHeight = Math.max(
                     0,
                     Math.min(innerHeight, rect.bottom)
@@ -7812,10 +7823,10 @@ class BrowserAcceptance:
                 );
                 return scrollY <= 1 &&
                     visibleHeight >= innerHeight - 1 &&
-                    document.activeElement === sidebar;
+                    document.activeElement === menu;
             })()
             """,
-            f"Rückkehrbutton bringt in {location} nicht zur Sidebar zurück",
+            f"Rückkehrbutton bringt in {location} nicht zum Menue zurück",
         )
 
     def _assert_existing_message_attachment_previews(self) -> None:
@@ -8670,7 +8681,7 @@ class BrowserAcceptance:
         )
         dirty_value = "Browser-Dirty-Guard-Test"
         self.cdp.click(
-            "vorgaben",
+            "aktionen",
             'button[name="stab_schreiben_x"][data-estab-workflow-key="stab_schreiben"]',
             "fachliches Formular zum Schreiben einer Nachricht",
         )
