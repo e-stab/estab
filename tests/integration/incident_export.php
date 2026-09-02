@@ -1367,10 +1367,25 @@ try {
                 $pageContent,
                 'Lagebetreff ' . $selectedMarker
             )
-            && str_contains($pageContent, 'EINGANG')
-            && str_contains($pageContent, 'AUSGANG')
-            && str_contains($pageContent, 'Nachweis-Nr.')
-            && str_contains($pageContent, 'Fm-Betriebsstelle')
+            /*
+             * Die Beschriftungen des heutigen Blattes.
+             *
+             * Der Abzug zeigt seit dem Umbau dasselbe Blatt wie der
+             * Bildschirm: Die Richtungen stehen dort in gemischter
+             * Schreibung, nicht in Versalien -- belegt werden soll, DASS die
+             * Seite beide nennt.
+             *
+             * "Nachweis-Nr." und "Fm-Betriebsstelle" gehoeren zum Raster des
+             * Altbestandes. tests/php/pdf_smoke.php und
+             * tests/php/incident_pdf_security.php VERBIETEN sie inzwischen
+             * ausdruecklich; diese Pruefung verlangte damit genau das, was
+             * jene beiden untersagen. An ihrer Stelle stehen zwei
+             * Beschriftungen, die das heutige Blatt fuehrt.
+             */
+            && stripos($pageContent, 'EINGANG') !== false
+            && stripos($pageContent, 'AUSGANG') !== false
+            && str_contains($pageContent, 'Fm-Zentrale')
+            && str_contains($pageContent, 'Aufnahmevermerk')
             && str_contains($pageContent, 'ALT_1 [gn]')
             && str_contains(
                 $pageContent,
