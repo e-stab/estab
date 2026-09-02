@@ -953,9 +953,27 @@ foreach ($plans as $plan) {
         ) ?></strong>
       </div>
     <?php endif; ?>
+    <?php
+      /*
+       * Die Kopfzeile nennt Namenszeichen und Funktion im Klartext und als
+       * Merkmal. Diese Seite zeichnet ihre Anmeldung selbst und nicht ueber
+       * estab_session_ui_markup(); ohne die Merkmale kann niemand ablesen,
+       * ALS WER hier gehandelt wird. Das Merkmal traegt die rohe Funktion,
+       * nicht ihren Anzeigenamen: 'A/W' ist die Funktion, 'Fernmelder' nur
+       * ihr Name. Solange in strenger Ordnung keine Arbeitsfunktion gewaehlt
+       * ist, steht auch kein Merkmal da -- eine Kontofunktion vorzugeben,
+       * die gerade NICHT gilt, waere schlimmer als gar keine Angabe.
+       */
+      $shownFunction = (string) (
+          $selectedIdentity['funktion'] ?? $identity['funktion']
+      );
+      $functionUnchosen = $strictMode && !is_array($selectedIdentity);
+    ?>
     <div>
       <span>Angemeldet als</span>
-      <strong><?= dv_operations_html(
+      <strong data-estab-user-code="<?= dv_operations_html(
+          (string) $identity['kuerzel']
+      ) ?>"><?= dv_operations_html(
           $identity['benutzer'] . ' · ' . $identity['kuerzel']
       ) ?></strong>
     </div>
@@ -963,11 +981,13 @@ foreach ($plans as $plan) {
       <span><?= $strictMode
           ? 'Aktive Arbeitsfunktion'
           : 'Kontofunktion' ?></span>
-      <strong><?php if ($strictMode && !is_array($selectedIdentity)): ?>
+      <strong<?= $functionUnchosen ? '' : ' data-estab-user-function="'
+          . dv_operations_html($shownFunction) . '"' ?>><?php
+        if ($functionUnchosen): ?>
         Noch nicht ausgewählt
       <?php else: ?><?= dv_operations_html(
           estab_function_identity_display_name(
-              (string) ($selectedIdentity['funktion'] ?? $identity['funktion']),
+              $shownFunction,
               (string) ($selectedIdentity['rolle'] ?? $identity['rolle'])
           )
       ) ?><?php endif; ?></strong>
