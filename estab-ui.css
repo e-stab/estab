@@ -797,6 +797,23 @@
     text-decoration: underline;
 }
 
+/* Der technische Zugang steht unter der Marke, bevor die Bereiche kommen:
+   Wer administriert, soll ihn lesen, ohne ihn zu suchen -- und er soll nicht
+   aussehen wie ein Bereich, den man anklicken kann. */
+.estab-shell-admin-context {
+    color: var(--tinte-spalte-neben);
+    font-size: var(--schrift-1);
+    line-height: 1.4;
+    padding: 0 var(--abstand-3) var(--abstand-3);
+}
+
+.estab-shell-admin-context strong {
+    color: var(--tinte-spalte);
+    display: block;
+    font-weight: var(--stark-voll);
+    overflow-wrap: anywhere;
+}
+
 .estab-shell-content {
     background: var(--handlung-sanft);
     box-sizing: border-box;

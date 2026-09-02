@@ -91,10 +91,33 @@ function estab_shell_menu_markup(
      * lief dessen focus()-Aufruf ins Leere: Der Blick sprang zurueck zum
      * Menue, die Tastatur blieb im Inhalt.
      */
+    /*
+     * Der technische Zugang steht in der Menuespalte.
+     *
+     * Er stand frueher in der Sitzungsleiste der Administrationsseite. Seit
+     * die Leiste im Cockpit-Rahmen steht, kann er dort nicht mehr stehen: Der
+     * Rahmen hat eine eigene Adresse, und die Basic-Anmeldung gilt nur unter
+     * /4fadm/ -- der Rahmen erfaehrt den Namen also gar nicht. Wer
+     * administriert, sah danach nirgends mehr, unter welchem Zugang er
+     * arbeitet, obwohl genau dieser Zugang die Massnahmen freigibt.
+     *
+     * Die Seite selbst weiss es. Also sagt sie es -- links, wo auch die
+     * Bereiche stehen, und nur dort, wo administriert wird.
+     */
+    $adminUser = estab_session_ui_admin_user($server);
+    $adminContext = $adminUser === null
+        ? ''
+        : '<aside class="estab-shell-admin-context"'
+            . ' aria-label="Administrationszugang">'
+            . 'Administrationszugang <strong data-estab-admin-user="'
+            . estab_auth_html($adminUser) . '">'
+            . estab_auth_html($adminUser) . '</strong></aside>';
+
     return '<div class="estab-shell-menu" data-estab-shell-menu tabindex="-1">'
         . '<a class="estab-shell-brand" href="'
         . estab_auth_html(estab_application_root()) . '" target="_top">'
         . 'eStab</a>'
+        . $adminContext
         . estab_navigation_markup(
             $identity !== null,
             $server,
