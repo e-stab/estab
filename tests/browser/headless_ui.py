@@ -3897,33 +3897,35 @@ class BrowserAcceptance:
             "/stabinfo/index.php",
             "Infosammlung BOS wurde nicht über ihre Root-Karte geöffnet",
         )
+        # Die Dokumentwahl steht seit 5abd596 im Menue der Huelle und nicht
+        # mehr als eigener Rahmen neben dem Inhalt.
         self.cdp.wait_for(
-            _frame_expression(
-                "status",
-                """
-                return target.location.pathname.endsWith("/stabinfo/l_index.php") &&
-                    doc.readyState === "complete";
-                """,
-            ),
-            "BOS-Navigationsframe wurde nicht vollständig geladen",
+            """
+            document.readyState === "complete" &&
+            Boolean(document.querySelector("[data-estab-shell-context]")) &&
+            document.querySelectorAll(
+                "[data-estab-bos-document-link]"
+            ).length > 0
+            """,
+            "BOS-Dokumentwahl wurde nicht vollständig geladen",
         )
         self._assert_session_bar("BOS-Infosammlung", "bos-info")
         self._equal(
             self.cdp.evaluate(
                 _visible_count_expression(
-                    "status",
+                    "vorgaben",
                     "aside[data-estab-session-bar].estab-session-bar-compact",
                 )
             ),
             1,
-            "kompakte Session-Bar im BOS-Navigationsframe",
+            "kompakte Session-Bar im BOS-Cockpit",
         )
         self._equal(
             self.cdp.evaluate(
                 _visible_count_expression(None, "aside[data-estab-session-bar]")
             ),
             0,
-            "zusätzliche Session-Bar im BOS-Frameset-Dokument",
+            "zusätzliche Session-Bar im BOS-Huellendokument",
         )
         self._equal(
             self.cdp.evaluate(
@@ -3950,7 +3952,7 @@ class BrowserAcceptance:
             "BOS-Infosammlung bei 390×844 px"
         )
         self.cdp.click(
-            "status",
+            None,
             'a[href$="Buchstabier.html"][target="mainframe"]',
             "BOS-Inhaltslink zum Buchstabieralphabet",
         )
@@ -3974,7 +3976,7 @@ class BrowserAcceptance:
         self._equal(
             self.cdp.evaluate(
                 _visible_count_expression(
-                    "status",
+                    "vorgaben",
                     "aside[data-estab-session-bar].estab-session-bar-compact",
                 )
             ),
@@ -4007,9 +4009,10 @@ class BrowserAcceptance:
             },
         )
         self.cdp.click(
-            "status",
-            '[data-estab-navigation] a[data-estab-nav-key="overview"]',
-            "Übersichtslink im BOS-Navigationsframe",
+            None,
+            '[data-estab-shell-menu] [data-estab-navigation] '
+            'a[data-estab-nav-key="overview"]',
+            "Übersichtslink im Menue der BOS-Huelle",
         )
         self._wait_for_authenticated_overview(
             "angemeldete Übersicht wurde nicht aus dem BOS-Bereich geöffnet"
@@ -5300,13 +5303,29 @@ class BrowserAcceptance:
                     navigationVisible: visible(document.querySelector(
                         "[data-estab-navigation]"
                     )),
-                    barCount:
-                        document.querySelectorAll(
-                            "aside[data-estab-session-bar]"
-                        ).length +
-                        document.querySelectorAll(
-                            "aside[data-estab-public-bar]"
-                        ).length,
+                    /* Die Sitzungsleiste steht im Cockpit-Rahmen; im
+                       Huellendokument darf keine stehen. Gezaehlt wird sie
+                       dort, wo sie hingehoert. */
+                    barCount: (() => {{
+                        const cockpit = document.querySelector(
+                            'iframe[name="vorgaben"]'
+                        );
+                        let inCockpit = 0;
+                        try {{
+                            inCockpit = cockpit
+                                && cockpit.contentDocument
+                                ? cockpit.contentDocument.querySelectorAll(
+                                    "aside[data-estab-session-bar]"
+                                ).length
+                                : 0;
+                        }} catch (ignore) {{
+                            inCockpit = 0;
+                        }}
+                        return inCockpit + document.querySelectorAll(
+                            "aside[data-estab-session-bar],"
+                            + "aside[data-estab-public-bar]"
+                        ).length;
+                    }})(),
                     mainFits: Boolean(mainRect) &&
                         mainRect.left >= -0.5 &&
                         mainRect.right <= innerWidth + 0.5,
@@ -5324,6 +5343,21 @@ class BrowserAcceptance:
                     tablePresent: Boolean(table),
                     emptyVisible: visible(document.querySelector(
                         ".estab-tool-empty"
+                    )),
+                    /* Der Fernmeldeplan zeigt in seiner taktischen Tiefe
+                       keine Tabelle, sondern je Stelle einen Kasten -- die
+                       Frage des taktischen Fuehrers lautet "wen erreiche ich
+                       womit" und nicht "welche Wege gibt es". Kaesten sind
+                       schon Karten; sie brauchen keine Umwandlung. */
+                    stationCards: visible(document.querySelector(
+                        ".estab-telecom-stations"
+                    )),
+                    /* Steht nichts da, muss die Seite sagen warum. Ohne
+                       freigegebenen Fernmeldeplan ist das ein Hinweis und
+                       keine leere Tabelle. */
+                    reasonVisible: visible(document.querySelector(
+                        '.estab-tool-feedback-error[role="alert"],'
+                        + '.estab-tool-notice'
                     )),
                     responsiveTable: Boolean(
                         table && wrapper && firstCell &&
@@ -5368,10 +5402,15 @@ class BrowserAcceptance:
                 )
                 or (
                     state.get("tablePresent") is False
-                    and state.get("emptyVisible") is True
+                    and (
+                        state.get("emptyVisible") is True
+                        or state.get("stationCards") is True
+                        or state.get("reasonVisible") is True
+                    )
                 ),
                 f"{description}: Datentabelle wird mobil nicht zu beschrifteten "
-                "Karten und der Leerzustand fehlt.",
+                "Karten, und es steht weder eine Stellenansicht noch ein "
+                f"Leerzustand da: {state!r}",
             )
 
     def _assert_admin_dashboard_layout(
