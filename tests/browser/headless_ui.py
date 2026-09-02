@@ -1617,14 +1617,20 @@ class BrowserAcceptance:
                 "[data-estab-message-overview]" +
                 "[data-estab-message-list]"
             )) &&
+            /* Die Filter der Uebersicht stehen im Suchband des
+               Tabellenbauteils; Ergebnisleiste, Seitengroesse und Blatt
+               kommen von dort und nicht mehr aus einem eigenen Kasten. */
             Boolean(document.querySelector(
-                "[data-estab-message-list-controls]"
+                ".estab-tabelle-suchband .estab-message-list-quick-filters"
             )) &&
             Boolean(document.querySelector(
-                ".estab-message-list-resultbar"
+                ".estab-tabelle-suchband .estab-message-list-filter-grid"
             )) &&
             Boolean(document.querySelector(
-                ".estab-message-list-table, " +
+                ".estab-tabelle-ergebnisleiste"
+            )) &&
+            Boolean(document.querySelector(
+                ".estab-tabelle-blatt, " +
                 "[data-estab-message-list-empty]"
             ))
             """,
@@ -1636,14 +1642,13 @@ class BrowserAcceptance:
             print("[2/3] Explizit bekannten Betreff über die echte Suche filtern")
             self.cdp.set_value(
                 None,
-                '.estab-message-list-search-row input[name="ml_q"]',
+                '.estab-tabelle-suchzeile input[name="ml_q"]',
                 expected_subject,
                 "bekannten Vordruck-Betreff suchen",
             )
             self.cdp.click(
                 None,
-                '.estab-message-list-search-row '
-                'button[name="ml_apply"][value="1"]',
+                '.estab-tabelle-suchzeile button[type="submit"]',
                 "Suche nach bekanntem Vordruck-Betreff absenden",
             )
             subject_literal = json.dumps(expected_subject)
@@ -1684,16 +1689,33 @@ class BrowserAcceptance:
                     "screenHeight": height,
                 },
             )
-            expected_table_display = "block" if mobile else "table"
-            display_literal = json.dumps(expected_table_display)
+            # Das Tabellenbauteil faltet Zeilen und Zellen zu Kaesten und
+            # blendet den Spaltenkopf aus, sobald seine SPALTE schmaler als
+            # 48rem ist -- nicht das Fenster. In der Huelle steht die
+            # Meldungsliste zwischen Menue und Cockpit, ihre Spalte ist also
+            # deutlich schmaler als der Schirm. Gemessen wird deshalb dort,
+            # wo die Regel gilt; die Tabelle selbst bleibt eine Tabelle.
             self.cdp.wait_for(
                 f"""
                 innerWidth === {width} && (() => {{
                     const table = document.querySelector(
-                        ".estab-message-list-table"
+                        ".estab-tabelle-blatt"
                     );
-                    return !table || getComputedStyle(table).display ===
-                        {display_literal};
+                    if (!table) return true;
+                    const section = table.closest(".estab-tabelle");
+                    if (!section) return false;
+                    const rem = parseFloat(getComputedStyle(
+                        document.documentElement
+                    ).fontSize);
+                    const karten = section.getBoundingClientRect().width
+                        <= 48 * rem;
+                    const head = table.querySelector("thead");
+                    const row = table.querySelector("tbody > tr");
+                    return getComputedStyle(table).display === "table" &&
+                        (!head || getComputedStyle(head).display ===
+                            (karten ? "none" : "table-header-group")) &&
+                        (!row || getComputedStyle(row).display ===
+                            (karten ? "block" : "table-row"));
                 }})()
                 """,
                 f"Responsive Meldungsliste bei {width}×{height} px "
@@ -1765,29 +1787,32 @@ class BrowserAcceptance:
                     "[data-estab-message-overview]" +
                     "[data-estab-message-list]"
                 );
+                /* Suche, Filter, Ergebnisleiste und Blaetterer kommen vom
+                   Tabellenbauteil; die Uebersicht reicht nur ihre Felder
+                   hinein. */
                 const controls = document.querySelector(
-                    "[data-estab-message-list-controls]"
+                    ".estab-tabelle-suchband"
                 );
                 const search = controls?.querySelector(
-                    '.estab-message-list-search-row input[name="ml_q"]'
+                    '.estab-tabelle-suchzeile input[name="ml_q"]'
                 );
                 const searchRow = controls?.querySelector(
-                    ".estab-message-list-search-row"
+                    ".estab-tabelle-suchzeile"
                 );
                 const resultbar = document.querySelector(
-                    ".estab-message-list-resultbar"
+                    ".estab-tabelle-ergebnisleiste"
                 );
                 const wrapper = document.querySelector(
-                    ".estab-message-list-table-wrap"
+                    ".estab-tabelle-rahmen"
                 );
                 const table = document.querySelector(
-                    ".estab-message-list-table"
+                    ".estab-tabelle-blatt"
                 );
                 const empty = document.querySelector(
                     "[data-estab-message-list-empty]"
                 );
                 const pager = document.querySelector(
-                    ".estab-message-list-pager"
+                    ".estab-tabelle-blaetterer"
                 );
                 const rows = table
                     ? Array.from(table.querySelectorAll(
@@ -1813,9 +1838,7 @@ class BrowserAcceptance:
                 ].filter(visible);
                 const headingContentOverlaps = headings.flatMap(
                     (heading, index) => {
-                        const summary = heading.closest(
-                            ".estab-message-list-summary"
-                        );
+                        const summary = heading.closest("td");
                         const excerpt = summary?.querySelector(
                             ".estab-message-list-excerpt"
                         );
@@ -1867,10 +1890,11 @@ class BrowserAcceptance:
                                 text.length > 0 &&
                                 text !== "Keine Überschrift angegeben";
                     }),
+                    /* Ueberschrift und Auszug stehen heute unmittelbar in
+                       ihrer Zelle; einen eigenen Kasten dazwischen gibt es
+                       nicht mehr. */
                     headingsContained: headings.every(heading => {
-                        const summary = heading.closest(
-                            ".estab-message-list-summary"
-                        );
+                        const summary = heading.closest("td");
                         return Boolean(summary) &&
                             containedBy(heading, summary);
                     }),
@@ -1892,15 +1916,29 @@ class BrowserAcceptance:
                     resultOverlaps: overlapPairs(resultChildren),
                     rowOverlaps: overlapPairs(rows),
                     headingContentOverlaps,
-                    responsiveMode: !tablePresent || (__MOBILE__
-                        ? tableDisplay === "block" &&
-                            wrapperOverflow === "visible" &&
-                            rows.every(
-                                row => getComputedStyle(row).display ===
-                                    "block"
-                            )
-                        : tableDisplay === "table" &&
-                            ["auto", "scroll"].includes(wrapperOverflow)),
+                    /* Der Rahmen scrollt quer -- auf jeder Breite. Schmal
+                       wird nicht die Tabelle zum Kasten, sondern jede
+                       Zeile, und schmal ist die Spalte des Bauteils, nicht
+                       der Schirm. */
+                    responsiveMode: !tablePresent ||
+                        (tableDisplay === "table" &&
+                            ["auto", "scroll"].includes(wrapperOverflow) &&
+                            (() => {
+                                const section = table.closest(
+                                    ".estab-tabelle"
+                                );
+                                if (!section) return false;
+                                const rem = parseFloat(getComputedStyle(
+                                    document.documentElement
+                                ).fontSize);
+                                const karten = section
+                                    .getBoundingClientRect().width
+                                    <= 48 * rem;
+                                return rows.every(
+                                    row => getComputedStyle(row).display ===
+                                        (karten ? "block" : "table-row")
+                                );
+                            })()),
                 };
             })()
             """
@@ -2208,6 +2246,66 @@ class BrowserAcceptance:
             "",
             "Rufnamen-Testfeld zurücksetzen",
         )
+        # Ein frisch geoeffneter Vordruck, in dem nichts mehr steht, darf
+        # den Waechter gegen Datenverlust nicht ausloesen. Ein Auswahlfeld
+        # ohne ausdrueckliches `selected` galt ihm als geaendert, und das
+        # Abmelden fragte jedes Mal nach ungespeicherten Eingaben, die es
+        # nicht gab.
+        pristine_forms = self.cdp.evaluate(
+            """
+            (() => {
+                const docs = [];
+                const collect = win => {
+                    try {
+                        docs.push(win.document);
+                        for (let i = 0; i < win.frames.length; i += 1) {
+                            collect(win.frames[i]);
+                        }
+                    } catch (ignore) { /* fremder Ursprung */ }
+                };
+                collect(window.top);
+                const changed = [];
+                for (const document of docs) {
+                    for (const form of document.querySelectorAll(
+                        'form[data-estab-dirty-guard]'
+                    )) {
+                        if (form.hasAttribute("data-estab-dirty-initial")) {
+                            changed.push("dirty-initial");
+                            continue;
+                        }
+                        for (const field of form.elements) {
+                            if (!field || field.disabled) continue;
+                            const type = String(field.type || "").toLowerCase();
+                            if (["hidden", "submit", "button", "image",
+                                "reset"].includes(type)) continue;
+                            if (type === "checkbox" || type === "radio") {
+                                if (field.checked !== field.defaultChecked) {
+                                    changed.push(field.name);
+                                }
+                            } else if (
+                                String(field.tagName).toLowerCase() === "select"
+                            ) {
+                                for (const option of field.options) {
+                                    if (option.selected
+                                        !== option.defaultSelected) {
+                                        changed.push(field.name);
+                                    }
+                                }
+                            } else if (field.value !== field.defaultValue) {
+                                changed.push(field.name);
+                            }
+                        }
+                    }
+                }
+                return changed;
+            })()
+            """
+        )
+        self._equal(
+            pristine_forms,
+            [],
+            "leerer Vordruck ohne falsche Verlustwarnung vor dem Abmelden",
+        )
         self.cdp.click(
             "vorgaben",
             "[data-estab-logout-form] button",
@@ -2308,6 +2406,18 @@ class BrowserAcceptance:
             labels == [],
             "aktiver Fernmeldeplan zeigte unerwartet einen direkten Wegeeditor.",
         )
+        # Die Wegetafel des aktiven Plans steht in der betrieblichen Tiefe.
+        # Die taktische zeigt je Stelle einen Kasten -- richtig fuer die Frage
+        # "wen erreiche ich womit", aber nicht feldweise vergleichbar.
+        self.cdp.navigate(operations_url + "?ansicht=betrieblich")
+        self.cdp.wait_for(
+            f"""
+            document.readyState === "complete" &&
+            location.pathname === {operations_path_literal} &&
+            Boolean(document.querySelector("[data-estab-active-telecom-plan]"))
+            """,
+            "betriebliche Tiefe des Fernmeldeplans wurde nicht geöffnet",
+        )
         active_plan_state = self.cdp.evaluate(
             """
             (() => {
@@ -2319,20 +2429,23 @@ class BrowserAcceptance:
                 );
                 const normalize = value => String(value || "")
                     .replace(/\\s+/g, " ").trim();
+                /* Die Wegetafel steht in der betrieblichen Tiefe; die
+                   taktische fasst je Stelle einen Kasten. Ihre Spalten
+                   heissen heute Stelle, Erreichbar unter, Mittel und
+                   Vermerke -- die Verkehrsform steht mit Band, Kanal und
+                   Bandlage zusammen unter "Technische Angaben", weil eine
+                   Wegart nur fuehrt, was sie kennt. */
                 const routes = Array.from(active?.querySelectorAll(
-                    '.estab-tool-table tbody tr'
+                    '.estab-tabelle-blatt tbody tr'
                 ) || []).map(row => ({
                     station: normalize(row.querySelector(
-                        '[data-label="Betriebsstelle"]'
+                        '[data-label="Stelle"]'
                     )?.textContent),
                     callsign: normalize(row.querySelector(
-                        '[data-label="Rufname"]'
+                        '[data-label="Erreichbar unter"]'
                     )?.textContent),
-                    technical: normalize(row.querySelector(
-                        '[data-label="Medium und technische Angaben"]'
-                    )?.textContent),
-                    traffic: normalize(row.querySelector(
-                        '[data-label="Verkehrsform"]'
+                    medium: normalize(row.querySelector(
+                        '[data-label="Mittel"]'
                     )?.textContent),
                     notes: normalize(row.querySelector(
                         '[data-label="Vermerke"]'
@@ -2363,7 +2476,21 @@ class BrowserAcceptance:
             and bool(active_plan_state.get("remarks"))
             and isinstance(active_plan_state.get("routes"), list)
             and len(active_plan_state["routes"]) >= 1,
-            "aktive Fernmeldeplanfassung war vor dem Klonen nicht vollständig lesbar.",
+            "aktive Fernmeldeplanfassung war vor dem Klonen nicht vollständig "
+            f"lesbar: {active_plan_state!r}",
+        )
+        # Zurueck in die taktische Tiefe: Der Rest des Laufs arbeitet auf der
+        # Adresse ohne Ansichtsparameter, und die Rueckkehr nach dem Speichern
+        # fuehrt ebenfalls dorthin.
+        self.cdp.navigate(operations_url)
+        self.cdp.wait_for(
+            f"""
+            document.readyState === "complete" &&
+            location.pathname === {operations_path_literal} &&
+            location.search === "" &&
+            Boolean(document.querySelector("[data-estab-active-telecom-plan]"))
+            """,
+            "taktische Tiefe des Fernmeldeplans wurde nicht wiederhergestellt",
         )
         self._assert_tool_page_layout(
             "aktiver S6-Fernmeldeplan bei 1280×800 px",
@@ -2400,18 +2527,14 @@ class BrowserAcceptance:
                     '[data-estab-telecom-entry-mode="edit"]'
                 )).map(form => {
                     const kind = form.elements.wegart;
-                    const technical = [
-                        kind?.selectedOptions[0]?.textContent,
-                        form.elements.kanal?.value,
-                        form.elements.bandlage?.value
-                    ].map(normalize).filter(Boolean).join(" · ");
                     return {
                         station: normalize(form.elements.betriebsstelle?.value),
                         callsign: normalize(
                             form.elements.erreichbarkeit?.value
                         ),
-                        technical,
-                        traffic: normalize(form.elements.verkehrsform?.value),
+                        medium: normalize(
+                            kind?.selectedOptions[0]?.textContent
+                        ),
                         notes: [
                             form.elements.besondere_vermerke?.value,
                             form.elements.bemerkungen?.value
@@ -2692,15 +2815,17 @@ class BrowserAcceptance:
             and messenger_fields.get("band") == {
                 "hidden": True, "disabled": True, "required": False
             }
+            # Der Melder traegt kein technisches Feld: kein Kanal, keine
+            # Bandlage und auch keine Verkehrsform. Wer zu Fuss geht, hat
+            # keine.
             and messenger_fields.get("traffic") == {
-                "hidden": False, "disabled": False, "required": True
+                "hidden": True, "disabled": True, "required": False
             },
             "Melder blendet unpassende Funkfelder nicht korrekt aus.",
         )
 
         messenger_station = "Browser-Melderziel"
         messenger_callsign = "Browser-Melderrufname"
-        messenger_traffic = "Persönliche Beförderung"
         add_form_selector = '[data-estab-telecom-entry-mode="add"]'
         for selector, value, description in (
             (
@@ -2712,11 +2837,6 @@ class BrowserAcceptance:
                 add_form_selector + ' input[name="erreichbarkeit"]',
                 messenger_callsign,
                 "Rufname des neuen Melderwegs",
-            ),
-            (
-                add_form_selector + ' input[name="verkehrsform"]',
-                messenger_traffic,
-                "Verkehrsform des neuen Melderwegs",
             ),
         ):
             self.cdp.set_value(None, selector, value, description)
@@ -4133,8 +4253,12 @@ class BrowserAcceptance:
                 document.readyState === "complete" &&
                 Boolean(document.querySelector("[data-estab-admin-dashboard]")) &&
                 document.querySelectorAll("[data-estab-admin-card]").length === 11 &&
+                /* Der technische Zugang steht in der Menuespalte der
+                   Huelle: Die Sitzungsleiste sitzt im Cockpit-Rahmen, und
+                   die Basic-Anmeldung gilt nur unter /4fadm/ -- der Rahmen
+                   erfaehrt den Namen gar nicht. Die Seite selbst weiss ihn. */
                 Boolean(document.querySelector(
-                    '[data-estab-public-bar] [data-estab-admin-user]'
+                    '[data-estab-shell-menu] [data-estab-admin-user]'
                 ))
                 """,
                 "administrative Übersicht wurde nicht vollständig geladen",
@@ -4177,8 +4301,12 @@ class BrowserAcceptance:
                 document.readyState === "complete" &&
                 Boolean(document.querySelector("[data-estab-export-list]")) &&
                 Boolean(document.querySelector("[data-estab-export-create]")) &&
+                /* Der technische Zugang steht in der Menuespalte der
+                   Huelle: Die Sitzungsleiste sitzt im Cockpit-Rahmen, und
+                   die Basic-Anmeldung gilt nur unter /4fadm/ -- der Rahmen
+                   erfaehrt den Namen gar nicht. Die Seite selbst weiss ihn. */
                 Boolean(document.querySelector(
-                    '[data-estab-public-bar] [data-estab-admin-user]'
+                    '[data-estab-shell-menu] [data-estab-admin-user]'
                 ))
                 """,
                 "administrative Exportübersicht wurde nicht vollständig geladen",
@@ -4705,8 +4833,7 @@ class BrowserAcceptance:
                     document.readyState === "complete" &&
                     Boolean(document.querySelector({json.dumps(marker)})) &&
                     Boolean(document.querySelector(
-                        "aside[data-estab-session-bar] " +
-                        "[data-estab-admin-user]"
+                        "[data-estab-shell-menu] [data-estab-admin-user]"
                     ))
                     """,
                     f"{label} mit kombinierter Anmeldung wurde nicht geladen",
@@ -4719,8 +4846,7 @@ class BrowserAcceptance:
                     self.cdp.evaluate(
                         """
                         document.querySelector(
-                            "aside[data-estab-session-bar] " +
-                            "[data-estab-admin-user]"
+                            "[data-estab-shell-menu] [data-estab-admin-user]"
                         )?.getAttribute("data-estab-admin-user")
                         """
                     ),
@@ -4832,14 +4958,16 @@ class BrowserAcceptance:
                     f"""
                     document.readyState === "complete" &&
                     Boolean(document.querySelector({escaped_marker})) &&
-                    (
-                        document.querySelectorAll(
-                            "aside[data-estab-session-bar]"
-                        ).length +
-                        document.querySelectorAll(
-                            "aside[data-estab-public-bar]"
-                        ).length
-                    ) === 1
+                    /* Die Leiste steht im Cockpit-Rahmen. Das Dokument der
+                       Huelle traegt keine zweite -- es bettet den Rahmen
+                       genau einmal ein. */
+                    document.querySelectorAll(
+                        "aside[data-estab-session-bar]," +
+                        "aside[data-estab-public-bar]"
+                    ).length === 0 &&
+                    document.querySelectorAll(
+                        'iframe[name="vorgaben"]'
+                    ).length === 1
                     """,
                     f"{label} wurde nicht vollständig geladen",
                 )
@@ -4849,6 +4977,7 @@ class BrowserAcceptance:
                     mobile=width <= 390,
                     require_responsive_table=responsive_table,
                     require_target=require_target,
+                    expect_shared_bar=False,
                 )
                 if path == "/4fadm/incidents.php":
                     self._assert_incident_archive_layout(
@@ -5274,6 +5403,7 @@ class BrowserAcceptance:
         mobile: bool,
         require_responsive_table: bool = False,
         require_target: bool = False,
+        expect_shared_bar: bool = True,
     ) -> None:
         state = self.cdp.evaluate(
             f"""
@@ -5293,6 +5423,14 @@ class BrowserAcceptance:
                     ".estab-tool-main .estab-button," +
                     ".estab-tool-main summary"
                 )).filter(visible);
+                /* Zwei Tabellen leben nebeneinander: das gemeinsame
+                   Bauteil, das seine Zeilen unter 48rem Spaltenbreite zu
+                   beschrifteten Kaesten faltet, und die aeltere Werkzeug-
+                   tabelle, die dasselbe mit eigenen Klassen tut. */
+                const sheet = document.querySelector(".estab-tabelle-blatt");
+                const sheetSection = sheet
+                    ? sheet.closest(".estab-tabelle")
+                    : null;
                 const table = document.querySelector(".estab-tool-table");
                 const wrapper = document.querySelector(
                     ".estab-tool-table-responsive"
@@ -5318,10 +5456,14 @@ class BrowserAcceptance:
                         );
                         let inCockpit = 0;
                         try {{
+                            /* Ohne angemeldetes Funktionskonto traegt der
+                               Rahmen die oeffentliche Leiste. Sie ist
+                               dieselbe Stelle und zaehlt genauso. */
                             inCockpit = cockpit
                                 && cockpit.contentDocument
                                 ? cockpit.contentDocument.querySelectorAll(
-                                    "aside[data-estab-session-bar]"
+                                    "aside[data-estab-session-bar],"
+                                    + "aside[data-estab-public-bar]"
                                 ).length
                                 : 0;
                         }} catch (ignore) {{
@@ -5346,7 +5488,7 @@ class BrowserAcceptance:
                     documentScrollWidth:
                         document.documentElement.scrollWidth,
                     innerWidth,
-                    tablePresent: Boolean(table),
+                    tablePresent: Boolean(table || sheet),
                     emptyVisible: visible(document.querySelector(
                         ".estab-tool-empty"
                     )),
@@ -5365,12 +5507,34 @@ class BrowserAcceptance:
                         '.estab-tool-feedback-error[role="alert"],'
                         + '.estab-tool-notice'
                     )),
-                    responsiveTable: Boolean(
-                        table && wrapper && firstCell &&
-                        getComputedStyle(table).display === "block" &&
-                        getComputedStyle(firstCell).display === "block" &&
-                        getComputedStyle(wrapper).overflowX === "visible"
-                    )
+                    responsiveTable: (() => {{
+                        if (sheet && sheetSection) {{
+                            const rem = parseFloat(getComputedStyle(
+                                document.documentElement
+                            ).fontSize);
+                            const karten = sheetSection
+                                .getBoundingClientRect().width <= 48 * rem;
+                            if (!karten) return false;
+                            const head = sheet.querySelector("thead");
+                            const row = sheet.querySelector("tbody > tr");
+                            const cell = sheet.querySelector("tbody td");
+                            return (!head
+                                    || getComputedStyle(head).display
+                                        === "none")
+                                && (!row
+                                    || getComputedStyle(row).display
+                                        === "block")
+                                && (!cell
+                                    || getComputedStyle(cell).display
+                                        === "block");
+                        }}
+                        return Boolean(
+                            table && wrapper && firstCell &&
+                            getComputedStyle(table).display === "block" &&
+                            getComputedStyle(firstCell).display === "block" &&
+                            getComputedStyle(wrapper).overflowX === "visible"
+                        );
+                    }})()
                 }};
             }})()
             """
@@ -5381,7 +5545,11 @@ class BrowserAcceptance:
             and state.get("heroVisible") is True
             and state.get("footerVisible") is True
             and state.get("navigationVisible") is True
-            and state.get("barCount") == 1,
+            # Ohne angemeldetes Funktionskonto hat das Cockpit nichts zu
+            # zeigen: Die technischen Werkzeuge stehen hinter der
+            # Basic-Anmeldung und kennen kein eStab-Konto. Dann steht auch
+            # keine Leiste da -- und keine ist richtig, nicht eine leere.
+            and state.get("barCount") == (1 if expect_shared_bar else 0),
             f"{description}: Werkzeugseite, Navigation oder einzelne Shared-Bar fehlt.",
         )
         self._truth(
@@ -5493,7 +5661,7 @@ class BrowserAcceptance:
                     documentScrollWidth:
                         document.documentElement.scrollWidth,
                     adminUserVisible: visible(document.querySelector(
-                        "[data-estab-public-bar] [data-estab-admin-user]"
+                        "[data-estab-shell-menu] [data-estab-admin-user]"
                     )),
                     navigationVisible: visible(document.querySelector(
                         "[data-estab-navigation]"
@@ -5628,13 +5796,20 @@ class BrowserAcceptance:
                 const cards = Array.from(document.querySelectorAll(
                     ".estab-export-card"
                 ));
+                /* Die breite Leiste ueber dem Inhalt gibt es nicht mehr.
+                   Anmeldung und Einsatzstand stehen im Cockpit-Rahmen, die
+                   Ziele links im Menue -- beide scrollen fuer sich und
+                   koennen den Arbeitsbereich nicht mehr verdecken. Geprueft
+                   wird deshalb, dass die Seite keine eigene Leiste mitbringt
+                   und den Rahmen genau einmal einbettet. */
                 const fullSessionBars = Array.from(document.querySelectorAll(
                     "body > aside.estab-session-bar" +
-                    ":not(.estab-session-bar-compact)"
+                    ":not(.estab-session-bar-compact)," +
+                    "body > aside.estab-public-bar"
                 ));
-                const narrowViewport = matchMedia(
-                    "(max-width: 42rem)"
-                ).matches;
+                const cockpitFrames = document.querySelectorAll(
+                    'iframe[name="vorgaben"]'
+                ).length;
                 const navigation = document.querySelector(
                     ".estab-navigation"
                 );
@@ -5688,10 +5863,9 @@ class BrowserAcceptance:
                         ".estab-session-bar"
                     )),
                     fullSessionBarCount: fullSessionBars.length,
-                    mobileHeaderNonSticky: fullSessionBars.length === 1 &&
-                        (!narrowViewport || getComputedStyle(
-                            fullSessionBars[0]
-                        ).position === "static"),
+                    cockpitFrames,
+                    mobileHeaderNonSticky: fullSessionBars.length === 0 &&
+                        cockpitFrames === 1,
                     sessionTopline: metrics(document.querySelector(
                         ".estab-session-topline"
                     )),
@@ -5743,7 +5917,7 @@ class BrowserAcceptance:
             f"{description}: Karten oder Bedienelemente ragen aus dem Viewport.",
         )
         self._truth(
-            state.get("fullSessionBarCount") == 1
+            state.get("fullSessionBarCount") == 0
             and state.get("mobileHeaderNonSticky") is True,
             f"{description}: Die mobile Status- und Navigationsleiste "
             "verdeckt den Arbeitsbereich beim Scrollen.",
@@ -7883,36 +8057,35 @@ class BrowserAcceptance:
             )
             return
         message_marker = marker + "_DIRECT_ATTACHMENT_SUBMIT"
-        # The legacy search field really has maxlength=30. Keep this input
-        # short enough for the actual UI while the full unique marker below
-        # still identifies the exact result row.
+        # Der Teilmarker genuegt: Er kommt nur in dieser einen Nachricht vor,
+        # und die Zeile unten wird ohnehin am vollen Marker erkannt.
         search_marker = "DIRECT_ATTACHMENT_SUBMIT"
 
-        self.cdp.click(
-            "mainframe",
-            'input[name="flt_find_mask_ein"]',
-            "Nachrichtensuche für die echte Anlagenvorschau",
-        )
+        # Die Suche steht im Suchband des Tabellenbauteils und ist immer da;
+        # den frueheren Knopf, der erst eine Suchmaske aufklappte, gibt es
+        # nicht mehr. Die beiden Zustandsschalter im selben Band gehoeren zum
+        # Filterformular daneben -- abgesendet wird der Knopf ohne `form`.
         self.cdp.wait_for(
             _frame_expression(
                 "mainframe",
                 """
                 return doc.readyState === "complete" &&
-                    Boolean(doc.querySelector('input[name="flt_search"]')) &&
-                    Boolean(doc.querySelector('input[name="filter_suche"]'));
+                    Boolean(doc.querySelector(
+                        '.estab-tabelle-suchband input[type="search"]'
+                    ));
                 """,
             ),
-            "Nachrichtensuche für die Anlagenvorschau wurde nicht geöffnet",
+            "Nachrichtensuche für die Anlagenvorschau fehlt",
         )
         self.cdp.set_value(
             "mainframe",
-            'input[name="flt_search"]',
+            '.estab-tabelle-suchband input[type="search"]',
             search_marker,
             "Suchmarker der Nachricht mit Bild, PDF und E-Mail",
         )
         self.cdp.click(
             "mainframe",
-            'input[name="filter_suche"]',
+            '.estab-tabelle-suchband button[type="submit"]:not([form])',
             "Nachricht mit Bild, PDF und E-Mail suchen",
         )
         row_state = self.cdp.wait_for(
