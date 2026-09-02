@@ -11242,8 +11242,8 @@ class BrowserAcceptance:
         )
 
         areas = self.cdp.evaluate(
-            f"""
-            (() => {{
+            """
+            (() => {
                 const menu = document.querySelector(
                     "[data-estab-shell-menu]"
                 );
@@ -11258,18 +11258,18 @@ class BrowserAcceptance:
                 const links = items
                     .map(item => item.querySelector("a[data-estab-nav-key]"))
                     .filter(Boolean);
-                const visible = element => {{
+                const visible = element => {
                     const rect = element.getBoundingClientRect();
                     const style = getComputedStyle(element);
                     return rect.width > 0 && rect.height > 0 &&
                         style.display !== "none" &&
                         style.visibility !== "hidden";
-                }};
+                };
                 const overview = navigation.querySelector(
                     'a[data-estab-nav-key="overview"]'
                 );
                 const navigationRect = navigation.getBoundingClientRect();
-                return {{
+                return {
                     navigationCount: document.querySelectorAll(
                         "[data-estab-navigation]"
                     ).length,
@@ -11306,8 +11306,8 @@ class BrowserAcceptance:
                         overview.textContent.replace(/\\s+/g, " ").trim()
                             === "Übersicht" &&
                         overview.getAttribute("target") === "_top"
-                }};
-            }})()
+                };
+            })()
             """
         )
         if not areas:
