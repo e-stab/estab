@@ -977,7 +977,19 @@ HTML;
         string $selected,
         string $emptyLabel
     ): string {
-        $markup = '<option value="">'
+        /*
+         * Der Platzhalter sagt ausdruecklich, dass er gewaehlt ist.
+         *
+         * Ohne `selected` waehlt der Browser die erste Zeile von sich aus.
+         * Fuer den Waechter gegen Datenverlust ist das eine Aenderung --
+         * `selected` weicht dann von `defaultSelected` ab --, und ein
+         * frisch geoeffneter Vordruck warnte beim Abmelden oder beim
+         * Bereichswechsel vor ungespeicherten Eingaben, die es nicht gab.
+         * Eine Warnung, die immer kommt, wird ueberlesen; dann fehlt sie,
+         * wenn wirklich etwas auf dem Spiel steht.
+         */
+        $markup = '<option value=""'
+            . ($selected === '' ? ' selected' : '') . '>'
             . estab_message_html($emptyLabel) . '</option>';
         foreach ($this->activeTelecomRoutes as $route) {
             $parts = array_values(array_filter([
