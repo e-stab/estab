@@ -4624,7 +4624,10 @@ function estab_dv_telecom_plan_header_audit_state(array $plan): array
  * carry the value lists is classified and not available, and a list invented
  * here would reject what an operation actually used.
  *
- * @return array<string, string|null>
+ * `rueckfallebene_fuer_weg` faellt aus der Reihe: es traegt eine Wegkennung,
+ * also eine Zahl, waehrend alle uebrigen Werte Text sind.
+ *
+ * @return array<string, int|string|null>
  */
 function estab_dv_telecom_entry_values(array $input): array
 {
@@ -5620,11 +5623,12 @@ function estab_dv_add_telecom_entry(
             } finally {
                 $next->close();
             }
+            $fallbackTarget = $values['rueckfallebene_fuer_weg'];
             estab_dv_telecom_assert_fallback(
                 $connection,
                 $planId,
                 null,
-                $values['rueckfallebene_fuer_weg']
+                is_int($fallbackTarget) ? $fallbackTarget : null
             );
             $insert = $connection->prepare(
                 'INSERT INTO `nv_fernmeldeplan_eintraege`'
@@ -5706,7 +5710,12 @@ function estab_dv_add_telecom_entry(
  * the route's, and the sentence the plan states is "over THIS way, THAT
  * station answers at THIS address".
  *
- * @return array{name:string,erreichbarkeit:string,bemerkungen:string}
+ * @return array{
+ *     name:string,
+ *     stellenart:string|null,
+ *     erreichbarkeit:string,
+ *     bemerkungen:string
+ * }
  */
 function estab_dv_telecom_counterpart_values(array $input): array
 {
@@ -6450,11 +6459,12 @@ function estab_dv_update_telecom_entry(
                     $ownStatement->close();
                 }
             }
+            $fallbackTarget = $values['rueckfallebene_fuer_weg'];
             estab_dv_telecom_assert_fallback(
                 $connection,
                 $planId,
                 $ownRoute,
-                $values['rueckfallebene_fuer_weg']
+                is_int($fallbackTarget) ? $fallbackTarget : null
             );
             $update = $connection->prepare(
                 'UPDATE `nv_fernmeldeplan_eintraege`'
