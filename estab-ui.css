@@ -4199,6 +4199,36 @@ form[data-estab-incident-disabled="true"]::before {
     min-width: 0;
 }
 
+/* Wer in welche Spalte kommt, sagt die Regel -- nicht die Reihenfolge.
+
+   Der Kasten ist als „links steht, was ist, rechts steht, was man tun kann"
+   gebaut: eine dehnbare Textspalte und eine Handlungsspalte, die sich nach
+   ihrem Knopf richtet. Die Zuordnung entstand aber allein aus der Reihenfolge
+   der Kinder. Ein Kasten mit Überschrift *und* Erläuterung schob damit die
+   Erläuterung in die Handlungsspalte, deren `auto` sich nach dem längsten
+   Inhalt richtet -- und drückte die Überschrift auf null Breite. Auf der
+   Schichtverwaltung stand „Unterstützter Betriebsmodus" daraufhin
+   buchstabenweise untereinander.
+
+   Handlung ist nicht nur der Knopf. Die Zugangsschaltung stellt ihrem
+   gefährlichen Zweig eine Aufklappung voran, die die Folgen zeigt, bevor sie
+   ausgeführt werden -- ein `details`, kein `form`. Steht es nicht in dieser
+   Liste, faellt derselbe Schalter je nach Zustand an zwei verschiedene
+   Plaetze: aktiviert unter den Text, deaktiviert daneben.
+
+   Kästen, die ihren Inhalt in `div` gliedern, haben ihre eigenen Spalten und
+   bleiben ausgenommen. */
+.estab-tool-status > :not(div) {
+    grid-column: 1;
+}
+
+.estab-tool-status > .estab-button,
+.estab-tool-status > details,
+.estab-tool-status > form {
+    grid-column: 2;
+    grid-row: 1;
+}
+
 .estab-tool-status span,
 .estab-tool-status strong {
     hyphens: auto;
@@ -4228,6 +4258,31 @@ form[data-estab-incident-disabled="true"]::before {
 
 .estab-tool-status form {
     margin: 0;
+}
+
+/* Unter 56 rem hat der Kasten keine Handlungsspalte mehr.
+
+   Die Huelle klappt ihre Menuespalte erst bei 42 rem ein; dazwischen bleibt
+   dem Inhalt eine schmale Bahn, und `auto` neben `minmax(0, 1fr)` nimmt sich
+   davon, was der Knopf braucht. Gemessen bei 720 px Schirmbreite: Der Kasten
+   war 198 px breit, davon nahm der Knopf 146 -- der Ueberschrift blieben 0.
+   Eine Handlungsspalte, die den Text auffrisst, ist keine; also geht die
+   Handlung hier zurueck in den Fluss und steht unter ihrem Text.
+
+   Die Zusammenfassung behaelt ihre eigenen Spalten: Sie traegt keine
+   Handlung, sondern nebeneinanderstehende Angaben mit je eigener
+   Ueberschrift. */
+@media (max-width: 56rem) {
+    .estab-tool-status:not(.estab-tool-status-summary) {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .estab-tool-status > .estab-button,
+    .estab-tool-status > details,
+    .estab-tool-status > form {
+        grid-column: 1;
+        grid-row: auto;
+    }
 }
 
 .estab-shift-confirmation {
