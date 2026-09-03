@@ -399,20 +399,16 @@ $soundUrl = $soundsEnabled
  *
  * Die Leiste wird deshalb auch dann gebaut, nur eben ohne den operativen
  * Status: dieselben Angaben wie sonst, dieselbe Stelle, derselbe Knopf.
+ *
+ * Aber nur bei angemeldetem Funktionskonto. Ohne eines hat das Cockpit nichts
+ * zu zeigen: Die technischen Werkzeuge stehen hinter der Basic-Anmeldung und
+ * kennen kein eStab-Konto. Dann steht dort keine Leiste -- und keine ist
+ * richtig, nicht eine leere und erst recht keine Anmeldeaufforderung.
+ * estab_session_ui_current_markup() faellt fuer Anonyme auf die oeffentliche
+ * Leiste zurueck; ohne diese Bedingung stuende sie auf jeder Werkzeugseite.
  */
-$statusMarkup = $selectedIdentity === null
-    ? estab_session_ui_current_markup(
-        $_SESSION,
-        true,
-        null,
-        false,
-        true,
-        false,
-        false,
-        null,
-        false
-    )
-    : estab_vorgaben_status_markup(
+$statusMarkup = $selectedIdentity !== null
+    ? estab_vorgaben_status_markup(
         $_SESSION,
         $conf_4f_db,
         (string) $conf_4f_tbl['benutzer'],
@@ -425,7 +421,18 @@ $statusMarkup = $selectedIdentity === null
         $soundUrl,
         $correctionProfiles,
         $correctionCounts
-    );
+    )
+    : ($identity === null ? '' : estab_session_ui_current_markup(
+        $_SESSION,
+        true,
+        null,
+        false,
+        true,
+        false,
+        false,
+        null,
+        false
+    ));
 
 if ($statusFragment) {
     echo $statusMarkup;

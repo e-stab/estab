@@ -275,22 +275,35 @@ $assert(
  */
 $statuszeile = $slice(
     $cockpit,
-    '$statusMarkup = $selectedIdentity === null',
-    ': estab_vorgaben_status_markup('
-);
-$assert(
-    !str_contains($statuszeile, "? ''"),
-    estab_ux_requirement(
-        'UX-KEIN-EINBAHNWEG',
-        'Ohne gewählte Arbeitsfunktion bleibt die Statuszeile leer -- und '
-            . 'mit ihr fällt der Abmeldeknopf weg.'
-    )
+    '$statusMarkup = $selectedIdentity !== null',
+    "\nif (\$statusFragment) {"
 );
 $assert(
     str_contains($statuszeile, 'estab_session_ui_current_markup('),
     estab_ux_requirement(
         'UX-KEIN-EINBAHNWEG',
-        'Ohne gewählte Arbeitsfunktion wird die Anmeldeleiste nicht gebaut.'
+        'Ohne gewählte Arbeitsfunktion wird die Anmeldeleiste nicht gebaut '
+            . '-- und mit ihr fällt der Abmeldeknopf weg.'
+    )
+);
+/*
+ * Aber nur bei angemeldetem Funktionskonto.
+ *
+ * estab_session_ui_current_markup() fällt für Anonyme auf die öffentliche
+ * Anmeldeleiste zurück. Ohne diese Bedingung stand sie auf jeder
+ * Werkzeugseite hinter der Basic-Anmeldung -- die kennt kein eStab-Konto,
+ * und dort ist keine Leiste richtig, nicht eine leere und erst recht keine
+ * Anmeldeaufforderung. Die CI hat genau das gefangen
+ * (tests/browser/headless_ui.py, „einzelne Shared-Bar").
+ */
+$assert(
+    str_contains($statuszeile, "\$identity === null ? '' :"),
+    estab_ux_requirement(
+        'UX-KEIN-EINBAHNWEG',
+        'Die Ersatzleiste wird auch ohne angemeldetes Funktionskonto '
+            . 'gebaut; auf den Werkzeugseiten hinter der Basic-Anmeldung '
+            . 'stünde dann eine Anmeldeaufforderung, wo keine Leiste '
+            . 'hingehört.'
     )
 );
 /*
@@ -311,11 +324,19 @@ while (
         } elseif ($cockpit[$i] === ')') {
             $tiefe--;
             if ($tiefe === 0) {
-                $aufrufe[] = preg_replace(
+                /*
+                 * Eine Nennung im Kommentar -- „estab_session_ui_current_markup()"
+                 * -- ist kein Aufruf. Sie hat keine Argumente, und genau
+                 * daran ist sie zu erkennen.
+                 */
+                $args = trim(preg_replace(
                     '~\s+~',
                     ' ',
                     substr($cockpit, $lauf + 1, $i - $lauf - 1)
-                );
+                ) ?? '');
+                if ($args !== '') {
+                    $aufrufe[] = $args;
+                }
                 break;
             }
         }
