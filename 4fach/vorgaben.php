@@ -385,8 +385,33 @@ $soundUrl = $soundsEnabled
         '4fach/audio/' . $queueProfiles[0]['sound_file']
     )
     : null;
+/*
+ * Ohne gewählte Arbeitsfunktion gibt es keine Warteschlangen -- aber es gibt
+ * eine Anmeldung, und die muss man beenden können.
+ *
+ * Hier stand ein leerer String. Die Statuszeile trägt seit dem Umbau auch die
+ * Anmeldung und den Weg hinaus ("Anmeldung und Abmelden stehen oben mit in der
+ * Statuszeile"), und so verschwand der Abmeldeknopf ausgerechnet in der Lage,
+ * in der man ihn am ehesten braucht: Wer im strengen Modus keine aktive
+ * Dienstschicht hat, sieht nur noch den Hinweis, dass operativer Zugriff nicht
+ * verfügbar ist -- und kam aus seiner Anmeldung nicht mehr heraus, ohne die
+ * Adresse der Abmeldeseite zu kennen.
+ *
+ * Die Leiste wird deshalb auch dann gebaut, nur eben ohne den operativen
+ * Status: dieselben Angaben wie sonst, dieselbe Stelle, derselbe Knopf.
+ */
 $statusMarkup = $selectedIdentity === null
-    ? ''
+    ? estab_session_ui_current_markup(
+        $_SESSION,
+        true,
+        null,
+        false,
+        true,
+        false,
+        false,
+        null,
+        false
+    )
     : estab_vorgaben_status_markup(
         $_SESSION,
         $conf_4f_db,

@@ -1412,6 +1412,175 @@ function estab_dv_assign_hat(
 }
 
 /**
+ * Eine Besetzung aus einer noch nicht aktivierten Schicht wieder entfernen.
+ *
+ * Aus dem Betrieb: „Wenn ich eine Schicht plane und aus Versehen jemand
+ * Falschem eine Rolle gegeben habe, kann ich das nicht wieder entfernen, ohne
+ * die gesamte Planung zu verwerfen." Das stimmte. Die Einzelablösung verlangt
+ * eine laufende Schicht und eine übernehmende Person; für eine geplante
+ * Schicht gab es nichts. Der einzige Ausweg war „Planung schließen" -- und
+ * der beendet die ganze Schicht mitsamt aller richtig besetzten Funktionen.
+ *
+ * Diese Rücknahme ist deshalb ausdrücklich *weniger* als das, was bisher als
+ * Ausweg diente: Sie tut genau einer Zeile das an, was das Schließen der
+ * Planung allen antut.
+ *
+ * Zwei Zustände, zwei Wege -- beide kennt die Datenbank bereits:
+ *
+ *   ZUGEWIESEN  -> ZURUECKGEZOGEN  Die Person hat nie zugestimmt. Es
+ *                                  verschwindet eine Absicht, keine Erklärung.
+ *   ANGENOMMEN  -> ABGELOEST       Die Person hat zugestimmt, die Schicht lief
+ *                                  aber nie. Genau diesen Übergang nimmt auch
+ *                                  estab_dv_close_shift(), nur für alle Zeilen
+ *                                  auf einmal.
+ *
+ * Nur für GEPLANT. Eine laufende Schicht wechselt ihre Träger über die
+ * Einzelablösung, die eine übernehmende Person benennt und im ETB nachweist;
+ * eine übergebene ist Geschichte. Und wie die Zuweisung selbst schreibt auch
+ * die Rücknahme kein Buch: Vor der Aktivierung gibt es weder ETB noch TBB,
+ * und was nie operativ wirkte, hinterlässt dort nichts. Nachgewiesen wird sie
+ * im Einsatzprotokoll.
+ *
+ * Rückgängig ist sie ohne Rest: Die Eindeutigkeitsschlüssel greifen nur auf
+ * ZUGEWIESEN und ANGENOMMEN, dieselbe Person darf dieselbe Funktion danach
+ * wieder bekommen.
+ *
+ * @return array{funktion:string,rolle:string,benutzer_kuerzel:string,
+ *   benutzer:string,vorher:string,nachher:string}
+ */
+function estab_dv_withdraw_hat(
+    mysqli $connection,
+    int $incidentId,
+    int $assignmentId,
+    string $actor,
+    string $protocolTable = 'nv_protokoll'
+): array {
+    $incidentId = estab_incident_positive_id($incidentId);
+    $assignmentId = estab_dv_positive_id($assignmentId, 'Dienstbesetzung');
+    $actor = estab_dv_actor($actor);
+
+    return estab_incident_with_active_write(
+        $connection,
+        static function (array $incident) use (
+            $connection,
+            $incidentId,
+            $assignmentId,
+            $actor,
+            $protocolTable
+        ): array {
+            estab_dv_require_strict_incident_snapshot($incident, $incidentId);
+            $select = $connection->prepare(
+                'SELECT b.`dienstschicht_id`, b.`benutzer_kuerzel`,'
+                . ' b.`funktion`, b.`rolle`, b.`status`,'
+                . ' s.`status` AS `schicht_status`,'
+                . ' s.`aktiviert_am` AS `schicht_aktiviert_am`,'
+                . ' s.`nummer` AS `schicht_nummer`,'
+                . ' u.`benutzer` AS `benutzer_name`'
+                . ' FROM `nv_dienstbesetzungen` AS b'
+                . ' JOIN `nv_dienstschichten` AS s'
+                . ' ON s.`dienstschicht_id` = b.`dienstschicht_id`'
+                . ' JOIN `nv_benutzer` AS u'
+                . ' ON BINARY u.`kuerzel` = BINARY b.`benutzer_kuerzel`'
+                . ' WHERE b.`dienstbesetzung_id` = ?'
+                . ' AND s.`einsatz_id` = ? FOR UPDATE'
+            );
+            if (!$select) {
+                throw new RuntimeException(
+                    'Besetzung konnte nicht gelesen werden.'
+                );
+            }
+            try {
+                $select->bind_param('ii', $assignmentId, $incidentId);
+                $select->execute();
+                $row = $select->get_result()->fetch_assoc();
+            } finally {
+                $select->close();
+            }
+            if (!is_array($row)) {
+                throw new EstabDvInputException(
+                    'Die Besetzung gehört nicht zum aktiven Einsatz.'
+                );
+            }
+
+            $shiftStatus = (string) $row['schicht_status'];
+            if (
+                $shiftStatus !== 'GEPLANT'
+                || $row['schicht_aktiviert_am'] !== null
+            ) {
+                throw new EstabDvConflictException(
+                    'Nur die Besetzung einer geplanten Schicht lässt sich '
+                    . 'zurücknehmen. Die Schicht #'
+                    . (int) $row['schicht_nummer'] . ' ist bereits '
+                    . 'aktiviert worden; dort wechselt eine Funktion über '
+                    . 'die Einzelablösung mit übernehmender Person.'
+                );
+            }
+
+            $before = (string) $row['status'];
+            $after = match ($before) {
+                'ZUGEWIESEN' => 'ZURUECKGEZOGEN',
+                'ANGENOMMEN' => 'ABGELOEST',
+                default => null,
+            };
+            if ($after === null) {
+                throw new EstabDvConflictException(
+                    'Diese Besetzung ist bereits beendet.'
+                );
+            }
+
+            $update = $connection->prepare(
+                'UPDATE `nv_dienstbesetzungen`'
+                . ' SET `status` = ?, `abgeloest_am` = NOW(6)'
+                . ' WHERE `dienstbesetzung_id` = ? AND `status` = ?'
+            );
+            if (!$update) {
+                throw new RuntimeException(
+                    'Rücknahme konnte nicht vorbereitet werden.'
+                );
+            }
+            try {
+                $update->bind_param('sis', $after, $assignmentId, $before);
+                if (!$update->execute() || $update->affected_rows !== 1) {
+                    throw new EstabDvConflictException(
+                        'Die Besetzung wurde zwischenzeitlich geändert.'
+                    );
+                }
+            } finally {
+                $update->close();
+            }
+
+            estab_dv_audit(
+                $connection,
+                $protocolTable,
+                $incidentId,
+                'DV Besetzung',
+                [
+                    'action' => 'hat_withdrawn',
+                    'assignment_id' => $assignmentId,
+                    'shift_id' => (int) $row['dienstschicht_id'],
+                    'target' => (string) $row['benutzer_kuerzel'],
+                    'function' => (string) $row['funktion'],
+                    'role' => (string) $row['rolle'],
+                    'actor' => $actor,
+                    'shift_status' => $shiftStatus,
+                    'from_status' => $before,
+                    'to_status' => $after,
+                ]
+            );
+
+            return [
+                'funktion' => (string) $row['funktion'],
+                'rolle' => (string) $row['rolle'],
+                'benutzer_kuerzel' => (string) $row['benutzer_kuerzel'],
+                'benutzer' => (string) $row['benutzer_name'],
+                'vorher' => $before,
+                'nachher' => $after,
+            ];
+        }
+    );
+}
+
+/**
  * Replace one accepted duty function while its shift keeps running.
  *
  * DV 1-101 expects a command post to stay able to work when a single person

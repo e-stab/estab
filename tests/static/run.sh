@@ -169,6 +169,7 @@ for test_name in \
     dv_composition_time \
     dv_shift_relief \
     dv_shift_start_flow \
+    ux_kein_einbahnweg \
     command_post_staffing \
     small_command_post_transport \
     dv_command_post_growth \

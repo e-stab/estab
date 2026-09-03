@@ -1055,6 +1055,23 @@ if ($requestMethod === 'POST') {
                     : 'hat_assigned'
             );
         }
+        if ($action === 'withdraw_duty_function') {
+            $withdrawn = estab_dv_withdraw_hat(
+                $connection,
+                $incidentId,
+                estab_dv_positive_id(
+                    $_POST['dienstbesetzung_id'] ?? null,
+                    'Dienstbesetzung'
+                ),
+                $actor,
+                $conf_4f_tbl['protokoll']
+            );
+            dv_admin_redirect(
+                $withdrawn['vorher'] === 'ANGENOMMEN'
+                    ? 'hat_withdrawn_accepted'
+                    : 'hat_withdrawn'
+            );
+        }
         if ($action === 'relieve_duty_function') {
             estab_dv_relieve_hat(
                 $connection,
@@ -1238,6 +1255,13 @@ try {
 $flashMessages = [
     'shift_created' => 'Die geplante Dienstschicht wurde angelegt.',
     'hat_assigned' => 'Die Funktionsbesetzung wurde verbindlich zugewiesen.',
+    'hat_withdrawn' =>
+        'Die Zuweisung wurde zurückgenommen. Die Funktion ist in dieser '
+        . 'geplanten Schicht wieder frei und kann neu vergeben werden.',
+    'hat_withdrawn_accepted' =>
+        'Die bereits angenommene Zuweisung wurde zurückgenommen. Die Funktion '
+        . 'ist in dieser geplanten Schicht wieder frei; sagen Sie der '
+        . 'betroffenen Person Bescheid, dass ihre Annahme nicht mehr gilt.',
     'hat_relieved' =>
         'Die Funktion wurde einzeln abgelöst. Abgebende und übernehmende '
         . 'Person stehen im ETB; wirksam wird die Nachbesetzung mit der '
@@ -1634,32 +1658,6 @@ function fuehrungsstelle_kontoauswahl(array $users): string
             annehmen.</p>
         </header>
         <?php
-        $besetzungMarkup = [];
-        foreach ($shift['besetzungen'] as $hat) {
-            ob_start();
-            ?>
-              <td><?= estab_admin_html(
-                  estab_function_identity_display_name(
-                      (string) $hat['funktion'],
-                      (string) $hat['rolle']
-                  )
-              ) ?></td>
-              <td><?= estab_admin_html(
-                  $hat['benutzer'] . ' (' . $hat['benutzer_kuerzel'] . ')'
-              ) ?></td>
-              <td><?= estab_admin_html($hat['status']) ?></td>
-            <?php
-            $besetzungMarkup[] = (string) ob_get_clean();
-        }
-        echo fuehrungsstelle_tafel(
-            'geplante-schicht-' . (int) $shift['dienstschicht_id'],
-            'Geplante Besetzung der Schicht #' . (int) $shift['nummer'],
-            ['Funktion', 'Person', 'Status'],
-            $besetzungMarkup,
-            'Für diese Schicht ist noch niemand eingeplant.'
-        );
-        ?>
-        <?php
         /*
          * Zuweisung und Annahme sind zwei verschiedene Rückstände, und sie
          * haben verschiedene Adressaten. Was noch niemandem zugewiesen ist,
@@ -1671,14 +1669,34 @@ function fuehrungsstelle_kontoauswahl(array $users): string
         $shiftAssigned = [];
         $shiftAccepted = [];
         $shiftWaiting = [];
+        $shiftOffen = [];
+        $shiftBeendet = 0;
         foreach ($shift['besetzungen'] as $hat) {
+            /*
+             * Nur eine laufende Besetzung besetzt etwas.
+             *
+             * Die Zählung stand vor der Statusprüfung und zählte damit jede
+             * Zeile mit, auch eine zurückgenommene. Solange es keine
+             * Rücknahme gab, fiel das nicht auf: Beendete Zeilen entstanden
+             * erst beim Schließen der Schicht, und dann verschwindet dieser
+             * Kasten ohnehin. Mit der Rücknahme wäre daraus ein Fehler
+             * geworden -- die zurückgenommene Funktion hätte weiter als
+             * besetzt gegolten, und niemand hätte gesehen, dass sie neu
+             * vergeben werden muss.
+             */
             if ((int) ($hat['benutzer_gesperrt'] ?? 1) === 1) {
                 continue;
             }
+            $status = (string) ($hat['status'] ?? '');
+            if ($status !== 'ZUGEWIESEN' && $status !== 'ANGENOMMEN') {
+                $shiftBeendet++;
+                continue;
+            }
             $shiftAssigned[] = (string) $hat['funktion'];
-            if (($hat['status'] ?? '') === 'ANGENOMMEN') {
+            $shiftOffen[] = $hat;
+            if ($status === 'ANGENOMMEN') {
                 $shiftAccepted[] = (string) $hat['funktion'];
-            } elseif (($hat['status'] ?? '') === 'ZUGEWIESEN') {
+            } else {
                 $shiftWaiting[] = $hat;
             }
         }
@@ -1694,7 +1712,71 @@ function fuehrungsstelle_kontoauswahl(array $users): string
         $istInbetriebnahme = $activeShift === null
             && !$hasActivationHistory
             && ($shift['vorgaenger_id'] ?? null) === null;
+
+        $besetzungMarkup = [];
+        foreach ($shiftOffen as $hat) {
+            ob_start();
+            ?>
+              <td><?= estab_admin_html(
+                  estab_function_identity_display_name(
+                      (string) $hat['funktion'],
+                      (string) $hat['rolle']
+                  )
+              ) ?></td>
+              <td><?= estab_admin_html(
+                  $hat['benutzer'] . ' (' . $hat['benutzer_kuerzel'] . ')'
+              ) ?></td>
+              <td><?= estab_admin_html($hat['status']) ?></td>
+              <td>
+                <?php
+                /*
+                 * Die Rücknahme steht in der Zeile, die sie betrifft.
+                 *
+                 * Wer sich vertan hat, sucht die falsche Person -- nicht ein
+                 * Formular unter der Tafel, in dem er sie noch einmal
+                 * auswählen müsste. Ein zweites Auswählen ist ein zweiter
+                 * Griff daneben.
+                 */
+                ?>
+                <form method="post" action="fuehrungsstelle.php">
+                  <?= estab_csrf_field() ?>
+                  <input type="hidden" name="admin_action"
+                    value="withdraw_duty_function">
+                  <input type="hidden" name="dienstbesetzung_id"
+                    value="<?= (int) $hat['dienstbesetzung_id'] ?>">
+                  <button class="estab-button estab-button-danger-outline"
+                    type="submit">Zuweisung zurücknehmen<span
+                      class="estab-visually-hidden">:
+                      <?= estab_admin_html(
+                          estab_function_identity_display_name(
+                              (string) $hat['funktion'],
+                              (string) $hat['rolle']
+                          ) . ' — ' . $hat['benutzer']
+                          . ' (' . $hat['benutzer_kuerzel'] . ')'
+                      ) ?></span></button>
+                </form>
+              </td>
+            <?php
+            $besetzungMarkup[] = (string) ob_get_clean();
+        }
+        echo fuehrungsstelle_tafel(
+            'geplante-schicht-' . (int) $shift['dienstschicht_id'],
+            'Geplante Besetzung der Schicht #' . (int) $shift['nummer'],
+            ['Funktion', 'Person', 'Status', 'Rücknahme'],
+            $besetzungMarkup,
+            'Für diese Schicht ist noch niemand eingeplant.'
+        );
         ?>
+        <?php if ($shiftBeendet > 0): ?>
+          <p class="estab-tool-feedback">
+            <?= (int) $shiftBeendet === 1
+                ? 'Eine zurückgenommene Zuweisung steht'
+                : (int) $shiftBeendet
+                    . ' zurückgenommene Zuweisungen stehen' ?>
+            im Einsatzprotokoll. Die Funktion ist wieder frei und kann neu
+            vergeben werden — auch an dieselbe Person.
+          </p>
+        <?php endif; ?>
         <?php if (!$hasAssignableAccount): ?>
           <section class="estab-tool-status estab-tool-status-danger"
             role="alert">
