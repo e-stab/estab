@@ -962,6 +962,7 @@ require_once __DIR__ . '/../4fcfg/config.inc.php';
 require_once __DIR__ . '/../app/admin_operations.php';
 require_once __DIR__ . '/../app/csrf.php';
 require_once __DIR__ . '/../app/dv_operations.php';
+require_once __DIR__ . '/../app/dv_shift_start.php';
 require_once __DIR__ . '/../app/session_ui.php';
 
 estab_admin_require_http_auth($_SERVER);
@@ -1278,6 +1279,128 @@ foreach ($handoverRequests as $handoverRequest) {
     }
 }
 
+/*
+ * Die Ablaufführung der Inbetriebnahme.
+ *
+ * Sie wird immer berechnet, auch wenn schon eine Schicht läuft: Dann steht
+ * dieselbe Liste als Nachweis da, dass nichts übersprungen wurde, und der
+ * letzte Schritt erinnert weiter an die Arbeitsfunktion, die nur die Person
+ * selbst wählen kann.
+ */
+$startState = estab_dv_shift_start_state($users, $shifts);
+$startSteps = estab_dv_shift_start_steps($startState);
+$startCurrent = estab_dv_shift_start_current($startSteps);
+/*
+ * Ein Auswahlfeld ohne Auswahl ist keine Bedienung.
+ *
+ * Ohne ungesperrtes Konto rendert die Zuweisung ein leeres Pflichtfeld und
+ * einen Knopf, der nur scheitern kann. Statt dessen steht dann der Grund da
+ * und der Weg dorthin.
+ */
+$hasAssignableAccount = $startState['konten_frei'] > 0;
+
+/**
+ * Die Funktionsauswahl in Pflicht- und weitere Funktionen teilen.
+ *
+ * Vierzehn Einträge in alphabetischer Ordnung verraten nicht, dass genau
+ * fünf davon über die Aktivierung entscheiden. Die Gruppen sagen es, ohne
+ * eine Funktion zu verstecken: Eine Führungsstelle darf jede Funktion
+ * besetzen, sie muss nur fünf davon besetzen.
+ *
+ * @param array<string,string> $roles
+ * @return array{pflicht:array<string,string>,weitere:array<string,string>}
+ */
+function fuehrungsstelle_funktionsgruppen(array $roles): array
+{
+    $pflicht = [];
+    $weitere = [];
+    foreach ($roles as $function => $role) {
+        if (in_array((string) $function, ESTAB_DV_REQUIRED_HATS, true)) {
+            $pflicht[$function] = $role;
+        } else {
+            $weitere[$function] = $role;
+        }
+    }
+    return ['pflicht' => $pflicht, 'weitere' => $weitere];
+}
+
+/**
+ * Die Auswahlliste einer Funktionszuweisung ausgeben.
+ *
+ * `$vorwahl` ist die nächste fehlende Pflichtfunktion. Sie vorzuwählen nimmt
+ * niemandem eine Entscheidung ab -- die Liste bleibt vollständig --, aber sie
+ * erspart im Regelfall das Suchen und macht die Reihenfolge sichtbar.
+ *
+ * @param array<string,string> $roles
+ */
+function fuehrungsstelle_funktionsauswahl(
+    array $roles,
+    ?string $vorwahl = null
+): string {
+    $gruppen = fuehrungsstelle_funktionsgruppen($roles);
+    $markup = '';
+    $optionen = static function (array $auswahl) use ($vorwahl): string {
+        $inhalt = '';
+        foreach ($auswahl as $function => $role) {
+            $inhalt .= '<option value="'
+                . estab_admin_html($function) . '"'
+                . ((string) $function === (string) $vorwahl
+                    ? ' selected' : '') . '>'
+                . estab_admin_html(
+                    estab_function_identity_display_name(
+                        (string) $function,
+                        (string) $role
+                    )
+                )
+                . '</option>';
+        }
+        return $inhalt;
+    };
+    if ($gruppen['pflicht'] !== []) {
+        $markup .= '<optgroup label="Pflichtfunktionen der Schicht">'
+            . $optionen($gruppen['pflicht']) . '</optgroup>';
+    }
+    if ($gruppen['weitere'] !== []) {
+        $markup .= '<optgroup label="Weitere Funktionen">'
+            . $optionen($gruppen['weitere']) . '</optgroup>';
+    }
+    return $markup;
+}
+
+/**
+ * Die Kontoauswahl einer Zuweisung ausgeben.
+ *
+ * Beide Zuweisungsformulare -- die geplante Schicht und die Ergänzung der
+ * laufenden -- brauchen dieselbe Liste. Sie stand zweimal im Quelltext, und
+ * genau eine der beiden Stellen hätte man beim nächsten Umbau vergessen.
+ *
+ * @param list<array<string,mixed>> $users
+ */
+function fuehrungsstelle_kontoauswahl(array $users): string
+{
+    $markup = '';
+    foreach ($users as $user) {
+        $blocked = (int) ($user['estab_gesperrt'] ?? 0) === 1;
+        $presence = estab_auth_presence_state($user);
+        $zustand = $blocked
+            ? 'gesperrt'
+            : match ($presence) {
+                'online' => 'aktiv',
+                'inactive' => 'inaktiv (15+ Min.)',
+                default => 'nicht angemeldet',
+            };
+        $markup .= '<option value="'
+            . estab_admin_html($user['kuerzel']) . '"'
+            . ($blocked ? ' disabled' : '') . '>'
+            . estab_admin_html(
+                $user['benutzer'] . ' (' . $user['kuerzel'] . ') · '
+                . $zustand
+            )
+            . '</option>';
+    }
+    return $markup;
+}
+
 ?><!doctype html>
 <html lang="de">
 <head>
@@ -1367,6 +1490,41 @@ foreach ($handoverRequests as $handoverRequest) {
       </div>
     </section>
 
+    <section class="estab-tool-panel" aria-label="Ablauf der Inbetriebnahme">
+      <header class="estab-tool-panel-heading">
+        <h2>Ablauf: erste Dienstschicht in Betrieb nehmen</h2>
+        <p>Im strengen Berechtigungsmodus entstehen operative Rechte
+          ausschließlich aus einer persönlich angenommenen Funktion. Diese
+          sechs Schritte führen dorthin; zwei davon kann die Administration
+          nicht selbst ausführen.</p>
+      </header>
+      <?php if ($startCurrent !== null): ?>
+        <?php
+        /*
+         * Der Kasten zitiert denselben Schritt, den die Liste hervorhebt.
+         *
+         * Er trug vorher bei laufender Schicht einen festen Satz -- „offen
+         * bleibt nur die Arbeitsfunktion". Nach einer Einzelablösung sprang
+         * die Liste darunter auf Schritt 4 zurück, und beide Aussagen standen
+         * nebeneinander. Wer eine Zusammenfassung schreibt, die ihre eigene
+         * Liste nicht liest, schreibt irgendwann etwas anderes als sie.
+         */
+        ?>
+        <p class="estab-tool-feedback <?= $activeShift !== null
+            ? 'estab-tool-feedback-success'
+            : 'estab-tool-feedback-warning' ?>" role="status">
+          <?php if ($activeShift !== null): ?>
+            <strong>Der formale Dienstbetrieb läuft.</strong>
+          <?php endif; ?>
+          <strong>Als Nächstes: Schritt
+            <?= (int) $startCurrent['nummer'] ?> ·
+            <?= estab_admin_html($startCurrent['titel']) ?></strong>
+          <?= estab_admin_html($startCurrent['wer']) ?>.
+        </p>
+      <?php endif; ?>
+      <?= estab_dv_shift_start_markup($startSteps) ?>
+    </section>
+
     <?php foreach ($handoverRequests as $handoverRequest): ?>
       <?php if (($handoverRequest['status'] ?? null) !== 'INITIIERT') {
           continue;
@@ -1403,12 +1561,24 @@ foreach ($handoverRequests as $handoverRequest) {
 
     <section class="estab-tool-panel">
       <header class="estab-tool-panel-heading">
-        <h2>Schicht vorbereiten</h2>
-        <p>Die Pflichtfunktionen S2, Si, S6, LdF und Fernmelder müssen
-          mindestens
-          einmal zugewiesen und persönlich angenommen sein, bevor eine
-          Schicht aktiv werden kann. Mehrere Fernmelder-Besetzungen sind
-          ausdrücklich möglich.</p>
+        <h2><?= $activeShift === null
+            ? 'Schritt 2: Dienstschicht planen'
+            : 'Nachfolgeschicht planen' ?></h2>
+        <?php if ($activeShift === null): ?>
+          <p>Die Pflichtfunktionen
+            <?= estab_admin_html(estab_dv_shift_start_function_text(
+                ESTAB_DV_REQUIRED_HATS
+            )) ?>
+            müssen mindestens einmal zugewiesen und persönlich angenommen
+            sein, bevor eine Schicht aktiv werden kann. Mehrere
+            Fernmelder-Besetzungen sind ausdrücklich möglich, und eine Person
+            darf mehrere Funktionen tragen.</p>
+        <?php else: ?>
+          <p>Der Dienstbetrieb läuft. Eine hier angelegte Schicht wird nicht
+            aktiviert, sondern über eine persönlich bestätigte Übergabe von
+            der laufenden Schicht übernommen. Wählen Sie dafür die laufende
+            Schicht als Vorgängerschicht.</p>
+        <?php endif; ?>
       </header>
       <form class="estab-tool-form" method="post" action="fuehrungsstelle.php">
         <?= estab_csrf_field() ?>
@@ -1419,11 +1589,28 @@ foreach ($handoverRequests as $handoverRequest) {
             placeholder="z. B. Tagschicht 30.07." required>
         </label>
         <label>Vorgängerschicht
-          <select name="vorgaenger_id">
-            <option value="">Erste Schicht / keine</option>
+          <?php
+          /*
+           * Läuft bereits eine Schicht, ist „keine Vorgängerschicht" eine
+           * Sackgasse: Als erste Schicht kann sie nicht mehr aktiviert
+           * werden, und ohne Vorgänger gibt es keine Übergabe, die sie
+           * übernimmt. Sie stünde geplant da und wäre zu nichts zu
+           * gebrauchen. Deshalb wird die laufende Schicht vorgewählt und
+           * die leere Wahl gar nicht erst angeboten.
+           */
+          ?>
+          <select name="vorgaenger_id"
+            <?= $activeShift === null ? '' : 'required' ?>>
+            <?php if ($activeShift === null): ?>
+              <option value="">Erste Schicht / keine</option>
+            <?php endif; ?>
             <?php foreach ($shifts as $shift): ?>
               <?php if (in_array($shift['status'], ['AKTIV', 'GEPLANT'], true)): ?>
-                <option value="<?= (int) $shift['dienstschicht_id'] ?>">
+                <option value="<?= (int) $shift['dienstschicht_id'] ?>"
+                  <?= $activeShift !== null
+                      && (int) $shift['dienstschicht_id']
+                          === (int) $activeShift['dienstschicht_id']
+                      ? 'selected' : '' ?>>
                   #<?= (int) $shift['nummer'] ?> ·
                   <?= estab_admin_html($shift['bezeichnung']) ?> ·
                   <?= estab_admin_html($shift['status']) ?>
@@ -1472,79 +1659,144 @@ foreach ($handoverRequests as $handoverRequest) {
             'Für diese Schicht ist noch niemand eingeplant.'
         );
         ?>
-        <form class="estab-tool-form" method="post"
-          action="fuehrungsstelle.php">
-          <?= estab_csrf_field() ?>
-          <input type="hidden" name="admin_action"
-            value="assign_duty_function">
-          <input type="hidden" name="dienstschicht_id"
-            value="<?= (int) $shift['dienstschicht_id'] ?>">
-          <p>Ein ungesperrtes Konto kann bereits für die kommende Schicht
-            eingeplant werden. Die Person muss sich erst zur persönlichen
-            Annahme anmelden. Die danach gespeicherte Annahme zählt auch nach
-            der Abmeldung; ein gesperrtes Konto zählt dagegen nie.</p>
-          <label>Benutzerkonto
-            <select name="benutzer_kuerzel" required>
-              <?php foreach ($users as $user): ?>
-                <?php
-                $userBlocked =
-                    (int) ($user['estab_gesperrt'] ?? 0) === 1;
-                $userPresence = estab_auth_presence_state($user);
-                ?>
-                <option value="<?= estab_admin_html($user['kuerzel']) ?>"
-                  <?= $userBlocked ? 'disabled' : '' ?>>
-                  <?= estab_admin_html(
-                      $user['benutzer'] . ' (' . $user['kuerzel'] . ') · '
-                      . (
-                          $userBlocked
-                              ? 'gesperrt'
-                              : (
-                                  $userPresence === 'online'
-                                      ? 'aktiv'
-                                      : (
-                                          $userPresence === 'inactive'
-                                              ? 'inaktiv (15+ Min.)'
-                                              : 'nicht angemeldet'
-                                      )
-                              )
-                      )
-                  ) ?>
-                </option>
+        <?php
+        /*
+         * Zuweisung und Annahme sind zwei verschiedene Rückstände, und sie
+         * haben verschiedene Adressaten. Was noch niemandem zugewiesen ist,
+         * macht die Administration; was zugewiesen und noch nicht angenommen
+         * ist, kann nur die benannte Person selbst. Die Seite hat das früher
+         * in einen Satz zusammengezogen -- und genau daran ist die
+         * Inbetriebnahme gescheitert.
+         */
+        $shiftAssigned = [];
+        $shiftAccepted = [];
+        $shiftWaiting = [];
+        foreach ($shift['besetzungen'] as $hat) {
+            if ((int) ($hat['benutzer_gesperrt'] ?? 1) === 1) {
+                continue;
+            }
+            $shiftAssigned[] = (string) $hat['funktion'];
+            if (($hat['status'] ?? '') === 'ANGENOMMEN') {
+                $shiftAccepted[] = (string) $hat['funktion'];
+            } elseif (($hat['status'] ?? '') === 'ZUGEWIESEN') {
+                $shiftWaiting[] = $hat;
+            }
+        }
+        $missingAssignment = estab_dv_shift_start_missing($shiftAssigned);
+        $missing = estab_dv_shift_start_missing($shiftAccepted);
+        /*
+         * Nur eine Schicht wird je aktiviert: die erste, ohne Vorgänger.
+         * estab_dv_activate_initial_shift() verlangt genau das. Jede andere
+         * geplante Schicht wird übernommen, nicht aktiviert -- sie darf
+         * deshalb weder die Schrittnummern der Inbetriebnahme tragen noch
+         * eine Aktivierung versprechen, die es für sie nicht gibt.
+         */
+        $istInbetriebnahme = $activeShift === null
+            && !$hasActivationHistory
+            && ($shift['vorgaenger_id'] ?? null) === null;
+        ?>
+        <?php if (!$hasAssignableAccount): ?>
+          <section class="estab-tool-status estab-tool-status-danger"
+            role="alert">
+            <strong>Noch kein Benutzerkonto vorhanden.</strong>
+            <span>Eine Dienstfunktion wird an ein ungesperrtes Benutzerkonto
+              vergeben, nicht an einen Namen. Legen Sie zuerst die Konten der
+              Funktionsträger an; danach steht die Zuweisung hier zur
+              Verfügung.</span>
+            <a class="estab-button estab-button-primary" href="users.php">
+              Benutzer verwalten
+            </a>
+          </section>
+        <?php else: ?>
+          <form class="estab-tool-form" method="post"
+            action="fuehrungsstelle.php">
+            <?= estab_csrf_field() ?>
+            <input type="hidden" name="admin_action"
+              value="assign_duty_function">
+            <input type="hidden" name="dienstschicht_id"
+              value="<?= (int) $shift['dienstschicht_id'] ?>">
+            <h3><?= $istInbetriebnahme
+                ? 'Schritt 3: Funktion zuweisen'
+                : 'Funktion zuweisen' ?></h3>
+            <p>Ein ungesperrtes Konto kann bereits für die kommende Schicht
+              eingeplant werden. Die Person muss sich erst zur persönlichen
+              Annahme anmelden. Die danach gespeicherte Annahme zählt auch nach
+              der Abmeldung; ein gesperrtes Konto zählt dagegen nie.</p>
+            <?php if ($missingAssignment !== []): ?>
+              <p class="estab-tool-feedback estab-tool-feedback-warning">
+                Noch nicht zugewiesen:
+                <strong><?= estab_admin_html(
+                    estab_dv_shift_start_function_text($missingAssignment)
+                ) ?></strong>. Die nächste fehlende Pflichtfunktion ist
+                vorgewählt.
+              </p>
+            <?php endif; ?>
+            <label>Benutzerkonto
+              <select name="benutzer_kuerzel" required>
+                <?= fuehrungsstelle_kontoauswahl($users) ?>
+              </select>
+            </label>
+            <label>Dienstfunktion
+              <select name="funktion" required>
+                <?= fuehrungsstelle_funktionsauswahl(
+                    $functionRoles,
+                    $missingAssignment[0] ?? null
+                ) ?>
+              </select>
+            </label>
+            <button class="estab-button" type="submit">Funktion zuweisen</button>
+          </form>
+        <?php endif; ?>
+        <?php if ($shiftWaiting !== []): ?>
+          <section class="estab-tool-status"
+            aria-label="Wartende Annahmen">
+            <strong><?= $istInbetriebnahme ? 'Schritt 4: ' : '' ?>Diese
+              Zuweisungen warten auf die persönliche Annahme.</strong>
+            <span>Die Administration kann die Annahme nicht ersatzweise
+              erklären. Jede benannte Person meldet sich mit ihrem eigenen
+              Konto an und nimmt ihre Funktion im
+              <?= estab_admin_html(
+                  ESTAB_DV_SHIFT_START_PERSONAL_LABEL
+              ) ?> verbindlich an.</span>
+            <ul class="estab-ablauf-namen">
+              <?php foreach ($shiftWaiting as $hat): ?>
+                <li><?= estab_admin_html(
+                    estab_function_identity_display_name(
+                        (string) $hat['funktion'],
+                        (string) $hat['rolle']
+                    )
+                    . ' — ' . $hat['benutzer']
+                    . ' (' . $hat['benutzer_kuerzel'] . ')'
+                ) ?></li>
               <?php endforeach; ?>
-            </select>
-          </label>
-          <label>Zusätzliche Dienstfunktion
-            <select name="funktion" required>
-              <?php foreach ($functionRoles as $function => $role): ?>
-                <option value="<?= estab_admin_html($function) ?>">
-                  <?= estab_admin_html(
-                      estab_function_identity_display_name($function, $role)
-                  ) ?>
-                </option>
-              <?php endforeach; ?>
-            </select>
-          </label>
-          <button class="estab-button" type="submit">Funktion zuweisen</button>
-        </form>
-        <?php $missing = array_values(array_diff(
-            ESTAB_DV_REQUIRED_HATS,
-            array_map(
-                static fn (array $hat): string =>
-                    $hat['status'] === 'ANGENOMMEN'
-                        && (int) ($hat['benutzer_gesperrt'] ?? 1) === 0
-                    ? $hat['funktion']
-                    : '',
-                $shift['besetzungen']
-            )
-        )); ?>
+            </ul>
+            <?php
+            /*
+             * Hier stand ein Knopf „Annahmeseite ansehen".
+             *
+             * Er führte die einzige Person, die ihn sehen kann, gegen eine
+             * Anmeldewand: Diese Seite schützt der HTTP-Basiszugang, und der
+             * ist kein eStab-Funktionskonto. Die Annahmeseite verlangt aber
+             * genau ein solches. Ein Bedienelement, das in der gegenwärtigen
+             * Lage nur scheitern kann, wird nicht angeboten -- der Ort steht
+             * oben im Satz, und weitergeben muss ihn ohnehin ein Mensch.
+             */
+            ?>
+          </section>
+        <?php endif; ?>
         <?php if ($missing === []): ?>
           <?php if ($activeShift === null && !$hasActivationHistory): ?>
-            <form method="post" action="fuehrungsstelle.php">
+            <form class="estab-tool-form" method="post"
+              action="fuehrungsstelle.php">
               <?= estab_csrf_field() ?>
               <input type="hidden" name="admin_action"
                 value="activate_duty_shift">
               <input type="hidden" name="dienstschicht_id"
                 value="<?= (int) $shift['dienstschicht_id'] ?>">
+              <h3>Schritt 5: Schicht aktivieren</h3>
+              <p>Alle Pflichtfunktionen sind zugewiesen und persönlich
+                angenommen. Die Aktivierung eröffnet ETB und TBB und gibt den
+                formalen Dienstbetrieb frei.</p>
               <button class="estab-button estab-button-primary" type="submit">
                 Als erste Schicht aktivieren
               </button>
@@ -1590,24 +1842,56 @@ foreach ($handoverRequests as $handoverRequest) {
             </form>
           <?php endif; ?>
         <?php else: ?>
-          <p class="estab-tool-feedback">
-            Noch nicht angenommen:
-            <strong><?= estab_admin_html(implode(', ', array_map(
-                'estab_function_display_name',
-                $missing
-            ))) ?></strong>
+          <p class="estab-tool-feedback estab-tool-feedback-warning">
+            <?php
+            /*
+             * Aktivierbar wird nur die erste Schicht. Eine Nachfolgeschicht
+             * verspricht das nicht: Sie wird über eine persönlich bestätigte
+             * Übergabe übernommen, und dieselbe Bedingung -- alle
+             * Pflichtfunktionen angenommen -- gilt dort für die Übergabe.
+             */
+            ?>
+            <?php if ($istInbetriebnahme): ?>
+              <strong>Schritt 5 ist noch gesperrt.</strong>
+              Die Schicht wird aktivierbar, sobald diese Pflichtfunktionen
+              persönlich angenommen sind:
+            <?php else: ?>
+              <strong>Die Übergabe ist noch gesperrt.</strong>
+              Diese Schicht wird nicht aktiviert, sondern von der laufenden
+              übernommen. Angefordert werden kann die Übergabe, sobald diese
+              Pflichtfunktionen persönlich angenommen sind:
+            <?php endif; ?>
+            <strong><?= estab_admin_html(
+                estab_dv_shift_start_function_text($missing)
+            ) ?></strong>.
+            <?= estab_admin_html($missingAssignment === []
+                ? 'Alle sind zugewiesen; es fehlt nur noch die Annahme durch '
+                    . 'die oben benannten Personen.'
+                : 'Davon ist noch keinem Konto zugewiesen: '
+                    . estab_dv_shift_start_function_text($missingAssignment)
+                    . '.') ?>
           </p>
         <?php endif; ?>
-        <form method="post" action="fuehrungsstelle.php">
-          <?= estab_csrf_field() ?>
-          <input type="hidden" name="admin_action"
-            value="close_duty_shift">
-          <input type="hidden" name="dienstschicht_id"
-            value="<?= (int) $shift['dienstschicht_id'] ?>">
-          <button class="estab-button estab-button-danger-outline" type="submit">
-            Planung schließen
-          </button>
-        </form>
+        <details class="estab-tool-details">
+          <summary>Diese Planung verwerfen</summary>
+          <p>Das Schließen beendet die geplante Schicht, ohne sie je zu
+            aktivieren. Es ist <em>nicht</em> der Weg zur Inbetriebnahme —
+            wer auf eine Annahme wartet, schließt hier nichts, sondern
+            wartet. Die Schicht bleibt danach als geschlossene Planung
+            nachvollziehbar; eine neue Schicht muss neu besetzt und neu
+            angenommen werden.</p>
+          <form method="post" action="fuehrungsstelle.php">
+            <?= estab_csrf_field() ?>
+            <input type="hidden" name="admin_action"
+              value="close_duty_shift">
+            <input type="hidden" name="dienstschicht_id"
+              value="<?= (int) $shift['dienstschicht_id'] ?>">
+            <button class="estab-button estab-button-danger-outline"
+              type="submit">
+              Planung schließen
+            </button>
+          </form>
+        </details>
       </section>
     <?php endforeach; ?>
 
@@ -1671,12 +1955,30 @@ foreach ($handoverRequests as $handoverRequest) {
                 ) ?></td>
                 <td><?= estab_admin_html($hat['status']) ?></td>
                 <td>
+                  <?php
+                  /*
+                   * Ablösen heißt: jemand anderes übernimmt. Gibt es
+                   * niemanden, ist das Formular kein Angebot, sondern eine
+                   * Falle -- ein Pflichtfeld ohne Auswahl.
+                   */
+                  $nachfolger = array_values(array_filter(
+                      $users,
+                      static fn (array $user): bool =>
+                          (int) ($user['estab_gesperrt'] ?? 0) !== 1
+                          && (string) $user['kuerzel']
+                              !== (string) $hat['benutzer_kuerzel']
+                  ));
+                  ?>
                   <?php if (($hat['status'] ?? null) !== 'ANGENOMMEN'): ?>
                     <span>Nur eine angenommene Funktion kann abgelöst
                       werden.</span>
                   <?php elseif ((string) $hat['funktion'] === 'ETB'): ?>
                     <span>Die bestimmte ETB-Führung wechselt ausschließlich
                       über eine bestätigte Schichtübergabe.</span>
+                  <?php elseif ($nachfolger === []): ?>
+                    <span>Es gibt kein weiteres ungesperrtes Konto, das diese
+                      Funktion übernehmen könnte. Legen Sie zuerst ein Konto
+                      an oder entsperren Sie eines.</span>
                   <?php else: ?>
                     <form class="estab-tool-form" method="post"
                       action="fuehrungsstelle.php">
@@ -1687,14 +1989,7 @@ foreach ($handoverRequests as $handoverRequest) {
                         value="<?= (int) $hat['dienstbesetzung_id'] ?>">
                       <label>Übernehmende Person
                         <select name="nachfolger_kuerzel" required>
-                          <?php foreach ($users as $user): ?>
-                            <?php if (
-                                (int) ($user['estab_gesperrt'] ?? 0) === 1
-                                || (string) $user['kuerzel']
-                                    === (string) $hat['benutzer_kuerzel']
-                            ) {
-                                continue;
-                            } ?>
+                          <?php foreach ($nachfolger as $user): ?>
                             <option
                               value="<?= estab_admin_html($user['kuerzel']) ?>">
                               <?= estab_admin_html(
@@ -1727,68 +2022,48 @@ foreach ($handoverRequests as $handoverRequest) {
             'Diese Schicht hat keine Besetzung.'
         );
         ?>
-        <form class="estab-tool-form" method="post"
-          action="fuehrungsstelle.php">
-          <?= estab_csrf_field() ?>
-          <input type="hidden" name="admin_action"
-            value="assign_duty_function">
-          <input type="hidden" name="dienstschicht_id"
-            value="<?= (int) $activeShift['dienstschicht_id'] ?>">
-          <h3>Laufende Schichtbesetzung erweitern</h3>
-          <p>Die Zuweisung allein ändert den Betrieb noch nicht. Erst wenn die
-            betroffene Person sie selbst annimmt, wird sie wirksam und
-            automatisch im ETB dokumentiert. Ergänzungen für LdF und
-            Fernmelder werden
-            zusätzlich im TBB nachgewiesen. Bereits besetzte Funktionen
-            können nicht ausgetauscht werden; dafür ist eine geordnete
-            Schichtübergabe erforderlich. Weitere Fernmelder dürfen ergänzt
-            werden. Eine ETB-Ergänzung, die S2 oder ETB als bestimmten
-            Schreiber verdrängen würde, wird nicht angeboten.</p>
-          <label>Benutzerkonto
-            <select name="benutzer_kuerzel" required>
-              <?php foreach ($users as $user): ?>
-                <?php
-                $userBlocked =
-                    (int) ($user['estab_gesperrt'] ?? 0) === 1;
-                $userPresence = estab_auth_presence_state($user);
-                ?>
-                <option value="<?= estab_admin_html($user['kuerzel']) ?>"
-                  <?= $userBlocked ? 'disabled' : '' ?>>
-                  <?= estab_admin_html(
-                      $user['benutzer'] . ' (' . $user['kuerzel'] . ') · '
-                      . (
-                          $userBlocked
-                              ? 'gesperrt'
-                              : (
-                                  $userPresence === 'online'
-                                      ? 'aktiv'
-                                      : (
-                                          $userPresence === 'inactive'
-                                              ? 'inaktiv (15+ Min.)'
-                                              : 'nicht angemeldet'
-                                      )
-                              )
-                      )
-                  ) ?>
-                </option>
-              <?php endforeach; ?>
-            </select>
-          </label>
-          <label>Neue oder zusätzliche Fernmelder-Funktion
-            <select name="funktion" required>
-              <?php foreach ($activeExtensionRoles as $function => $role): ?>
-                <option value="<?= estab_admin_html($function) ?>">
-                  <?= estab_admin_html(
-                      estab_function_identity_display_name($function, $role)
-                  ) ?>
-                </option>
-              <?php endforeach; ?>
-            </select>
-          </label>
-          <button class="estab-button" type="submit">
-            Ergänzung verbindlich zuweisen
-          </button>
-        </form>
+        <?php if (!$hasAssignableAccount): ?>
+          <section class="estab-tool-status estab-tool-status-danger"
+            role="alert">
+            <strong>Kein ungesperrtes Benutzerkonto vorhanden.</strong>
+            <span>Die laufende Schicht lässt sich erst ergänzen, wenn wieder
+              ein ungesperrtes Konto zur Verfügung steht. Die bereits
+              angenommenen Funktionen bleiben davon unberührt.</span>
+            <a class="estab-button" href="users.php">Benutzer verwalten</a>
+          </section>
+        <?php else: ?>
+          <form class="estab-tool-form" method="post"
+            action="fuehrungsstelle.php">
+            <?= estab_csrf_field() ?>
+            <input type="hidden" name="admin_action"
+              value="assign_duty_function">
+            <input type="hidden" name="dienstschicht_id"
+              value="<?= (int) $activeShift['dienstschicht_id'] ?>">
+            <h3>Laufende Schichtbesetzung erweitern</h3>
+            <p>Die Zuweisung allein ändert den Betrieb noch nicht. Erst wenn
+              die betroffene Person sie selbst annimmt, wird sie wirksam und
+              automatisch im ETB dokumentiert. Ergänzungen für LdF und
+              Fernmelder werden
+              zusätzlich im TBB nachgewiesen. Bereits besetzte Funktionen
+              können nicht ausgetauscht werden; dafür ist eine geordnete
+              Schichtübergabe erforderlich. Weitere Fernmelder dürfen ergänzt
+              werden. Eine ETB-Ergänzung, die S2 oder ETB als bestimmten
+              Schreiber verdrängen würde, wird nicht angeboten.</p>
+            <label>Benutzerkonto
+              <select name="benutzer_kuerzel" required>
+                <?= fuehrungsstelle_kontoauswahl($users) ?>
+              </select>
+            </label>
+            <label>Neue oder zusätzliche Fernmelder-Funktion
+              <select name="funktion" required>
+                <?= fuehrungsstelle_funktionsauswahl($activeExtensionRoles) ?>
+              </select>
+            </label>
+            <button class="estab-button" type="submit">
+              Ergänzung verbindlich zuweisen
+            </button>
+          </form>
+        <?php endif; ?>
         <?php if ($plannedShifts === []
             && !$hasOpenHandover
             && ($finalShiftPreflight['closable'] ?? false)): ?>

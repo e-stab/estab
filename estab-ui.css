@@ -4285,6 +4285,111 @@ form[data-estab-incident-disabled="true"]::before {
     }
 }
 
+/* Ablaufführung: ein mehrschrittiger Vorgang, der nicht raten lässt.
+
+   Die Inbetriebnahme der ersten Dienstschicht ist kein Formular, sondern eine
+   Kette aus sechs Schritten, von denen die Administration zwei gar nicht
+   selbst ausführen kann. Wer nur Felder sieht, sucht den Fehler bei sich.
+   Deshalb trägt jeder Schritt seinen Zustand sichtbar: erledigt tritt zurück,
+   der aktuelle hebt sich mit Fläche und kräftiger Kante heraus, spätere
+   bleiben gedämpft. Genau ein Schritt trägt „aktuell" -- das entscheidet die
+   Anwendung, nicht das Stylesheet. */
+.estab-ablauf {
+    display: grid;
+    gap: var(--abstand-4);
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.estab-ablauf-schritt {
+    border: 1px solid var(--linie);
+    border-left: 4px solid var(--linie-kraeftig);
+    border-radius: var(--radius-2);
+    padding: var(--abstand-5) var(--abstand-6);
+}
+
+.estab-ablauf-schritt > p {
+    margin: 0 0 var(--abstand-3);
+}
+
+.estab-ablauf-schritt > p:last-child {
+    margin-bottom: 0;
+}
+
+.estab-ablauf-kopf {
+    align-items: baseline;
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--abstand-4);
+}
+
+.estab-ablauf-nummer {
+    background: var(--grund-gedaempft);
+    border-radius: var(--radius-pille);
+    color: var(--tinte);
+    font-weight: var(--stark-voll);
+    min-width: 1.75rem;
+    padding: var(--abstand-1) var(--abstand-4);
+    text-align: center;
+}
+
+.estab-ablauf-titel {
+    font-size: var(--schrift-5);
+    font-weight: var(--stark-voll);
+}
+
+.estab-ablauf-marke {
+    border-radius: var(--radius-pille);
+    font-size: var(--schrift-1);
+    font-weight: var(--stark-voll);
+    letter-spacing: 0.06em;
+    margin-left: auto;
+    padding: var(--abstand-1) var(--abstand-4);
+    text-transform: uppercase;
+}
+
+.estab-ablauf-wer {
+    color: var(--tinte-neben);
+    font-weight: var(--stark-halb);
+}
+
+.estab-ablauf-namen {
+    display: grid;
+    gap: var(--abstand-2);
+    margin: 0 0 var(--abstand-3);
+    padding-left: var(--abstand-7);
+}
+
+.estab-ablauf-erledigt {
+    border-left-color: var(--erledigt-kante);
+}
+
+.estab-ablauf-erledigt .estab-ablauf-marke {
+    background: var(--erledigt-flaeche);
+    color: var(--erledigt-tinte);
+}
+
+.estab-ablauf-aktuell {
+    background: var(--handlung-sanft);
+    border-left-color: var(--handlung);
+}
+
+.estab-ablauf-aktuell .estab-ablauf-marke {
+    background: var(--handlung);
+    color: var(--tinte-spalte);
+}
+
+.estab-ablauf-offen .estab-ablauf-titel,
+.estab-ablauf-offen .estab-ablauf-wer {
+    color: var(--tinte-neben);
+}
+
+.estab-ablauf-offen .estab-ablauf-marke {
+    background: var(--grund-gedaempft);
+    color: var(--tinte-neben);
+}
+
 .estab-shift-confirmation {
     max-width: min(38rem, 100%);
     min-width: 0;

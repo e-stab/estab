@@ -420,6 +420,28 @@ function estab_ux_rules(): array
                 . 'unwichtig, um zu stehen.',
         ],
 
+        /*
+         * Herkunft: eine Betriebsmeldung vom 03.09.2026.
+         *
+         * Der strenge Berechtigungsmodus war fachlich vollstaendig und
+         * trotzdem nicht in Betrieb zu nehmen. Die Schichtverwaltung zeigte
+         * jedes Feld, aber nie den Weg: ein Pflicht-Auswahlfeld ohne einen
+         * einzigen Eintrag, danach der Satz „Noch nicht angenommen" -- und
+         * kein Hinweis darauf, dass diese Annahme nicht die Administration
+         * erklaert, sondern jede benannte Person selbst an ihrem eigenen
+         * Bildschirm. Der einzige Knopf, der dann noch dastand, verwarf die
+         * Planung.
+         */
+        'UX-ABLAUFFUEHRUNG' => [
+            'origin' => ESTAB_UX_ORIGIN_BETREIBER,
+            'reference' => 'Mehrschrittige Vorgänge',
+            'requirement' => 'Ein Vorgang über mehrere Schritte zeigt alle '
+                . 'Schritte, hebt genau einen als den aktuellen hervor und '
+                . 'nennt je Schritt, wer ihn ausführt und wo. Ein '
+                . 'Bedienelement, das in der gegenwärtigen Lage nur '
+                . 'scheitern kann, wird nicht angeboten; an seiner Stelle '
+                . 'stehen der Grund und der Weg dorthin.',
+        ],
         'UX-SPRACHE-VORSCHRIFT' => [
             'origin' => ESTAB_UX_ORIGIN_BETREIBER,
             'reference' => 'Begriffe der Vorschrift',
