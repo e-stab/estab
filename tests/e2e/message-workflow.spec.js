@@ -38,6 +38,165 @@ function assignmentForm(page) {
   });
 }
 
+// Die Schichtverwaltung im strengen Modus vermessen.
+//
+// Diese Strecke faehrt den Aufbau der ersten Dienstschicht ohnehin durch --
+// anlegen, besetzen, annehmen, aktivieren. Geprueft hat sie dabei nur, dass
+// die Knoepfe wirken und die Rueckmeldungen erscheinen: Funktion, nicht
+// Gestalt. Die Gestaltpruefungen leben in tests/browser/headless_ui.py, und
+// die erreicht diese Haelfte der Seite nicht -- sie wartet auf den Marker
+// data-estab-shift-admin, den nur die lockere Haelfte traegt, und ihr Einsatz
+// laeuft in LOOSE.
+//
+// Gemessen wird deshalb hier, wo der strenge Zustand schon steht, und nach
+// denselben Regeln wie dort: nichts ragt aus dem Sichtfeld, jede Klickflaeche
+// ist mindestens 44x44 Bildpunkte gross.
+//
+// Dazu die Zusicherungen, die diese Seite selbst gibt: Die Ablauffuehrung
+// zeigt alle sechs Schritte und hebt genau einen hervor, und kein Kind eines
+// Zustandskastens wird auf null Breite gedrueckt -- der Fehler, mit dem
+// "Unterstuetzter Betriebsmodus" einmal buchstabenweise untereinander stand.
+async function messeSchichtverwaltung(page, breite, hoehe) {
+  await page.setViewportSize({ width: breite, height: hoehe });
+  await page.goto('/4fadm/fuehrungsstelle.php');
+  await expect(page.locator('[data-estab-dv-admin]')).toBeVisible();
+  return page.evaluate(() => {
+    const sichtbar = (element) => {
+      if (!element) return false;
+      const stil = getComputedStyle(element);
+      const kasten = element.getBoundingClientRect();
+      return (
+        stil.display !== 'none' &&
+        stil.visibility !== 'hidden' &&
+        kasten.width > 0 &&
+        kasten.height > 0
+      );
+    };
+    const beschreibe = (element) =>
+      `${element.tagName.toLowerCase()}.${element.className || '-'}: ` +
+      `${(element.textContent || '').replace(/\s+/gu, ' ').trim().slice(0, 40)}`;
+
+    const haupt = document.querySelector('.estab-tool-main');
+    const hauptKasten = haupt ? haupt.getBoundingClientRect() : null;
+    const ziele = Array.from(
+      document.querySelectorAll(
+        '.estab-tool-main .estab-button,.estab-tool-main summary'
+      )
+    ).filter(sichtbar);
+
+    // Was in einem eigenen Rollrahmen steht, darf breiter sein als das
+    // Sichtfeld -- dafuer ist der Rahmen da, und das Dokument selbst rollt
+    // deshalb trotzdem nicht. Die Groessenregel gilt weiter fuer alle.
+    //
+    // Gemessen am 03.09.2026: Die Besetzungstafeln fuehren bei 390 px eine
+    // Mindestbreite von 608 px mit sich, weil app/tabelle.php sie als
+    // Inline-Stil schreibt und damit die Faltungsregel `min-width: 0`
+    // schlaegt. Das ist ein Befund am geteilten Tabellenbauteil und trifft
+    // jede Tafel der Anwendung; er gehoert nicht in diese Pruefung. Bis er
+    // behoben ist, wuerde die Randregel hier nur ihn melden und nichts sonst.
+    const imRollrahmen = (element) => {
+      for (
+        let eltern = element.parentElement;
+        eltern;
+        eltern = eltern.parentElement
+      ) {
+        const fluss = getComputedStyle(eltern).overflowX;
+        if (fluss === 'auto' || fluss === 'scroll') return true;
+      }
+      return false;
+    };
+
+    // Ein Kind eines Zustandskastens, das Text traegt und trotzdem keine
+    // Breite hat, ist die zerdrueckte Ueberschrift.
+    const zerdrueckt = Array.from(
+      document.querySelectorAll('.estab-tool-status > *')
+    )
+      .filter((kind) => {
+        const text = (kind.textContent || '').trim();
+        if (text === '') return false;
+        return kind.getBoundingClientRect().width < 1;
+      })
+      .map(beschreibe);
+
+    return {
+      breite: window.innerWidth,
+      dokumentUeberlauf:
+        document.documentElement.scrollWidth > window.innerWidth + 1,
+      hauptPasst:
+        Boolean(hauptKasten) &&
+        hauptKasten.left >= -0.5 &&
+        hauptKasten.right <= window.innerWidth + 0.5,
+      zieleGesamt: ziele.length,
+      zuKleineZiele: ziele
+        .filter((ziel) => {
+          const kasten = ziel.getBoundingClientRect();
+          return kasten.width < 44 || kasten.height < 44;
+        })
+        .map(beschreibe),
+      zieleAusDemBild: ziele
+        .filter((ziel) => {
+          if (imRollrahmen(ziel)) return false;
+          const kasten = ziel.getBoundingClientRect();
+          return (
+            kasten.left < -0.5 || kasten.right > window.innerWidth + 0.5
+          );
+        })
+        .map(beschreibe),
+      ablaufSchritte: document.querySelectorAll('.estab-ablauf-schritt').length,
+      ablaufAktuell: document.querySelectorAll(
+        '.estab-ablauf [aria-current="step"]'
+      ).length,
+      aktuellerSchritt: (() => {
+        const schritt = document.querySelector('.estab-ablauf-aktuell');
+        if (!schritt) return null;
+        const titel = schritt.querySelector('.estab-ablauf-titel');
+        return titel ? titel.textContent.trim() : null;
+      })(),
+      zerdrueckt,
+      ruecknahmeKnoepfe: Array.from(
+        document.querySelectorAll(
+          'input[name="admin_action"][value="withdraw_duty_function"]'
+        )
+      ).length,
+    };
+  });
+}
+
+// Die Messung gegen die Hausregeln halten.
+function pruefeSchichtverwaltung(bericht, lage, erwarteterSchritt) {
+  expect(
+    bericht.dokumentUeberlauf,
+    `${lage}: Die Seite rollt waagerecht.`
+  ).toBe(false);
+  expect(bericht.hauptPasst, `${lage}: Der Inhalt ragt aus dem Sichtfeld.`)
+    .toBe(true);
+  expect(
+    bericht.zuKleineZiele,
+    `${lage}: Bedienelemente sind kleiner als 44x44 Bildpunkte.`
+  ).toEqual([]);
+  expect(
+    bericht.zieleAusDemBild,
+    `${lage}: Bedienelemente ausserhalb eines Rollrahmens ragen aus dem ` +
+      'Sichtfeld.'
+  ).toEqual([]);
+  expect(
+    bericht.zerdrueckt,
+    `${lage}: Ein Zustandskasten drueckt sein Kind auf null Breite.`
+  ).toEqual([]);
+  expect(
+    bericht.ablaufSchritte,
+    `${lage}: Die Ablauffuehrung zeigt nicht alle sechs Schritte.`
+  ).toBe(6);
+  expect(
+    bericht.ablaufAktuell,
+    `${lage}: Es ist nicht genau ein Schritt als aktuell ausgezeichnet.`
+  ).toBe(1);
+  expect(
+    bericht.aktuellerSchritt,
+    `${lage}: Der falsche Schritt ist hervorgehoben.`
+  ).toBe(erwarteterSchritt);
+}
+
 async function registerAccount(browser, account) {
   const context = await browser.newContext();
   const page = await context.newPage();
@@ -259,6 +418,13 @@ test.describe('vollständiger Nachrichtenablauf', () => {
     await expect(adminPage.getByText('Die geplante Dienstschicht wurde angelegt.'))
       .toBeVisible();
 
+    // Die Schicht steht, besetzt ist noch nichts: Schritt 3 ist dran.
+    pruefeSchichtverwaltung(
+      await messeSchichtverwaltung(adminPage, 1280, 800),
+      'Schichtverwaltung nach dem Anlegen bei 1280×800',
+      'Pflichtfunktionen besetzen'
+    );
+
     for (const account of Object.values(accounts)) {
       const form = assignmentForm(adminPage);
       await form.locator('[name="benutzer_kuerzel"]').selectOption(account.code);
@@ -268,6 +434,33 @@ test.describe('vollständiger Nachrichtenablauf', () => {
         adminPage.getByText('Die Funktionsbesetzung wurde verbindlich zugewiesen.')
       ).toBeVisible();
     }
+
+    // Alles zugewiesen, nichts angenommen: der Zustand, an dem die
+    // Inbetriebnahme im Betrieb haengengeblieben ist. Hier stehen die meisten
+    // Bedienelemente der Seite gleichzeitig -- deshalb wird er auf beiden
+    // Bildschirmbreiten vermessen.
+    for (const [breite, hoehe] of [
+      [1280, 800],
+      [390, 844],
+    ]) {
+      const bericht = await messeSchichtverwaltung(adminPage, breite, hoehe);
+      pruefeSchichtverwaltung(
+        bericht,
+        `Schichtverwaltung mit wartenden Annahmen bei ${breite}×${hoehe}`,
+        'Persönliche Annahme'
+      );
+      // Jede Besetzung laesst sich einzeln zuruecknehmen; ohne das kostet
+      // eine Fehlzuweisung die ganze Planung.
+      expect(
+        bericht.ruecknahmeKnoepfe,
+        `Schichtverwaltung bei ${breite}×${hoehe}: Nicht jede geplante ` +
+          'Besetzung bietet ihre Ruecknahme an.'
+      ).toBe(Object.keys(accounts).length);
+    }
+    await expect(
+      adminPage.getByText('warten auf die persönliche Annahme')
+    ).toBeVisible();
+    await adminPage.setViewportSize({ width: 1280, height: 720 });
 
     for (const { page, account } of Object.values(sessions)) {
       await page.goto('/4fach/fuehrungsstelle.php');
@@ -288,6 +481,22 @@ test.describe('vollständiger Nachrichtenablauf', () => {
       .click();
     await expect(adminPage.getByText('Die erste Dienstschicht ist jetzt aktiv.'))
       .toBeVisible();
+
+    // Der Dienstbetrieb laeuft. Offen bleibt nur, was die Administration
+    // ohnehin nicht abnehmen kann -- die Arbeitsfunktion waehlt jede Person
+    // selbst. Die Liste muss das sagen und darf nicht auf einen frueheren
+    // Schritt zurueckfallen.
+    pruefeSchichtverwaltung(
+      await messeSchichtverwaltung(adminPage, 1280, 800),
+      'Schichtverwaltung im laufenden Dienstbetrieb bei 1280×800',
+      'Arbeitsfunktion wählen'
+    );
+    await expect(
+      adminPage.getByText('Der formale Dienstbetrieb läuft.')
+    ).toBeVisible();
+    // Die Bildschirmgroesse zurueckstellen; die folgenden Pruefungen teilen
+    // sich diese Seite.
+    await adminPage.setViewportSize({ width: 1280, height: 720 });
 
     for (const { page, account } of Object.values(sessions)) {
       await page.goto('/4fach/fuehrungsstelle.php');
