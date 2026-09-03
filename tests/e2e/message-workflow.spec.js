@@ -457,8 +457,12 @@ test.describe('vollständiger Nachrichtenablauf', () => {
           'Besetzung bietet ihre Ruecknahme an.'
       ).toBe(Object.keys(accounts).length);
     }
+    // Auf den Kasten zeigen, nicht auf seinen Satz: Die Ablauffuehrung sagt
+    // denselben Satz noch einmal, und das ist so gewollt -- oben die
+    // Uebersicht, unten die betroffene Schicht. Ein Text, den es zweimal
+    // gibt, taugt nicht als Adresse.
     await expect(
-      adminPage.getByText('warten auf die persönliche Annahme')
+      adminPage.locator('section[aria-label="Wartende Annahmen"]')
     ).toBeVisible();
     await adminPage.setViewportSize({ width: 1280, height: 720 });
 
@@ -491,8 +495,12 @@ test.describe('vollständiger Nachrichtenablauf', () => {
       'Schichtverwaltung im laufenden Dienstbetrieb bei 1280×800',
       'Arbeitsfunktion wählen'
     );
+    // Wieder der Kasten, nicht der Satz: Schritt 5 der Ablauffuehrung sagt
+    // dasselbe.
     await expect(
-      adminPage.getByText('Der formale Dienstbetrieb läuft.')
+      adminPage
+        .locator('p.estab-tool-feedback-success')
+        .filter({ hasText: 'Der formale Dienstbetrieb läuft.' })
     ).toBeVisible();
     // Die Bildschirmgroesse zurueckstellen; die folgenden Pruefungen teilen
     // sich diese Seite.
