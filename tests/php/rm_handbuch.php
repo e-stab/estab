@@ -54,9 +54,20 @@ $assert = static function (bool $condition, string $message) use (&$assertions):
  * entfallen. Neu dazugekommen sind der berichtigte Fernmeldeplan mit
  * Gegenstellen, Nebenstellen und Skizze, die eigene Seite fuer die
  * Melderauftraege und der LdF als Fuehrer des Technischen Betriebsbuchs.
+ *
+ * Von 4567 auf 4721 Woerter am 03.09.2026, Kapitel 15 „Schichten".
+ *
+ * Aus dem Betrieb kam die Meldung, der strenge Berechtigungsmodus
+ * funktioniere nicht: Eine Dienstschicht liess sich nicht starten. Das
+ * Kapitel beschrieb bis dahin in drei Schritten die *Zugangs*schicht; die
+ * Dienstschicht bekam einen Satz. Es fehlte genau das, woran die
+ * Inbetriebnahme scheiterte: die Reihenfolge, die Vorbedingung
+ * Benutzerkonto, der Ort der persoenlichen Annahme und der eigene Schritt
+ * „Arbeitsfunktion waehlen". Beide Listen tragen jetzt eine Ueberschrift,
+ * damit die zweite nicht wieder fuer die erste gelesen wird.
  */
-const ESTAB_HANDBUCH_WOERTER = 4567;
-const ESTAB_HANDBUCH_PRUEFSUMME = 'eb87bad2d6d7e35e';
+const ESTAB_HANDBUCH_WOERTER = 4721;
+const ESTAB_HANDBUCH_PRUEFSUMME = '73fc8baa1ab4ee4c';
 
 $quelle = file_get_contents($root . '/handbuch/index.php');
 $assert(is_string($quelle), 'Das Handbuch ist nicht lesbar.');

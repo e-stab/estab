@@ -4199,6 +4199,36 @@ form[data-estab-incident-disabled="true"]::before {
     min-width: 0;
 }
 
+/* Wer in welche Spalte kommt, sagt die Regel -- nicht die Reihenfolge.
+
+   Der Kasten ist als „links steht, was ist, rechts steht, was man tun kann"
+   gebaut: eine dehnbare Textspalte und eine Handlungsspalte, die sich nach
+   ihrem Knopf richtet. Die Zuordnung entstand aber allein aus der Reihenfolge
+   der Kinder. Ein Kasten mit Überschrift *und* Erläuterung schob damit die
+   Erläuterung in die Handlungsspalte, deren `auto` sich nach dem längsten
+   Inhalt richtet -- und drückte die Überschrift auf null Breite. Auf der
+   Schichtverwaltung stand „Unterstützter Betriebsmodus" daraufhin
+   buchstabenweise untereinander.
+
+   Handlung ist nicht nur der Knopf. Die Zugangsschaltung stellt ihrem
+   gefährlichen Zweig eine Aufklappung voran, die die Folgen zeigt, bevor sie
+   ausgeführt werden -- ein `details`, kein `form`. Steht es nicht in dieser
+   Liste, faellt derselbe Schalter je nach Zustand an zwei verschiedene
+   Plaetze: aktiviert unter den Text, deaktiviert daneben.
+
+   Kästen, die ihren Inhalt in `div` gliedern, haben ihre eigenen Spalten und
+   bleiben ausgenommen. */
+.estab-tool-status > :not(div) {
+    grid-column: 1;
+}
+
+.estab-tool-status > .estab-button,
+.estab-tool-status > details,
+.estab-tool-status > form {
+    grid-column: 2;
+    grid-row: 1;
+}
+
 .estab-tool-status span,
 .estab-tool-status strong {
     hyphens: auto;
@@ -4228,6 +4258,136 @@ form[data-estab-incident-disabled="true"]::before {
 
 .estab-tool-status form {
     margin: 0;
+}
+
+/* Unter 56 rem hat der Kasten keine Handlungsspalte mehr.
+
+   Die Huelle klappt ihre Menuespalte erst bei 42 rem ein; dazwischen bleibt
+   dem Inhalt eine schmale Bahn, und `auto` neben `minmax(0, 1fr)` nimmt sich
+   davon, was der Knopf braucht. Gemessen bei 720 px Schirmbreite: Der Kasten
+   war 198 px breit, davon nahm der Knopf 146 -- der Ueberschrift blieben 0.
+   Eine Handlungsspalte, die den Text auffrisst, ist keine; also geht die
+   Handlung hier zurueck in den Fluss und steht unter ihrem Text.
+
+   Die Zusammenfassung behaelt ihre eigenen Spalten: Sie traegt keine
+   Handlung, sondern nebeneinanderstehende Angaben mit je eigener
+   Ueberschrift. */
+@media (max-width: 56rem) {
+    .estab-tool-status:not(.estab-tool-status-summary) {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .estab-tool-status > .estab-button,
+    .estab-tool-status > details,
+    .estab-tool-status > form {
+        grid-column: 1;
+        grid-row: auto;
+    }
+}
+
+/* Ablaufführung: ein mehrschrittiger Vorgang, der nicht raten lässt.
+
+   Die Inbetriebnahme der ersten Dienstschicht ist kein Formular, sondern eine
+   Kette aus sechs Schritten, von denen die Administration zwei gar nicht
+   selbst ausführen kann. Wer nur Felder sieht, sucht den Fehler bei sich.
+   Deshalb trägt jeder Schritt seinen Zustand sichtbar: erledigt tritt zurück,
+   der aktuelle hebt sich mit Fläche und kräftiger Kante heraus, spätere
+   bleiben gedämpft. Genau ein Schritt trägt „aktuell" -- das entscheidet die
+   Anwendung, nicht das Stylesheet. */
+.estab-ablauf {
+    display: grid;
+    gap: var(--abstand-4);
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.estab-ablauf-schritt {
+    border: 1px solid var(--linie);
+    border-left: 4px solid var(--linie-kraeftig);
+    border-radius: var(--radius-2);
+    padding: var(--abstand-5) var(--abstand-6);
+}
+
+.estab-ablauf-schritt > p {
+    margin: 0 0 var(--abstand-3);
+}
+
+.estab-ablauf-schritt > p:last-child {
+    margin-bottom: 0;
+}
+
+.estab-ablauf-kopf {
+    align-items: baseline;
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--abstand-4);
+}
+
+.estab-ablauf-nummer {
+    background: var(--grund-gedaempft);
+    border-radius: var(--radius-pille);
+    color: var(--tinte);
+    font-weight: var(--stark-voll);
+    min-width: 1.75rem;
+    padding: var(--abstand-1) var(--abstand-4);
+    text-align: center;
+}
+
+.estab-ablauf-titel {
+    font-size: var(--schrift-5);
+    font-weight: var(--stark-voll);
+}
+
+.estab-ablauf-marke {
+    border-radius: var(--radius-pille);
+    font-size: var(--schrift-1);
+    font-weight: var(--stark-voll);
+    letter-spacing: 0.06em;
+    margin-left: auto;
+    padding: var(--abstand-1) var(--abstand-4);
+    text-transform: uppercase;
+}
+
+.estab-ablauf-wer {
+    color: var(--tinte-neben);
+    font-weight: var(--stark-halb);
+}
+
+.estab-ablauf-namen {
+    display: grid;
+    gap: var(--abstand-2);
+    margin: 0 0 var(--abstand-3);
+    padding-left: var(--abstand-7);
+}
+
+.estab-ablauf-erledigt {
+    border-left-color: var(--erledigt-kante);
+}
+
+.estab-ablauf-erledigt .estab-ablauf-marke {
+    background: var(--erledigt-flaeche);
+    color: var(--erledigt-tinte);
+}
+
+.estab-ablauf-aktuell {
+    background: var(--handlung-sanft);
+    border-left-color: var(--handlung);
+}
+
+.estab-ablauf-aktuell .estab-ablauf-marke {
+    background: var(--handlung);
+    color: var(--tinte-spalte);
+}
+
+.estab-ablauf-offen .estab-ablauf-titel,
+.estab-ablauf-offen .estab-ablauf-wer {
+    color: var(--tinte-neben);
+}
+
+.estab-ablauf-offen .estab-ablauf-marke {
+    background: var(--grund-gedaempft);
+    color: var(--tinte-neben);
 }
 
 .estab-shift-confirmation {

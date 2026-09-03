@@ -733,6 +733,33 @@ $handbookUpdated = '1. September 2026';
               Zugänge gemeinsam ein- und auszuschalten. Sie verändert keine
               Funktion und kein Recht.</span></div>
           </div>
+          <h3>Die erste Dienstschicht in Betrieb nehmen („Streng“)</h3>
+          <p>Sechs Schritte, und zwei davon kann die Administration nicht
+            selbst ausführen. Die Schichtverwaltung zeigt denselben Ablauf und
+            hebt hervor, welcher Schritt gerade dran ist.</p>
+          <ol class="estab-handbook-steps">
+            <li>Benutzerkonten anlegen. Eine Dienstfunktion wird an ein Konto
+              vergeben, nicht an einen Namen. Ohne Konto geht es nicht
+              weiter.</li>
+            <li>Dienstschicht planen. Die Administration legt sie unter einer
+              Bezeichnung an.</li>
+            <li>Pflichtfunktionen besetzen: S 2, Si, S 6, LdF und Fernmelder.
+              Eine Person darf mehrere davon tragen.</li>
+            <li><strong>Jede benannte Person nimmt ihre Funktion selbst
+              an.</strong> Sie meldet sich mit ihrem eigenen Konto an und
+              bestätigt sie im Bereich „Fernmeldeplan“, Abschnitt „Meine
+              Dienstfunktionen“. Die Administration kann das nicht ersatzweise
+              erklären.</li>
+            <li>Die Administration aktiviert die Schicht. Damit eröffnet eStab
+              ETB und TBB.</li>
+            <li><strong>Jede Person wählt danach ihre Arbeitsfunktion</strong>
+              — an derselben Stelle. Erst dann sind ihre operativen Bereiche
+              frei.</li>
+          </ol>
+          <p>Aktiviert wird nur die erste Schicht. Jede weitere wird nicht
+            aktiviert, sondern über eine persönlich bestätigte Übergabe
+            übernommen.</p>
+          <h3>Zugangsschicht schalten („Locker“)</h3>
           <ol class="estab-handbook-steps">
             <li>Die Administration legt die Gruppe für den aktiven Einsatz an
               und ordnet Konten zu.</li>
