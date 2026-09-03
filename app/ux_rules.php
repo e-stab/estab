@@ -442,6 +442,30 @@ function estab_ux_rules(): array
                 . 'scheitern kann, wird nicht angeboten; an seiner Stelle '
                 . 'stehen der Grund und der Weg dorthin.',
         ],
+        /*
+         * Herkunft: zwei Betriebsmeldungen vom 03.09.2026, derselbe Fehler an
+         * zwei Stellen.
+         *
+         * „Wenn ich eine Schicht plane und aus Versehen jemand Falschem eine
+         * Rolle gegeben habe, kann ich das nicht wieder entfernen, ohne die
+         * gesamte Planung zu verwerfen." Und: „Wenn keine Dienstschicht aktiv
+         * ist, kommt rechts nur das Feld mit ,operativer Zugriff nicht
+         * verfuegbar' -- da fehlt mir aber der Abmeldeknopf."
+         *
+         * Beide Male fuehrte die Anwendung in einen Zustand und liess dort
+         * keinen Ausgang. Einmal kostete der Ausweg mehr, als der Fehler wert
+         * war; einmal gab es gar keinen.
+         */
+        'UX-KEIN-EINBAHNWEG' => [
+            'origin' => ESTAB_UX_ORIGIN_BETREIBER,
+            'reference' => 'Jeder Zustand hat einen Ausgang',
+            'requirement' => 'Aus jedem Zustand, in den die Anwendung führt, '
+                . 'führt sie auch wieder heraus. Ein einzelner Fehleintrag '
+                . 'wird einzeln zurückgenommen und kostet nicht den ganzen '
+                . 'Vorgang. Und wer nicht arbeiten kann, kommt trotzdem aus '
+                . 'seiner Anmeldung heraus: Der Weg hinaus verschwindet nie '
+                . 'mit dem Grund, der ihn nötig macht.',
+        ],
         'UX-SPRACHE-VORSCHRIFT' => [
             'origin' => ESTAB_UX_ORIGIN_BETREIBER,
             'reference' => 'Begriffe der Vorschrift',
