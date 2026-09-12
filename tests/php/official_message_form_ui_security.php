@@ -157,7 +157,7 @@ $requiredGuideContent = [
     // Keine der beiden Formen ist die Ausnahme der anderen: Beides sind
     // Sonderfälle, und der Hinweis muss sagen, welcher wann gilt.
     8 => ['DURCHSAGE', 'Spruch', '1:1', 'Wortlaut', 'Gruppe von Empfängern'],
-    9 => ['Vorrangstufe', 'Sofort', 'Blitz', 'Staatsnot'],
+    9 => ['Vorrangstufe', 'Sofort', 'Blitz'],
     10 => ['Immer ausfüllen', 'Dienststellen-', 'Eigennamen'],
     11 => ['Rufnummer', 'Gesprächsnotizen'],
     // Die Gesprächsnotiz hält ein bereits geführtes Gespräch fest. Der
@@ -341,18 +341,28 @@ $historicNoPriorityMarkup = (string) ob_get_clean();
  * braucht keines -- sie ist die Abwesenheit eines Kreuzes.
  *
  * Der Vordruck zeigt eine solche Nachricht deshalb wie jede ohne Stufe: kein
- * Kreuz, alle drei Stufen wählbar. Speichert jemand sie in einem
- * bearbeitenden Schritt erneut, wird aus "eee" ein leerer Wert. Beide sind
- * für Anzeige, Ausdruck und Dringlichkeit gleichbedeutend, also geht nichts
- * verloren.
+ * Kreuz, beide Stufen des Vordrucks wählbar -- und die ausgemusterte
+ * Staatsnot nicht, die nur eine Nachricht aus dem Altbestand noch trägt.
+ * Speichert jemand sie in einem bearbeitenden Schritt erneut, wird aus "eee"
+ * ein leerer Wert. Beide sind für Anzeige, Ausdruck und Dringlichkeit
+ * gleichbedeutend, also geht nichts verloren.
  */
 $assert(
     !str_contains($historicNoPriorityMarkup, 'checked')
         && str_contains(
             $historicNoPriorityMarkup,
+            'id="f_09_vorrangstufe_sofort"'
+        )
+        && str_contains(
+            $historicNoPriorityMarkup,
+            'id="f_09_vorrangstufe_blitz"'
+        )
+        && !str_contains(
+            $historicNoPriorityMarkup,
             'id="f_09_vorrangstufe_staatsnot"'
         ),
-    'A historic no-priority value shows as a checked box or hides the scale'
+    'A historic no-priority value shows as a checked box, hides the scale '
+        . 'or still offers the retired Staatsnot'
 );
 $assert(
     estab_message_priority_document_label('eee') === ''

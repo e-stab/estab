@@ -2104,11 +2104,11 @@ HTML;
       }
       echo "</select>\n";
     }
-    $priorityWarning = $this->feld [9]
-      ? estab_message_priority_warning ("aaa")
-      : estab_message_priority_warning (
-          $this->formdata ["09_vorrangstufe"]
-        );
+    // Staatsnot wird nicht mehr angeboten; der Hinweis gilt nur noch einer
+    // gespeicherten Stufe aus dem Altbestand.
+    $priorityWarning = estab_message_priority_warning (
+      $this->formdata ["09_vorrangstufe"]
+    );
     if ($priorityWarning !== "") {
       echo "<small id=\"estab-priority-warning\" ".
         "style=\"display:block; margin-top:0.35rem; font-size:0.72rem; ".

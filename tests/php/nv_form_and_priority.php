@@ -271,11 +271,21 @@ preg_match_all(
     PREG_SET_ORDER
 );
 $assert(
-    count($labels) === 3,
+    count($labels) === 2,
     estab_dv_requirement(
         'NV-09-VORRANGSTUFE',
-        'Die Vorrangstufe bietet ' . count($labels) . ' statt drei '
-            . 'Möglichkeiten an: Sofort, Blitz und Staatsnot.'
+        'Die Vorrangstufe bietet ' . count($labels) . ' statt zwei '
+            . 'Möglichkeiten an: Sofort und Blitz.'
+    )
+);
+// Staatsnot ist ausgemustert: kein Kästchen auf dem Papier, keine Stufe, die
+// die Führungsstelle vergibt. Ein neuer Vordruck bietet sie nicht an.
+$assert(
+    !str_contains($priorityMarkup, 'f_09_vorrangstufe_staatsnot')
+        && !str_contains($priorityMarkup, 'Staatsnot'),
+    estab_dv_requirement(
+        'NV-09-VORRANGSTUFE',
+        'Ein neuer Vordruck bietet die ausgemusterte Stufe Staatsnot an.'
     )
 );
 
@@ -304,7 +314,9 @@ $assert(
     )
 );
 
-// Eine getragene Stufe steht selbstverständlich weiter angekreuzt da.
+// Eine getragene Stufe steht selbstverständlich weiter angekreuzt da -- auch
+// die ausgemusterte Staatsnot aus dem Altbestand, damit ein späterer Schritt
+// sie beim Speichern nicht verliert.
 foreach (['sss' => 'sofort', 'bbb' => 'blitz', 'aaa' => 'staatsnot'] as $wert => $kennung) {
     $gewaehlt = new FormAndPriorityFixture();
     $gewaehlt->feld = [9 => true];

@@ -99,12 +99,13 @@ function estab_message_priority_requires_attention(mixed $priority): bool
 }
 
 /**
- * Organisational warning for the highest priority.
+ * Organisational warning for the retired highest priority.
  *
- * eStab records the operator and workflow evidence, but cannot establish
- * whether the external originator is legally authorised to issue a
- * Staatsnot-Nachricht. User interfaces exposing this option should show this
- * warning without claiming an application role grants that authority.
+ * Staatsnot is no longer offered for new messages, but a stored value keeps
+ * its meaning. eStab records the operator and workflow evidence, but cannot
+ * establish whether the external originator was legally authorised to issue
+ * a Staatsnot-Nachricht. Wherever a stored value is still shown, this warning
+ * accompanies it without claiming an application role grants that authority.
  */
 function estab_message_priority_warning(mixed $priority): string
 {
@@ -117,7 +118,10 @@ function estab_message_priority_warning(mixed $priority): string
  * Options for new message forms.
  *
  * `eee` is deliberately absent: it remains readable for historical records,
- * while all new non-urgent messages use the single `keine` option.
+ * while all new non-urgent messages use the single `keine` option. `aaa`
+ * (Staatsnot) is absent as well: the official form has no box for it and the
+ * Führungsstelle does not issue it, so it is retired from the choice while a
+ * stored value stays readable, ranked and printed as before.
  *
  * @return list<array{value:string,label:string,warning:string}>
  */
@@ -129,7 +133,7 @@ function estab_message_priority_options(): array
             'label' => estab_message_priority_label($value),
             'warning' => estab_message_priority_warning($value),
         ],
-        ['', 'sss', 'bbb', 'aaa']
+        ['', 'sss', 'bbb']
     );
 }
 

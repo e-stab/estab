@@ -49,7 +49,7 @@ function estab_nachweisung_spalten(bool $mitRichtung): array
     $spalten = [
         ['schluessel' => 'vorrang', 'kopf' => 'Vorrang', 'breite' => 9,
             'sortierbar' => true, 'suchbar' => false, 'art' => 'vorrang',
-            'filter' => ['Sofort', 'Blitz', 'Staatsnot'],
+            'filter' => ['Sofort', 'Blitz'],
             'filtername' => 'Alle Vorrangstufen'],
     ];
     if ($mitRichtung) {

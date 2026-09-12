@@ -301,7 +301,7 @@ $handbookUpdated = '1. September 2026';
 
         <article id="vordruck" class="estab-handbook-chapter"
           data-estab-handbook-section
-          data-handbook-keywords="Formular Felder Betreff Anschrift Vorrang Sofort Blitz Staatsnot Zeit Zeichen Antwort Weiterleitung Gesprächsnotiz Stationsleiste Laufzeit Hilfe">
+          data-handbook-keywords="Formular Felder Betreff Anschrift Vorrang Sofort Blitz Zeit Zeichen Antwort Weiterleitung Gesprächsnotiz Stationsleiste Laufzeit Hilfe">
           <header><span>5</span><h2>Der Nachrichtenvordruck</h2></header>
           <p>Der Vordruck am Bildschirm hat drei Teile: Fm-Zentrale,
             Nachricht und Sichter. Er sieht aus wie das Blatt auf Papier. Auf
@@ -313,10 +313,8 @@ $handbookUpdated = '1. September 2026';
             <li><strong>Pflichtfelder.</strong> Betreff und Text, Anschrift,
               Absender und Zeichen. Welche davon nötig sind, hängt vom
               Arbeitsschritt ab.</li>
-            <li><strong>Vorrang.</strong> Sofort, Blitz und Staatsnot wählen
-              Sie im Vorrangfeld. „Keine“ bedeutet: kein besonderer Vorrang.
-              Staatsnot nur auf ausdrückliche Weisung einer berechtigten
-              Stelle.</li>
+            <li><strong>Vorrang.</strong> Sofort oder Blitz wählen Sie im
+              Vorrangfeld. Kein Kreuz bedeutet: kein besonderer Vorrang.</li>
             <li><strong>Zeiten.</strong> Lassen Sie ein Zeitfeld leer, gilt
               der jetzige Zeitpunkt. Die Zeit des Sichters entsteht erst,
               wenn die Sichtung abgeschlossen wird.</li>

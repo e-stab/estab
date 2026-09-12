@@ -120,21 +120,29 @@ $assert(
 
 $options = estab_message_priority_options();
 $assert(
-    array_column($options, 'value') === ['', 'sss', 'bbb', 'aaa']
+    array_column($options, 'value') === ['', 'sss', 'bbb']
         && array_column($options, 'label')
-            === ['keine', 'Sofort', 'Blitz', 'Staatsnot'],
+            === ['keine', 'Sofort', 'Blitz'],
     'New-message options do not expose the prescribed human labels'
 );
 $assert(
     !in_array('eee', array_column($options, 'value'), true),
     'The historic eee representation is still offered for new messages'
 );
+// Staatsnot ist als Vorrangstufe ausgemustert: Der amtliche Vordruck hat
+// kein Kästchen dafür, und die Führungsstelle vergibt sie nicht. Eine
+// gespeicherte Stufe bleibt lesbar (siehe $labels oben), wird aber nicht
+// mehr angeboten.
+$assert(
+    !in_array('aaa', array_column($options, 'value'), true)
+        && array_column($options, 'warning') === ['', '', ''],
+    'Staatsnot is still offered for new messages'
+);
 $warning = estab_message_priority_warning('aaa');
 $assert(
     $warning !== ''
         && str_contains($warning, 'ausdrückliche Weisung')
-        && estab_message_priority_warning('bbb') === ''
-        && ($options[3]['warning'] ?? '') === $warning,
+        && estab_message_priority_warning('bbb') === '',
     'The organisational Staatsnot warning is missing or applied too broadly'
 );
 
@@ -248,9 +256,9 @@ $assert(
     is_string($nachweisung)
         && str_contains($nachweisung, 'estab_message_priority_label')
         && str_contains($nachweisung, "'art' => 'vorrang'")
-        && str_contains($nachweisung, "'filter' => ['Sofort', 'Blitz', 'Staatsnot']"),
-    'Die Nachweisung stuft ihre Vorrangstufen nicht zentral ein. '
-        . 'Alphabetisch sortiert stuende Blitz vor Staatsnot.'
+        && str_contains($nachweisung, "'filter' => ['Sofort', 'Blitz']"),
+    'Die Nachweisung stuft ihre Vorrangstufen nicht zentral ein oder '
+        . 'bietet die ausgemusterte Stufe Staatsnot als Filter an.'
 );
 $assert(
     str_contains(

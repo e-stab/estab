@@ -606,7 +606,7 @@ HTML;
             ],
             9 => [
                 'title' => 'Vorrangstufe',
-                'text' => 'Tragen Sie die gewünschte oder bei Eingang erhaltene Vorrangstufe ein: Sofort, Blitz oder Staatsnot. Staatsnot darf nur auf ausdrückliche Weisung einer hierzu berechtigten Stelle verwendet werden. Ohne besondere Vorrangstufe bleibt dieses Feld frei.',
+                'text' => 'Tragen Sie die gewünschte oder bei Eingang erhaltene Vorrangstufe ein: Sofort oder Blitz. Ohne besondere Vorrangstufe bleibt dieses Feld frei.',
             ],
             10 => [
                 'title' => 'Anschrift',
@@ -1760,8 +1760,23 @@ HTML;
          * eigene Aussage. Und ein vorbelegtes Kreuz ist eine Angabe, die
          * niemand gemacht hat.
          */
+        $offered = estab_message_priority_options();
+        /*
+         * Der amtliche Vordruck hat zwei Kästchen: Sofort und Blitz. Staatsnot
+         * wird nicht mehr angeboten. Eine Nachricht aus dem Altbestand kann
+         * die Stufe aber tragen; sie bleibt dann sichtbar und angekreuzt,
+         * damit das Speichern eines späteren Schrittes sie nicht verliert --
+         * ohne gedrucktes Kästchen, das der Vordruck nicht hat.
+         */
+        if (estab_message_priority_storage_value($current) === 'aaa') {
+            $offered[] = [
+                'value' => 'aaa',
+                'label' => estab_message_priority_label('aaa'),
+                'warning' => estab_message_priority_warning('aaa'),
+            ];
+        }
         $options = [];
-        foreach (estab_message_priority_options() as $option) {
+        foreach ($offered as $option) {
             if ($option['value'] === '') {
                 continue;
             }
@@ -1775,9 +1790,6 @@ HTML;
                     default => $option['value'],
                 },
                 'warning' => $option['warning'],
-                // Der amtliche Vordruck hat zwei Kästchen: Sofort und Blitz.
-                // Staatsnot ist wählbar, weil eine eingegangene Nachricht sie
-                // tragen kann -- ein gedrucktes Kästchen dafür wäre erfunden.
                 'extra' => !in_array($option['value'], ['sss', 'bbb'], true),
             ];
         }
