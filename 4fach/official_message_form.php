@@ -535,6 +535,13 @@ HTML;
      */
     function official_message_ttb_evidence_text(): string
     {
+        if (($this->formdata['11_gesprnotiz'] ?? false) === true) {
+            // Eine Gespraechsnotiz wird nicht befoerdert und bekommt deshalb
+            // keine Nummer im Technischen Betriebsbuch -- so steht es auch in
+            // der Liste. "noch kein" versprach hier einen Nachweis, der nie
+            // kommt.
+            return 'ohne TBB-Nachweis · Gesprächsnotiz';
+        }
         $value = $this->formdata['estab_ttb_lfd'] ?? null;
         if (is_int($value) && $value > 0) {
             return (string) $value;
@@ -2111,9 +2118,7 @@ HTML;
                     'role' => 'hauptaktion',
                     'markup' => $this->official_message_action_button(
                         'hauptaktion',
-                        $this->task === 'Stab_gesprnoti'
-                            ? 'Zur Sichtung geben'
-                            : 'Absenden',
+                        'Absenden',
                         'submit',
                         'absenden_x'
                     ),
@@ -2478,6 +2483,36 @@ HTML;
             . '</p>';
     }
 
+    /**
+     * Der Laufweg der Gesprächsnotiz, am Bildschirm neben dem Vordruck.
+     *
+     * Hier stand in der zweiten Stufe eine Liste, die LdF und Fernmelder
+     * nannte -- den Ausgangslaufweg, nicht den der Notiz. Die Notiz geht
+     * mit dem Absenden zur Sichtung, und die schließt sie ab. Der Hinweis
+     * steht beim Verfasser, solange das Kästchen 12 angekreuzt ist; ohne
+     * Skript steht er immer und sagt, wann er gilt.
+     */
+    function official_message_conversation_route(): void
+    {
+        if ($this->task !== 'Stab_schreiben') {
+            return;
+        }
+        $selected = ($this->formdata['11_gesprnotiz'] ?? false) === true;
+        echo '<p class="estab-official-review-scope" '
+            . 'data-estab-conversation-next-steps'
+            . ($selected ? '' : ' data-estab-conversation-next-steps-idle')
+            . '>'
+            . '<span class="estab-official-review-scope-title">'
+            . 'Gesprächsnotiz</span>'
+            . '<span>Ist Feld 12 angekreuzt, geht die Notiz mit dem Absenden '
+            . 'unmittelbar zur Sichtung. Si prüft sie formal; damit ist sie '
+            . 'abgeschlossen. Eine Disposition durch den LdF und eine '
+            . 'Beförderung durch die Fernmelder folgen nicht.</span>'
+            . '<span>Das im Gespräch benutzte Mittel steht oben in Feld 1; '
+            . 'Zeichen und Aufnahmezeit setzt eStab beim Absenden ein.</span>'
+            . '</p>';
+    }
+
     function official_message_workflow_controls(): void
     {
         // Der Eingang steht hier ausdruecklich mit drin. Frueher haing die
@@ -2487,7 +2522,7 @@ HTML;
         $hasTransport = in_array(
             $this->task,
             [
-                'Stab_gesprnoti', 'LdF-Eingang', 'LdF-Ausgang', 'FM-Ausgang',
+                'LdF-Eingang', 'LdF-Ausgang', 'FM-Ausgang',
                 'FM-Eingang', 'FM-Eingang_Anhang',
             ],
             true
@@ -2497,29 +2532,11 @@ HTML;
         }
         echo '<section class="estab-message-workflow-panel" '
             . 'aria-labelledby="estab-message-workflow-title">';
-        if ($this->task === 'Stab_gesprnoti') {
-            echo '<div><span class="estab-section-kicker">Weiterer Nachrichtenlauf</span>'
-                . '<h2 id="estab-message-workflow-title">Gesprächsnotiz zur Sichtung geben</h2>'
-                . '<p>Die im Vordruck ausgewählte Übermittlungsart beschreibt das '
-                . 'ursprüngliche Gespräch. Die Sichtung schliesst die Notiz ab; '
-                . 'eine Disposition und eine Beförderung folgen nicht.</p></div>';
-        } else {
-            echo '<div><span class="estab-section-kicker">Digitale Bearbeitung</span>'
-                . '<h2 id="estab-message-workflow-title">Betriebliche Ergänzungen</h2>'
-                . '<p>Diese Angaben steuern den digitalen Ablauf und liegen deshalb '
-                . 'außerhalb des unveränderten amtlichen Rasters.</p></div>';
-        }
+        echo '<div><span class="estab-section-kicker">Digitale Bearbeitung</span>'
+            . '<h2 id="estab-message-workflow-title">Betriebliche Ergänzungen</h2>'
+            . '<p>Diese Angaben steuern den digitalen Ablauf und liegen deshalb '
+            . 'außerhalb des unveränderten amtlichen Rasters.</p></div>';
         echo '<div class="estab-message-workflow-fields">';
-        if ($this->task === 'Stab_gesprnoti') {
-            echo '<fieldset data-estab-conversation-next-steps>'
-                . '<legend>Nächste Schritte</legend><ol>'
-                . '<li><strong>Si</strong> prüft die Gesprächsnotiz formal.</li>'
-                . '<li><strong>LdF</strong> wählt Rufname und freigegebenen '
-                . 'S6-Beförderungsweg.</li>'
-                . '<li><strong>Fernmelder</strong> übernimmt die Nachricht und '
-                . 'führt den Beförderungsnachweis.</li>'
-                . '</ol></fieldset>';
-        }
         if (
             $this->task === 'FM-Eingang'
             || $this->task === 'FM-Eingang_Anhang'
@@ -3080,6 +3097,53 @@ HTML;
       }
     }
 
+    var desiredMediumInputs = Array.prototype.slice.call(
+      document.querySelectorAll(
+        'input[type="radio"][name="06_befwegausw"]'
+      )
+    );
+    var conversationRoute = document.querySelector(
+      "[data-estab-conversation-next-steps]"
+    );
+
+    // Bei einem gefuehrten Gespraech gibt es kein gewuenschtes Mittel mehr,
+    // nur das benutzte. Was unten in Feld 7 angekreuzt war, wandert nach
+    // oben in Feld 1, und Feld 7 ist gesperrt, solange die Notiz gilt.
+    function mirrorDesiredMedium(active) {
+      if (!conversationMediumControlled) {
+        return;
+      }
+      var chosen = "";
+      var desiredIndex;
+      for (desiredIndex = 0; desiredIndex < desiredMediumInputs.length;
+        desiredIndex++) {
+        if (desiredMediumInputs[desiredIndex].checked) {
+          chosen = desiredMediumInputs[desiredIndex].value;
+        }
+        desiredMediumInputs[desiredIndex].disabled = active;
+      }
+      if (!active || chosen === "") {
+        return;
+      }
+      var alreadyChosen = false;
+      var mediumIndex;
+      for (mediumIndex = 0; mediumIndex < conversationMediumInputs.length;
+        mediumIndex++) {
+        if (conversationMediumInputs[mediumIndex].checked) {
+          alreadyChosen = true;
+        }
+      }
+      if (alreadyChosen) {
+        return;
+      }
+      for (mediumIndex = 0; mediumIndex < conversationMediumInputs.length;
+        mediumIndex++) {
+        if (conversationMediumInputs[mediumIndex].value === chosen) {
+          conversationMediumInputs[mediumIndex].checked = true;
+        }
+      }
+    }
+
     function updateConversationMedium() {
       var active = !conversationMediumControlled
         || Boolean(conversationCheckbox && conversationCheckbox.checked);
@@ -3087,6 +3151,19 @@ HTML;
         "data-estab-conversation-medium-active",
         active ? "true" : "false"
       );
+      mirrorDesiredMedium(active);
+      if (conversationRoute && conversationMediumControlled) {
+        if (active) {
+          conversationRoute.removeAttribute(
+            "data-estab-conversation-next-steps-idle"
+          );
+        } else {
+          conversationRoute.setAttribute(
+            "data-estab-conversation-next-steps-idle",
+            ""
+          );
+        }
+      }
       if (conversationMediumGroup) {
         conversationMediumGroup.setAttribute(
           "aria-disabled",
@@ -3894,6 +3971,7 @@ HTML;
         $this->official_message_help(20);
         echo '</div>';
         $this->official_message_review_scope();
+        $this->official_message_conversation_route();
         $this->official_message_textarea(
             '17_vermerke',
             $this->official_message_field_access(20),

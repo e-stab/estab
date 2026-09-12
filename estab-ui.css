@@ -7361,6 +7361,13 @@ section.estab-message-timeline[data-estab-message-timeline] * {
     margin: 0 0 0.25rem;
 }
 
+/* Der Laufweghinweis der Gespraechsnotiz gilt, solange Kaestchen 12
+   angekreuzt ist. Das Skript setzt das Merkmal; ohne Skript bleibt der
+   Hinweis stehen und sagt selbst, wann er gilt. */
+.estab-official-review-scope[data-estab-conversation-next-steps-idle] {
+    display: none;
+}
+
 .estab-official-review-scope-title {
     font-weight: 700;
     letter-spacing: 0.02em;

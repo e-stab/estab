@@ -728,17 +728,53 @@ $assert(
         && is_string($dockerfile),
     'Official form implementation files are not readable'
 );
+/*
+ * Die Gesprächsnotiz wird in einem Schritt angelegt: Das Absenden ist die
+ * Weitergabe an den Sichter. Der Laufweghinweis steht beim Verfasser und
+ * nennt weder LdF noch Fernmelder -- die kommen in diesem Laufweg nicht vor.
+ */
 $assert(
     str_contains($view, 'data-estab-conversation-medium')
         && str_contains($view, 'data-estab-conversation-medium-status')
         && str_contains($view, 'data-estab-conversation-next-steps')
-        && str_contains($view, 'Gesprächsnotiz zur Sichtung geben')
-        && str_contains($view, 'Zur Sichtung geben')
+        && !str_contains($view, 'Zur Sichtung geben')
+        && !str_contains($view, 'wählt Rufname und freigegebenen')
         && str_contains(
             $view,
             'document.getElementById("f_11_gesprnotiz")'
-        ),
+        )
+        && str_contains($view, 'name="06_befwegausw"]'),
     'The conversation-note UI lacks its medium or downstream-workflow contract'
+);
+$routeFixture = new OfficialMessageFormHelpFixture();
+$routeFixture->task = 'Stab_schreiben';
+$routeFixture->formdata = ['11_gesprnotiz' => true];
+ob_start();
+$routeFixture->official_message_conversation_route();
+$routeMarkup = (string) ob_get_clean();
+$assert(
+    str_contains($routeMarkup, 'data-estab-conversation-next-steps')
+        && !str_contains($routeMarkup, 'data-estab-conversation-next-steps-idle')
+        && str_contains($routeMarkup, 'unmittelbar zur Sichtung')
+        && str_contains($routeMarkup, 'abgeschlossen')
+        && str_contains($routeMarkup, 'folgen nicht')
+        && !str_contains($routeMarkup, 'wählt Rufname')
+        && !str_contains($routeMarkup, 'Beförderungsnachweis')
+        && !str_contains($routeMarkup, 'Beförderungsweg'),
+    'The conversation-note route hint still describes the outgoing route'
+);
+$routeFixture->formdata = [];
+ob_start();
+$routeFixture->official_message_conversation_route();
+$idleRouteMarkup = (string) ob_get_clean();
+$routeFixture->task = 'Stab_sichten';
+ob_start();
+$routeFixture->official_message_conversation_route();
+$reviewRouteMarkup = (string) ob_get_clean();
+$assert(
+    str_contains($idleRouteMarkup, 'data-estab-conversation-next-steps-idle')
+        && $reviewRouteMarkup === '',
+    'The conversation-note route hint is shown without the note or outside the draft'
 );
 $conversationAccessStart = strpos(
     $controller,

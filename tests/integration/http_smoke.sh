@@ -3395,10 +3395,10 @@ if [ "$forged_vordruck_count" != 0 ]; then
     exit 1
 fi
 
-# Prove the server-only fallback: with JavaScript unavailable, selecting the
-# conversation-note checkbox must open the dedicated step where all five
-# media are enabled and required. The note checkbox is authoritative there
-# and therefore no longer presents an ineffective user choice.
+# Prove the server-only fallback: with JavaScript unavailable, the note is
+# still one step. A submit with the checkbox set but without medium, address
+# and time fails validation and returns the author's own form -- checkbox
+# still set, all five media enabled and required -- not a second stage.
 assert_status 200 --location --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --request POST \
     --data-urlencode "csrf_token=$workflow_csrf_token" \
@@ -3412,24 +3412,33 @@ assert_status 200 --location --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --data-urlencode '12_betreff=No-JS-Gesprächsnotiz' \
     --data-urlencode '12_inhalt=Serverseitiger Gesprächsnotiz-Rückfall' \
     "$base_url/4fach/mainindex.php"
-assert_body 'name="task" value="Stab_gesprnoti"'
+assert_body 'name="task" value="Stab_schreiben"'
+assert_body_absent 'name="task" value="Stab_gesprnoti"'
 assert_body \
     'id="estab-conversation-medium-options" aria-label="Tatsächlich verwendetes Übermittlungsmittel" aria-describedby="estab-conversation-medium-status" aria-required="true"'
 assert_body_regex \
-    'id="f_11_gesprnotiz"[^>]*type="checkbox"[^>]*disabled[^>]*checked' \
-    'dedicated conversation-note checkbox is immutable'
+    'id="f_11_gesprnotiz"[^>]*type="checkbox"[^>]*name="11_gesprnotiz"[^>]*checked' \
+    'no-JS conversation note keeps its checkbox set on the returned form'
 if grep -Eq 'name="01_medium"[^>]*(disabled|checked="checked")' "$body"; then
     printf '%s\n' \
-        'HTTP smoke: no-JS conversation stage has disabled or preselected media' >&2
+        'HTTP smoke: no-JS conversation form has disabled or preselected media' >&2
     exit 1
 fi
 assert_body_regex \
     'name="01_medium"[^>]*required' \
-    'no-JS conversation stage requires a communication medium'
+    'no-JS conversation form requires a communication medium'
+nojs_note_count=$(
+    printf "SELECT COUNT(*) FROM nv_nachrichten WHERE \`12_inhalt\` = '%s';\n" \
+        'Serverseitiger Gesprächsnotiz-Rückfall' | db_sql
+)
+if [ "$nojs_note_count" != 0 ]; then
+    printf 'HTTP smoke: incomplete conversation note reached persistent state\n' >&2
+    exit 1
+fi
 
 # Start a fresh form for the independent direct-attachment scenario below.
-# Entering the no-JS stage has intentionally consumed the one-time action
-# token from the preceding form.
+# The failed submit has intentionally consumed the one-time action token from
+# the preceding form.
 assert_status 200 --location --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --request POST --data-urlencode 'stab_schreiben_x=1' \
     "$base_url/4fach/mainindex.php"
@@ -3440,17 +3449,18 @@ conversation_attachment_request_token=$(
     message_attachment_request_token_from_body
 )
 
-# Exercise the real two-step UI transition with a direct attachment.
-# Browser-supplied author, organisation and fictitious review marks from the
-# originating staff form must be replaced. Repeating that exact multipart POST
-# must rebuild Stab_gesprnoti and never downgrade it to an ordinary message.
+# A conversation note with a direct attachment is one step as well: the
+# multipart submit archives the file and creates the note for Si. Browser-
+# supplied author, organisation and fictitious review marks must be replaced,
+# the desired medium of Feld 7 is dropped, and repeating that exact multipart
+# POST must neither duplicate the attachment nor the note.
 conversation_attachment_comment="Gesprächsnotiz ${workflow_marker}"
 conversation_medium=Me
 conversation_attachment_before=$(
     printf "SELECT COUNT(*) FROM nv_anhang WHERE BINARY comment = BINARY '%s' AND BINARY kuerzel = BINARY '%s';\n" \
         "$conversation_attachment_comment" "$test_code" | db_sql
 )
-submit_conversation_attachment_stage() {
+submit_conversation_attachment_note() {
     assert_status 200 --location --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
         --request POST \
         --form "csrf_token=$workflow_csrf_token" \
@@ -3463,6 +3473,8 @@ submit_conversation_attachment_stage() {
         --form "01_medium=$conversation_medium" \
         --form '01_datum=' \
         --form '01_zeichen=forged' \
+        --form '06_befwegausw=Fe' \
+        --form '07_durchspruch=D' \
         --form '10_anschrift=HTTP-Vordruckempfänger' \
         --form '11_rufnummer=' \
         --form '11_gesprnotiz=on' \
@@ -3475,6 +3487,7 @@ submit_conversation_attachment_stage() {
         --form "14_funktion=$test_function" \
         --form '15_quitdatum=30122000' \
         --form '15_quitzeichen=si0001' \
+        --form '16_54=16_54_bl' \
         --form '16_empf=' \
         --form '17_vermerke=Backup-Restore-Nachweis' \
         --form "message_attachment_comment=$conversation_attachment_comment" \
@@ -3482,75 +3495,46 @@ submit_conversation_attachment_stage() {
             "message_attachment_upload=@$direct_staff_upload_file;type=image/jpeg;filename=Gesprächsnotiz.JPEG" \
         "$base_url/4fach/mainindex.php"
 }
-submit_conversation_attachment_stage
-assert_body 'name="task" value="Stab_gesprnoti"'
-assert_body 'data-estab-conversation-medium'
-assert_body 'data-estab-conversation-medium-status'
-for conversation_medium_control in \
-    'f_01_medium_fu|Fu|Funk' \
-    'f_01_medium_fe|Fe|Telefon' \
-    'f_01_medium_fax|FAX|Telefax' \
-    'f_01_medium_at|@|DFÜ' \
-    'f_01_medium_me|Me|Kurier/Melder'; do
-    conversation_medium_id=${conversation_medium_control%%|*}
-    conversation_medium_value=${conversation_medium_control#*|}
-    conversation_medium_value=${conversation_medium_value%%|*}
-    conversation_medium_label=${conversation_medium_control##*|}
-    assert_body \
-        "id=\"$conversation_medium_id\" name=\"01_medium\" value=\"$conversation_medium_value\" type=\"radio\""
-    assert_body ">$conversation_medium_label</span>"
-done
-if grep -Eq 'name="01_medium"[^>]*disabled' "$body"; then
-    printf '%s\n' \
-        'HTTP smoke: dedicated conversation-note medium remains disabled' >&2
+submit_conversation_attachment_note
+if grep -Eq 'Fatal error|Uncaught (Error|TypeError)|Warning:' "$body"; then
+    printf 'HTTP smoke: PHP runtime error leaked while saving a conversation note\n' >&2
     exit 1
 fi
-assert_body_regex \
-    'id="f_01_medium_me"[^>]*name="01_medium"[^>]*value="Me"[^>]*checked="checked"' \
-    'conversation-note transition preserves the selected messenger medium'
-assert_body 'id="f_01_zeichen" data-estab-readonly="true"'
+assert_body_absent 'name="task" value="Stab_gesprnoti"'
 assert_body_absent 'Browserseitig gefälschte Einheit'
-assert_body_absent 'name="15_quitdatum"'
-assert_body_absent 'name="15_quitzeichen"'
-assert_body_absent 'name="16_gncopy"'
-assert_body 'name="16_54" value="16_54_bl" type="checkbox"'
-conversation_attachment_reference=$(sed -n \
-    's/.*id="f_12_anhang" type="hidden" name="12_anhang" value="\([A-Za-z0-9_.;-][A-Za-z0-9_.;-]*\)".*/\1/p' \
-    "$body" | head -n 1)
+conversation_attachment_reference=$(
+    printf "SELECT \`12_anhang\` FROM nv_nachrichten WHERE \`12_inhalt\` = '%s';\n" \
+        "$vordruck_marker" | db_sql
+)
 if ! printf '%s' "$conversation_attachment_reference" |
     grep -Eq '^[A-Za-z]{2}[0-9]{4,}\.jpeg;$'; then
-    printf 'HTTP smoke: conversation-note transition lost its attachment\n' >&2
+    printf 'HTTP smoke: conversation note lost its attachment: %s\n' \
+        "$conversation_attachment_reference" >&2
     exit 1
 fi
-submit_conversation_attachment_stage
-assert_body 'name="task" value="Stab_gesprnoti"'
-assert_body 'Übergang zur Gesprächsnotiz wurde bereits vorbereitet'
-assert_body "value=\"$conversation_attachment_reference\""
+submit_conversation_attachment_note
 conversation_attachment_after=$(
     printf "SELECT COUNT(*) FROM nv_anhang WHERE BINARY comment = BINARY '%s' AND BINARY kuerzel = BINARY '%s';\n" \
         "$conversation_attachment_comment" "$test_code" | db_sql
 )
 if [ "$conversation_attachment_after" != \
         "$((conversation_attachment_before + 1))" ]; then
-    printf 'HTTP smoke: conversation-note transition replay duplicated its attachment\n' >&2
+    printf 'HTTP smoke: conversation-note replay duplicated its attachment\n' >&2
     exit 1
 fi
-staged_note_csrf_token=$(csrf_from_body)
-staged_note_matrix_revision=$(recipient_matrix_revision_from_body)
-staged_note_attachment_request_token=$(
-    message_attachment_request_token_from_body
+conversation_note_count=$(
+    printf "SELECT COUNT(*) FROM nv_nachrichten WHERE \`12_inhalt\` = '%s';\n" \
+        "$vordruck_marker" | db_sql
 )
-if [ "$staged_note_matrix_revision" = \
-    "$workflow_recipient_matrix_revision" ]; then
-    printf '%s\n' \
-        'HTTP smoke: recipient-matrix revision did not change for AB_C fixture' >&2
+if [ "$conversation_note_count" != 1 ]; then
+    printf 'HTTP smoke: conversation-note replay duplicated the note: %s\n' \
+        "$conversation_note_count" >&2
     exit 1
 fi
 
-# A conversation-note stage belongs to its form token, not to the shared PHP
-# session. Keep the first stage open while a second browser tab starts the
-# same workflow. The second tab must also reach Stab_gesprnoti and must not
-# accidentally save its draft as an ordinary staff message.
+# A conversation note belongs to its form token, not to the shared PHP
+# session. A second browser tab that starts the same workflow saves its own
+# note directly for Si and must not downgrade it to an ordinary staff message.
 assert_status 200 --location --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --request POST --data-urlencode 'stab_schreiben_x=1' \
     "$base_url/4fach/mainindex.php"
@@ -3567,8 +3551,8 @@ assert_status 200 --location --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
         "message_attachment_request_token=$parallel_note_request_token" \
     --data-urlencode 'absenden_x=1' \
     --data-urlencode 'task=Stab_schreiben' \
-    --data-urlencode "01_medium=$conversation_medium" \
     --data-urlencode '01_datum=' \
+    --data-urlencode "06_befwegausw=$conversation_medium" \
     --data-urlencode '10_anschrift=HTTP-Parallel-Tab' \
     --data-urlencode '11_rufnummer=' \
     --data-urlencode '11_gesprnotiz=on' \
@@ -3578,25 +3562,28 @@ assert_status 200 --location --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --data-urlencode "12_abfzeit=$tactical_time" \
     --data-urlencode '16_empf=' \
     "$base_url/4fach/mainindex.php"
-assert_body 'name="task" value="Stab_gesprnoti"'
-assert_body "$parallel_note_marker"
-parallel_note_count=$(
-    printf "SELECT COUNT(*) FROM nv_nachrichten WHERE \`12_inhalt\` = '%s';\n" \
+assert_body_absent 'name="task" value="Stab_gesprnoti"'
+# Without a medium in Feld 1, the medium of Feld 7 is what the call used.
+parallel_note_state=$(
+    printf "SELECT CONCAT(\`04_richtung\`, '|', \`x00_status\`, '|', \`11_gesprnotiz\`, '|', \`01_medium\`, '|', \`01_zeichen\`, '|', IF(\`06_befwegausw\` IS NULL OR \`06_befwegausw\` = '', 'unset', 'set')) FROM nv_nachrichten WHERE \`12_inhalt\` = '%s';\n" \
         "$parallel_note_marker" | db_sql
 )
-if [ "$parallel_note_count" != 0 ]; then
+if [ "$parallel_note_state" != "A|4|t|${conversation_medium}|${test_code}|unset" ]; then
     printf '%s\n' \
-        'HTTP smoke: parallel conversation-note tab persisted prematurely' >&2
+        'HTTP smoke: parallel conversation-note tab did not save a note for Si' >&2
+    printf 'actual: %s\n' "$parallel_note_state" >&2
     exit 1
 fi
 
+# A stale recipient-matrix revision still stops a hand-built second-stage
+# submit; the note that already exists is not touched.
 assert_status 409 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --request POST \
     --data-urlencode "csrf_token=$workflow_csrf_token" \
     --data-urlencode \
         "recipient_matrix_revision=$workflow_recipient_matrix_revision" \
     --data-urlencode \
-        "message_attachment_request_token=$staged_note_attachment_request_token" \
+        "message_attachment_request_token=$conversation_attachment_request_token" \
     --data-urlencode 'absenden_x=1' \
     --data-urlencode 'task=Stab_gesprnoti' \
     --data-urlencode "01_medium=$conversation_medium" \
@@ -3625,39 +3612,48 @@ staged_vordruck_count=$(
     printf "SELECT COUNT(*) FROM nv_nachrichten WHERE \`12_inhalt\` = '%s';\n" \
         "$vordruck_marker" | db_sql
 )
-if [ "$staged_vordruck_count" != 0 ]; then
-    printf 'HTTP smoke: conversation-note staging persisted prematurely\n' >&2
+if [ "$staged_vordruck_count" != 1 ]; then
+    printf 'HTTP smoke: stale conversation-note submit changed the note count\n' >&2
     exit 1
 fi
 
-# The attachment picker must return to the exact staged conversation-note
-# task. It must not silently downgrade the form to a normal staff message.
+# The attachment picker must return to the author's draft with the note
+# still set. It must not silently drop the checkbox or the medium.
+assert_status 200 --location --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+    --request POST --data-urlencode 'stab_schreiben_x=1' \
+    "$base_url/4fach/mainindex.php"
+staged_note_csrf_token=$(csrf_from_body)
+staged_note_matrix_revision=$(recipient_matrix_revision_from_body)
+staged_note_marker="Anhangwahl ${workflow_marker}"
 assert_status 422 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --request POST \
     --data-urlencode "csrf_token=$staged_note_csrf_token" \
     --data-urlencode \
         "recipient_matrix_revision=$staged_note_matrix_revision" \
     --data-urlencode 'anhang_plus_x=1' \
-    --data-urlencode 'task=Stab_gesprnoti' \
+    --data-urlencode 'task=Stab_schreiben' \
     --data-urlencode '00_lfd=' \
     --data-urlencode "01_medium=$conversation_medium" \
     --data-urlencode '01_datum=' \
     --data-urlencode '07_durchspruch=D' \
     --data-urlencode '10_anschrift=HTTP-Vordruckempfänger' \
     --data-urlencode '11_rufnummer=' \
-    --data-urlencode '11_gesprnotiz=f' \
-    --data-urlencode "12_anhang=$conversation_attachment_reference" \
-    --data-urlencode "12_betreff=$vordruck_subject" \
-    --data-urlencode "12_inhalt=$vordruck_marker" \
+    --data-urlencode '11_gesprnotiz=on' \
+    --data-urlencode '12_anhang=' \
+    --data-urlencode "12_betreff=$staged_note_marker" \
+    --data-urlencode "12_inhalt=$staged_note_marker" \
     --data-urlencode "12_abfzeit=$tactical_time" \
     --data-urlencode "14_zeichen=$test_code" \
     --data-urlencode "14_funktion=$test_function" \
     --data-urlencode '16_54=16_54_bl' \
     --data-urlencode '17_vermerke[]=unzulässiger Arraywert' \
     "$base_url/4fach/mainindex.php"
-assert_body 'name="task" value="Stab_gesprnoti"'
+assert_body 'name="task" value="Stab_schreiben"'
 assert_body 'Die Anhangverwaltung wurde nicht geöffnet:'
-assert_body "$vordruck_marker"
+assert_body "$staged_note_marker"
+assert_body_regex \
+    'id="f_11_gesprnotiz"[^>]*type="checkbox"[^>]*name="11_gesprnotiz"[^>]*checked' \
+    '422 conversation-note draft keeps its checkbox'
 assert_body_regex \
     'id="f_01_medium_me"[^>]*name="01_medium"[^>]*value="Me"[^>]*checked="checked"' \
     '422 conversation-note draft preserves the selected medium'
@@ -3670,7 +3666,7 @@ assert_body_absent 'Fatal error'
 assert_body_absent 'Warning:'
 rejected_vordruck_count=$(
     printf "SELECT COUNT(*) FROM nv_nachrichten WHERE \`12_inhalt\` = '%s';\n" \
-        "$vordruck_marker" |
+        "$staged_note_marker" |
         db_sql
 )
 if [ "$rejected_vordruck_count" != 0 ]; then
@@ -3680,9 +3676,6 @@ if [ "$rejected_vordruck_count" != 0 ]; then
 fi
 staged_note_csrf_token=$(csrf_from_body)
 staged_note_matrix_revision=$(recipient_matrix_revision_from_body)
-staged_note_attachment_request_token=$(
-    message_attachment_request_token_from_body
-)
 
 assert_status 200 --location --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --request POST \
@@ -3690,17 +3683,17 @@ assert_status 200 --location --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --data-urlencode \
         "recipient_matrix_revision=$staged_note_matrix_revision" \
     --data-urlencode 'anhang_plus_x=1' \
-    --data-urlencode 'task=Stab_gesprnoti' \
+    --data-urlencode 'task=Stab_schreiben' \
     --data-urlencode '00_lfd=' \
     --data-urlencode "01_medium=$conversation_medium" \
     --data-urlencode '01_datum=' \
     --data-urlencode '07_durchspruch=D' \
     --data-urlencode '10_anschrift=HTTP-Vordruckempfänger' \
     --data-urlencode '11_rufnummer=' \
-    --data-urlencode '11_gesprnotiz=f' \
-    --data-urlencode "12_anhang=$conversation_attachment_reference" \
-    --data-urlencode "12_betreff=$vordruck_subject" \
-    --data-urlencode "12_inhalt=$vordruck_marker" \
+    --data-urlencode '11_gesprnotiz=on' \
+    --data-urlencode '12_anhang=' \
+    --data-urlencode "12_betreff=$staged_note_marker" \
+    --data-urlencode "12_inhalt=$staged_note_marker" \
     --data-urlencode "12_abfzeit=$tactical_time" \
     --data-urlencode "14_zeichen=$test_code" \
     --data-urlencode "14_funktion=$test_function" \
@@ -3719,77 +3712,27 @@ assert_status 200 --location --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
         "attachment_flow=$staged_note_attachment_flow" \
     --data-urlencode 'ah_abbrechen_x=1' \
     "$base_url/4fach/anhang.php"
-assert_body 'name="task" value="Stab_gesprnoti"'
-assert_body "$vordruck_marker"
-assert_body ">$test_code</strong>"
+assert_body 'name="task" value="Stab_schreiben"'
+assert_body_absent 'name="task" value="Stab_gesprnoti"'
+assert_body "$staged_note_marker"
+assert_body_regex \
+    'id="f_11_gesprnotiz"[^>]*type="checkbox"[^>]*name="11_gesprnotiz"[^>]*checked' \
+    'attachment-returned conversation draft keeps its checkbox'
 assert_body_regex \
     'id="f_01_medium_me"[^>]*name="01_medium"[^>]*value="Me"[^>]*checked="checked"' \
-    'attachment-returned conversation note preserves the selected medium'
+    'attachment-returned conversation draft preserves the selected medium'
 assert_body_regex \
     'name="16_54" value="16_54_bl" type="checkbox"[^>]*checked' \
     'attachment-returned conversation-note underscore recipient'
 assert_body_absent 'name="16_gncopy"'
-assert_body_absent 'name="task" value="Stab_schreiben"'
-staged_note_return_csrf=$(csrf_from_body)
-staged_note_matrix_revision=$(recipient_matrix_revision_from_body)
-staged_note_return_attachment_request_token=$(
-    message_attachment_request_token_from_body
-)
 
-submit_open_conversation_note() {
-    expected_status=$1
-    # Wie beim Direktentwurf: Wer die Seite sehen will, folgt der
-    # Weiterleitung; wer nur den Umlenkschritt nachweist, folgt ihr nicht.
-    set --
-    if [ "$expected_status" = 200 ]; then
-        set -- --location
-    fi
-    assert_status "$expected_status" "$@" \
-        --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
-        --request POST \
-        --data-urlencode "csrf_token=$staged_note_return_csrf" \
-        --data-urlencode \
-            "recipient_matrix_revision=$staged_note_matrix_revision" \
-        --data-urlencode \
-            "message_attachment_request_token=$staged_note_return_attachment_request_token" \
-        --data-urlencode 'absenden_x=1' \
-        --data-urlencode 'task=Stab_gesprnoti' \
-        --data-urlencode "01_medium=$conversation_medium" \
-        --data-urlencode '01_datum=' \
-        --data-urlencode "01_zeichen=$test_code" \
-        --data-urlencode '02_zeit=' \
-        --data-urlencode '07_durchspruch=D' \
-        --data-urlencode '08_befhinweis=' \
-        --data-urlencode '08_befhinwausw=' \
-        --data-urlencode '09_vorrangstufe=' \
-        --data-urlencode '10_anschrift=HTTP-Vordruckempfänger' \
-        --data-urlencode '11_rufnummer=' \
-        --data-urlencode '11_gesprnotiz=f' \
-        --data-urlencode "12_anhang=$conversation_attachment_reference" \
-        --data-urlencode "12_betreff=$vordruck_subject" \
-        --data-urlencode "12_inhalt=$vordruck_marker" \
-        --data-urlencode "12_abfzeit=$tactical_time" \
-        --data-urlencode '13_abseinheit=HTTP-Vordrucktest' \
-        --data-urlencode "14_zeichen=$test_code" \
-        --data-urlencode "14_funktion=$test_function" \
-        --data-urlencode '15_quitdatum=' \
-        --data-urlencode '15_quitzeichen=' \
-        --data-urlencode '16_54=16_54_bl' \
-        --data-urlencode '16_empf=' \
-        --data-urlencode '17_vermerke=Backup-Restore-Nachweis' \
-        "$base_url/4fach/mainindex.php"
-}
-submit_open_conversation_note 200
-if grep -Eq 'Fatal error|Uncaught (Error|TypeError)|Warning:' "$body"; then
-    printf 'HTTP smoke: PHP runtime error leaked while generating a form\n' >&2
-    exit 1
-fi
-submit_open_conversation_note 303
-# Die Erstellungsevidenz ist hashverkettet und unveraenderlich; sie darf
-# deshalb nichts behaupten, was der Laufweg nicht vorsieht. Eine
-# Gespraechsnotiz endet bei der Sichtung -- es folgt weder eine Disposition
-# durch den LdF noch eine Befoerderung durch die Fernmelder. Die beiden
-# Merkmale sind darum weggefallen und muessen fehlen.
+# Die Erstellungsevidenz der oben in einem Schritt gespeicherten Notiz ist
+# hashverkettet und unveraenderlich; sie darf deshalb nichts behaupten, was
+# der Laufweg nicht vorsieht. Eine Gespraechsnotiz endet bei der Sichtung --
+# es folgt weder eine Disposition durch den LdF noch eine Befoerderung durch
+# die Fernmelder. Die beiden Merkmale sind darum weggefallen und muessen
+# fehlen. Die vom Browser mitgesendeten Zeichen, Einheit und Quittungsmarken
+# hat der Server ersetzt.
 conversation_evidence_count=$(
     printf "SELECT COUNT(*) FROM nv_nachrichten n JOIN nv_nachrichten_ereignisse e ON e.message_id = n.\`00_lfd\` AND e.einsatz_id = n.einsatz_id WHERE n.\`12_inhalt\` = '%s' AND n.\`04_richtung\` = 'A' AND n.\`x00_status\` = 4 AND n.\`x01_abschluss\` = 'f' AND n.\`01_zeichen\` = '%s' AND n.\`14_zeichen\` = '%s' AND n.\`14_funktion\` = '%s' AND n.\`02_zeit\` IS NULL AND COALESCE(n.\`02_zeichen\`, '') = '' AND n.\`03_datum\` IS NULL AND COALESCE(n.\`03_zeichen\`, '') = '' AND COALESCE(n.\`15_quitzeichen\`, '') = '' AND n.\`15_quitdatum\` IS NULL AND e.event_type = 'conversation_note_created' AND e.from_status IS NULL AND e.to_status = 4 AND e.actor_code = '%s' AND e.actor_function = '%s' AND JSON_UNQUOTE(JSON_EXTRACT(e.field_snapshot, '$.direction')) = 'A' AND JSON_UNQUOTE(JSON_EXTRACT(e.field_snapshot, '$.object_type')) = 'conversation_note' AND JSON_UNQUOTE(JSON_EXTRACT(e.field_snapshot, '$.author_code')) = '%s' AND JSON_UNQUOTE(JSON_EXTRACT(e.field_snapshot, '$.review_required')) = 'true' AND JSON_EXTRACT(e.field_snapshot, '$.ldf_disposition_required') IS NULL AND JSON_EXTRACT(e.field_snapshot, '$.transport_evidence_required') IS NULL;\n" \
         "$vordruck_marker" "$test_code" "$test_code" "$test_function" \
@@ -3800,11 +3743,12 @@ if [ "$conversation_evidence_count" != 1 ]; then
     exit 1
 fi
 conversation_initial_state=$(
-    printf "SELECT CONCAT(\`04_richtung\`, '|', \`x00_status\`, '|', \`x01_abschluss\`, '|', IF(\`05_gegenstelle\` IS NULL OR \`05_gegenstelle\` = '', 'unset', 'set'), '|', IF(\`06_befweg\` IS NULL OR \`06_befweg\` = '', 'unset', 'set'), '|', COALESCE(\`estab_fernmeldeplan_eintrag_id\`, 0), '|', \`x04_druck\`) FROM nv_nachrichten WHERE \`12_inhalt\` = '%s';\n" \
+    printf "SELECT CONCAT(\`04_richtung\`, '|', \`x00_status\`, '|', \`x01_abschluss\`, '|', IF(\`05_gegenstelle\` IS NULL OR \`05_gegenstelle\` = '', 'unset', 'set'), '|', IF(\`06_befweg\` IS NULL OR \`06_befweg\` = '', 'unset', 'set'), '|', COALESCE(\`estab_fernmeldeplan_eintrag_id\`, 0), '|', \`x04_druck\`, '|', IF(\`06_befwegausw\` IS NULL OR \`06_befwegausw\` = '', 'unset', 'set'), '|', IF(\`13_abseinheit\` = 'Browserseitig gefälschte Einheit', 'forged', 'server')) FROM nv_nachrichten WHERE \`12_inhalt\` = '%s';\n" \
         "$vordruck_marker" | db_sql
 )
-if [ "$conversation_initial_state" != 'A|4|f|unset|unset|0|f' ]; then
-    printf 'HTTP smoke: conversation note bypassed Si/LdF/A-W: %s\n' \
+if [ "$conversation_initial_state" != \
+    'A|4|f|unset|unset|0|f|unset|server' ]; then
+    printf 'HTTP smoke: conversation note bypassed Si/LdF/A-W or kept forged marks: %s\n' \
         "$conversation_initial_state" >&2
     exit 1
 fi
