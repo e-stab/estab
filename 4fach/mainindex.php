@@ -1643,26 +1643,10 @@ if (
    * the ordinary link remains available when JavaScript is disabled.
    */
   function estab_navigation_open_after_login (string $destinationKey): never {
-    $destinationUrl = estab_navigation_url_for_key ($destinationKey);
-    $encodedUrl = json_encode (
-      $destinationUrl,
-      JSON_HEX_TAG
-        | JSON_HEX_AMP
-        | JSON_HEX_APOS
-        | JSON_HEX_QUOT
-        | JSON_UNESCAPED_SLASHES
-        | JSON_THROW_ON_ERROR
+    // Derselbe Ausbruch, den auch die Funktionsauswahl aus dem Rahmen nimmt.
+    estab_navigation_open_top_level (
+      estab_navigation_url_for_key ($destinationKey)
     );
-    header ("Content-Type: text/html; charset=UTF-8");
-    echo "<!doctype html><html lang=\"de\"><head><meta charset=\"UTF-8\">";
-    echo "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">";
-    echo "<title>eStab-Bereich öffnen</title></head><body>";
-    echo "<p>Der gewählte eStab-Bereich wird geöffnet.</p>";
-    echo "<p><a href=\"".estab_auth_html ($destinationUrl).
-         "\" target=\"_top\">Jetzt öffnen</a></p>";
-    echo "<script".estab_csp_script_attribute().">window.top.location.replace(".$encodedUrl.");</script>";
-    echo "</body></html>";
-    exit;
   }
 
 

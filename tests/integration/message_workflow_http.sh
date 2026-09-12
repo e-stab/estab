@@ -2020,6 +2020,23 @@ assert_strict_duty_redirect \
     "$s1_cookies" 'STRICT incident log without selected duty' \
     "$base_url/stabetb/etb.php"
 
+# The message form lives inside the workspace's content frame. A 303 from
+# there would only move the frame, and the command post would then render
+# its own shell -- menu column and cockpit -- inside the first one. From a
+# frame the selector therefore replaces the whole window, with a plain
+# target="_top" link for browsers without JavaScript.
+assert_status 200 'STRICT message form inside the content frame breaks out' \
+    --header 'Sec-Fetch-Dest: iframe' \
+    --cookie "$s1_cookies" --cookie-jar "$s1_cookies" \
+    "$base_url/4fach/mainindex.php"
+assert_body \
+    'window.top.location.replace("/4fach/fuehrungsstelle.php#meine-dienstfunktionen")' \
+    'STRICT frame breakout replaces the top-level window with the duty selector'
+assert_body 'target="_top"' \
+    'STRICT frame breakout keeps a top-level link without JavaScript'
+assert_body_absent 'data-estab-shell' \
+    'STRICT frame breakout does not nest the application shell'
+
 # A fresh login in STRICT retains the validated original destination only in
 # server-side session state and first opens the duty selector. Reusing the S3
 # account here also proves that this is a login transition, not merely a guard

@@ -77,6 +77,31 @@ $assert(
         && !str_contains($selectDutySource, 'estab_auth_require_session('),
     'missing STRICT function selection can still end in a plain-text dead end or replay an unsafe destination'
 );
+/*
+ * Der Nachrichtenvordruck steht im Rahmen der Arbeitsflaeche. Eine 303 von
+ * dort traefe nur den Rahmen, und die Fuehrungsstelle bekaeme darin ihre
+ * eigene Huelle -- ein zweites Menue im ersten. Aus dem Rahmen heraus muss
+ * die Auswahl deshalb das ganze Fenster setzen, mit Verweis fuer Browser
+ * ohne Skript.
+ */
+$assert(
+    str_contains(
+        $selectDutySource,
+        'estab_navigation_request_is_embedded($effectiveServer)'
+    )
+        && str_contains($selectDutySource, 'estab_navigation_open_top_level(')
+        && str_contains($selectDutySource, 'window.top.location.replace(')
+        && str_contains($selectDutySource, 'target="_top"')
+        && str_contains($selectDutySource, 'Vary: Cookie, Sec-Fetch-Dest'),
+    'the STRICT duty selector redirects inside the content frame and nests the shell into itself'
+);
+$assert(
+    estab_navigation_request_is_embedded(['HTTP_SEC_FETCH_DEST' => 'iframe'])
+        && estab_navigation_request_is_embedded(['HTTP_SEC_FETCH_DEST' => ' Frame '])
+        && !estab_navigation_request_is_embedded(['HTTP_SEC_FETCH_DEST' => 'document'])
+        && !estab_navigation_request_is_embedded(['REQUEST_METHOD' => 'GET']),
+    'frame detection does not follow Fetch Metadata'
+);
 $assert(
     estab_navigation_strict_duty_selection_required(null)
         && estab_navigation_strict_duty_selection_required([
