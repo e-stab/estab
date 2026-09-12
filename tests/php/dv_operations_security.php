@@ -839,6 +839,42 @@ $assert(
         ),
     'operator command-post UI does not bootstrap STRICT hats or bypass them in LOOSE'
 );
+/*
+ * Der Kasten ueber den Dienstfunktionen nennt den naechsten Schritt des
+ * Lesers, nicht den einer anderen Stelle: annehmen, auf die Aktivierung
+ * warten, oder waehlen. Jeder Fall traegt das gemeinsame Merkmal der
+ * fehlenden Auswahl und ein eigenes fuer den Schritt.
+ */
+foreach ([
+    'data-estab-duty-acceptance-required',
+    'data-estab-duty-acceptance-done',
+    'data-estab-duty-choice-required',
+    'data-estab-duty-assignment-missing',
+] as $dutyMarker) {
+    $assert(
+        substr_count($operationsUi, $dutyMarker) >= 1
+            && preg_match(
+                '/data-estab-duty-selection-required\s+' . $dutyMarker . '/',
+                $operationsUi
+            ) === 1,
+        'operator command-post UI lacks the duty step marker ' . $dutyMarker
+            . ' or detaches it from the selection-required marker'
+    );
+}
+$assert(
+    substr_count($operationsUi, "'ZUGEWIESEN'") >= 1
+        && substr_count($operationsUi, "'schicht_status'") >= 2
+        && !str_contains(
+            $operationsUi,
+            'Die Administration muss
+            eine geplante Dienstschicht aktivieren.'
+        )
+        && !str_contains(
+            $operationsUi,
+            'Nehmen Sie oben eine zugewiesene Funktion an und wählen Sie'
+        ),
+    'operator command-post UI still tells the reader to wait for the administration or to accept after accepting'
+);
 $messengerCandidates = $slice(
     $dv,
     'function estab_dv_messenger_candidates(',

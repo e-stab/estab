@@ -1041,11 +1041,95 @@ foreach ($plans as $plan) {
     </section>
   <?php else: ?>
     <?php if ($strictMode): ?>
-      <?php if (!is_array($activeDutyShift)): ?>
-        <section class="estab-tool-status estab-tool-status-danger" role="alert">
+      <?php
+        /*
+         * Ein Kasten, ein naechster Schritt.
+         *
+         * Hier standen zwei Kaesten: oben „Keine Dienstschicht aktiv -- die
+         * Administration muss aktivieren", unten „Nehmen Sie eine Funktion
+         * an und waehlen Sie sie aus". Der obere nannte die falsche Stelle:
+         * Die Administration kann eine geplante Schicht erst aktivieren,
+         * wenn jede Pflichtfunktion persoenlich angenommen ist -- dran war
+         * also der, der den Satz las. Der untere blieb nach der Annahme
+         * stehen, weil er nur auf die fehlende Auswahl sah, die in einer
+         * geplanten Schicht noch gar nicht moeglich ist.
+         *
+         * Der Zustand wird deshalb aus den eigenen Dienstfunktionen
+         * abgeleitet, und der Kasten sagt genau das, was als Naechstes
+         * ansteht. Das Merkmal data-estab-duty-selection-required tragen
+         * alle Faelle ohne gewaehlte Arbeitsfunktion; das zweite Merkmal
+         * nennt den Schritt.
+         */
+        $zuweisungenOffen = array_filter(
+            $hats,
+            static fn (array $h): bool =>
+                (string) ($h['status'] ?? '') === 'ZUGEWIESEN'
+        );
+        $angenommenAktiv = array_filter(
+            $hats,
+            static fn (array $h): bool =>
+                (string) ($h['status'] ?? '') === 'ANGENOMMEN'
+                && (string) ($h['schicht_status'] ?? '') === 'AKTIV'
+        );
+        $angenommenGeplant = array_filter(
+            $hats,
+            static fn (array $h): bool =>
+                (string) ($h['status'] ?? '') === 'ANGENOMMEN'
+                && (string) ($h['schicht_status'] ?? '') === 'GEPLANT'
+        );
+      ?>
+      <?php if (is_array($selectedIdentity)): ?>
+      <?php elseif ($zuweisungenOffen !== []): ?>
+        <section class="estab-tool-status estab-tool-status-danger"
+          role="alert" data-estab-duty-selection-required
+          data-estab-duty-acceptance-required>
+          <strong>Bitte nehmen Sie Ihre Dienstfunktion an.</strong>
+          <span><?= is_array($activeDutyShift)
+              ? 'Ihnen ist in der aktiven Dienstschicht eine Funktion '
+                  . 'zugewiesen. Nehmen Sie sie unten unter „Meine '
+                  . 'Dienstfunktionen“ verbindlich an und wählen Sie sie '
+                  . 'danach als Arbeitsfunktion.'
+              : 'Die Dienstschicht ist geplant und noch nicht aktiv. Sie '
+                  . 'wird erst aktiviert, wenn alle Pflichtfunktionen '
+                  . 'persönlich angenommen sind -- nehmen Sie Ihre Zuweisung '
+                  . 'unten unter „Meine Dienstfunktionen“ verbindlich an.' ?>
+          </span>
+        </section>
+      <?php elseif ($angenommenAktiv !== []): ?>
+        <section class="estab-tool-status estab-tool-status-danger"
+          role="alert" data-estab-duty-selection-required
+          data-estab-duty-choice-required>
+          <strong>Keine Arbeitsfunktion ausgewählt.</strong>
+          <span>Ihre Dienstfunktion ist angenommen. Wählen Sie sie unten
+            unter „Meine Dienstfunktionen“ als Arbeitsfunktion aus; erst
+            danach sind operative Bereiche freigeschaltet.</span>
+        </section>
+      <?php elseif ($angenommenGeplant !== []): ?>
+        <section class="estab-tool-status estab-tool-status-warning"
+          role="status" data-estab-duty-selection-required
+          data-estab-duty-acceptance-done>
+          <strong>Ihre Dienstfunktion ist angenommen.</strong>
+          <span>Die Dienstschicht ist noch geplant. Sobald alle
+            Pflichtfunktionen angenommen sind, aktiviert die Administration
+            sie; danach wählen Sie hier Ihre Arbeitsfunktion.</span>
+        </section>
+      <?php elseif (!is_array($activeDutyShift)): ?>
+        <section class="estab-tool-status estab-tool-status-danger"
+          role="alert" data-estab-duty-selection-required
+          data-estab-duty-assignment-missing>
           <strong>Keine Dienstschicht aktiv.</strong>
-          <span>Operative Eingaben sind gesperrt. Die Administration muss
-            eine geplante Dienstschicht aktivieren.</span>
+          <span>Operative Eingaben sind gesperrt. Ihrem Konto ist in der
+            aktuellen oder geplanten Schicht noch keine Funktion zugewiesen;
+            die Administration plant die Dienstschicht und weist die
+            Funktionen zu.</span>
+        </section>
+      <?php else: ?>
+        <section class="estab-tool-status estab-tool-status-danger"
+          role="alert" data-estab-duty-selection-required
+          data-estab-duty-assignment-missing>
+          <strong>Keine Arbeitsfunktion ausgewählt.</strong>
+          <span>Ihrem Konto ist in der aktiven Dienstschicht keine Funktion
+            zugewiesen. Die Administration weist die Funktionen zu.</span>
         </section>
       <?php endif; ?>
 
@@ -1223,14 +1307,6 @@ foreach ($plans as $plan) {
         </section>
       <?php endif; ?>
 
-      <?php if (!is_array($selectedIdentity)): ?>
-        <section class="estab-tool-status estab-tool-status-danger"
-          role="alert" data-estab-duty-selection-required>
-          <strong>Keine Arbeitsfunktion ausgewählt.</strong>
-          <span>Nehmen Sie oben eine zugewiesene Funktion an und wählen Sie
-            sie aus. Erst danach sind operative Bereiche freigeschaltet.</span>
-        </section>
-      <?php endif; ?>
     <?php endif; ?>
 
     <?php if (!$strictMode || is_array($selectedIdentity)): ?>

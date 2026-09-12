@@ -4247,6 +4247,15 @@ form[data-estab-incident-disabled="true"]::before {
     color: var(--fehler-tinte);
 }
 
+/* Ein Zustand, in dem nichts fehlt und nichts zu tun ist -- nur zu warten:
+   die Dienstfunktion ist angenommen, die Schicht noch nicht aktiviert.
+   Rot hiesse „hier ist etwas falsch", gruen „fertig"; beides stimmt nicht. */
+.estab-tool-status-warning {
+    background: var(--achtung-flaeche);
+    border-color: var(--achtung-kante);
+    color: var(--achtung-tinte);
+}
+
 .estab-tool-status strong,
 .estab-tool-status span {
     display: block;
