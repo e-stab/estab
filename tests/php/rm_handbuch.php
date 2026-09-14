@@ -72,9 +72,16 @@ $assert = static function (bool $condition, string $message) use (&$assertions):
  * Vordruck hat kein Kaestchen dafuer, und die Fuehrungsstelle vergibt sie
  * nicht. Der Absatz „Vorrang" nennt nur noch Sofort und Blitz; der Satz
  * ueber die ausdrueckliche Weisung entfaellt mit der Stufe.
+ *
+ * Von 4713 auf 4721 Woerter am 14.09.2026, Kapitel 6 „Nachricht ausgeben".
+ *
+ * Die Abfassungszeit eines neuen Ausgangs ist jetzt mit der Uhrzeit beim
+ * Oeffnen vorbelegt (Issue #35); der Satz, eStab setze sie nicht selbst,
+ * sagt das Gegenteil und ist ersetzt. Und der Verfasser gibt nicht mehr
+ * "zur Sichtung", er sendet ab -- das Absenden ist die Weitergabe.
  */
-const ESTAB_HANDBUCH_WOERTER = 4713;
-const ESTAB_HANDBUCH_PRUEFSUMME = '59849b1f6060593d';
+const ESTAB_HANDBUCH_WOERTER = 4721;
+const ESTAB_HANDBUCH_PRUEFSUMME = 'eee2a2a738e94823';
 
 $quelle = file_get_contents($root . '/handbuch/index.php');
 $assert(is_string($quelle), 'Das Handbuch ist nicht lesbar.');

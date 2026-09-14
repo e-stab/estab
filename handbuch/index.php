@@ -346,9 +346,10 @@ $handbookUpdated = '1. September 2026';
             genau eine Aufgabe.</p>
           <ol class="estab-handbook-steps">
             <li><strong>Verfasser.</strong> Anschrift, Betreff, Inhalt,
-              Abfassungszeit und Verteiler eintragen und zur Sichtung geben.
-              Die Abfassungszeit in Feld 16 setzt eStab nicht selbst; sie
-              gehört dem Verfasser. In Feld 7 trägt er ein, über welches
+              Abfassungszeit und Verteiler eintragen und absenden.
+              Die Abfassungszeit in Feld 16 ist mit der Uhrzeit beim Öffnen
+              vorbelegt; sie gehört dem Verfasser, der sie prüft und bei
+              Bedarf ändert. In Feld 7 trägt er ein, über welches
               Mittel die Nachricht seiner Ansicht nach laufen soll. Dieser
               Wunsch bleibt im Vordruck stehen.</li>
             <li><strong>Si.</strong> Anschrift, Verfasserzeichen und Funktion
