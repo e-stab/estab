@@ -23,22 +23,35 @@ RUN set -eux; \
 # bis -53615 in util-linux, CVE-2026-14456 in openssl) und der Auftrag
 # bricht ab.
 #
+# Dasselbe am 14.09.2026 fuer gzip, pcre2, perl, sqlite und libssh2: Das
+# Grundbild trug sie noch im Stand vor den Nachbesserungen, der Bildscan
+# meldete 34 behebbare Luecken (u. a. CVE-2026-13221 in perl,
+# CVE-2026-86145 in pcre2), auch auf main ohne jede Codeaenderung.
+#
 # Die Pruefung darunter besteht darauf, dass die Anhebung wirklich ankam.
 # Ein stiller Rueckfall -- etwa weil ein Spiegel den Stand noch nicht hat --
 # waere schlimmer als gar keine Anhebung: das Bild saehe geprueft aus und
 # waere es nicht.
     apt-get install -y --no-install-recommends --only-upgrade \
         bsdutils \
+        gzip \
         libblkid1 \
         liblastlog2-2 \
         libmount1 \
+        libpcre2-8-0 \
+        libperl5.40 \
         libsmartcols1 \
+        libsqlite3-0 \
+        libssh2-1t64 \
         libssl3t64 \
         libuuid1 \
         login \
         mount \
         openssl \
         openssl-provider-legacy \
+        perl \
+        perl-base \
+        perl-modules-5.40 \
         util-linux; \
     dpkg --compare-versions \
         "$(dpkg-query --showformat='${Version}' --show util-linux)" \
@@ -46,6 +59,12 @@ RUN set -eux; \
     dpkg --compare-versions \
         "$(dpkg-query --showformat='${Version}' --show openssl)" \
         ge '3.5.7-1~deb13u2'; \
+    dpkg --compare-versions \
+        "$(dpkg-query --showformat='${Version}' --show perl-base)" \
+        ge '5.40.1-6+deb13u1'; \
+    dpkg --compare-versions \
+        "$(dpkg-query --showformat='${Version}' --show libpcre2-8-0)" \
+        ge '10.46-1~deb13u2'; \
     apt-get install -y --no-install-recommends \
         acl \
         apache2-utils \

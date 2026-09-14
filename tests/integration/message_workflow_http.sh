@@ -1201,7 +1201,6 @@ finish_ldf_incoming()
     assert_body "$ldf_marker" "LdF queue for $ldf_marker"
     assert_route_control ldf meldung "$ldf_record_id" "LdF incoming detail"
     ldf_csrf=$(csrf_from_cockpit "$ldf_cookies")
-    ldf_clock_before=$(app_tactical_group)
     assert_status 200 "open LdF incoming for $ldf_marker" \
         --cookie "$ldf_cookies" --cookie-jar "$ldf_cookies" \
         --location \
@@ -1210,15 +1209,17 @@ finish_ldf_incoming()
         --data-urlencode 'ldf=meldung' \
         --data-urlencode "00_lfd=$ldf_record_id" \
         "$base_url/4fach/mainindex.php"
-    ldf_clock_after=$(app_tactical_group)
     assert_no_runtime_error "LdF incoming form for $ldf_marker"
     assert_body 'name="task" value="LdF-Eingang"' "LdF incoming task"
-    assert_current_editable_tactical_time_input \
-        f_02_zeit "$ldf_clock_before" "$ldf_clock_after" \
-        "LdF incoming acceptance time"
-    assert_body \
+    # Feld 3 gehoert dem Ausgang. Beim Eingang bietet der Vordruck weder eine
+    # Annahmezeit zur Eingabe an noch zeigt er ein Zeichen; die Bestaetigung
+    # des LdF haelt die Anwendung selbst fest.
+    assert_body_absent \
+        'id="f_02_zeit" class="estab-official-input"' \
+        'LdF incoming offers no acceptance time input'
+    assert_body_absent \
         'id="f_02_zeichen" data-estab-readonly="true"' \
-        'LdF incoming authenticated code'
+        'LdF incoming shows no acceptance code on the sheet'
     assert_body \
         'id="f_13_abseinheit"' \
         'LdF incoming sender translation field'
@@ -2019,6 +2020,23 @@ assert_strict_duty_redirect \
 assert_strict_duty_redirect \
     "$s1_cookies" 'STRICT incident log without selected duty' \
     "$base_url/stabetb/etb.php"
+
+# The message form lives inside the workspace's content frame. A 303 from
+# there would only move the frame, and the command post would then render
+# its own shell -- menu column and cockpit -- inside the first one. From a
+# frame the selector therefore replaces the whole window, with a plain
+# target="_top" link for browsers without JavaScript.
+assert_status 200 'STRICT message form inside the content frame breaks out' \
+    --header 'Sec-Fetch-Dest: iframe' \
+    --cookie "$s1_cookies" --cookie-jar "$s1_cookies" \
+    "$base_url/4fach/mainindex.php"
+assert_body \
+    'window.top.location.replace("/4fach/fuehrungsstelle.php#meine-dienstfunktionen")' \
+    'STRICT frame breakout replaces the top-level window with the duty selector'
+assert_body 'target="_top"' \
+    'STRICT frame breakout keeps a top-level link without JavaScript'
+assert_body_absent 'data-estab-shell' \
+    'STRICT frame breakout does not nest the application shell'
 
 # A fresh login in STRICT retains the validated original destination only in
 # server-side session state and first opens the duty selector. Reusing the S3
@@ -4450,48 +4468,9 @@ assert_body 'name="task" value="Stab_schreiben"' \
 conversation_csrf=$(csrf_from_body "$s1_cookies")
 conversation_matrix_revision=$(recipient_matrix_revision_from_body)
 conversation_attachment_token=$(message_attachment_request_token_from_body)
-assert_status 200 'enter dedicated conversation-note stage' \
-    --cookie "$s1_cookies" --cookie-jar "$s1_cookies" \
-    --location \
-    --request POST \
-    --data-urlencode "csrf_token=$conversation_csrf" \
-    --data-urlencode \
-        "recipient_matrix_revision=$conversation_matrix_revision" \
-    --data-urlencode \
-        "message_attachment_request_token=$conversation_attachment_token" \
-    --data-urlencode 'absenden_x=1' \
-    --data-urlencode 'task=Stab_schreiben' \
-    --data-urlencode '01_medium=Fe' \
-    --data-urlencode '11_gesprnotiz=on' \
-    --data-urlencode '10_anschrift=E2E-Gesprächsziel' \
-    --data-urlencode "12_betreff=$conversation_subject" \
-    --data-urlencode "12_inhalt=$conversation_marker" \
-    --data-urlencode "14_zeichen=$s1_code" \
-    --data-urlencode '14_funktion=S1' \
-    "$base_url/4fach/mainindex.php"
-assert_no_runtime_error 'dedicated conversation-note stage'
-assert_body 'name="task" value="Stab_gesprnoti"' \
-    'dedicated conversation-note task'
-assert_body 'id="f_01_medium_fe" name="01_medium" value="Fe" type="radio" checked="checked"' \
-    'original conversation medium retained in dedicated stage'
-assert_body_absent 'id="f_05_gegenstelle" maxlength=' \
-    'conversation author cannot enter LdF callsign'
-assert_body_absent 'id="f_fernmeldeplan_eintrag_id"' \
-    'conversation author cannot select an S6 route'
-# Aus dem Satz ist eine Liste geworden: Wer als naechstes was tut, steht als
-# eigener Schritt da statt in einem Nebensatz.
-assert_body 'data-estab-conversation-next-steps' \
-    'conversation-note next steps'
-assert_body 'wählt Rufname und freigegebenen S6-Beförderungsweg' \
-    'conversation-note help explains the next responsibility'
-assert_body 'data-estab-conversation-next-steps' \
-    'conversation-note stage shows its downstream responsibilities'
-assert_body '>Zur Sichtung geben</button>' \
-    'conversation-note action names its actual next stage'
-conversation_csrf=$(csrf_from_body)
-conversation_matrix_revision=$(recipient_matrix_revision_from_body)
-conversation_attachment_token=$(message_attachment_request_token_from_body)
-
+# Feld 7 wandert im echten Browser-Body immer mit. Bis hierher wies die
+# Dispositionssperre der zweiten Stufe genau daran die ganze Anfrage ab
+# ("Aktion nicht erlaubt"); die Tests liessen das Feld weg und fanden es nie.
 assert_status 403 'reject author-forged conversation disposition' \
     --cookie "$s1_cookies" --cookie-jar "$s1_cookies" \
     --request POST \
@@ -4513,7 +4492,12 @@ assert_status 403 'reject author-forged conversation disposition' \
 assert_db_equals 0 'forged conversation disposition created no message' \
     "SELECT COUNT(*) FROM \`nv_nachrichten\` WHERE \`12_inhalt\`='${conversation_marker}';"
 
-assert_status 200 'save open conversation note for Si' \
+# Die Gespraechsnotiz wird in einem Schritt angelegt: Das Absenden aus dem
+# Vordruck des Verfassers ist die Weitergabe an den Sichter. Es gibt keine
+# zweite Stufe "Zur Sichtung geben" mehr. Der Body traegt, was ein Browser
+# traegt -- auch Feld 7 und die vom Verfasser nicht setzbaren Vermerke, die
+# der Server ersetzt.
+assert_status 200 'save open conversation note for Si in one step' \
     --cookie "$s1_cookies" --cookie-jar "$s1_cookies" \
     --location \
     --request POST \
@@ -4523,30 +4507,29 @@ assert_status 200 'save open conversation note for Si' \
     --data-urlencode \
         "message_attachment_request_token=$conversation_attachment_token" \
     --data-urlencode 'absenden_x=1' \
-    --data-urlencode 'task=Stab_gesprnoti' \
+    --data-urlencode 'task=Stab_schreiben' \
     --data-urlencode '01_medium=Fe' \
-    --data-urlencode '01_datum=' \
-    --data-urlencode "01_zeichen=$s1_code" \
-    --data-urlencode '02_zeit=' \
-    --data-urlencode '02_zeichen=' \
-    --data-urlencode '03_datum=' \
-    --data-urlencode '03_zeichen=' \
+    --data-urlencode '06_befwegausw=Fe' \
     --data-urlencode '07_durchspruch=D' \
     --data-urlencode '09_vorrangstufe=eee' \
     --data-urlencode '10_anschrift=E2E-Gesprächsziel' \
     --data-urlencode '11_rufnummer=' \
-    --data-urlencode '11_gesprnotiz=t' \
+    --data-urlencode '11_gesprnotiz=on' \
     --data-urlencode '12_anhang=' \
     --data-urlencode "12_betreff=$conversation_subject" \
     --data-urlencode "12_inhalt=$conversation_marker" \
     --data-urlencode "12_abfzeit=$tactical_time" \
-    --data-urlencode "13_abseinheit=$authoritative_sender" \
+    --data-urlencode '13_abseinheit=Browserseitig gefälschte Einheit' \
     --data-urlencode "14_zeichen=$s1_code" \
     --data-urlencode '14_funktion=S1' \
     --data-urlencode '15_quitdatum=' \
     --data-urlencode '15_quitzeichen=' \
     --data-urlencode '17_vermerke=Ursprüngliches Gespräch dokumentiert' \
     "$base_url/4fach/mainindex.php"
+assert_body_absent 'name="task" value="Stab_gesprnoti"' \
+    'conversation note no longer opens a second stage'
+assert_body_absent '>Zur Sichtung geben</button>' \
+    'conversation note no longer asks for a second hand-over'
 assert_no_runtime_error 'saved open conversation note'
 conversation_id=$(db_sql <<SQL
 SELECT \`00_lfd\` FROM \`nv_nachrichten\`

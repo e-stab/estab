@@ -270,10 +270,14 @@ class vordruckaspdf extends PDF_Ellipse {
 
     $this->db_dataset ["01_zeichen"]      = $data  ["01_zeichen"];
 
-    $this->db_dataset ["02_zeit"] = estab_datetime_is_unset ($data ["02_zeit"])
-      ? "" : estab_message_form_tactical_time ($data ["02_zeit"]);
+    // Feld 3 gehoert dem Ausgang. Ein Eingang traegt es auf dem Blatt nicht,
+    // auch wenn die Anwendung die Bestaetigung des LdF festgehalten hat.
+    $eingang = (string) ($data ["04_richtung"] ?? "") === "E";
+    $this->db_dataset ["02_zeit"] =
+      $eingang || estab_datetime_is_unset ($data ["02_zeit"])
+        ? "" : estab_message_form_tactical_time ($data ["02_zeit"]);
 
-    $this->db_dataset ["02_zeichen"]      = $data ["02_zeichen"];
+    $this->db_dataset ["02_zeichen"] = $eingang ? "" : $data ["02_zeichen"];
 
     $this->db_dataset ["03_datum"] = estab_datetime_is_unset ($data ["03_datum"])
       ? "" : estab_message_form_tactical_time ($data ["03_datum"]);
@@ -516,7 +520,8 @@ class vordruckaspdf extends PDF_Ellipse {
    * byteweise Kuerzen nach der Umwandlung eindeutig.
    */
   function nv_wert (
-    $x, $y, $breite, $text, $groesse = null, $aus = "L"
+    $x, $y, $breite, $text, $groesse = null, $aus = "L",
+    $schriftart = "helvetica", $grossbuchstaben = false
   ){
     $groesse = $groesse === null ? $this->raster ['schrift']['wert'] : $groesse;
     $klartext = preg_replace (
@@ -524,8 +529,13 @@ class vordruckaspdf extends PDF_Ellipse {
       " ",
       estab_message_plain_text ((string) $text)
     );
+    // Namenszeichen und Kuerzel stehen in Grossbuchstaben und Serifen, wie
+    // am Bildschirm: l, I und 1 oder O und 0 sind so nicht zu verwechseln.
+    if ($grossbuchstaben && $klartext !== null) {
+      $klartext = mb_strtoupper ($klartext, "UTF-8");
+    }
     $text = estab_fpdf_text ($klartext === null ? "" : $klartext);
-    $this->SetFont ("helvetica", "B", $this->nv_punkt ($groesse));
+    $this->SetFont ($schriftart, "B", $this->nv_punkt ($groesse));
     if ($text !== "" && $this->GetStringWidth ($text) > $breite) {
       $suffix = "...";
       $platz = max (0, $breite - $this->GetStringWidth ($suffix));
@@ -1293,7 +1303,8 @@ class vordruckaspdf extends PDF_Ellipse {
    */
   function nv_taktzeit_teile ($taktzeit){
     $taktzeit = trim ((string) $taktzeit);
-    if (preg_match ("/\A(\d{2})(\d{4})([a-z]{3})(\d{4})\z/D", $taktzeit, $teile) === 1) {
+    if (preg_match ("/\A(\d{2})(\d{4})([a-z]{3})\d{2}(\d{2})\z/D", $taktzeit, $teile) === 1) {
+      // Die Datumszelle traegt das Jahr zweistellig, wie am Bildschirm.
       return array ($teile [1] . $teile [3] . $teile [4], $teile [2]);
     }
     return array ($taktzeit, "");
@@ -1380,7 +1391,7 @@ class vordruckaspdf extends PDF_Ellipse {
       $this->nv_wert (
         $vermerk ['zeichen'], 22.8,
         $vermerk ['rechts'] - $vermerk ['zeichen'],
-        $eintraege [$platz][1], $schrift ['klein'], "C"
+        $eintraege [$platz][1], $schrift ['klein'], "C", "times", true
       );
     }
 
@@ -1415,7 +1426,7 @@ class vordruckaspdf extends PDF_Ellipse {
     $this->nv_wert (52.1, 210.7, 65.1, $this->db_dataset ["12_abfzeit"]);
     $this->nv_wert (
       121.6, 218.4, 29.5, $this->db_dataset ["14_zeichen"],
-      $schrift ['wert'], "C"
+      $schrift ['wert'], "C", "times", true
     );
     $this->nv_wert (154.5, 220.1, 28.8, $this->db_dataset ["14_funktion"]);
 
@@ -1428,7 +1439,7 @@ class vordruckaspdf extends PDF_Ellipse {
     );
     $this->nv_wert (
       97.9, 233.0, 19.9, $this->db_dataset ["15_quitzeichen"],
-      $schrift ['klein'], "C"
+      $schrift ['klein'], "C", "times", true
     );
 
     // Feld 20: Vermerke und Erledigung.

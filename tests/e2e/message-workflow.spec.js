@@ -271,6 +271,10 @@ test.describe('vollständiger Nachrichtenablauf', () => {
 
     for (const { page, account } of Object.values(sessions)) {
       await page.goto('/4fach/fuehrungsstelle.php');
+      // Der Kasten nennt den naechsten Schritt des Lesers: erst annehmen.
+      await expect(
+        page.locator('[data-estab-duty-acceptance-required]')
+      ).toBeVisible();
       await page
         .getByRole('button', { name: 'Verbindlich annehmen' })
         .click();
@@ -279,6 +283,14 @@ test.describe('vollständiger Nachrichtenablauf', () => {
       // stuende auch dann da, wenn die Zeile den Zustand nie erreicht.
       await expect(
         page.getByRole('table').getByText('ANGENOMMEN', { exact: true })
+      ).toBeVisible();
+      // Nach der Annahme verlangt nichts mehr die Annahme; der Kasten sagt,
+      // dass die Schicht noch aktiviert wird.
+      await expect(
+        page.locator('[data-estab-duty-acceptance-required]')
+      ).toHaveCount(0);
+      await expect(
+        page.locator('[data-estab-duty-acceptance-done]')
       ).toBeVisible();
     }
 
@@ -291,10 +303,17 @@ test.describe('vollständiger Nachrichtenablauf', () => {
 
     for (const { page, account } of Object.values(sessions)) {
       await page.goto('/4fach/fuehrungsstelle.php');
+      // Schicht aktiv, Funktion angenommen: jetzt steht die Auswahl an.
+      await expect(
+        page.locator('[data-estab-duty-choice-required]')
+      ).toBeVisible();
       await page
         .getByRole('button', { name: 'Als Arbeitsfunktion wählen' })
         .click();
       await expect(page.locator('[data-estab-selected-duty-hat]')).toBeVisible();
+      await expect(
+        page.locator('[data-estab-duty-selection-required]')
+      ).toHaveCount(0);
       await expect(page.locator('[data-estab-user-function]')).toHaveAttribute(
         'data-estab-user-function',
         account.function

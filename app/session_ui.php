@@ -1356,6 +1356,15 @@ function estab_session_ui_wrap_in_shell(string $html): string
     ) {
         return $html;
     }
+    /*
+     * Was in einem Rahmen steht, ist bereits der Inhalt einer Huelle. Eine
+     * Seite, die sonst ihre eigene bekommt, landet dort nur durch eine
+     * Weiterleitung, die den Rahmen nicht kannte -- und truege dann ein
+     * zweites Menue im ersten. Der Rahmen bekommt sie nackt.
+     */
+    if (estab_navigation_request_is_embedded()) {
+        return $html;
+    }
     if (
         preg_match('/<body\b[^>]*>/i', $html, $bodyOpen, PREG_OFFSET_CAPTURE)
             !== 1

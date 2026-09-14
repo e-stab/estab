@@ -140,12 +140,23 @@ $assert(
         'Die Fernmeldezentrale kann den Aufnahmevermerk nicht setzen.'
     )
 );
-$acceptance = $ownership('LdF-Eingang', 'E');
+// Der Annahmevermerk gehoert dem Ausgang: Angenommen wird eine Nachricht
+// zur Befoerderung. Beim Eingang bleibt Feld 3 auf dem Blatt frei.
+$acceptance = $ownership('LdF-Ausgang', 'A');
 $assert(
     $acceptance[2] === true,
     estab_dv_requirement(
         'LW-NUR-BLAUER-TEIL',
         'Der Leiter des Fernmeldebetriebes kann den Annahmevermerk nicht setzen.'
+    )
+);
+$incomingAcceptance = $ownership('LdF-Eingang', 'E');
+$assert(
+    $incomingAcceptance[2] === false,
+    estab_dv_requirement(
+        'NV-03-ANNAHMEVERMERK',
+        'Der Leiter des Fernmeldebetriebes bekommt beim Eingang den '
+            . 'Annahmevermerk zur Eingabe; das Feld gehoert dem Ausgang.'
     )
 );
 $forwarding = $ownership('FM-Ausgang', 'A');

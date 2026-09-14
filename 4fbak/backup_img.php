@@ -89,10 +89,13 @@ class vordruckasimg {
 
     $this->db_dataset ["01_zeichen"]      = $data  ["01_zeichen"];
 
-    $this->db_dataset ["02_zeit"] = estab_datetime_is_unset ($data ["02_zeit"])
-      ? "" : konv_datetime_taktime ($data ["02_zeit"]);
+    // Feld 3 gehoert dem Ausgang; ein Eingang traegt es auf dem Blatt nicht.
+    $eingang = (string) ($data ["04_richtung"] ?? "") === "E";
+    $this->db_dataset ["02_zeit"] =
+      $eingang || estab_datetime_is_unset ($data ["02_zeit"])
+        ? "" : konv_datetime_taktime ($data ["02_zeit"]);
 
-    $this->db_dataset ["02_zeichen"]      = $data ["02_zeichen"];
+    $this->db_dataset ["02_zeichen"] = $eingang ? "" : $data ["02_zeichen"];
 
     $this->db_dataset ["03_datum"] = estab_datetime_is_unset ($data ["03_datum"])
       ? "" : konv_datetime_taktime ($data ["03_datum"]);

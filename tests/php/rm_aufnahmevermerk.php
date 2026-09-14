@@ -21,9 +21,9 @@ declare(strict_types=1);
  * bekommen. Sie bleibt frei korrigierbar; sie ist ein Vorschlag, keine
  * Feststellung.
  *
- * Der Annahmevermerk (Feld 3, `02_zeit`) bleibt eine reine Uhrzeit. Das ist
- * keine Auslassung, sondern seine Bauart: Der Vordruck stellt ihn
- * ausdruecklich als time-only dar.
+ * Der Annahmevermerk (Feld 3, `02_zeit`) traegt seit Issue #37 ebenfalls
+ * seinen Tag; das Raster des Blattes gibt allen drei Vermerken dieselben
+ * drei Zellen.
  */
 
 $root = dirname(__DIR__, 2);
@@ -145,8 +145,10 @@ $assert(
             . '" statt "2110".'
     )
 );
+// Die Datumszelle traegt Tag, Monatskuerzel und das Jahr zweistellig:
+// "28aug26". Vier Ziffern fasst die Zelle auf dem Papier nicht (Issue #36).
 $assert(
-    str_starts_with($teile['date'], '28') && strlen($teile['date']) === 9,
+    str_starts_with($teile['date'], '28') && strlen($teile['date']) === 7,
     estab_dv_requirement(
         'NV-02-AUFNAHMEVERMERK',
         'Die Datumszelle des Vermerks zeigt "' . $teile['date']
@@ -162,19 +164,23 @@ $assert(
         . 'der Befund oben keiner.'
 );
 
-/* --- Der Annahmevermerk bleibt eine Uhrzeit --- */
+/* --- Die Zerlegung kann weiterhin nur die Uhrzeit liefern --- */
 
 $nurZeit = $fixture->official_message_stamp_parts($gruppe, true);
 $assert(
     $nurZeit['date'] === '' && $nurZeit['time'] === '2110',
-    estab_dv_requirement(
-        'NV-03-ANNAHMEVERMERK',
-        'Der Annahmevermerk zeigt jetzt ein Datum; der Vordruck stellt ihn '
-            . 'ausdruecklich als reine Uhrzeit dar.'
-    )
+    'Die Zerlegung liefert auf Wunsch nicht mehr nur die Uhrzeit.'
 );
+/*
+ * Vorbelegt werden die Vermerke der Stationen, die sie beobachten: Aufnahme
+ * (Fernmelder), Annahme beim Ausgang (LdF) und Befoerderung. Beim Eingang
+ * bleibt Feld 3 frei (Issue #32), und die Abfassungszeit des Verfassers ist
+ * ein ausgewiesener Vorschlag (Issue #35).
+ */
 $assert(
-    str_contains($quelle, '"LdF-Eingang" => "02_zeit"')
+    !str_contains($quelle, '"LdF-Eingang" => "02_zeit"')
+        && str_contains($quelle, '"LdF-Ausgang" => "02_zeit"')
+        && str_contains($quelle, '"Stab_schreiben" => "12_abfzeit"')
         && str_contains($quelle, '"FM-Eingang" => "01_datum"')
         && str_contains($quelle, '"FM-Ausgang" => "03_datum"'),
     'Die Zuordnung der bearbeitbaren Zeitstempel zu den Arbeitsschritten hat '

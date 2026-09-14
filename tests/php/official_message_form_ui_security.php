@@ -157,7 +157,7 @@ $requiredGuideContent = [
     // Keine der beiden Formen ist die Ausnahme der anderen: Beides sind
     // Sonderfälle, und der Hinweis muss sagen, welcher wann gilt.
     8 => ['DURCHSAGE', 'Spruch', '1:1', 'Wortlaut', 'Gruppe von Empfängern'],
-    9 => ['Vorrangstufe', 'Sofort', 'Blitz', 'Staatsnot'],
+    9 => ['Vorrangstufe', 'Sofort', 'Blitz'],
     10 => ['Immer ausfüllen', 'Dienststellen-', 'Eigennamen'],
     11 => ['Rufnummer', 'Gesprächsnotizen'],
     // Die Gesprächsnotiz hält ein bereits geführtes Gespräch fest. Der
@@ -341,18 +341,28 @@ $historicNoPriorityMarkup = (string) ob_get_clean();
  * braucht keines -- sie ist die Abwesenheit eines Kreuzes.
  *
  * Der Vordruck zeigt eine solche Nachricht deshalb wie jede ohne Stufe: kein
- * Kreuz, alle drei Stufen wählbar. Speichert jemand sie in einem
- * bearbeitenden Schritt erneut, wird aus "eee" ein leerer Wert. Beide sind
- * für Anzeige, Ausdruck und Dringlichkeit gleichbedeutend, also geht nichts
- * verloren.
+ * Kreuz, beide Stufen des Vordrucks wählbar -- und die ausgemusterte
+ * Staatsnot nicht, die nur eine Nachricht aus dem Altbestand noch trägt.
+ * Speichert jemand sie in einem bearbeitenden Schritt erneut, wird aus "eee"
+ * ein leerer Wert. Beide sind für Anzeige, Ausdruck und Dringlichkeit
+ * gleichbedeutend, also geht nichts verloren.
  */
 $assert(
     !str_contains($historicNoPriorityMarkup, 'checked')
         && str_contains(
             $historicNoPriorityMarkup,
+            'id="f_09_vorrangstufe_sofort"'
+        )
+        && str_contains(
+            $historicNoPriorityMarkup,
+            'id="f_09_vorrangstufe_blitz"'
+        )
+        && !str_contains(
+            $historicNoPriorityMarkup,
             'id="f_09_vorrangstufe_staatsnot"'
         ),
-    'A historic no-priority value shows as a checked box or hides the scale'
+    'A historic no-priority value shows as a checked box, hides the scale '
+        . 'or still offers the retired Staatsnot'
 );
 $assert(
     estab_message_priority_document_label('eee') === ''
@@ -458,13 +468,14 @@ foreach (['01_datum', '02_zeit', '03_datum'] as $timeField) {
         'Stamp ' . $timeField . ' no longer binds two visual cells to one accessible field'
     );
 }
+/*
+ * Alle drei Vermerke zeigen Datum, Uhrzeit und Handzeichen -- auch der
+ * Annahmevermerk, der bisher nur die Uhrzeit trug. Die Datumszelle kuerzt
+ * das Jahr auf zwei Ziffern, wie die Zelle auf dem Papier es fasst.
+ */
 $assert(
-    substr_count($stampMarkup, 'data-estab-stamp-time-only="true"') === 1
-        && str_contains(
-            $stampMarkup,
-            'data-estab-single-backend-field="02_zeit" role="group" '
-                . 'data-estab-stamp-time-only="true"'
-        )
+    substr_count($stampMarkup, 'data-estab-stamp-time-only="true"') === 0
+        && substr_count($stampMarkup, 'data-estab-stamp-time-only="false"') === 3
         && preg_match(
             '/data-estab-single-backend-field="02_zeit".*?'
                 . 'data-estab-stamp-value="date"><\/span>.*?'
@@ -473,13 +484,28 @@ $assert(
         ) === 1
         && str_contains(
             $stampMarkup,
-            'data-estab-stamp-value="date">31Jul2026</span>'
+            'data-estab-stamp-value="date">31Jul26</span>'
         )
+        && !str_contains($stampMarkup, '31Jul2026')
         && str_contains(
             $stampMarkup,
             'data-estab-stamp-value="time">1845</span>'
         ),
-    'A time-only stamp value is not shown exclusively in the Uhrzeit cell'
+    'The acceptance stamp hides its date cell or a stamp still prints a four-digit year'
+);
+$stampProbe = new OfficialMessageFormHelpFixture();
+$assert(
+    $stampProbe->official_message_stamp_parts('2026-07-31 18:45:00')
+        === ['date' => '31.07.26', 'time' => '18:45']
+        && $stampProbe->official_message_stamp_parts('31.07.2026 1845')
+        === ['date' => '31.07.26', 'time' => '1845']
+        && $stampProbe->official_message_stamp_parts('31072026 1845')
+        === ['date' => '310726', 'time' => '1845']
+        && $stampProbe->official_message_stamp_parts('311845jul2026')
+        === ['date' => '31jul26', 'time' => '1845']
+        && $stampProbe->official_message_stamp_parts('1845')
+        === ['date' => '', 'time' => '1845'],
+    'Stamp dates are not shortened to a two-digit year'
 );
 
 $fixture->empfarray = [
@@ -718,17 +744,53 @@ $assert(
         && is_string($dockerfile),
     'Official form implementation files are not readable'
 );
+/*
+ * Die Gesprächsnotiz wird in einem Schritt angelegt: Das Absenden ist die
+ * Weitergabe an den Sichter. Der Laufweghinweis steht beim Verfasser und
+ * nennt weder LdF noch Fernmelder -- die kommen in diesem Laufweg nicht vor.
+ */
 $assert(
     str_contains($view, 'data-estab-conversation-medium')
         && str_contains($view, 'data-estab-conversation-medium-status')
         && str_contains($view, 'data-estab-conversation-next-steps')
-        && str_contains($view, 'Gesprächsnotiz zur Sichtung geben')
-        && str_contains($view, 'Zur Sichtung geben')
+        && !str_contains($view, 'Zur Sichtung geben')
+        && !str_contains($view, 'wählt Rufname und freigegebenen')
         && str_contains(
             $view,
             'document.getElementById("f_11_gesprnotiz")'
-        ),
+        )
+        && str_contains($view, 'getElementsByName("06_befwegausw")'),
     'The conversation-note UI lacks its medium or downstream-workflow contract'
+);
+$routeFixture = new OfficialMessageFormHelpFixture();
+$routeFixture->task = 'Stab_schreiben';
+$routeFixture->formdata = ['11_gesprnotiz' => true];
+ob_start();
+$routeFixture->official_message_conversation_route();
+$routeMarkup = (string) ob_get_clean();
+$assert(
+    str_contains($routeMarkup, 'data-estab-conversation-next-steps')
+        && !str_contains($routeMarkup, 'data-estab-conversation-next-steps-idle')
+        && str_contains($routeMarkup, 'unmittelbar zur Sichtung')
+        && str_contains($routeMarkup, 'abgeschlossen')
+        && str_contains($routeMarkup, 'folgen nicht')
+        && !str_contains($routeMarkup, 'wählt Rufname')
+        && !str_contains($routeMarkup, 'Beförderungsnachweis')
+        && !str_contains($routeMarkup, 'Beförderungsweg'),
+    'The conversation-note route hint still describes the outgoing route'
+);
+$routeFixture->formdata = [];
+ob_start();
+$routeFixture->official_message_conversation_route();
+$idleRouteMarkup = (string) ob_get_clean();
+$routeFixture->task = 'Stab_sichten';
+ob_start();
+$routeFixture->official_message_conversation_route();
+$reviewRouteMarkup = (string) ob_get_clean();
+$assert(
+    str_contains($idleRouteMarkup, 'data-estab-conversation-next-steps-idle')
+        && $reviewRouteMarkup === '',
+    'The conversation-note route hint is shown without the note or outside the draft'
 );
 $conversationAccessStart = strpos(
     $controller,

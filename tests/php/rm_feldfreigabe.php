@@ -91,8 +91,11 @@ $erwartet = [
     // nicht die Abfassungszeit (16) und nicht das Verfasserzeichen (17).
     'FM-Eingang' => [1, 2, 6, 8, 9, 10, 11, 13, 14, 15],
     'FM-Eingang_Anhang' => [1, 2, 6, 8, 9, 10, 11, 13, 14, 15],
-    // Der LdF bestaetigt oder berichtigt Annahmevermerk und Absender.
-    'LdF-Eingang' => [3, 15],
+    // Der LdF berichtigt beim Eingang den Absender. Den Annahmevermerk (3)
+    // gibt es nur beim Ausgang: Angenommen wird zur Befoerderung, und ein
+    // Eingang wird nicht befoerdert. Seine Bestaetigung beobachtet die
+    // Anwendung selbst.
+    'LdF-Eingang' => [15],
     // Beim Ausgang disponiert er zusaetzlich Gegenstelle und Beforderungsweg.
     'LdF-Ausgang' => [3, 6, 7],
     // Die Weitergabe ist der Befoerderungsvermerk, sonst nichts.

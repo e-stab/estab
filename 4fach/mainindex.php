@@ -777,37 +777,6 @@ function estab_message_attachment_render_form (
   exit;
 }
 
-/** Rebuild the second conversation-note stage for an idempotent replay. */
-function estab_message_attachment_render_conversation_stage (
-  array $draft,
-  array $context,
-  ?array $originMessage,
-  array $recipientMatrix,
-  string $redCopyFunction,
-  array $identity,
-  string $commandPostName
-): never {
-  $context ["task"] = "Stab_gesprnoti";
-  $context ["record_id"] = null;
-  $draft ["11_gesprnotiz"] = "t";
-  $formdata = estab_message_attachment_form_data (
-    $draft,
-    $context,
-    $originMessage,
-    $recipientMatrix,
-    $redCopyFunction,
-    $identity,
-    $commandPostName
-  );
-  $formdata ["task"] = "Stab_gesprnoti";
-  estab_message_attachment_render_form (
-    $formdata,
-    "Stab_gesprnoti",
-    "Der Übergang zur Gesprächsnotiz wurde bereits vorbereitet. Die Anlage ".
-    "wurde nur einmal gespeichert."
-  );
-}
-
 /** Best-effort release of an unfinished direct-upload replay token. */
 function estab_message_attachment_abandon_direct_action (mixed $token): void {
   if (!isset ($_SESSION) || !is_array ($_SESSION)) {
@@ -889,12 +858,6 @@ $messageAttachmentFilePending = is_array ($messageAttachmentFile)
 $messageAttachmentSubmitWithFile =
   isset ($returnValue ["absenden_x"])
   && $messageAttachmentFilePending;
-// The second stage is identified by the submitted task and the one-time form
-// token. A session-wide flag would let one open browser tab alter another.
-$messageAttachmentConversationStageRequested =
-  $messageAttachmentFinalSubmitRequested
-  && (string) ($returnValue ["task"] ?? "") === "Stab_schreiben"
-  && (string) ($returnValue ["11_gesprnotiz"] ?? "") === "on";
 $messageAttachmentPendingSubmitCompletion = null;
 $messageAttachmentReplayWithoutFile =
   !$messageAttachmentFilePending
@@ -1104,20 +1067,6 @@ if ($messageAttachmentAction) {
       }
       if (
         ($messageAttachmentReplayWithoutFile ["mode"] ?? "") ===
-          "conversation-stage"
-      ) {
-        estab_message_attachment_render_conversation_stage (
-          $attachmentDraft,
-          $attachmentContext,
-          is_array ($objectMessage) ? $objectMessage : null,
-          $empf_matrix,
-          (string) $redcopy2,
-          $workflowSelectedIdentity,
-          $activeCommandPostName
-        );
-      }
-      if (
-        ($messageAttachmentReplayWithoutFile ["mode"] ?? "") ===
           "pending-submit"
       ) {
         // A reference linked anywhere in the incident is not proof that this
@@ -1231,17 +1180,6 @@ if ($messageAttachmentAction) {
         header ("Location: ".(string) $conf_4f ["MainURL"], true, 303);
         exit;
       }
-      if (($replayedAttachment ["mode"] ?? "") === "conversation-stage") {
-        estab_message_attachment_render_conversation_stage (
-          $attachmentDraft,
-          $attachmentContext,
-          is_array ($objectMessage) ? $objectMessage : null,
-          $empf_matrix,
-          (string) $redcopy2,
-          $workflowSelectedIdentity,
-          $activeCommandPostName
-        );
-      }
       $formdata = estab_message_attachment_form_data (
         $attachmentDraft,
         $attachmentContext,
@@ -1284,10 +1222,7 @@ if ($messageAttachmentAction) {
       $attachmentContext,
       $_SERVER
     );
-    if (
-      $messageAttachmentSubmitWithFile
-      && !$messageAttachmentConversationStageRequested
-    ) {
+    if ($messageAttachmentSubmitWithFile) {
       // The token remains processing until the ordinary message transaction
       // has returned successfully. Validation/stage failures must never look
       // like a completed message merely because its file was archived.
@@ -1306,24 +1241,6 @@ if ($messageAttachmentAction) {
         $workflowIncidentId,
         (string) $attachmentContext ["task"],
         $attachmentContext ["record_id"] ?? null
-      );
-    } elseif ($messageAttachmentSubmitWithFile) {
-      // This first button only opens the second conversation-note form; it
-      // does not commit a message. Persist that deterministic outcome now so
-      // a worker loss cannot mislabel it as an ambiguous message save.
-      estab_attachment_direct_action_complete (
-        $_SESSION,
-        (string) $messageAttachmentRequestToken,
-        (string) $storedAttachment ["reference"],
-        "conversation-stage"
-      );
-      estab_message_attachment_checkpoint_pending_action (
-        $messageAttachmentRequestToken,
-        $workflowSelectedIdentity,
-        $workflowIncidentId,
-        (string) $attachmentContext ["task"],
-        $attachmentContext ["record_id"] ?? null,
-        "conversation-stage"
       );
     } else {
       estab_attachment_direct_action_complete (
@@ -1517,22 +1434,7 @@ if (
         "Der Nachrichtenvorgang wurde bereits verarbeitet."
       );
     }
-    if ($messageAttachmentConversationStageRequested) {
-      estab_attachment_direct_action_complete (
-        $_SESSION,
-        (string) $messageAttachmentRequestToken,
-        null,
-        "conversation-stage"
-      );
-      estab_message_attachment_checkpoint_pending_action (
-        $messageAttachmentRequestToken,
-        $workflowSelectedIdentity,
-        $workflowIncidentId,
-        (string) $returnValue ["task"],
-        null,
-        "conversation-stage"
-      );
-    } else {
+    {
       estab_attachment_direct_action_note_pending_submit (
         $_SESSION,
         (string) $messageAttachmentRequestToken,
@@ -1643,26 +1545,10 @@ if (
    * the ordinary link remains available when JavaScript is disabled.
    */
   function estab_navigation_open_after_login (string $destinationKey): never {
-    $destinationUrl = estab_navigation_url_for_key ($destinationKey);
-    $encodedUrl = json_encode (
-      $destinationUrl,
-      JSON_HEX_TAG
-        | JSON_HEX_AMP
-        | JSON_HEX_APOS
-        | JSON_HEX_QUOT
-        | JSON_UNESCAPED_SLASHES
-        | JSON_THROW_ON_ERROR
+    // Derselbe Ausbruch, den auch die Funktionsauswahl aus dem Rahmen nimmt.
+    estab_navigation_open_top_level (
+      estab_navigation_url_for_key ($destinationKey)
     );
-    header ("Content-Type: text/html; charset=UTF-8");
-    echo "<!doctype html><html lang=\"de\"><head><meta charset=\"UTF-8\">";
-    echo "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">";
-    echo "<title>eStab-Bereich öffnen</title></head><body>";
-    echo "<p>Der gewählte eStab-Bereich wird geöffnet.</p>";
-    echo "<p><a href=\"".estab_auth_html ($destinationUrl).
-         "\" target=\"_top\">Jetzt öffnen</a></p>";
-    echo "<script".estab_csp_script_attribute().">window.top.location.replace(".$encodedUrl.");</script>";
-    echo "</body></html>";
-    exit;
   }
 
 
@@ -2189,7 +2075,6 @@ ANTWORT % WEITERLEITUNG
     }
   }
 
-  $gesprnotizsichter = false ; // false Voreinstellung fuer dieses Skript
 
 /**********************************************************************
   Daten kommen vom Formular zurueck und koennen gespeichert bzw.
@@ -2222,10 +2107,23 @@ ANTWORT % WEITERLEITUNG
 
     if ( ( ($returnValue ["11_gesprnotiz"] ?? "") == "on" ) and
          ( $returnValue ["task"] == "Stab_schreiben" ) ){
-        // Bei GesprÃ¤chsnotiz 2. Vorlage beim Verfasser fÃ¼r Sichtung
-
-        if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><br> ### Gesprächsnotiz == 2. Sichtung<br>\n";}
-
+        /*
+         * Die Gespraechsnotiz wird in einem Schritt angelegt.
+         *
+         * Hier stand ein zweiter Vordruck: Das Absenden speicherte nichts,
+         * sondern zeigte dasselbe Blatt noch einmal, jetzt mit dem Knopf
+         * "Zur Sichtung geben". Wer das Blatt einmal ausgefuellt hatte,
+         * las das als zweite Weitergabe -- und der zweite Vordruck sendete
+         * das gesperrte Feld 7 als verstecktes Feld erneut mit, woran die
+         * Dispositionssperre die ganze Anfrage abwies ("Aktion nicht
+         * erlaubt").
+         *
+         * Was der zweite Vordruck ergaenzte, setzt der Server: Zeichen und
+         * Aufnahmezeit des Verfassers, Einheit, Verteiler. Was er sperrte,
+         * wird hier geleert -- eine Gespraechsnotiz hat keine Disposition
+         * und keine Befoerderung. Der Datensatz entsteht unmittelbar beim
+         * Sichter (Status 4), wie bisher in check_and_save.
+         */
         $formdata = $returnValue ;
         $formdata ["01_zeichen"] =
           (string) $workflowSelectedIdentity ["kuerzel"];
@@ -2235,57 +2133,30 @@ ANTWORT % WEITERLEITUNG
           (string) $workflowSelectedIdentity ["kuerzel"];
         $formdata ["14_funktion"] =
           (string) $workflowSelectedIdentity ["funktion"];
-        // Der Wechsel in die Gesprächsnotiz behält den Verteiler, den der
-        // Verfasser im Ausgangsvordruck bereits angekreuzt hat. Die rote
-        // Lage-/Dokumentationsdurchschrift und die grüne des Verfassers
-        // bleiben dabei vorgeschrieben.
-        try {
-          $formdata ["16_empf"] = estab_workflow_distribution_tokens (
-            $returnValue,
-            $empf_matrix,
-            array (
-              $redcopy2."_rt",
-              ((string) $workflowSelectedIdentity ["funktion"])."_gn"
-            )
-          );
-        } catch (InvalidArgumentException $exception) {
-          estab_workflow_forbid ();
-        }
+        // Den Verteiler leitet check_and_save aus den angekreuzten
+        // Kaestchen ab, mit der roten Lage-/Dokumentationsdurchschrift und
+        // der gruenen des Verfassers als Pflicht. Fertige Marken gehoeren
+        // nicht in die Anfrage: Die Routenpruefung weist sie dort als
+        // Uebergriff des Browsers ab.
         $formdata ["15_quitdatum"]    = "";
         $formdata ["15_quitzeichen"]  = "";
-        $formdata ["task"]            = "Stab_gesprnoti";
-        if (is_array ($messageAttachmentPendingSubmitCompletion)) {
-          try {
-            // This first step only changes into the dedicated conversation-
-            // note form; no message commit is expected yet. The archived
-            // attachment is nevertheless complete and the old submit token
-            // must not remain replayable as a pending message save.
-            estab_attachment_direct_action_complete (
-              $_SESSION,
-              (string) $messageAttachmentPendingSubmitCompletion ["token"],
-              is_string (
-                $messageAttachmentPendingSubmitCompletion ["reference"]
-                  ?? null
-              )
-                ? $messageAttachmentPendingSubmitCompletion ["reference"]
-                : null,
-              "conversation-stage"
-            );
-          } catch (Throwable $exception) {
-            estab_attachment_direct_action_forget (
-              $_SESSION,
-              $messageAttachmentPendingSubmitCompletion ["token"] ?? null
-            );
-            error_log (
-              "eStab conversation-note attachment token completion failed: ".
-              $exception->getMessage ()
-            );
-          }
-          $messageAttachmentPendingSubmitCompletion = null;
+        // Wer unten in Feld 7 ein Mittel angekreuzt hat, meinte bei einem
+        // Gespraech das tatsaechlich benutzte: Feld 1 uebernimmt es, wenn
+        // oben nichts steht. Danach ist Feld 7 leer -- gewuenscht wird bei
+        // einem gefuehrten Gespraech nichts mehr.
+        if (trim ((string) ($formdata ["01_medium"] ?? "")) === ""
+            && trim ((string) ($returnValue ["06_befwegausw"] ?? "")) !== "") {
+          $formdata ["01_medium"] = (string) $returnValue ["06_befwegausw"];
         }
-        $form = new nachrichten4fach ($formdata, "Stab_gesprnoti", "");
-        $gesprnotizsichter = true ;
-    } else {
+        foreach (array ("02_zeit", "02_zeichen", "03_datum", "03_zeichen",
+                        "05_gegenstelle", "06_befweg", "06_befwegausw",
+                        "fernmeldeplan_eintrag_id",
+                        "transportweg_bestaetigt") as $dispositionField) {
+          $formdata [$dispositionField] = "";
+        }
+        $formdata ["task"]            = "Stab_gesprnoti";
+        $returndata = $formdata ;
+    }
 
       if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b> ### 369 check and save";  echo "<br>\n";}
 
@@ -2337,8 +2208,11 @@ ANTWORT % WEITERLEITUNG
         // Was ist geschehen und wohin ist die Nachricht gegangen? Beides
         // leitet der Server aus der bereits geprueften Aufgabe, dem
         // Aktionsschalter und der gespeicherten Richtung ab.
+        // Die Rueckmeldung folgt dem Schritt, der gespeichert wurde: Bei
+        // einer Gespraechsnotiz ist das Stab_gesprnoti, nicht der
+        // Ausgang, aus dem sie kam.
         resetframeset (estab_session_ui_message_outcome (
-          (string) ($returnValue ["task"] ?? ""),
+          (string) ($returndata ["task"] ?? ""),
           $returnValue,
           is_array ($objectMessage)
             ? (string) ($objectMessage ["04_richtung"] ?? "")
@@ -2353,7 +2227,6 @@ ANTWORT % WEITERLEITUNG
             : ""
         ));
       }
-    }
   } elseif ( ( in_array (
                $returnValue["task"],
                array (
@@ -2672,9 +2545,9 @@ if ($returnValue ["stab"] === "korrektur") {
         $workflowPrimaryView,
         "staff-write",
         false
-      ) and !$gesprnotizsichter ) {
+      ) ) {
 
-    if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><br>  _GET[stab_schreiben_x] )) and !gesprnotizsichter ";  echo "<br>\n";}
+    if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><br>  _GET[stab_schreiben_x] )) ";  echo "<br>\n";}
     $formdata ["13_abseinheit"] = $activeCommandPostName;
     $formdata ["14_zeichen"] =
       (string) $workflowSelectedIdentity ["kuerzel"];
@@ -2707,7 +2580,6 @@ if ($returnValue ["stab"] === "korrektur") {
          ) and
         (
           ( !(isset ($returnValue ["stab_schreiben_x"] ) ) ) and
-          ( !$gesprnotizsichter ) and
           ( !(isset ($returnValue ["stab_anhang_x"] ) ) ) and
           ( !(isset ($returnValue ["fm_anhang_x"] ) ) ) and
           ( !(isset ($returnValue ["ah_auswahl_x"] ) ) ) and
