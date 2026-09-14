@@ -4010,7 +4010,7 @@ HTML;
             echo '<span id="estab-composition-prefilled" '
                 . 'class="estab-official-composition-note" '
                 . 'data-estab-composition-prefilled>'
-                . 'vorbelegt mit der Uhrzeit beim Öffnen -- bitte prüfen'
+                . 'vorbelegt mit der Uhrzeit beim Öffnen – bitte prüfen'
                 . '</span>';
         }
         echo '</div>'

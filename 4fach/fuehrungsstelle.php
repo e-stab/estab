@@ -1091,7 +1091,7 @@ foreach ($plans as $plan) {
                   . 'danach als Arbeitsfunktion.'
               : 'Die Dienstschicht ist geplant und noch nicht aktiv. Sie '
                   . 'wird erst aktiviert, wenn alle Pflichtfunktionen '
-                  . 'persönlich angenommen sind -- nehmen Sie Ihre Zuweisung '
+                  . 'persönlich angenommen sind – nehmen Sie Ihre Zuweisung '
                   . 'unten unter „Meine Dienstfunktionen“ verbindlich an.' ?>
           </span>
         </section>
