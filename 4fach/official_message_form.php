@@ -3215,8 +3215,9 @@ HTML;
     }
 
     // Ueber den Namen statt ueber einen Selektor: Die HTTP-Pruefungen
-    // suchen im Quelltext woertlich nach name="06_befwegausw", um ein
-    // absendbares Feld 7 dort auszuschliessen, wo es keins geben darf.
+    // suchen im Quelltext woertlich nach dem Namensattribut von Feld 7,
+    // um ein absendbares Feld dort auszuschliessen, wo es keins geben
+    // darf -- auch dieser Kommentar steht im ausgelieferten Skript.
     var desiredMediumInputs = Array.prototype.slice.call(
       document.getElementsByName("06_befwegausw")
     ).filter(function (control) {
