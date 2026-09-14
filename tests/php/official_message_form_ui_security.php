@@ -759,7 +759,7 @@ $assert(
             $view,
             'document.getElementById("f_11_gesprnotiz")'
         )
-        && str_contains($view, 'name="06_befwegausw"]'),
+        && str_contains($view, 'getElementsByName("06_befwegausw")'),
     'The conversation-note UI lacks its medium or downstream-workflow contract'
 );
 $routeFixture = new OfficialMessageFormHelpFixture();

@@ -3214,11 +3214,14 @@ HTML;
       }
     }
 
+    // Ueber den Namen statt ueber einen Selektor: Die HTTP-Pruefungen
+    // suchen im Quelltext woertlich nach name="06_befwegausw", um ein
+    // absendbares Feld 7 dort auszuschliessen, wo es keins geben darf.
     var desiredMediumInputs = Array.prototype.slice.call(
-      document.querySelectorAll(
-        'input[type="radio"][name="06_befwegausw"]'
-      )
-    );
+      document.getElementsByName("06_befwegausw")
+    ).filter(function (control) {
+      return control.type === "radio";
+    });
     var conversationRoute = document.querySelector(
       "[data-estab-conversation-next-steps]"
     );
