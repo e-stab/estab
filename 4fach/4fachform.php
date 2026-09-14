@@ -1073,12 +1073,11 @@ HTML;
         // LdF confirms or corrects only the incoming transport medium. The
         // A/W receipt time and receipt mark in the same visual block stay
         // immutable and are therefore not enabled through field bit 1.
-        //
-        // Der Annahmevermerk (Zugriffsindex 2, Feld 3) gehoert dem Ausgang:
-        // Angenommen wird eine Nachricht zur Befoerderung, und ein Eingang
-        // wird nicht befoerdert. Beim Eingang bleibt das Feld auf dem Blatt
-        // frei; die Bestaetigung des LdF beobachtet die Anwendung selbst.
         $this->bg [1] = $this->feldbg [1]["a"];
+        // Der Annahmevermerk gehoert dem Ausgang: Angenommen wird eine
+        // Nachricht zur Befoerderung, und ein Eingang wird nicht befoerdert.
+        // Beim Eingang bleibt er auf dem Blatt frei; die Bestaetigung des
+        // LdF beobachtet die Anwendung selbst.
         $this->bg [2] = $this->feldbg [2]["i"];
         $this->feld [2] = false;
         $this->bg [13] = $this->feldbg [13]["a"];
