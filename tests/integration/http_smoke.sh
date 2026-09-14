@@ -3575,10 +3575,10 @@ if [ "$parallel_note_state" != "A|4|t|${conversation_medium}|${test_code}|unset"
     exit 1
 fi
 
-# A stale recipient-matrix revision still stops a hand-built second-stage
-# submit; the note that already exists is not touched. The one-time tokens
-# of the saved note are spent, so the probe takes fresh ones from a new
-# draft and combines them with the revision from before the matrix change.
+# A stale recipient-matrix revision still stops a conversation note on its
+# one-step path; the note that already exists is not touched. The probe takes
+# fresh one-time tokens from a new draft -- those of the saved note are spent
+# -- and combines them with the revision from before the matrix change.
 assert_status 200 --location --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --request POST --data-urlencode 'stab_schreiben_x=1' \
     "$base_url/4fach/mainindex.php"
@@ -3594,17 +3594,14 @@ assert_status 409 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --data-urlencode \
         "message_attachment_request_token=$stale_note_attachment_request_token" \
     --data-urlencode 'absenden_x=1' \
-    --data-urlencode 'task=Stab_gesprnoti' \
+    --data-urlencode 'task=Stab_schreiben' \
     --data-urlencode "01_medium=$conversation_medium" \
-    --data-urlencode '01_datum=' \
-    --data-urlencode "01_zeichen=$test_code" \
-    --data-urlencode '02_zeit=' \
     --data-urlencode '07_durchspruch=D' \
     --data-urlencode '09_vorrangstufe=' \
     --data-urlencode '10_anschrift=HTTP-Vordruckempfänger' \
     --data-urlencode '11_rufnummer=' \
-    --data-urlencode '11_gesprnotiz=f' \
-    --data-urlencode "12_anhang=$conversation_attachment_reference" \
+    --data-urlencode '11_gesprnotiz=on' \
+    --data-urlencode '12_anhang=' \
     --data-urlencode "12_betreff=$vordruck_subject" \
     --data-urlencode "12_inhalt=$vordruck_marker" \
     --data-urlencode "12_abfzeit=$tactical_time" \
