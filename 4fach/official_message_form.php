@@ -1682,9 +1682,10 @@ HTML;
          * Der Annahmevermerk zeigte nur die Uhrzeit. Das Raster des Blattes
          * gibt allen drei Vermerken Datum, Uhrzeit und Handzeichen, und der
          * Ausgang laeuft ueber Mitternacht wie der Eingang: "0100" ohne Tag
-         * ist keine Annahme, die sich einordnen laesst.
+         * ist keine Annahme, die sich einordnen laesst. Das Merkmal
+         * data-estab-stamp-time-only bleibt fuer die Pruefungen und das
+         * Skript, das es liest -- es ist an jedem Vermerk falsch.
          */
-        $timeOnly = false;
         /*
          * Feld 3 ist der Annahmevermerk fuer ausgehende Nachrichten. Bei
          * einer eingehenden bleibt es auf dem Papier frei: Angenommen wird
@@ -1712,16 +1713,12 @@ HTML;
             }
         }
         $stampParts = $this->official_message_stamp_parts(
-            (string)($this->formdata[$timeField] ?? ''),
-            $timeOnly
+            (string)($this->formdata[$timeField] ?? '')
         );
-        echo '<div class="estab-official-stamp-datetime'
-            . ($timeOnly ? ' estab-official-stamp-datetime--time-only' : '')
-            . '" '
+        echo '<div class="estab-official-stamp-datetime" '
             . 'data-estab-single-backend-field="'
             . estab_message_html($timeField) . '" role="group" '
-            . 'data-estab-stamp-time-only="'
-            . ($timeOnly ? 'true' : 'false') . '" '
+            . 'data-estab-stamp-time-only="false" '
             . 'aria-label="' . estab_message_html($timeLabel) . '" '
             . 'aria-describedby="estab-stamp-description-'
             . estab_message_html($timeField) . '">';

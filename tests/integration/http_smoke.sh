@@ -3576,14 +3576,23 @@ if [ "$parallel_note_state" != "A|4|t|${conversation_medium}|${test_code}|unset"
 fi
 
 # A stale recipient-matrix revision still stops a hand-built second-stage
-# submit; the note that already exists is not touched.
+# submit; the note that already exists is not touched. The one-time tokens
+# of the saved note are spent, so the probe takes fresh ones from a new
+# draft and combines them with the revision from before the matrix change.
+assert_status 200 --location --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+    --request POST --data-urlencode 'stab_schreiben_x=1' \
+    "$base_url/4fach/mainindex.php"
+stale_note_csrf_token=$(csrf_from_body)
+stale_note_attachment_request_token=$(
+    message_attachment_request_token_from_body
+)
 assert_status 409 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --request POST \
-    --data-urlencode "csrf_token=$workflow_csrf_token" \
+    --data-urlencode "csrf_token=$stale_note_csrf_token" \
     --data-urlencode \
         "recipient_matrix_revision=$workflow_recipient_matrix_revision" \
     --data-urlencode \
-        "message_attachment_request_token=$conversation_attachment_request_token" \
+        "message_attachment_request_token=$stale_note_attachment_request_token" \
     --data-urlencode 'absenden_x=1' \
     --data-urlencode 'task=Stab_gesprnoti' \
     --data-urlencode "01_medium=$conversation_medium" \
