@@ -1467,7 +1467,10 @@ function check_and_save ($data, $activeCommandPostName, $expectedIncidentId){
         if (!$result) {
           // Die Anlage ist einstufig: Ein Fehler fuehrt in den Vordruck des
           // Verfassers zurueck, mit angekreuzter Gespraechsnotiz -- nicht in
-          // einen zweiten Vordruck, den es nicht mehr gibt.
+          // einen zweiten Vordruck, den es nicht mehr gibt. Der Validator
+          // fuehrt das Kaestchen nicht mit; ohne diese Zeile kaeme der
+          // Vordruck als gewoehnlicher Ausgang zurueck.
+          $data ["11_gesprnotiz"] = "t";
           $data ["task"] = "Stab_schreiben";
           $form = new nachrichten4fach ($data, $data["task"], $vali->validate);
         exit ;

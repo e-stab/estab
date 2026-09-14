@@ -7409,7 +7409,11 @@ section.estab-message-timeline[data-estab-message-timeline] * {
 #f_02_zeichen,
 #f_03_zeichen,
 #f_14_zeichen,
-#f_15_quitzeichen {
+#f_15_quitzeichen,
+.estab-official-stamp-mark > .estab-official-input,
+.estab-official-stamp-mark > .estab-official-readonly,
+.estab-official-author-mark > .estab-official-input,
+.estab-official-author-mark > .estab-official-readonly {
     font-family: Georgia, "Times New Roman", Times, serif;
     letter-spacing: 0.06em;
     text-transform: uppercase;

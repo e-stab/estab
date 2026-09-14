@@ -2208,8 +2208,11 @@ ANTWORT % WEITERLEITUNG
         // Was ist geschehen und wohin ist die Nachricht gegangen? Beides
         // leitet der Server aus der bereits geprueften Aufgabe, dem
         // Aktionsschalter und der gespeicherten Richtung ab.
+        // Die Rueckmeldung folgt dem Schritt, der gespeichert wurde: Bei
+        // einer Gespraechsnotiz ist das Stab_gesprnoti, nicht der
+        // Ausgang, aus dem sie kam.
         resetframeset (estab_session_ui_message_outcome (
-          (string) ($returnValue ["task"] ?? ""),
+          (string) ($returndata ["task"] ?? ""),
           $returnValue,
           is_array ($objectMessage)
             ? (string) ($objectMessage ["04_richtung"] ?? "")
