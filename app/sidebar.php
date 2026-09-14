@@ -1512,13 +1512,23 @@ function estab_sidebar_status_markup(
         . ' data-estab-notify="' . $notify . '"'
         . ' data-estab-sidebar-status aria-labelledby="estab-sidebar-status-title">'
         . '<div class="estab-sidebar-status-top">'
-        . '<div class="estab-sidebar-queue ' . $queueState . '"'
-        . ' data-estab-queue-state="' . $queueState . '">'
+        /*
+         * Der Zaehler ist ein Verweis auf die Liste, die er zaehlt. Wer
+         * "Offene Meldungen 12" liest, will sie sehen -- bisher musste er
+         * dafuer erst links den Bereich suchen. Das Cockpit steht in einem
+         * Rahmen; der Verweis setzt deshalb das ganze Fenster.
+         */
+        . '<a class="estab-sidebar-queue ' . $queueState . '"'
+        . ' href="' . estab_auth_html(
+            estab_application_url('4fach/index.php')
+        ) . '" target="_top" data-estab-queue-link'
+        . ' data-estab-queue-state="' . $queueState . '"'
+        . ' title="Zur Liste der offenen Meldungen">'
         . '<span class="estab-sidebar-eyebrow" id="estab-sidebar-status-title">'
         . estab_auth_html($queueLabel) . '</span>'
         . '<strong data-estab-queue-count aria-live="polite">'
         . estab_auth_html($queueValue) . '</strong>'
-        . '</div>'
+        . '</a>'
         . '<time class="estab-sidebar-time" datetime="'
         . estab_auth_html($machineTime) . '">'
         . '<strong>' . estab_auth_html($now->format('H:i')) . '</strong>'

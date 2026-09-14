@@ -66,6 +66,11 @@
     --erledigt-spalte-flaeche: #163e35;  /* weiss darauf 11.83 */
     --fehler-spalte: #ffc2c2;            /* min 7.63 */
     --fehler-spalte-flaeche: #5a1a1f;    /* weiss darauf 13.11 */
+    /* "Inaktiv (15 Min.)" trug dasselbe Gold wie "Ihre Funktion" -- eine
+       Farbe fuer zwei Zustaende. Lila steht keinem anderen Zustand der
+       Spalte nahe: nicht Gruen, nicht Rot, nicht Gold, nicht Grau. */
+    --inaktiv-spalte: #d9ccff;           /* min 7.79 auf den drei Kachelgruenden */
+    --inaktiv-spalte-flaeche: #2f2650;   /* weiss darauf 13.9 */
     --marke-standort-flaeche: #3d341d;   /* Gold darauf 7.39 */
 
     /* Standort und Fokus */
@@ -1055,6 +1060,23 @@
     padding: var(--abstand-3);
 }
 
+/* Der Zaehler ist ein Verweis auf seine Liste. Er sieht aus wie zuvor;
+   beim Zeigen unterstreicht er seine Ueberschrift, damit man den Griff
+   erkennt, und beim Fokus greift der Fokusring der Huelle. */
+a.estab-sidebar-queue {
+    color: inherit;
+    text-decoration: none;
+}
+
+a.estab-sidebar-queue:hover .estab-sidebar-eyebrow,
+a.estab-sidebar-queue:focus-visible .estab-sidebar-eyebrow {
+    text-decoration: underline;
+}
+
+a.estab-sidebar-queue:hover {
+    border-color: var(--tinte-spalte-neben);
+}
+
 .estab-sidebar-queue.has-work {
     background: var(--marke-standort-flaeche);
     border-color: var(--marke-standort);
@@ -1439,30 +1461,34 @@
     background: var(--marke-standort);
 }
 
+/* Inaktiv hat seine eigene Farbe. Gold bleibt der Standortmarke: "Ihre
+   Funktion" ist "Sie sind hier", nicht "seit 15 Minuten nichts". */
 .estab-sidebar-presence-inactive {
-    background: var(--marke-standort-flaeche);
-    border-color: var(--marke-standort);
+    background: var(--inaktiv-spalte-flaeche);
+    border-color: var(--inaktiv-spalte);
     color: var(--tinte-spalte);
 }
 
 .estab-sidebar-presence-inactive .estab-sidebar-presence-dot,
 .estab-sidebar-presence-legend i.inactive {
-    background: var(--marke-standort);
+    background: var(--inaktiv-spalte);
 }
 
 .estab-sidebar-presence-mixed {
-    background: linear-gradient(135deg, var(--erledigt-spalte-flaeche) 0 50%, var(--marke-standort-flaeche) 50%);
-    border-color: var(--marke-standort);
+    background: linear-gradient(135deg, var(--erledigt-spalte-flaeche) 0 50%, var(--inaktiv-spalte-flaeche) 50%);
+    border-color: var(--inaktiv-spalte);
 }
 
+/* Die eigene Funktion, aber seit 15 Minuten still: Goldflaeche des
+   Standorts, Punkt und Innenrand in der Farbe von Inaktiv. */
 .estab-sidebar-presence-current-inactive {
     background: var(--marke-standort-flaeche);
     border-color: var(--marke-standort);
-    box-shadow: inset 0 0 0 1px var(--marke-standort);
+    box-shadow: inset 0 0 0 1px var(--inaktiv-spalte);
 }
 
 .estab-sidebar-presence-current-inactive .estab-sidebar-presence-dot {
-    background: var(--marke-standort);
+    background: var(--inaktiv-spalte);
 }
 
 .estab-sidebar-presence-offline {
@@ -6803,6 +6829,54 @@ section.estab-message-timeline[data-estab-message-timeline] * {
     zoom: max(0.75, min(1, calc(100cqw / 56rem)));
 }
 
+/* Das Blatt traegt die Farbe der Durchschrift, die der Betrachter haelt --
+   wie die Zeile in der Liste. Blau ist Blatt 1 und die Vorgabe. Wer eine
+   Nachricht verteilt bekommt, sieht blau; der Verfasser sieht seinen
+   Ausgang blau, solange er laeuft, und gruen, wenn er abgeschlossen ist;
+   S 2 sieht die rote Lagedurchschrift; das Betriebsbuch die gelbe. Haelt
+   jemand zwei Durchschriften -- S 2 mit rot und blau --, ist das Blatt
+   halb und halb. Die Zonen des Blattes malen dann nicht mehr selbst, damit
+   der Verlauf durchscheint. */
+.estab-official-message-form[data-estab-copy="gn"] {
+    --estab-official-blue: #b8ecc4;
+}
+
+.estab-official-message-form[data-estab-copy="rt"] {
+    --estab-official-blue: #ffc9c9;
+}
+
+.estab-official-message-form[data-estab-copy="ge"] {
+    --estab-official-blue: #fff3a8;
+}
+
+.estab-official-message-form[data-estab-copy*=","] {
+    --estab-official-blue: transparent;
+}
+
+.estab-official-message-form[data-estab-copy="bl,gn"] {
+    background: linear-gradient(to right, #a2d9f7 0 50%, #b8ecc4 50% 100%);
+}
+
+.estab-official-message-form[data-estab-copy="bl,rt"] {
+    background: linear-gradient(to right, #a2d9f7 0 50%, #ffc9c9 50% 100%);
+}
+
+.estab-official-message-form[data-estab-copy="bl,ge"] {
+    background: linear-gradient(to right, #a2d9f7 0 50%, #fff3a8 50% 100%);
+}
+
+.estab-official-message-form[data-estab-copy="gn,rt"] {
+    background: linear-gradient(to right, #b8ecc4 0 50%, #ffc9c9 50% 100%);
+}
+
+.estab-official-message-form[data-estab-copy="gn,ge"] {
+    background: linear-gradient(to right, #b8ecc4 0 50%, #fff3a8 50% 100%);
+}
+
+.estab-official-message-form[data-estab-copy="rt,ge"] {
+    background: linear-gradient(to right, #ffc9c9 0 50%, #fff3a8 50% 100%);
+}
+
 
 .estab-official-message-form h2,
 .estab-official-message-form h3,
@@ -6975,12 +7049,14 @@ section.estab-message-timeline[data-estab-message-timeline] * {
    mehr. Ein <input> bricht nie um; ein <span> schon, und schreibgeschuetzt
    steht dort ein <span>.
 
-   Der Annahmevermerk ist als time-only nur halb so breit. Sein Wert
+   Der Annahmevermerk war als time-only nur halb so breit. Sein Wert
    `251532aug2026` passte nicht in die 74 Bildpunkte und brach auf zwei
    Zeilen um: 63 statt 32. Der Vermerk wurde damit 123 Bildpunkte hoch, sein
    Rasterfeld ist 114 -- und die neun Bildpunkte Ueberlauf legten die
    Beschriftungszeile "Datum · Uhrzeit · Hdz." auf den Rufnamen der
-   Gegenstelle darunter.
+   Gegenstelle darunter. Inzwischen traegt er sein Datum wie die anderen
+   beiden Vermerke; die Regel bleibt, weil der Wert auch dort nicht
+   umbrechen darf.
 
    Sichtbar ist der Wert ohnehin nicht: Die drei Zellen darueber zeigen ihn
    zerlegt. */
@@ -6999,12 +7075,6 @@ section.estab-message-timeline[data-estab-message-timeline] * {
 .estab-official-stamp-datetime:not(:focus-within)
     > .estab-official-readonly {
     color: transparent;
-}
-
-.estab-official-stamp-datetime--time-only > .estab-official-input,
-.estab-official-stamp-datetime--time-only > .estab-official-readonly {
-    margin-left: 50%;
-    width: 50%;
 }
 
 .estab-official-stamp-visual-cell {
@@ -7319,12 +7389,41 @@ section.estab-message-timeline[data-estab-message-timeline] * {
    ueberlaeuft er die Feldnummer und zerstoert das Papierbild, das
    UX-PAPIERBILD verlangt. Die Vorschrift schlaegt die Gestaltungsspec.
    Derselbe Text steht lesbar in der Ausfuellhilfe am Feld. */
+/* Der Hinweis unter "Anschrift:" und "Absender:" lief in drei Zeilen bis
+   in die linke untere Ecke -- genau dorthin, wo die Feldnummer 10 bzw. 15
+   gedruckt steht. Er rueckt so weit ein, dass die Nummer frei bleibt. */
 .estab-official-designation-hint {
     color: var(--tinte);
-    display: inline-block;
+    display: block;
     font-size: 0.6rem;
     font-weight: 400;
     line-height: 1.1;
+    margin-left: 0.7rem;
+}
+
+/* Namenszeichen und Kuerzel: Grossbuchstaben in Serifenschrift, damit sich
+   l, I und 1 oder O und 0 nicht verwechseln lassen -- in jedem Vermerk, in
+   Feld 17 und in der Quittung, eingegeben wie schreibgeschuetzt. Das Blatt
+   ist ein Papierfaksimile; die Schriftregeln der Huelle gelten hier nicht. */
+#f_01_zeichen,
+#f_02_zeichen,
+#f_03_zeichen,
+#f_14_zeichen,
+#f_15_quitzeichen {
+    font-family: Georgia, "Times New Roman", Times, serif;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+/* Die Vorbelegung der Abfassungszeit steht neben dem Feld, nur am Schirm.
+   Ausnahme von der Mindestschrift des Blattes (GES-VORDRUCK-LESBAR): Der
+   Hinweis traegt keine Angabe -- die Uhrzeit steht daneben in
+   Arbeitsgroesse -- und muss in die Rasterzeile von Feld 16 passen. */
+.estab-official-composition-note {
+    color: var(--tinte);
+    font-size: 0.6rem;
+    line-height: 1.1;
+    margin-left: 0.5rem;
 }
 
 .estab-official-text-guidance {
@@ -7591,13 +7690,24 @@ section.estab-message-timeline[data-estab-message-timeline] * {
     padding: 0.2rem 0.4rem;
 }
 
+/* Die Beschriftungen "Uhrzeit" und "Zeichen" standen ueber die ganze Breite
+   verteilt, die Zellen darueber aber nur rechts neben "Quittung:". Die Zeile
+   teilt sich jetzt wie die Zeile darueber: leer unter der Ueberschrift, dann
+   dasselbe 2:1-Raster mit demselben Polster wie die Zellen. */
 .estab-official-receipt-labels {
     border-top: 1px solid var(--estab-official-line);
     display: grid;
     grid-column: 1 / 3;
     grid-row: 2;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 11.5rem minmax(0, 1fr);
     text-align: center;
+}
+
+.estab-official-receipt-label-cells {
+    display: grid;
+    gap: 0.35rem;
+    grid-template-columns: 2fr 1fr;
+    padding: 0 0.4rem;
 }
 
 .estab-official-distribution {
@@ -8923,6 +9033,7 @@ section.estab-message-timeline[data-estab-message-timeline]
      * Nachweises.
      */
     .estab-official-designation-hint,
+    .estab-official-composition-note,
     .estab-official-text-guidance,
     .estab-official-required-mark,
     .estab-official-review-scope {

@@ -9933,7 +9933,7 @@ class BrowserAcceptance:
             and desktop_state.get("extraControlsPersisted") is True
             and desktop_state.get("noExternalGreenChoice") is True
             and desktop_state.get("readonlyCopyControlsLabeled") is True
-            and desktop_state.get("timeOnlyStampCount") == 1
+            and desktop_state.get("timeOnlyStampCount") == 0
             and desktop_state.get("noImages") is True,
             "Amtliches Dreizonen-Raster, Blauton oder die 20 Hilfen "
             "weichen im echten Browser ab. Messwerte: "

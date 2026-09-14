@@ -1201,7 +1201,6 @@ finish_ldf_incoming()
     assert_body "$ldf_marker" "LdF queue for $ldf_marker"
     assert_route_control ldf meldung "$ldf_record_id" "LdF incoming detail"
     ldf_csrf=$(csrf_from_cockpit "$ldf_cookies")
-    ldf_clock_before=$(app_tactical_group)
     assert_status 200 "open LdF incoming for $ldf_marker" \
         --cookie "$ldf_cookies" --cookie-jar "$ldf_cookies" \
         --location \
@@ -1210,15 +1209,17 @@ finish_ldf_incoming()
         --data-urlencode 'ldf=meldung' \
         --data-urlencode "00_lfd=$ldf_record_id" \
         "$base_url/4fach/mainindex.php"
-    ldf_clock_after=$(app_tactical_group)
     assert_no_runtime_error "LdF incoming form for $ldf_marker"
     assert_body 'name="task" value="LdF-Eingang"' "LdF incoming task"
-    assert_current_editable_tactical_time_input \
-        f_02_zeit "$ldf_clock_before" "$ldf_clock_after" \
-        "LdF incoming acceptance time"
-    assert_body \
+    # Feld 3 gehoert dem Ausgang. Beim Eingang bietet der Vordruck weder eine
+    # Annahmezeit zur Eingabe an noch zeigt er ein Zeichen; die Bestaetigung
+    # des LdF haelt die Anwendung selbst fest.
+    assert_body_absent \
+        'id="f_02_zeit" class="estab-official-input"' \
+        'LdF incoming offers no acceptance time input'
+    assert_body_absent \
         'id="f_02_zeichen" data-estab-readonly="true"' \
-        'LdF incoming authenticated code'
+        'LdF incoming shows no acceptance code on the sheet'
     assert_body \
         'id="f_13_abseinheit"' \
         'LdF incoming sender translation field'

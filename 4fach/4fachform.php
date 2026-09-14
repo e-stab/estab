@@ -136,9 +136,13 @@ class nachrichten4fach {
         "FM-Eingang" => "01_datum",
         "FM-Eingang_Anhang" => "01_datum",
         "Stab_gesprnoti" => "01_datum",
-        "LdF-Eingang" => "02_zeit",
+        // Kein "LdF-Eingang": Feld 3 bleibt beim Eingang frei.
         "LdF-Ausgang" => "02_zeit",
-        "FM-Ausgang" => "03_datum"
+        "FM-Ausgang" => "03_datum",
+        // Die Abfassungszeit des Verfassers: vorbelegt mit der Uhrzeit beim
+        // Oeffnen, am Vordruck als Vorbelegung ausgewiesen (NV-16) und frei
+        // korrigierbar. Wer schreibt, schreibt meist jetzt.
+        "Stab_schreiben" => "12_abfzeit"
       ) [$this->task] ?? "";
       if (
         $editableTimestampField !== ""
@@ -160,6 +164,8 @@ class nachrichten4fach {
         // Auslassung.
         $this->formdata [$editableTimestampField] =
           konv_datetime_taktime (date ("Y-m-d H:i:s"));
+        $this->compositionTimePrefilled =
+          $editableTimestampField === "12_abfzeit";
       }
       if ((!isset($this->formdata ["17_vermerke"]))  or ($this->formdata ["17_vermerke"] == "0000-00-00 00:00:00")) { $this->formdata ["17_vermerke"] = ""; }
       $conversationNote = $this->formdata ["11_gesprnotiz"] ?? "";
@@ -196,6 +202,7 @@ class nachrichten4fach {
     }
 
     var $task;        // text , Fuer welche Funktion ist der Vordruck
+    var $compositionTimePrefilled = false; // Feld 16 traegt die Uhrzeit beim Oeffnen
     var $formdata ;   // array, Formulardaten
     var $lfd ;        // integer, laufende Nummer der Nachricht
     var $errorselect; // array, Felder die falsch eingegeben wurden.
@@ -1066,9 +1073,14 @@ HTML;
         // LdF confirms or corrects only the incoming transport medium. The
         // A/W receipt time and receipt mark in the same visual block stay
         // immutable and are therefore not enabled through field bit 1.
+        //
+        // Der Annahmevermerk (Zugriffsindex 2, Feld 3) gehoert dem Ausgang:
+        // Angenommen wird eine Nachricht zur Befoerderung, und ein Eingang
+        // wird nicht befoerdert. Beim Eingang bleibt das Feld auf dem Blatt
+        // frei; die Bestaetigung des LdF beobachtet die Anwendung selbst.
         $this->bg [1] = $this->feldbg [1]["a"];
-        $this->bg [2] = $this->feldbg [2]["a"];
-        $this->feld [2] = true;
+        $this->bg [2] = $this->feldbg [2]["i"];
+        $this->feld [2] = false;
         $this->bg [13] = $this->feldbg [13]["a"];
         $this->feld [13] = true;
       break;

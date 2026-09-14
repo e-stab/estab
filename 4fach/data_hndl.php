@@ -1633,7 +1633,10 @@ function check_and_save ($data, $activeCommandPostName, $expectedIncidentId){
         $data ["01_datum"] = "";
         $data ["01_zeichen"] = "";
       }
-      if ($data ["02_zeit"] == "") {
+      if ($ldfDirection === "E" || $data ["02_zeit"] == "") {
+        // Beim Eingang bleibt Feld 3 auf dem Blatt frei; die Bestaetigung
+        // des LdF beobachtet die Anwendung mit ihrer eigenen Uhr. Beim
+        // Ausgang ist die Uhrzeit ein Vorschlag, den der LdF korrigieren kann.
         $data ["02_zeit"] = date ("Hi");
       }
       // The signed acceptance mark is an identity attribute. A forged form

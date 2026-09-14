@@ -13,6 +13,63 @@ require_once __DIR__ . '/../app/ui_elements.php';
 
 trait EstabOfficialMessageFormView
 {
+    /**
+     * Welche Durchschrift der Betrachter haelt -- als Ton fuer das Blatt.
+     *
+     * Die Liste faerbt jede Zeile nach der Durchschrift, die die wirksame
+     * Funktion von der Nachricht bekommt; das Blatt tat es nicht und war
+     * immer blau. Jetzt sagt es dasselbe: leer fuer die Vorgabe (blau),
+     * sonst die Farben der Durchschriften in fester Folge, durch Komma
+     * getrennt, wenn es mehrere sind. Die gruene Durchschrift ist die des
+     * Verfassers -- blau, solange sein Ausgang laeuft, gruen, wenn er
+     * abgeschlossen ist.
+     */
+    function official_message_copy_tone(): string
+    {
+        $stored = trim((string)($this->formdata['16_empf'] ?? ''));
+        $function = trim(
+            (string)($this->official_message_acting_function() ?? '')
+        );
+        if (
+            $stored === ''
+            || $function === ''
+            || !function_exists('estab_recipient_copy_map')
+        ) {
+            return '';
+        }
+        $map = estab_recipient_copy_map($stored);
+        $held = [];
+        foreach (explode(',', (string)($map[$function] ?? '')) as $colour) {
+            $colour = strtolower(trim($colour));
+            if ($colour === 'gb') {
+                $colour = 'ge';
+            }
+            if (
+                in_array($colour, ['bl', 'gn', 'rt', 'ge'], true)
+                && !in_array($colour, $held, true)
+            ) {
+                $held[] = $colour;
+            }
+        }
+        if (
+            (string)($this->formdata['04_richtung'] ?? '') === 'A'
+            && (int)($this->formdata['x00_status'] ?? 0) !== 8
+            && in_array('gn', $held, true)
+        ) {
+            $held = array_values(array_unique(array_map(
+                static fn (string $colour): string =>
+                    $colour === 'gn' ? 'bl' : $colour,
+                $held
+            )));
+        }
+        $order = ['bl' => 0, 'gn' => 1, 'rt' => 2, 'ge' => 3];
+        usort(
+            $held,
+            static fn (string $a, string $b): int => $order[$a] <=> $order[$b]
+        );
+        return $held === ['bl'] ? '' : implode(',', $held);
+    }
+
     /** Carry one server-selected Stab/FB workspace through form round-trips. */
     function official_message_acting_function(): ?string
     {
@@ -584,7 +641,7 @@ HTML;
             ],
             3 => [
                 'title' => 'Annahmevermerk',
-                'text' => 'Nur für ausgehende Nachrichten. Sobald die Fm-Zentrale die Nachricht zur Beförderung annimmt, trägt sie Uhrzeit und Namenszeichen ein. Die Anleitung verlangt hier kein zusätzliches Pflichtdatum.',
+                'text' => 'Nur für ausgehende Nachrichten. Sobald die Fm-Zentrale die Nachricht zur Beförderung annimmt, trägt sie Datum, Uhrzeit und Namenszeichen ein. Bei einer eingehenden Nachricht bleibt das Feld frei.',
             ],
             4 => [
                 'title' => 'Beförderungsvermerk',
@@ -1520,18 +1577,26 @@ HTML;
             return ['date' => '', 'time' => ''];
         }
 
+        /*
+         * Die Datumszelle traegt das Jahr zweistellig: "31aug26", nicht
+         * "31aug2026". Die Zelle ist so breit wie auf dem Papier, und dort
+         * schreibt niemand vier Ziffern hinein. Gespeichert und eingegeben
+         * wird die Zeitgruppe weiter mit vier Ziffern; nur die Zelle kuerzt.
+         */
         if (preg_match(
-            '/^(\d{2})(\d{4})([[:alpha:]ÄÖÜäöü]{3}\d{4})$/uD',
+            '/^(\d{2})(\d{4})([[:alpha:]ÄÖÜäöü]{3})\d{2}(\d{2})$/uD',
             $value,
             $matches
         ) === 1) {
             return [
-                'date' => $preferTimeOnly ? '' : $matches[1] . $matches[3],
+                'date' => $preferTimeOnly
+                    ? ''
+                    : $matches[1] . $matches[3] . $matches[4],
                 'time' => $matches[2],
             ];
         }
         if (preg_match(
-            '/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::\d{2})?$/D',
+            '/^\d{2}(\d{2})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::\d{2})?$/D',
             $value,
             $matches
         ) === 1) {
@@ -1543,14 +1608,25 @@ HTML;
             ];
         }
         if (preg_match(
-            '/^(\d{2}\.\d{2}\.\d{4}|\d{8})\s+'
+            '/^(\d{2}\.\d{2}\.)\d{2}(\d{2})\s+'
                 . '((?:[01]\d|2[0-3]):?[0-5]\d(?::?[0-5]\d)?)$/D',
             $value,
             $matches
         ) === 1) {
             return [
-                'date' => $preferTimeOnly ? '' : $matches[1],
-                'time' => $matches[2],
+                'date' => $preferTimeOnly ? '' : $matches[1] . $matches[2],
+                'time' => $matches[3],
+            ];
+        }
+        if (preg_match(
+            '/^(\d{4})\d{2}(\d{2})\s+'
+                . '((?:[01]\d|2[0-3]):?[0-5]\d(?::?[0-5]\d)?)$/D',
+            $value,
+            $matches
+        ) === 1) {
+            return [
+                'date' => $preferTimeOnly ? '' : $matches[1] . $matches[2],
+                'time' => $matches[3],
             ];
         }
         if (preg_match(
@@ -1602,7 +1678,39 @@ HTML;
             ],
             true
         );
-        $timeOnly = $timeField === '02_zeit';
+        /*
+         * Der Annahmevermerk zeigte nur die Uhrzeit. Das Raster des Blattes
+         * gibt allen drei Vermerken Datum, Uhrzeit und Handzeichen, und der
+         * Ausgang laeuft ueber Mitternacht wie der Eingang: "0100" ohne Tag
+         * ist keine Annahme, die sich einordnen laesst.
+         */
+        $timeOnly = false;
+        /*
+         * Feld 3 ist der Annahmevermerk fuer ausgehende Nachrichten. Bei
+         * einer eingehenden bleibt es auf dem Papier frei: Angenommen wird
+         * eine Nachricht zur Befoerderung, und befoerdert wird ein Eingang
+         * nicht. Die Bestaetigung des LdF beobachtet die Anwendung selbst
+         * und weist sie in der Zeitleiste nach. Das Blatt zeigt hier nichts
+         * und gibt nichts frei.
+         */
+        $incomingAcceptance = $timeField === '02_zeit'
+            && (
+                (string) ($this->formdata['04_richtung'] ?? '') === 'E'
+                || in_array(
+                    $this->task,
+                    ['FM-Eingang', 'FM-Eingang_Anhang', 'LdF-Eingang'],
+                    true
+                )
+            );
+        $hiddenAcceptance = [];
+        if ($incomingAcceptance) {
+            $editable = false;
+            foreach ([$timeField, $markField] as $acceptanceField) {
+                $hiddenAcceptance[$acceptanceField] =
+                    $this->formdata[$acceptanceField] ?? null;
+                $this->formdata[$acceptanceField] = '';
+            }
+        }
         $stampParts = $this->official_message_stamp_parts(
             (string)($this->formdata[$timeField] ?? ''),
             $timeOnly
@@ -1665,6 +1773,9 @@ HTML;
             . '<span>Datum</span><span>Uhrzeit</span><span>Hdz.</span>'
             . '</div><span class="estab-official-print-number">'
             . $number . '</span></section>';
+        foreach ($hiddenAcceptance as $acceptanceField => $storedValue) {
+            $this->formdata[$acceptanceField] = $storedValue;
+        }
     }
 
     /**
@@ -2965,15 +3076,18 @@ HTML;
     if (!normalized) {
       return { date: "", time: "" };
     }
-    match = normalized.match(/^(\d{2})(\d{4})([A-Za-zÄÖÜäöü]{3}\d{4})$/);
+    // Die Datumszelle zeigt das Jahr zweistellig, wie die Zelle auf Papier.
+    match = normalized.match(
+      /^(\d{2})(\d{4})([A-Za-zÄÖÜäöü]{3})\d{2}(\d{2})$/
+    );
     if (match) {
       return {
-        date: timeOnly ? "" : match[1] + match[3],
+        date: timeOnly ? "" : match[1] + match[3] + match[4],
         time: match[2]
       };
     }
     match = normalized.match(
-      /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::\d{2})?$/
+      /^\d{2}(\d{2})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::\d{2})?$/
     );
     if (match) {
       return {
@@ -2982,10 +3096,16 @@ HTML;
       };
     }
     match = normalized.match(
-      /^(\d{2}\.\d{2}\.\d{4}|\d{8})\s+((?:[01]\d|2[0-3]):?[0-5]\d(?::?[0-5]\d)?)$/
+      /^(\d{2}\.\d{2}\.)\d{2}(\d{2})\s+((?:[01]\d|2[0-3]):?[0-5]\d(?::?[0-5]\d)?)$/
     );
     if (match) {
-      return { date: timeOnly ? "" : match[1], time: match[2] };
+      return { date: timeOnly ? "" : match[1] + match[2], time: match[3] };
+    }
+    match = normalized.match(
+      /^(\d{4})\d{2}(\d{2})\s+((?:[01]\d|2[0-3]):?[0-5]\d(?::?[0-5]\d)?)$/
+    );
+    if (match) {
+      return { date: timeOnly ? "" : match[1] + match[2], time: match[3] };
     }
     match = normalized.match(
       /^((?:[01]\d|2[0-3]):?[0-5]\d(?::?[0-5]\d)?)$/
@@ -3555,6 +3675,11 @@ HTML;
             . 'aria-label="Amtlichen Nachrichtenvordruck horizontal verschieben">';
         echo '<article id="nachrichtenvordruck" '
             . 'class="estab-official-message-form" '
+            . ($this->official_message_copy_tone() !== ''
+                ? 'data-estab-copy="'
+                    . estab_message_html($this->official_message_copy_tone())
+                    . '" '
+                : '')
             . 'data-estab-official-message-form data-estab-form-zones="3">';
 
         echo '<section class="estab-official-zone estab-official-zone--fmz" '
@@ -3866,13 +3991,28 @@ HTML;
             . '<div class="estab-official-cell-heading">Abfassungszeit:';
         $this->official_message_help(16);
         echo '</div></div><div class="estab-official-composition-value">';
+        $compositionPrefilled = ($this->compositionTimePrefilled ?? false)
+            === true;
         $this->official_message_text_input(
             '12_abfzeit',
             $this->official_message_field_access(16),
             19,
             'Abfassungszeit',
             ' inputmode="numeric" autocomplete="off"'
+                . ($compositionPrefilled
+                    ? ' data-estab-prefilled="jetzt"'
+                        . ' aria-describedby="estab-composition-prefilled"'
+                    : '')
         );
+        if ($compositionPrefilled) {
+            // NV-16: Eine eingesetzte Uhrzeit wird am Vordruck ausgewiesen.
+            // Sie ist ein Vorschlag, den der Verfasser aendern kann.
+            echo '<span id="estab-composition-prefilled" '
+                . 'class="estab-official-composition-note" '
+                . 'data-estab-composition-prefilled>'
+                . 'vorbelegt mit der Uhrzeit beim Öffnen -- bitte prüfen'
+                . '</span>';
+        }
         echo '</div>'
             . '<span class="estab-official-print-number">16</span></section>';
 
@@ -3954,8 +4094,17 @@ HTML;
                 false
             );
         }
+        /*
+         * Die Beschriftungen standen ueber die ganze Breite verteilt, die
+         * Zellen aber nur rechts neben der Ueberschrift "Quittung:". Die
+         * Beschriftungszeile teilt sich deshalb wie die Zeile darueber: eine
+         * leere Zelle unter der Ueberschrift, dann Uhrzeit und Zeichen im
+         * selben Raster wie ihre Felder.
+         */
         echo '</div><div class="estab-official-receipt-labels" '
-            . 'aria-hidden="true"><span>Uhrzeit</span><span>Zeichen</span></div>'
+            . 'aria-hidden="true"><span></span>'
+            . '<span class="estab-official-receipt-label-cells">'
+            . '<span>Uhrzeit</span><span>Zeichen</span></span></div>'
             . '<span class="estab-official-print-number">18</span></section>';
 
         echo '<section class="estab-official-distribution" '

@@ -468,13 +468,14 @@ foreach (['01_datum', '02_zeit', '03_datum'] as $timeField) {
         'Stamp ' . $timeField . ' no longer binds two visual cells to one accessible field'
     );
 }
+/*
+ * Alle drei Vermerke zeigen Datum, Uhrzeit und Handzeichen -- auch der
+ * Annahmevermerk, der bisher nur die Uhrzeit trug. Die Datumszelle kuerzt
+ * das Jahr auf zwei Ziffern, wie die Zelle auf dem Papier es fasst.
+ */
 $assert(
-    substr_count($stampMarkup, 'data-estab-stamp-time-only="true"') === 1
-        && str_contains(
-            $stampMarkup,
-            'data-estab-single-backend-field="02_zeit" role="group" '
-                . 'data-estab-stamp-time-only="true"'
-        )
+    substr_count($stampMarkup, 'data-estab-stamp-time-only="true"') === 0
+        && substr_count($stampMarkup, 'data-estab-stamp-time-only="false"') === 3
         && preg_match(
             '/data-estab-single-backend-field="02_zeit".*?'
                 . 'data-estab-stamp-value="date"><\/span>.*?'
@@ -483,13 +484,28 @@ $assert(
         ) === 1
         && str_contains(
             $stampMarkup,
-            'data-estab-stamp-value="date">31Jul2026</span>'
+            'data-estab-stamp-value="date">31Jul26</span>'
         )
+        && !str_contains($stampMarkup, '31Jul2026')
         && str_contains(
             $stampMarkup,
             'data-estab-stamp-value="time">1845</span>'
         ),
-    'A time-only stamp value is not shown exclusively in the Uhrzeit cell'
+    'The acceptance stamp hides its date cell or a stamp still prints a four-digit year'
+);
+$stampProbe = new OfficialMessageFormHelpFixture();
+$assert(
+    $stampProbe->official_message_stamp_parts('2026-07-31 18:45:00')
+        === ['date' => '31.07.26', 'time' => '18:45']
+        && $stampProbe->official_message_stamp_parts('31.07.2026 1845')
+        === ['date' => '31.07.26', 'time' => '1845']
+        && $stampProbe->official_message_stamp_parts('31072026 1845')
+        === ['date' => '310726', 'time' => '1845']
+        && $stampProbe->official_message_stamp_parts('311845jul2026')
+        === ['date' => '31jul26', 'time' => '1845']
+        && $stampProbe->official_message_stamp_parts('1845')
+        === ['date' => '', 'time' => '1845'],
+    'Stamp dates are not shortened to a two-digit year'
 );
 
 $fixture->empfarray = [
