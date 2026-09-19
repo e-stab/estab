@@ -467,7 +467,7 @@ $assert(
     str_contains($lead, 'Vom Fernmelder benannter Weg')
         && str_contains($lead, 'Funk (digital) · Führungsstelle')
         && str_contains($lead, 'Gegenstelle laut Fernmeldeplan')
-        && str_contains($lead, 'Feld 15 ist daraus vorbelegt'),
+        && str_contains($lead, 'Feld 12 ist daraus vorbelegt'),
     estab_dv_requirement(
         'TKM-FERNMELDEPLAN',
         'Der Leiter des Fernmeldebetriebes erfaehrt nicht, welchen Weg und '

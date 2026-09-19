@@ -74,12 +74,14 @@ function estab_dv_rules(): array
 {
     return [
         'NV-FELDNUMMERN' => [
-            'source' => ESTAB_DV_SOURCE_AUSFUELLANLEITUNG,
-            'reference' => 'Felder 1 bis 20',
-            'requirement' => 'Der Vordruck beziffert seine Felder nach der '
-                . 'geltenden Ausfüllanleitung. Die am Feld sichtbare Nummer '
-                . 'und die Nummer der zugehörigen Ausfüllhilfe sind gleich, '
-                . 'und jedes der zwanzig Felder trägt eine Nummer.',
+            'source' => ESTAB_DV_SOURCE_UNTERLAGE,
+            'reference' => 'Felder 1 bis 17',
+            'requirement' => 'Der Vordruck beziffert seine Felder wie das '
+                . 'gedruckte Blatt: mit den siebzehn kleinen Nummern in den '
+                . 'Feldecken. Die Zählung der Ausfüllanleitung führt nur zur '
+                . 'Ausfüllhilfe und wird dort als Fundstelle genannt; was am '
+                . 'Bildschirm ein Feld beim Namen nennt, nennt die Nummer '
+                . 'des Blattes.',
         ],
         'NV-NUMMERNBRUECKE' => [
             'source' => ESTAB_DV_SOURCE_AUSFUELLANLEITUNG,

@@ -1687,7 +1687,7 @@ function estab_workflow_distribution_has_processor(string $distribution): bool
  */
 function estab_workflow_missing_processor_message(): string
 {
-    return 'Feld 19 benennt keinen Bearbeiter: Bitte kreuzen Sie im '
+    return 'Feld 16 benennt keinen Bearbeiter: Bitte kreuzen Sie im '
         . 'Verteiler mindestens eine Funktion an, welche die Nachricht '
         . 'bearbeitet (blaue Durchschrift). Die rote Durchschrift für Lage '
         . 'und Dokumentation trägt jeder Eingang bereits, sie ersetzt den '

@@ -630,10 +630,10 @@ HTML;
                     . 'kennt fünf: Funk, Telefon, Telefax, DFÜ und '
                     . 'Kurier/Melder. Internet, E-Mail und Messenger sind '
                     . 'DFÜ; kreuzen Sie dieses Kästchen an und benennen Sie '
-                    . 'den genauen Weg im Beförderungsweg (Feld 6). Ein '
-                    . 'Fernschreiben teilt sich das Kästchen der DFÜ. Feld 1 '
-                    . 'dokumentiert den tatsächlichen Weg; Feld 7 enthält nur '
-                    . 'den gewünschten.',
+                    . 'den genauen Weg im Beförderungsweg (Feld 5). Ein '
+                    . 'Fernschreiben teilt sich das Kästchen der DFÜ. Diese '
+                    . 'obere Zeile dokumentiert den tatsächlichen Weg; Feld 6 '
+                    . 'enthält nur den gewünschten.',
             ],
             2 => [
                 'title' => 'Aufnahmevermerk',
@@ -661,8 +661,9 @@ HTML;
                     . 'Mittel die Nachricht befördert werden soll: Funk, '
                     . 'Telefon, Telefax, DFÜ oder Kurier/Melder. Internet, '
                     . 'E-Mail und Messenger sind DFÜ; den genauen Weg benennt '
-                    . 'der Beförderungsweg (Feld 6). Der tatsächlich benutzte '
-                    . 'Weg wird in Feld 1 nachgewiesen.',
+                    . 'der Beförderungsweg (Feld 5). Der tatsächlich benutzte '
+                    . 'Weg wird in der oberen Zeile der Fm-Zentrale '
+                    . 'nachgewiesen.',
             ],
             8 => [
                 'title' => 'DURCHSAGE / Spruch',
@@ -710,7 +711,7 @@ HTML;
                     . 'keinem Weg. Sofort und ohne Aufforderung zu melden '
                     . 'sind: Gefahrstoffe und Gefahrgüter, der Abschluss des '
                     . 'Auftrages und jede Abweichung vom Auftrag. Wählen Sie '
-                    . 'dafür eine Vorrangstufe in Feld 9, die zum Fall '
+                    . 'dafür eine Vorrangstufe in Feld 8, die zum Fall '
                     . 'passt. Eine Lagemeldung arbeitet die folgenden acht '
                     . 'Punkte ab, in dieser Reihenfolge, mit Angaben nur zu '
                     . 'zutreffenden Punkten. Sie nimmt denselben Laufweg wie '
@@ -759,6 +760,13 @@ HTML;
     function official_message_help(int $number): void
     {
         $definition = $this->official_message_help_definitions()[$number];
+        // Der Knopf und der Dialog heissen, was das Blatt druckt: "Feld 8 ·
+        // Vorrangstufe". Die Nummer der Ausfuellanleitung fuehrt nur zur
+        // Erklaerung und steht deshalb im Dialog als Fundstelle.
+        $visibleName = estab_nv_visible_label(
+            $number,
+            (string) $definition['title']
+        );
         $buttonId = 'estab-form-help-button-' . $number;
         $dialogId = 'estab-form-help-' . $number;
         $titleId = $dialogId . '-title';
@@ -768,16 +776,17 @@ HTML;
             . 'class="estab-official-help-button" '
             . 'data-estab-form-help="' . $number . '" '
             . 'aria-expanded="false" aria-controls="' . $dialogId . '" '
-            . 'aria-label="Ausfüllhilfe ' . $number . ' zu '
-            . estab_message_html($definition['title']) . ' öffnen">i</button>';
+            . 'aria-label="Ausfüllhilfe zu '
+            . estab_message_html($visibleName) . ' öffnen">i</button>';
         echo '<span id="' . $dialogId . '" '
             . 'class="estab-official-help-dialog" role="dialog" '
             . 'tabindex="-1" '
             . 'aria-modal="false" aria-labelledby="' . $titleId . '" '
             . 'aria-describedby="' . $descriptionId . '" hidden>';
         echo '<strong id="' . $titleId . '">'
-            . $number . ' · ' . estab_message_html($definition['title'])
-            . '</strong>';
+            . estab_message_html($visibleName) . '</strong>'
+            . '<span class="estab-official-help-source">Ausfüllanleitung, '
+            . 'Nr. ' . $number . '</span>';
         echo '<span id="' . $descriptionId . '">'
             . estab_message_html($definition['text']) . '</span>';
         /*
@@ -795,6 +804,32 @@ HTML;
         echo '<button type="button" class="estab-official-help-close" '
             . 'data-estab-form-help-close="' . $number . '">Schließen</button>';
         echo '</span></span>';
+    }
+
+    /**
+     * Die kleine Nummer in der Feldecke.
+     *
+     * Es ist die Nummer des gedruckten Blattes, nicht die der
+     * Ausfuellanleitung; drei Felder tragen auf dem Blatt keine, und die
+     * Abfassungszeit teilt sich die 12 mit dem Absender, der sie traegt.
+     * Aufgerufen wird mit der Nummer der Ausfuellanleitung wie die Hilfe,
+     * uebersetzt wird nur in app/nv_field_numbers.php.
+     */
+    function official_message_print_number(int $number): void
+    {
+        $printed = estab_nv_corner_number($number);
+        if ($printed === null) {
+            return;
+        }
+        echo '<span class="estab-official-print-number">' . $printed
+            . '</span>';
+    }
+
+    /** Die 13 des Blattes: "Einheit/Einrichtung/Stelle" hat keine Hilfe. */
+    function official_message_print_unit_number(): void
+    {
+        echo '<span class="estab-official-print-number">'
+            . ESTAB_NV_UNTERLAGE_EINHEIT . '</span>';
     }
 
     /** @var array<string,bool> Felder, die im Raster eine Marke tragen. */
@@ -1349,12 +1384,17 @@ HTML;
             if (!isset($guidance[$field])) {
                 continue;
             }
+            // Die Liste nennt die Nummer, die das Blatt druckt; die Felder
+            // neben dem Raster tragen die Nummer 0 und nur ihren Namen.
             $entries[] = [
                 'number' => $guidance[$field]['number'],
                 'anchor' => $this->official_message_field_anchor($field),
-                'title' => ($guidance[$field]['number'] > 0
-                    ? 'Feld ' . $guidance[$field]['number'] . ' · '
-                    : '') . $guidance[$field]['label'],
+                'title' => $guidance[$field]['number'] > 0
+                    ? estab_nv_visible_label(
+                        (int) $guidance[$field]['number'],
+                        (string) $guidance[$field]['label']
+                    )
+                    : $guidance[$field]['label'],
                 'reason' => $guidance[$field]['reason'],
             ];
         }
@@ -1768,8 +1808,9 @@ HTML;
         echo '</div></div>'
             . '<div class="estab-official-stamp-labels" aria-hidden="true">'
             . '<span>Datum</span><span>Uhrzeit</span><span>Hdz.</span>'
-            . '</div><span class="estab-official-print-number">'
-            . $number . '</span></section>';
+            . '</div>';
+        $this->official_message_print_number($number);
+        echo '</section>';
         foreach ($hiddenAcceptance as $acceptanceField => $storedValue) {
             $this->formdata[$acceptanceField] = $storedValue;
         }
@@ -2582,11 +2623,11 @@ HTML;
         echo '<p class="estab-official-review-scope">'
             . '<span class="estab-official-review-scope-title">'
             . 'Formale Sichtung</span>'
-            . '<span>Geprüft werden Anschrift (10), Absender (15) sowie '
-            . 'Zeichen und Funktion des Verfassers (17). Eine inhaltliche '
+            . '<span>Geprüft werden Anschrift (9), Absender (12) sowie '
+            . 'Zeichen und Funktion des Verfassers (14). Eine inhaltliche '
             . 'Prüfung der Nachricht entfällt: Für den Inhalt steht der '
             . 'Verfasser mit seinem Namenszeichen ein.</span>'
-            . '<span>Eine Rückgabe braucht einen Vermerk in Feld 20 -- '
+            . '<span>Eine Rückgabe braucht einen Vermerk in Feld 17 – '
             . 'sonst erfährt der Verfasser nicht, was zu ändern ist.</span>'
             . '</p>';
     }
@@ -2612,11 +2653,12 @@ HTML;
             . '>'
             . '<span class="estab-official-review-scope-title">'
             . 'Gesprächsnotiz</span>'
-            . '<span>Ist Feld 12 angekreuzt, geht die Notiz mit dem Absenden '
+            . '<span>Ist Feld 10 angekreuzt, geht die Notiz mit dem Absenden '
             . 'unmittelbar zur Sichtung. Si prüft sie formal; damit ist sie '
             . 'abgeschlossen. Eine Disposition durch den LdF und eine '
             . 'Beförderung durch die Fernmelder folgen nicht.</span>'
-            . '<span>Das im Gespräch benutzte Mittel steht oben in Feld 1; '
+            . '<span>Das im Gespräch benutzte Mittel steht oben in der Zeile '
+            . 'der Fm-Zentrale; '
             . 'Zeichen und Aufnahmezeit setzt eStab beim Absenden ein.</span>'
             . '</p>';
     }
@@ -2665,7 +2707,8 @@ HTML;
             if ($this->activeTelecomRoutes === []) {
                 echo '<p>Kein freigegebener S6-Fernmeldeplan verfügbar. '
                     . 'Der Eingangsweg bleibt offen; das Übermittlungsmittel '
-                    . 'in Feld 1 wird davon nicht berührt.</p>';
+                    . 'in der oberen Zeile der Fm-Zentrale wird davon nicht '
+                    . 'berührt.</p>';
             } else {
                 echo '<label for="f_fernmeldeplan_eintrag_id">'
                     . 'Über welchen Weg kam die Nachricht herein? '
@@ -2737,7 +2780,7 @@ HTML;
                         . $counterpartMarkup
                         . '</select>'
                         . '<p class="estab-field-hint">Die Auswahl muss zum '
-                        . 'oben gewählten Weg gehören. Der LdF bekommt Feld 15 '
+                        . 'oben gewählten Weg gehören. Der LdF bekommt Feld 12 '
                         . 'daraus vorbelegt.</p>';
                 }
             }
@@ -2815,7 +2858,7 @@ HTML;
                         . ' · '
                         . $this->incomingCounterpart['erreichbarkeit']
                     )
-                    . '</strong> — Feld 15 ist daraus vorbelegt.</p>';
+                    . '</strong> — Feld 12 ist daraus vorbelegt.</p>';
             }
             if ($this->activeTelecomRoutes !== []) {
                 echo '<label for="f_fernmeldeplan_eintrag_id">'
@@ -2849,7 +2892,8 @@ HTML;
                 echo '<p class="estab-field-error">Kein aktuell gültiger, '
                     . 'freigegebener S6-Fernmeldeplan verfügbar.</p>'
                     . '<p>Ohne veröffentlichten Fernmeldeplan disponieren Sie '
-                    . 'das Übermittlungsmittel in Feld 1 und benennen den '
+                    . 'das Übermittlungsmittel in der oberen Zeile der '
+                    . 'Fm-Zentrale und benennen den '
                     . 'Beförderungsweg hier.</p>'
                     . '<label for="f_06_befweg">Beförderungsweg</label>';
                 $this->official_message_text_input(
@@ -3740,7 +3784,8 @@ HTML;
                 ? 'estab-conversation-medium-status'
                 : ''
         );
-        echo '<span class="estab-official-print-number">1</span></div>';
+        $this->official_message_print_number(1);
+        echo '</div>';
 
         echo '<section class="estab-official-ttb">'
             . '<div class="estab-official-cell-heading">'
@@ -3761,7 +3806,8 @@ HTML;
             false,
             'Richtung im Technischen Betriebsbuch'
         );
-        echo '<span class="estab-official-print-number">5</span></section>';
+        $this->official_message_print_number(5);
+        echo '</section>';
 
         echo '<div class="estab-official-direction-headings" aria-hidden="true">'
             . '<strong>Eingang</strong><strong>Ausgang</strong></div>';
@@ -3819,7 +3865,9 @@ HTML;
                 'Rufname der Gegenstelle'
             );
         }
-        echo '</div><span class="estab-official-print-number">6</span></section>';
+        echo '</div>';
+        $this->official_message_print_number(6);
+        echo '</section>';
         echo '</div></section>';
 
         echo '<div class="estab-official-section-rule" aria-hidden="true"></div>';
@@ -3854,7 +3902,8 @@ HTML;
             'Gewünschtes Übermittlungsmittel',
             $this->task !== 'LdF-Ausgang'
         );
-        echo '<span class="estab-official-print-number">7</span></section>';
+        $this->official_message_print_number(7);
+        echo '</section>';
 
         echo '<section class="estab-official-type-priority">'
             . '<div class="estab-official-type">';
@@ -3869,11 +3918,12 @@ HTML;
             $this->official_message_field_access(8),
             'Nachrichtenform'
         );
-        echo '<span class="estab-official-print-number">8</span></div>'
-            . '<div class="estab-official-priority">';
+        $this->official_message_print_number(8);
+        echo '</div><div class="estab-official-priority">';
         $this->official_message_help(9);
         $this->official_message_priority();
-        echo '<span class="estab-official-print-number">9</span></div></section>';
+        $this->official_message_print_number(9);
+        echo '</div></section>';
 
         echo '<section class="estab-official-address-block">'
             . '<div class="estab-official-address-label">'
@@ -3881,8 +3931,9 @@ HTML;
             . '<br><span class="estab-official-designation-hint">'
             . 'Dienststelle, Teileinheit oder Einheit</span>';
         $this->official_message_help(10);
-        echo '</div><span class="estab-official-print-number">10</span></div>'
-            . '<div class="estab-official-address-value">';
+        echo '</div>';
+        $this->official_message_print_number(10);
+        echo '</div><div class="estab-official-address-value">';
         $this->official_message_textarea(
             '10_anschrift',
             $this->official_message_field_access(10),
@@ -3892,8 +3943,9 @@ HTML;
         echo '</div><div class="estab-official-phone-label">'
             . '<div class="estab-official-cell-heading">Ruf Nr.';
         $this->official_message_help(11);
-        echo '</div><span class="estab-official-print-number">11</span>'
-            . '</div><div class="estab-official-phone-value">';
+        echo '</div>';
+        $this->official_message_print_number(11);
+        echo '</div><div class="estab-official-phone-value">';
         $this->official_message_text_input(
             '11_rufnummer',
             $this->official_message_field_access(11),
@@ -3925,8 +3977,9 @@ HTML;
                             . 'DFÜ oder Kurier/Melder.'))
                 . '</span>';
         }
-        echo '</div><span class="estab-official-print-number">12</span>'
-            . '</div></section>';
+        echo '</div>';
+        $this->official_message_print_number(12);
+        echo '</div></section>';
 
         echo '<section class="estab-official-subject">'
             . '<div class="estab-official-cell-heading">Inhalt';
@@ -3938,7 +3991,9 @@ HTML;
             255,
             'Betreff der Nachricht'
         );
-        echo '</div><span class="estab-official-print-number">13</span></section>';
+        echo '</div>';
+        $this->official_message_print_number(13);
+        echo '</section>';
 
         echo '<section class="estab-official-message-text">';
         $this->official_message_help(14);
@@ -3948,7 +4003,8 @@ HTML;
             $this->official_message_field_access(14),
             'Nachrichtentext'
         );
-        echo '<span class="estab-official-print-number">14</span></section>';
+        $this->official_message_print_number(14);
+        echo '</section>';
 
         $senderAssignedByLead = in_array(
             $this->task,
@@ -3985,7 +4041,9 @@ HTML;
                 'Absender'
             );
         }
-        echo '</div><span class="estab-official-print-number">15</span></section>';
+        echo '</div>';
+        $this->official_message_print_number(15);
+        echo '</section>';
 
         echo '<section class="estab-official-composition">'
             . '<div class="estab-official-composition-label">'
@@ -4014,14 +4072,16 @@ HTML;
                 . 'vorbelegt mit der Uhrzeit beim Öffnen – bitte prüfen'
                 . '</span>';
         }
-        echo '</div>'
-            . '<span class="estab-official-print-number">16</span></section>';
+        echo '</div>';
+        $this->official_message_print_number(16);
+        echo '</section>';
 
         echo '<section class="estab-official-author">'
             . '<div class="estab-official-author-unit">'
-            . '<span>Einheit/Einrichtung/Stelle</span></div>'
-            . '<div class="estab-official-author-mark">'
-            . '<span class="estab-official-print-number">17</span>';
+            . '<span>Einheit/Einrichtung/Stelle</span>';
+        $this->official_message_print_unit_number();
+        echo '</div><div class="estab-official-author-mark">';
+        $this->official_message_print_number(17);
         $this->official_message_help(17);
         if ($this->official_message_field_access(17)) {
             $this->official_message_text_input(
@@ -4105,8 +4165,9 @@ HTML;
         echo '</div><div class="estab-official-receipt-labels" '
             . 'aria-hidden="true"><span></span>'
             . '<span class="estab-official-receipt-label-cells">'
-            . '<span>Uhrzeit</span><span>Zeichen</span></span></div>'
-            . '<span class="estab-official-print-number">18</span></section>';
+            . '<span>Uhrzeit</span><span>Zeichen</span></span></div>';
+        $this->official_message_print_number(18);
+        echo '</section>';
 
         echo '<section class="estab-official-distribution" '
             . 'id="f_16_empf" tabindex="-1">'
@@ -4114,7 +4175,8 @@ HTML;
         $this->official_message_help(19);
         echo '</div>';
         $this->official_message_distribution();
-        echo '<span class="estab-official-print-number">19</span></section>';
+        $this->official_message_print_number(19);
+        echo '</section>';
 
         echo '<section class="estab-official-notes">'
             . '<div class="estab-official-cell-heading">Vermerke:';
@@ -4129,7 +4191,8 @@ HTML;
             0,
             false
         );
-        echo '<span class="estab-official-print-number">20</span></section>';
+        $this->official_message_print_number(20);
+        echo '</section>';
         echo '</div></section></article></div>';
         $this->official_message_extra_distribution();
 

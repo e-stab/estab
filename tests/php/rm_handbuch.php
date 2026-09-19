@@ -79,9 +79,18 @@ $assert = static function (bool $condition, string $message) use (&$assertions):
  * Oeffnen vorbelegt (Issue #35); der Satz, eStab setze sie nicht selbst,
  * sagt das Gegenteil und ist ersetzt. Und der Verfasser gibt nicht mehr
  * "zur Sichtung", er sendet ab -- das Absenden ist die Weitergabe.
+ *
+ * Von 4721 auf 4743 Woerter am 19.09.2026, Kapitel 5, 6 und 7.
+ *
+ * Die Feldecken tragen jetzt die kleinen Nummern des Papiervordrucks
+ * (1 bis 17) statt der Kreisnummern der Ausfuellanleitung (1 bis 20). Das
+ * Handbuch nennt deshalb dieselben Nummern wie der Bildschirm -- Feld 6
+ * statt 7, Feld 5 statt 6, Feld 12 statt 15 und 16, Feld 17 statt 20 --,
+ * spricht vom unbezifferten oberen Mittel als "obere Zeile" und erklaert
+ * in Kapitel 5 in einem Satz, woher die Nummer in der Ecke stammt.
  */
-const ESTAB_HANDBUCH_WOERTER = 4721;
-const ESTAB_HANDBUCH_PRUEFSUMME = 'eee2a2a738e94823';
+const ESTAB_HANDBUCH_WOERTER = 4743;
+const ESTAB_HANDBUCH_PRUEFSUMME = 'cac4603bb70d8a49';
 
 $quelle = file_get_contents($root . '/handbuch/index.php');
 $assert(is_string($quelle), 'Das Handbuch ist nicht lesbar.');

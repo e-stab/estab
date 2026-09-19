@@ -90,11 +90,12 @@ Fernmelder entfallen.
 
 1. Richtung und Art wählen.
 2. Rufnamen, Absender, Empfänger, Überschrift und Text ausfüllen.
-3. Vorrangstufe, gewünschtes Übermittlungsmittel (Feld 7) und erforderliche
+3. Vorrangstufe, gewünschtes Übermittlungsmittel (Feld 6) und erforderliche
    Vermerke im Vordruck setzen.
-4. Abfassungszeit (Feld 16) eintragen. Die Anwendung setzt sie nicht selbst
-   ein: sie kennt den Zeitpunkt der Erfassung, nicht den der Abfassung.
-5. Verteiler (Feld 19) ausfüllen. Die rote Lage- und die eigene grüne
+4. Abfassungszeit (Feld 12) prüfen. Sie ist mit der Uhrzeit beim Öffnen
+   vorbelegt und am Feld so ausgewiesen; sie gehört dem Verfasser und bleibt
+   änderbar.
+5. Verteiler (Feld 16) ausfüllen. Die rote Lage- und die eigene grüne
    Durchschrift ergänzt der Server unabwählbar.
 6. Anhänge direkt am Vordruck auswählen und hochladen.
 7. Nachricht an die nächste Station übergeben.
@@ -103,10 +104,14 @@ Rufnamen und Absender werden aus früheren Einträgen desselben Einsatzes
 vorgeschlagen. Die tatsächliche Aufnahme- oder Beförderungszeit bleibt
 änderbar.
 
-Feld 7 trägt den Wunsch des Verfassers und bleibt dauerhaft stehen. Der LdF
-disponiert davon unabhängig in Feld 1; erreicht der Fernmelder den Empfänger
-darüber nicht, geht die Nachricht mit einem Vermerk in Feld 20 an den LdF
-zurück und wird neu disponiert.
+Feld 6 trägt den Wunsch des Verfassers und bleibt dauerhaft stehen. Der LdF
+disponiert davon unabhängig in der oberen Zeile der Fm-Zentrale; erreicht der
+Fernmelder den Empfänger darüber nicht, geht die Nachricht mit einem Vermerk
+in Feld 17 an den LdF zurück und wird neu disponiert.
+
+Die kleinen Nummern in den Feldecken sind die des Papiervordrucks (1 bis 17).
+Die Ausfüllanleitung zählt zwanzig Erklärungen; ihre Nummer nennt die
+Ausfüllhilfe als Fundstelle.
 
 Eine eingehende Nachricht lässt sich erst abschliessen, wenn im Verteiler
 mindestens ein Bearbeiter benannt ist -- sonst erreichte sie niemanden.

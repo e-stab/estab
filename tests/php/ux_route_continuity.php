@@ -88,9 +88,12 @@ $render = substr(
     (int) strpos($view, 'function plot_official_message_form()')
 );
 
+// Die Ecken werden mit der Nummer der Ausfuellanleitung aufgerufen; was das
+// Blatt dort druckt, entscheidet app/nv_field_numbers.php. Fuer das Bild
+// zaehlt der Aufruf: Er steht an jedem der zwanzig Felder.
 preg_match_all(
     '~data-estab-form-zone="([a-z-]+)"'
-        . '|estab-official-print-number">(\d+)<'
+        . '|\$this->official_message_print_number\((\d+)\)'
         . '|official_message_timestamp_block\(\s*\'[^\']*\',\s*(\d+),~',
     $render,
     $marks,
@@ -132,6 +135,7 @@ $depth = 0;
 $inMethod = false;
 $sawFunctionName = false;
 $depths = [];
+$awaitingCornerNumber = false;
 foreach ($tokens as $token) {
     if (is_array($token)) {
         if (
@@ -140,16 +144,17 @@ foreach ($tokens as $token) {
         ) {
             $sawFunctionName = true;
         }
-        if ($inMethod && $token[0] === T_CONSTANT_ENCAPSED_STRING) {
-            if (
-                preg_match(
-                    '~estab-official-print-number">(\d+)<~',
-                    $token[1],
-                    $printed
-                ) === 1
-            ) {
-                $depths[(int) $printed[1]] = $depth;
-            }
+        // Der Eckenaufruf traegt seine Nummer als naechstes Zahlzeichen;
+        // die Tiefe des Aufrufs ist die Tiefe des Feldes.
+        if (
+            $inMethod
+            && $token[0] === T_STRING
+            && $token[1] === 'official_message_print_number'
+        ) {
+            $awaitingCornerNumber = true;
+        } elseif ($awaitingCornerNumber && $token[0] === T_LNUMBER) {
+            $depths[(int) $token[1]] = $depth;
+            $awaitingCornerNumber = false;
         }
         if (
             $inMethod
