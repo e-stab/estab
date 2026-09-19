@@ -402,6 +402,8 @@ Tabelle ohne Zeilenlinien ist bei 4 px Polster nicht mehr zu lesen.
 | `--erledigt-spalte-flaeche` | `#163e35` | Fläche dazu |
 | `--fehler-spalte` | `#ffc2c2` | „unbesetzt", „Vorrang offen" |
 | `--fehler-spalte-flaeche` | `#5a1a1f` | Fläche dazu |
+| `--inaktiv-spalte` | `#d9ccff` | „inaktiv (15 Min.)" — angemeldet, aber still; nicht Gold, das ist die Standortmarke |
+| `--inaktiv-spalte-flaeche` | `#2f2650` | Fläche dazu |
 | `--marke-standort-flaeche` | `#3d341d` | Fläche unter der Standortmarke |
 
 **Warum es diese fünf zusätzlich gibt:** Die hellen Zustandsfarben aus der

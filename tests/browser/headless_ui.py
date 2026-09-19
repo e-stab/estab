@@ -9313,10 +9313,12 @@ class BrowserAcceptance:
                 const priorityGroup = priorityField?.querySelector(
                     ".estab-official-priority-choices"
                 );
+                /* Zwei Kaestchen, wie auf dem amtlichen Vordruck: Staatsnot
+                   wird seit Issue #39 nicht mehr angeboten; ein gespeicherter
+                   Altbestand zeigt sie noch, ein neuer Vordruck nicht. */
                 const priorityDefinitions = [
                     ["sofort", "sss", "Sofort"],
-                    ["blitz", "bbb", "Blitz"],
-                    ["staatsnot", "aaa", "Staatsnot"]
+                    ["blitz", "bbb", "Blitz"]
                 ];
                 const priorityControls = priorityDefinitions.map(
                     ([id]) => doc.querySelector(
@@ -9326,10 +9328,9 @@ class BrowserAcceptance:
                 const priorityLabels = priorityControls.map(control =>
                     control?.closest("label") || null
                 );
-                /* Feld 9 hat drei Kaestchen. "Keine Vorrangstufe" ist auf
-                   dem amtlichen Vordruck die Abwesenheit eines Kreuzes und
-                   kein eigenes Kaestchen -- 013b14d hat das vierte
-                   entfernt. */
+                /* "Keine Vorrangstufe" ist auf dem amtlichen Vordruck die
+                   Abwesenheit eines Kreuzes und kein eigenes Kaestchen --
+                   013b14d hat das dritte entfernt, #39 die Staatsnot. */
                 const extraDistribution = doc.querySelector(
                     ".estab-message-distribution-extras"
                 );
@@ -9413,14 +9414,9 @@ class BrowserAcceptance:
                         && rect.width >= 17
                         && rect.width <= 18.5;
                 });
-                const staatsnotDescriptionId = priorityControls[2]
-                    ?.getAttribute("aria-describedby") || "";
-                const staatsnotDescription = staatsnotDescriptionId
-                    ? doc.getElementById(staatsnotDescriptionId)
-                    : null;
                 const priorityGeometry = Boolean(
                     priorityRect
-                    && priorityLabelRects.length === 3
+                    && priorityLabelRects.length === 2
                     && priorityLabelRects.every(rect =>
                         rect.left >= priorityRect.left - 1
                         && rect.right <= priorityRect.right + 1
@@ -9641,7 +9637,7 @@ class BrowserAcceptance:
                                 && control.name === "09_vorrangstufe"
                             )
                         )
-                        /* Ohne Kreuz ist keine Stufe gewaehlt: Die drei
+                        /* Ohne Kreuz ist keine Stufe gewaehlt: Die beiden
                            Kaestchen stehen frei, und keines ist gesetzt. */
                         && priorityControls.every(
                             control => control.checked === false
@@ -9652,11 +9648,9 @@ class BrowserAcceptance:
                             )
                         ).every(control => priorityField.contains(control))
                     ),
-                    staatsnotWarning: priorityControls[2]?.getAttribute(
-                        "title"
-                    ) || "",
-                    staatsnotDescription:
-                        staatsnotDescription?.textContent || "",
+                    staatsnotAbsent: !doc.querySelector(
+                        "#f_09_vorrangstufe_staatsnot"
+                    ),
                     priorityBoxesSquare,
                     priorityGeometry,
                     noExternalPriority: !doc.querySelector(
@@ -9873,14 +9867,11 @@ class BrowserAcceptance:
                 reference_proportions.get("priority", 0) - 0.39
             ) <= 0.005
             and desktop_state.get("priorityLabels")
-                == ["Sofort", "Blitz", "Staatsnot"]
+                == ["Sofort", "Blitz"]
             and desktop_state.get("priorityValues")
-                == ["sss", "bbb", "aaa"]
+                == ["sss", "bbb"]
             and desktop_state.get("priorityInsideOfficialField") is True
-            and "ausdrückliche Weisung"
-                in desktop_state.get("staatsnotWarning", "")
-            and "ausdrückliche Weisung"
-                in desktop_state.get("staatsnotDescription", "")
+            and desktop_state.get("staatsnotAbsent") is True
             and desktop_state.get("priorityBoxesSquare") is True
             and desktop_state.get("priorityGeometry") is True
             and desktop_state.get("noExternalPriority") is True
@@ -9933,7 +9924,7 @@ class BrowserAcceptance:
             and desktop_state.get("extraControlsPersisted") is True
             and desktop_state.get("noExternalGreenChoice") is True
             and desktop_state.get("readonlyCopyControlsLabeled") is True
-            and desktop_state.get("timeOnlyStampCount") == 1
+            and desktop_state.get("timeOnlyStampCount") == 0
             and desktop_state.get("noImages") is True,
             "Amtliches Dreizonen-Raster, Blauton oder die 20 Hilfen "
             "weichen im echten Browser ab. Messwerte: "
@@ -9946,8 +9937,8 @@ class BrowserAcceptance:
 
         self.cdp.click(
             "mainframe",
-            "#f_09_vorrangstufe_staatsnot",
-            "Staatsnot im amtlichen Vorrangfeld",
+            "#f_09_vorrangstufe_blitz",
+            "Blitz im amtlichen Vorrangfeld",
         )
         self.cdp.wait_for(
             _frame_expression(
@@ -9956,15 +9947,15 @@ class BrowserAcceptance:
                 const field = doc.querySelector(
                     ".estab-official-priority"
                 );
-                const staatsnot = doc.querySelector(
-                    "#f_09_vorrangstufe_staatsnot"
+                const blitz = doc.querySelector(
+                    "#f_09_vorrangstufe_blitz"
                 );
                 return Boolean(
                     field
-                    && staatsnot
-                    && field.contains(staatsnot)
-                    && staatsnot.checked
-                    && staatsnot.value === "aaa"
+                    && blitz
+                    && field.contains(blitz)
+                    && blitz.checked
+                    && blitz.value === "bbb"
                     && doc.querySelectorAll(
                         '.estab-official-priority '
                         + 'input[name="09_vorrangstufe"]:checked'
@@ -9972,7 +9963,7 @@ class BrowserAcceptance:
                 );
                 """,
             ),
-            "Staatsnot wurde nicht im amtlichen Vorrangfeld angekreuzt",
+            "Blitz wurde nicht im amtlichen Vorrangfeld angekreuzt",
         )
         # Ein Kaestchen "keine" gibt es nicht mehr: Auf dem amtlichen Vordruck
         # ist die fehlende Stufe die Abwesenheit eines Kreuzes. Zurueckgenommen
@@ -9981,7 +9972,7 @@ class BrowserAcceptance:
         # nicht ab.
         self.cdp.click(
             "mainframe",
-            "#f_09_vorrangstufe_staatsnot",
+            "#f_09_vorrangstufe_blitz",
             "Vorrang im amtlichen Feld durch zweiten Klick zurücksetzen",
         )
         self.cdp.wait_for(
@@ -9993,7 +9984,7 @@ class BrowserAcceptance:
                     && doc.querySelectorAll(
                         '.estab-official-priority '
                         + 'input[name="09_vorrangstufe"]'
-                    ).length === 3
+                    ).length === 2
                     && doc.querySelectorAll(
                         '.estab-official-priority '
                         + 'input[name="09_vorrangstufe"]:checked'
@@ -10225,20 +10216,20 @@ class BrowserAcceptance:
         )
         self.cdp.click(
             "mainframe",
-            "#f_09_vorrangstufe_staatsnot",
-            "Staatsnot für den echten Drucknachweis",
+            "#f_09_vorrangstufe_blitz",
+            "Blitz für den echten Drucknachweis",
         )
         self.cdp.wait_for(
             _frame_expression(
                 "mainframe",
                 """
-                const staatsnot = doc.querySelector(
-                    "#f_09_vorrangstufe_staatsnot"
+                const blitz = doc.querySelector(
+                    "#f_09_vorrangstufe_blitz"
                 );
-                return Boolean(staatsnot && staatsnot.checked);
+                return Boolean(blitz && blitz.checked);
                 """,
             ),
-            "Staatsnot ist vor dem Drucknachweis nicht markiert",
+            "Blitz ist vor dem Drucknachweis nicht markiert",
         )
         print_document = self.cdp.evaluate(
             _frame_expression(
@@ -10316,8 +10307,8 @@ class BrowserAcceptance:
                 const priorityClear = document.querySelector(
                     ".estab-official-priority-clear"
                 );
-                const staatsnot = document.querySelector(
-                    "#f_09_vorrangstufe_staatsnot"
+                const blitz = document.querySelector(
+                    "#f_09_vorrangstufe_blitz"
                 );
                 if (
                     sheetStyle.zoom !== "0.78"
@@ -10339,7 +10330,7 @@ class BrowserAcceptance:
                        zurueckkommen: Eine Regel fuer ein Element, das es
                        nicht gibt, waere eine Leiche. */
                     priorityClearAbsent: priorityClear === null,
-                    staatsnotChecked: Boolean(staatsnot?.checked),
+                    priorityChecked: Boolean(blitz?.checked),
                     blue: contentBlue,
                     zones: document.querySelectorAll(
                         "[data-estab-form-zone]"
@@ -10357,7 +10348,7 @@ class BrowserAcceptance:
             and print_state.get("pseudoContent") in {"none", "normal"}
             and print_state.get("pseudoDisplay") == "none"
             and print_state.get("priorityClearAbsent") is True
-            and print_state.get("staatsnotChecked") is True
+            and print_state.get("priorityChecked") is True
             and 695 <= print_state.get("width", 0) <= 705
             and 0 < print_state.get("height", 9999) <= 1069.7,
             "Das echte Drucklayout passt nicht fragmentierungsfrei in den "

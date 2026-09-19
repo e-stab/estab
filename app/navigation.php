@@ -239,6 +239,27 @@ function estab_navigation_login_content_url(
 }
 
 /**
+ * Whether this request loads a frame rather than the top-level document.
+ *
+ * Fetch Metadata names the destination; the application uses it in two
+ * places that must agree: the login redirect and the STRICT duty selector.
+ * Both used to be answered by a redirect that assumed a top-level window,
+ * and inside the historical mainframe that nested the whole workspace --
+ * menu column, cockpit and all -- into its own content frame.
+ */
+function estab_navigation_request_is_embedded(array $server = []): bool
+{
+    $effectiveServer = $server === [] ? $_SERVER : $server;
+    $fetchDestination = $effectiveServer['HTTP_SEC_FETCH_DEST'] ?? '';
+    return is_string($fetchDestination)
+        && in_array(
+            strtolower(trim($fetchDestination)),
+            ['frame', 'iframe'],
+            true
+        );
+}
+
+/**
  * Return the login document appropriate for the current browsing context.
  *
  * A protected controller rendered inside the historical mainframe must not
@@ -253,15 +274,10 @@ function estab_navigation_login_redirect_url(
     array $server = [],
     bool $preferContentDocument = false
 ): string {
-    $effectiveServer = $server === [] ? $_SERVER : $server;
-    $fetchDestination = $effectiveServer['HTTP_SEC_FETCH_DEST'] ?? '';
-    $embedded = is_string($fetchDestination)
-        && in_array(
-            strtolower(trim($fetchDestination)),
-            ['frame', 'iframe'],
-            true
-        );
-    if ($preferContentDocument || $embedded) {
+    if (
+        $preferContentDocument
+        || estab_navigation_request_is_embedded($server)
+    ) {
         return estab_navigation_login_content_url(
             $destinationKey,
             $submissionDiscarded
@@ -343,14 +359,52 @@ function estab_navigation_select_duty(
     } else {
         $session['estab_pending_navigation_key'] = $destinationKey;
     }
+    $target = estab_navigation_url_for_key('command-post')
+        . '#meine-dienstfunktionen';
     header('Cache-Control: no-store');
-    header('Vary: Cookie');
-    header(
-        'Location: ' . estab_navigation_url_for_key('command-post')
-            . '#meine-dienstfunktionen',
-        true,
-        303
+    header('Vary: Cookie, Sec-Fetch-Dest');
+    /*
+     * Der Nachrichtenvordruck steht im Rahmen der Arbeitsflaeche. Eine
+     * Weiterleitung von dort traefe nur den Rahmen: Die Fuehrungsstelle
+     * bekaeme ihre eigene Huelle -- Menuespalte und Cockpit -- und stuende
+     * damit als zweites Menue im ersten. Aus dem Rahmen heraus wird deshalb
+     * das ganze Fenster auf das Ziel gesetzt.
+     */
+    if (estab_navigation_request_is_embedded($effectiveServer)) {
+        estab_navigation_open_top_level($target);
+    }
+    header('Location: ' . $target, true, 303);
+    exit;
+}
+
+/**
+ * Replace the complete window with one application URL, out of any frame.
+ *
+ * The ordinary link with target="_top" remains for browsers without
+ * JavaScript; the script does the same without a click.
+ */
+function estab_navigation_open_top_level(string $url): never
+{
+    require_once __DIR__ . '/csp.php';
+    $encodedUrl = json_encode(
+        $url,
+        JSON_HEX_TAG
+            | JSON_HEX_AMP
+            | JSON_HEX_APOS
+            | JSON_HEX_QUOT
+            | JSON_UNESCAPED_SLASHES
+            | JSON_THROW_ON_ERROR
     );
+    header('Content-Type: text/html; charset=UTF-8');
+    echo '<!doctype html><html lang="de"><head><meta charset="UTF-8">'
+        . '<meta name="viewport" content="width=device-width, initial-scale=1">'
+        . '<title>eStab-Bereich öffnen</title></head><body>'
+        . '<p>Der gewählte eStab-Bereich wird geöffnet.</p>'
+        . '<p><a href="' . estab_auth_html($url) . '" target="_top">'
+        . 'Jetzt öffnen</a></p>'
+        . '<script' . estab_csp_script_attribute() . '>'
+        . 'window.top.location.replace(' . $encodedUrl . ');'
+        . '</script></body></html>';
     exit;
 }
 

@@ -1465,6 +1465,13 @@ function check_and_save ($data, $activeCommandPostName, $expectedIncidentId){
         $data = $vali->i_data ;
 
         if (!$result) {
+          // Die Anlage ist einstufig: Ein Fehler fuehrt in den Vordruck des
+          // Verfassers zurueck, mit angekreuzter Gespraechsnotiz -- nicht in
+          // einen zweiten Vordruck, den es nicht mehr gibt. Der Validator
+          // fuehrt das Kaestchen nicht mit; ohne diese Zeile kaeme der
+          // Vordruck als gewoehnlicher Ausgang zurueck.
+          $data ["11_gesprnotiz"] = "t";
+          $data ["task"] = "Stab_schreiben";
           $form = new nachrichten4fach ($data, $data["task"], $vali->validate);
         exit ;
          }
@@ -1629,7 +1636,10 @@ function check_and_save ($data, $activeCommandPostName, $expectedIncidentId){
         $data ["01_datum"] = "";
         $data ["01_zeichen"] = "";
       }
-      if ($data ["02_zeit"] == "") {
+      if ($ldfDirection === "E" || $data ["02_zeit"] == "") {
+        // Beim Eingang bleibt Feld 3 auf dem Blatt frei; die Bestaetigung
+        // des LdF beobachtet die Anwendung mit ihrer eigenen Uhr. Beim
+        // Ausgang ist die Uhrzeit ein Vorschlag, den der LdF korrigieren kann.
         $data ["02_zeit"] = date ("Hi");
       }
       // The signed acceptance mark is an identity attribute. A forged form

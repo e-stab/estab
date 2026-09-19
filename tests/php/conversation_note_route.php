@@ -281,4 +281,70 @@ $assert(
     )
 );
 
+
+/*
+ * 5. Die Anlage ist ein Schritt.
+ *
+ * Das Absenden legte die Notiz nicht an, sondern zeigte denselben Vordruck
+ * ein zweites Mal mit dem Knopf "Zur Sichtung geben". Wer ihn las, las eine
+ * zweite Weitergabe; und der zweite Vordruck sendete das gesperrte Feld 7
+ * als verstecktes Feld erneut, woran die Dispositionssperre die Anfrage
+ * abwies. Jetzt entsteht der Datensatz beim ersten Absenden.
+ */
+$controller = $read('4fach/mainindex.php');
+$noteStart = strpos($controller, '($returnValue ["11_gesprnotiz"] ?? "") == "on"');
+$noteEnd = is_int($noteStart)
+    ? strpos($controller, 'check_and_save (', $noteStart)
+    : false;
+$noteBranch = is_int($noteStart) && is_int($noteEnd)
+    ? substr($controller, $noteStart, $noteEnd - $noteStart)
+    : '';
+$assert(
+    $noteBranch !== ''
+        && str_contains($noteBranch, '$returndata = $formdata ;')
+        && str_contains($noteBranch, '$formdata ["task"]            = "Stab_gesprnoti";')
+        && str_contains($noteBranch, '"06_befwegausw"')
+        && str_contains($noteBranch, '$formdata ["01_medium"] = (string) $returnValue ["06_befwegausw"];')
+        && !str_contains($noteBranch, 'new nachrichten4fach (')
+        && !str_contains($controller, 'gesprnotizsichter')
+        && !str_contains($controller, 'conversation-stage'),
+    estab_dv_requirement(
+        'NV-GESPRAECHSNOTIZ-LAUFWEG',
+        'Das Absenden der Gesprächsnotiz führt noch über einen zweiten Vordruck '
+            . 'statt unmittelbar zur Sichtung.'
+    )
+);
+$saver = $read('4fach/data_hndl.php');
+// Der Speicherzweig ist der zweite Fall dieses Namens; der erste gehört zur
+// Anhangverwaltung.
+$saveStart = strrpos($saver, 'case "Stab_gesprnoti":');
+$saveEnd = is_int($saveStart) ? strpos($saver, 'case "LdF-Eingang":', $saveStart) : false;
+$saveBranch = is_int($saveStart) && is_int($saveEnd)
+    ? substr($saver, $saveStart, $saveEnd - $saveStart)
+    : '';
+$assert(
+    $saveBranch !== ''
+        && str_contains($saveBranch, '$data ["task"] = "Stab_schreiben";')
+        && preg_match(
+            '/\$data \["task"\] = "Stab_schreiben";\s*\$form = new nachrichten4fach \(\$data, \$data\["task"\], \$vali->validate\);/',
+            $saveBranch
+        ) === 1
+        && str_contains($saveBranch, '"x00_status" => 4,'),
+    estab_dv_requirement(
+        'NV-GESPRAECHSNOTIZ-LAUFWEG',
+        'Ein Fehler beim Absenden führt in einen zweiten Vordruck statt in den '
+            . 'des Verfassers zurück.'
+    )
+);
+$view = $read('4fach/official_message_form.php');
+$assert(
+    !str_contains($view, 'Zur Sichtung geben')
+        && str_contains($view, 'function official_message_conversation_route()'),
+    estab_dv_requirement(
+        'NV-GESPRAECHSNOTIZ-LAUFWEG',
+        'Der Vordruck bietet noch die zweite Weitergabe an.'
+    )
+);
+
 printf("conversation note route: OK (%d assertions)\n", $assertions);
+

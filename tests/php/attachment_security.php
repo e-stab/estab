@@ -2409,19 +2409,14 @@ $assert(
             $mainControllerSource,
             'estab_attachment_direct_action_note_pending_submit ('
         )
-        && str_contains(
-            $mainControllerSource,
-            'eStab conversation-note attachment token completion failed: '
-        )
-        && str_contains(
-            $mainControllerSource,
-            'function estab_message_attachment_render_conversation_stage ('
-        )
-        && substr_count(
+        // Die zweite Stufe der Gesprächsnotiz gibt es nicht mehr; eine
+        // Notiz mit Anlage geht wie jede Nachricht in einem Schritt durch
+        // den Nachrichtenvorgang mit anhängigem Absenden.
+        && !str_contains(
             $mainControllerSource,
             'estab_message_attachment_render_conversation_stage ('
-        ) === 3
-        && str_contains($mainControllerSource, '"conversation-stage"')
+        )
+        && !str_contains($mainControllerSource, '"conversation-stage"')
         && str_contains(
             $mainControllerSource,
             'Prüfen Sie die Meldungsliste und senden Sie diesen '

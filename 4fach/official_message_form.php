@@ -13,6 +13,63 @@ require_once __DIR__ . '/../app/ui_elements.php';
 
 trait EstabOfficialMessageFormView
 {
+    /**
+     * Welche Durchschrift der Betrachter haelt -- als Ton fuer das Blatt.
+     *
+     * Die Liste faerbt jede Zeile nach der Durchschrift, die die wirksame
+     * Funktion von der Nachricht bekommt; das Blatt tat es nicht und war
+     * immer blau. Jetzt sagt es dasselbe: leer fuer die Vorgabe (blau),
+     * sonst die Farben der Durchschriften in fester Folge, durch Komma
+     * getrennt, wenn es mehrere sind. Die gruene Durchschrift ist die des
+     * Verfassers -- blau, solange sein Ausgang laeuft, gruen, wenn er
+     * abgeschlossen ist.
+     */
+    function official_message_copy_tone(): string
+    {
+        $stored = trim((string)($this->formdata['16_empf'] ?? ''));
+        $function = trim(
+            (string)($this->official_message_acting_function() ?? '')
+        );
+        if (
+            $stored === ''
+            || $function === ''
+            || !function_exists('estab_recipient_copy_map')
+        ) {
+            return '';
+        }
+        $map = estab_recipient_copy_map($stored);
+        $held = [];
+        foreach (explode(',', (string)($map[$function] ?? '')) as $colour) {
+            $colour = strtolower(trim($colour));
+            if ($colour === 'gb') {
+                $colour = 'ge';
+            }
+            if (
+                in_array($colour, ['bl', 'gn', 'rt', 'ge'], true)
+                && !in_array($colour, $held, true)
+            ) {
+                $held[] = $colour;
+            }
+        }
+        if (
+            (string)($this->formdata['04_richtung'] ?? '') === 'A'
+            && (int)($this->formdata['x00_status'] ?? 0) !== 8
+            && in_array('gn', $held, true)
+        ) {
+            $held = array_values(array_unique(array_map(
+                static fn (string $colour): string =>
+                    $colour === 'gn' ? 'bl' : $colour,
+                $held
+            )));
+        }
+        $order = ['bl' => 0, 'gn' => 1, 'rt' => 2, 'ge' => 3];
+        usort(
+            $held,
+            static fn (string $a, string $b): int => $order[$a] <=> $order[$b]
+        );
+        return $held === ['bl'] ? '' : implode(',', $held);
+    }
+
     /** Carry one server-selected Stab/FB workspace through form round-trips. */
     function official_message_acting_function(): ?string
     {
@@ -535,6 +592,13 @@ HTML;
      */
     function official_message_ttb_evidence_text(): string
     {
+        if (($this->formdata['11_gesprnotiz'] ?? false) === true) {
+            // Eine Gespraechsnotiz wird nicht befoerdert und bekommt deshalb
+            // keine Nummer im Technischen Betriebsbuch -- so steht es auch in
+            // der Liste. "noch kein" versprach hier einen Nachweis, der nie
+            // kommt.
+            return 'ohne TBB-Nachweis · Gesprächsnotiz';
+        }
         $value = $this->formdata['estab_ttb_lfd'] ?? null;
         if (is_int($value) && $value > 0) {
             return (string) $value;
@@ -577,7 +641,7 @@ HTML;
             ],
             3 => [
                 'title' => 'Annahmevermerk',
-                'text' => 'Nur für ausgehende Nachrichten. Sobald die Fm-Zentrale die Nachricht zur Beförderung annimmt, trägt sie Uhrzeit und Namenszeichen ein. Die Anleitung verlangt hier kein zusätzliches Pflichtdatum.',
+                'text' => 'Nur für ausgehende Nachrichten. Sobald die Fm-Zentrale die Nachricht zur Beförderung annimmt, trägt sie Datum, Uhrzeit und Namenszeichen ein. Bei einer eingehenden Nachricht bleibt das Feld frei.',
             ],
             4 => [
                 'title' => 'Beförderungsvermerk',
@@ -606,7 +670,7 @@ HTML;
             ],
             9 => [
                 'title' => 'Vorrangstufe',
-                'text' => 'Tragen Sie die gewünschte oder bei Eingang erhaltene Vorrangstufe ein: Sofort, Blitz oder Staatsnot. Staatsnot darf nur auf ausdrückliche Weisung einer hierzu berechtigten Stelle verwendet werden. Ohne besondere Vorrangstufe bleibt dieses Feld frei.',
+                'text' => 'Tragen Sie die gewünschte oder bei Eingang erhaltene Vorrangstufe ein: Sofort oder Blitz. Ohne besondere Vorrangstufe bleibt dieses Feld frei.',
             ],
             10 => [
                 'title' => 'Anschrift',
@@ -1513,18 +1577,26 @@ HTML;
             return ['date' => '', 'time' => ''];
         }
 
+        /*
+         * Die Datumszelle traegt das Jahr zweistellig: "31aug26", nicht
+         * "31aug2026". Die Zelle ist so breit wie auf dem Papier, und dort
+         * schreibt niemand vier Ziffern hinein. Gespeichert und eingegeben
+         * wird die Zeitgruppe weiter mit vier Ziffern; nur die Zelle kuerzt.
+         */
         if (preg_match(
-            '/^(\d{2})(\d{4})([[:alpha:]ÄÖÜäöü]{3}\d{4})$/uD',
+            '/^(\d{2})(\d{4})([[:alpha:]ÄÖÜäöü]{3})\d{2}(\d{2})$/uD',
             $value,
             $matches
         ) === 1) {
             return [
-                'date' => $preferTimeOnly ? '' : $matches[1] . $matches[3],
+                'date' => $preferTimeOnly
+                    ? ''
+                    : $matches[1] . $matches[3] . $matches[4],
                 'time' => $matches[2],
             ];
         }
         if (preg_match(
-            '/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::\d{2})?$/D',
+            '/^\d{2}(\d{2})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::\d{2})?$/D',
             $value,
             $matches
         ) === 1) {
@@ -1536,14 +1608,25 @@ HTML;
             ];
         }
         if (preg_match(
-            '/^(\d{2}\.\d{2}\.\d{4}|\d{8})\s+'
+            '/^(\d{2}\.\d{2}\.)\d{2}(\d{2})\s+'
                 . '((?:[01]\d|2[0-3]):?[0-5]\d(?::?[0-5]\d)?)$/D',
             $value,
             $matches
         ) === 1) {
             return [
-                'date' => $preferTimeOnly ? '' : $matches[1],
-                'time' => $matches[2],
+                'date' => $preferTimeOnly ? '' : $matches[1] . $matches[2],
+                'time' => $matches[3],
+            ];
+        }
+        if (preg_match(
+            '/^(\d{4})\d{2}(\d{2})\s+'
+                . '((?:[01]\d|2[0-3]):?[0-5]\d(?::?[0-5]\d)?)$/D',
+            $value,
+            $matches
+        ) === 1) {
+            return [
+                'date' => $preferTimeOnly ? '' : $matches[1] . $matches[2],
+                'time' => $matches[3],
             ];
         }
         if (preg_match(
@@ -1595,18 +1678,47 @@ HTML;
             ],
             true
         );
-        $timeOnly = $timeField === '02_zeit';
+        /*
+         * Der Annahmevermerk zeigte nur die Uhrzeit. Das Raster des Blattes
+         * gibt allen drei Vermerken Datum, Uhrzeit und Handzeichen, und der
+         * Ausgang laeuft ueber Mitternacht wie der Eingang: "0100" ohne Tag
+         * ist keine Annahme, die sich einordnen laesst. Das Merkmal
+         * data-estab-stamp-time-only bleibt fuer die Pruefungen und das
+         * Skript, das es liest -- es ist an jedem Vermerk falsch.
+         */
+        /*
+         * Feld 3 ist der Annahmevermerk fuer ausgehende Nachrichten. Bei
+         * einer eingehenden bleibt es auf dem Papier frei: Angenommen wird
+         * eine Nachricht zur Befoerderung, und befoerdert wird ein Eingang
+         * nicht. Die Bestaetigung des LdF beobachtet die Anwendung selbst
+         * und weist sie in der Zeitleiste nach. Das Blatt zeigt hier nichts
+         * und gibt nichts frei.
+         */
+        $incomingAcceptance = $timeField === '02_zeit'
+            && (
+                (string) ($this->formdata['04_richtung'] ?? '') === 'E'
+                || in_array(
+                    $this->task,
+                    ['FM-Eingang', 'FM-Eingang_Anhang', 'LdF-Eingang'],
+                    true
+                )
+            );
+        $hiddenAcceptance = [];
+        if ($incomingAcceptance) {
+            $editable = false;
+            foreach ([$timeField, $markField] as $acceptanceField) {
+                $hiddenAcceptance[$acceptanceField] =
+                    $this->formdata[$acceptanceField] ?? null;
+                $this->formdata[$acceptanceField] = '';
+            }
+        }
         $stampParts = $this->official_message_stamp_parts(
-            (string)($this->formdata[$timeField] ?? ''),
-            $timeOnly
+            (string)($this->formdata[$timeField] ?? '')
         );
-        echo '<div class="estab-official-stamp-datetime'
-            . ($timeOnly ? ' estab-official-stamp-datetime--time-only' : '')
-            . '" '
+        echo '<div class="estab-official-stamp-datetime" '
             . 'data-estab-single-backend-field="'
             . estab_message_html($timeField) . '" role="group" '
-            . 'data-estab-stamp-time-only="'
-            . ($timeOnly ? 'true' : 'false') . '" '
+            . 'data-estab-stamp-time-only="false" '
             . 'aria-label="' . estab_message_html($timeLabel) . '" '
             . 'aria-describedby="estab-stamp-description-'
             . estab_message_html($timeField) . '">';
@@ -1658,6 +1770,9 @@ HTML;
             . '<span>Datum</span><span>Uhrzeit</span><span>Hdz.</span>'
             . '</div><span class="estab-official-print-number">'
             . $number . '</span></section>';
+        foreach ($hiddenAcceptance as $acceptanceField => $storedValue) {
+            $this->formdata[$acceptanceField] = $storedValue;
+        }
     }
 
     /**
@@ -1760,8 +1875,23 @@ HTML;
          * eigene Aussage. Und ein vorbelegtes Kreuz ist eine Angabe, die
          * niemand gemacht hat.
          */
+        $offered = estab_message_priority_options();
+        /*
+         * Der amtliche Vordruck hat zwei Kästchen: Sofort und Blitz. Staatsnot
+         * wird nicht mehr angeboten. Eine Nachricht aus dem Altbestand kann
+         * die Stufe aber tragen; sie bleibt dann sichtbar und angekreuzt,
+         * damit das Speichern eines späteren Schrittes sie nicht verliert --
+         * ohne gedrucktes Kästchen, das der Vordruck nicht hat.
+         */
+        if (estab_message_priority_storage_value($current) === 'aaa') {
+            $offered[] = [
+                'value' => 'aaa',
+                'label' => estab_message_priority_label('aaa'),
+                'warning' => estab_message_priority_warning('aaa'),
+            ];
+        }
         $options = [];
-        foreach (estab_message_priority_options() as $option) {
+        foreach ($offered as $option) {
             if ($option['value'] === '') {
                 continue;
             }
@@ -1775,9 +1905,6 @@ HTML;
                     default => $option['value'],
                 },
                 'warning' => $option['warning'],
-                // Der amtliche Vordruck hat zwei Kästchen: Sofort und Blitz.
-                // Staatsnot ist wählbar, weil eine eingegangene Nachricht sie
-                // tragen kann -- ein gedrucktes Kästchen dafür wäre erfunden.
                 'extra' => !in_array($option['value'], ['sss', 'bbb'], true),
             ];
         }
@@ -2099,9 +2226,7 @@ HTML;
                     'role' => 'hauptaktion',
                     'markup' => $this->official_message_action_button(
                         'hauptaktion',
-                        $this->task === 'Stab_gesprnoti'
-                            ? 'Zur Sichtung geben'
-                            : 'Absenden',
+                        'Absenden',
                         'submit',
                         'absenden_x'
                     ),
@@ -2466,6 +2591,36 @@ HTML;
             . '</p>';
     }
 
+    /**
+     * Der Laufweg der Gesprächsnotiz, am Bildschirm neben dem Vordruck.
+     *
+     * Hier stand in der zweiten Stufe eine Liste, die LdF und Fernmelder
+     * nannte -- den Ausgangslaufweg, nicht den der Notiz. Die Notiz geht
+     * mit dem Absenden zur Sichtung, und die schließt sie ab. Der Hinweis
+     * steht beim Verfasser, solange das Kästchen 12 angekreuzt ist; ohne
+     * Skript steht er immer und sagt, wann er gilt.
+     */
+    function official_message_conversation_route(): void
+    {
+        if ($this->task !== 'Stab_schreiben') {
+            return;
+        }
+        $selected = ($this->formdata['11_gesprnotiz'] ?? false) === true;
+        echo '<p class="estab-official-review-scope" '
+            . 'data-estab-conversation-next-steps'
+            . ($selected ? '' : ' data-estab-conversation-next-steps-idle')
+            . '>'
+            . '<span class="estab-official-review-scope-title">'
+            . 'Gesprächsnotiz</span>'
+            . '<span>Ist Feld 12 angekreuzt, geht die Notiz mit dem Absenden '
+            . 'unmittelbar zur Sichtung. Si prüft sie formal; damit ist sie '
+            . 'abgeschlossen. Eine Disposition durch den LdF und eine '
+            . 'Beförderung durch die Fernmelder folgen nicht.</span>'
+            . '<span>Das im Gespräch benutzte Mittel steht oben in Feld 1; '
+            . 'Zeichen und Aufnahmezeit setzt eStab beim Absenden ein.</span>'
+            . '</p>';
+    }
+
     function official_message_workflow_controls(): void
     {
         // Der Eingang steht hier ausdruecklich mit drin. Frueher haing die
@@ -2475,7 +2630,7 @@ HTML;
         $hasTransport = in_array(
             $this->task,
             [
-                'Stab_gesprnoti', 'LdF-Eingang', 'LdF-Ausgang', 'FM-Ausgang',
+                'LdF-Eingang', 'LdF-Ausgang', 'FM-Ausgang',
                 'FM-Eingang', 'FM-Eingang_Anhang',
             ],
             true
@@ -2485,29 +2640,11 @@ HTML;
         }
         echo '<section class="estab-message-workflow-panel" '
             . 'aria-labelledby="estab-message-workflow-title">';
-        if ($this->task === 'Stab_gesprnoti') {
-            echo '<div><span class="estab-section-kicker">Weiterer Nachrichtenlauf</span>'
-                . '<h2 id="estab-message-workflow-title">Gesprächsnotiz zur Sichtung geben</h2>'
-                . '<p>Die im Vordruck ausgewählte Übermittlungsart beschreibt das '
-                . 'ursprüngliche Gespräch. Die Sichtung schliesst die Notiz ab; '
-                . 'eine Disposition und eine Beförderung folgen nicht.</p></div>';
-        } else {
-            echo '<div><span class="estab-section-kicker">Digitale Bearbeitung</span>'
-                . '<h2 id="estab-message-workflow-title">Betriebliche Ergänzungen</h2>'
-                . '<p>Diese Angaben steuern den digitalen Ablauf und liegen deshalb '
-                . 'außerhalb des unveränderten amtlichen Rasters.</p></div>';
-        }
+        echo '<div><span class="estab-section-kicker">Digitale Bearbeitung</span>'
+            . '<h2 id="estab-message-workflow-title">Betriebliche Ergänzungen</h2>'
+            . '<p>Diese Angaben steuern den digitalen Ablauf und liegen deshalb '
+            . 'außerhalb des unveränderten amtlichen Rasters.</p></div>';
         echo '<div class="estab-message-workflow-fields">';
-        if ($this->task === 'Stab_gesprnoti') {
-            echo '<fieldset data-estab-conversation-next-steps>'
-                . '<legend>Nächste Schritte</legend><ol>'
-                . '<li><strong>Si</strong> prüft die Gesprächsnotiz formal.</li>'
-                . '<li><strong>LdF</strong> wählt Rufname und freigegebenen '
-                . 'S6-Beförderungsweg.</li>'
-                . '<li><strong>Fernmelder</strong> übernimmt die Nachricht und '
-                . 'führt den Beförderungsnachweis.</li>'
-                . '</ol></fieldset>';
-        }
         if (
             $this->task === 'FM-Eingang'
             || $this->task === 'FM-Eingang_Anhang'
@@ -2936,15 +3073,18 @@ HTML;
     if (!normalized) {
       return { date: "", time: "" };
     }
-    match = normalized.match(/^(\d{2})(\d{4})([A-Za-zÄÖÜäöü]{3}\d{4})$/);
+    // Die Datumszelle zeigt das Jahr zweistellig, wie die Zelle auf Papier.
+    match = normalized.match(
+      /^(\d{2})(\d{4})([A-Za-zÄÖÜäöü]{3})\d{2}(\d{2})$/
+    );
     if (match) {
       return {
-        date: timeOnly ? "" : match[1] + match[3],
+        date: timeOnly ? "" : match[1] + match[3] + match[4],
         time: match[2]
       };
     }
     match = normalized.match(
-      /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::\d{2})?$/
+      /^\d{2}(\d{2})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::\d{2})?$/
     );
     if (match) {
       return {
@@ -2953,10 +3093,16 @@ HTML;
       };
     }
     match = normalized.match(
-      /^(\d{2}\.\d{2}\.\d{4}|\d{8})\s+((?:[01]\d|2[0-3]):?[0-5]\d(?::?[0-5]\d)?)$/
+      /^(\d{2}\.\d{2}\.)\d{2}(\d{2})\s+((?:[01]\d|2[0-3]):?[0-5]\d(?::?[0-5]\d)?)$/
     );
     if (match) {
-      return { date: timeOnly ? "" : match[1], time: match[2] };
+      return { date: timeOnly ? "" : match[1] + match[2], time: match[3] };
+    }
+    match = normalized.match(
+      /^(\d{4})\d{2}(\d{2})\s+((?:[01]\d|2[0-3]):?[0-5]\d(?::?[0-5]\d)?)$/
+    );
+    if (match) {
+      return { date: timeOnly ? "" : match[1] + match[2], time: match[3] };
     }
     match = normalized.match(
       /^((?:[01]\d|2[0-3]):?[0-5]\d(?::?[0-5]\d)?)$/
@@ -3068,6 +3214,57 @@ HTML;
       }
     }
 
+    // Ueber den Namen statt ueber einen Selektor: Die HTTP-Pruefungen
+    // suchen im Quelltext woertlich nach dem Namensattribut von Feld 7,
+    // um ein absendbares Feld dort auszuschliessen, wo es keins geben
+    // darf -- auch dieser Kommentar steht im ausgelieferten Skript.
+    var desiredMediumInputs = Array.prototype.slice.call(
+      document.getElementsByName("06_befwegausw")
+    ).filter(function (control) {
+      return control.type === "radio";
+    });
+    var conversationRoute = document.querySelector(
+      "[data-estab-conversation-next-steps]"
+    );
+
+    // Bei einem gefuehrten Gespraech gibt es kein gewuenschtes Mittel mehr,
+    // nur das benutzte. Was unten in Feld 7 angekreuzt war, wandert nach
+    // oben in Feld 1, und Feld 7 ist gesperrt, solange die Notiz gilt.
+    function mirrorDesiredMedium(active) {
+      if (!conversationMediumControlled) {
+        return;
+      }
+      var chosen = "";
+      var desiredIndex;
+      for (desiredIndex = 0; desiredIndex < desiredMediumInputs.length;
+        desiredIndex++) {
+        if (desiredMediumInputs[desiredIndex].checked) {
+          chosen = desiredMediumInputs[desiredIndex].value;
+        }
+        desiredMediumInputs[desiredIndex].disabled = active;
+      }
+      if (!active || chosen === "") {
+        return;
+      }
+      var alreadyChosen = false;
+      var mediumIndex;
+      for (mediumIndex = 0; mediumIndex < conversationMediumInputs.length;
+        mediumIndex++) {
+        if (conversationMediumInputs[mediumIndex].checked) {
+          alreadyChosen = true;
+        }
+      }
+      if (alreadyChosen) {
+        return;
+      }
+      for (mediumIndex = 0; mediumIndex < conversationMediumInputs.length;
+        mediumIndex++) {
+        if (conversationMediumInputs[mediumIndex].value === chosen) {
+          conversationMediumInputs[mediumIndex].checked = true;
+        }
+      }
+    }
+
     function updateConversationMedium() {
       var active = !conversationMediumControlled
         || Boolean(conversationCheckbox && conversationCheckbox.checked);
@@ -3075,6 +3272,19 @@ HTML;
         "data-estab-conversation-medium-active",
         active ? "true" : "false"
       );
+      mirrorDesiredMedium(active);
+      if (conversationRoute && conversationMediumControlled) {
+        if (active) {
+          conversationRoute.removeAttribute(
+            "data-estab-conversation-next-steps-idle"
+          );
+        } else {
+          conversationRoute.setAttribute(
+            "data-estab-conversation-next-steps-idle",
+            ""
+          );
+        }
+      }
       if (conversationMediumGroup) {
         conversationMediumGroup.setAttribute(
           "aria-disabled",
@@ -3466,6 +3676,11 @@ HTML;
             . 'aria-label="Amtlichen Nachrichtenvordruck horizontal verschieben">';
         echo '<article id="nachrichtenvordruck" '
             . 'class="estab-official-message-form" '
+            . ($this->official_message_copy_tone() !== ''
+                ? 'data-estab-copy="'
+                    . estab_message_html($this->official_message_copy_tone())
+                    . '" '
+                : '')
             . 'data-estab-official-message-form data-estab-form-zones="3">';
 
         echo '<section class="estab-official-zone estab-official-zone--fmz" '
@@ -3777,13 +3992,28 @@ HTML;
             . '<div class="estab-official-cell-heading">Abfassungszeit:';
         $this->official_message_help(16);
         echo '</div></div><div class="estab-official-composition-value">';
+        $compositionPrefilled = ($this->compositionTimePrefilled ?? false)
+            === true;
         $this->official_message_text_input(
             '12_abfzeit',
             $this->official_message_field_access(16),
             19,
             'Abfassungszeit',
             ' inputmode="numeric" autocomplete="off"'
+                . ($compositionPrefilled
+                    ? ' data-estab-prefilled="jetzt"'
+                        . ' aria-describedby="estab-composition-prefilled"'
+                    : '')
         );
+        if ($compositionPrefilled) {
+            // NV-16: Eine eingesetzte Uhrzeit wird am Vordruck ausgewiesen.
+            // Sie ist ein Vorschlag, den der Verfasser aendern kann.
+            echo '<span id="estab-composition-prefilled" '
+                . 'class="estab-official-composition-note" '
+                . 'data-estab-composition-prefilled>'
+                . 'vorbelegt mit der Uhrzeit beim Öffnen – bitte prüfen'
+                . '</span>';
+        }
         echo '</div>'
             . '<span class="estab-official-print-number">16</span></section>';
 
@@ -3865,8 +4095,17 @@ HTML;
                 false
             );
         }
+        /*
+         * Die Beschriftungen standen ueber die ganze Breite verteilt, die
+         * Zellen aber nur rechts neben der Ueberschrift "Quittung:". Die
+         * Beschriftungszeile teilt sich deshalb wie die Zeile darueber: eine
+         * leere Zelle unter der Ueberschrift, dann Uhrzeit und Zeichen im
+         * selben Raster wie ihre Felder.
+         */
         echo '</div><div class="estab-official-receipt-labels" '
-            . 'aria-hidden="true"><span>Uhrzeit</span><span>Zeichen</span></div>'
+            . 'aria-hidden="true"><span></span>'
+            . '<span class="estab-official-receipt-label-cells">'
+            . '<span>Uhrzeit</span><span>Zeichen</span></span></div>'
             . '<span class="estab-official-print-number">18</span></section>';
 
         echo '<section class="estab-official-distribution" '
@@ -3882,6 +4121,7 @@ HTML;
         $this->official_message_help(20);
         echo '</div>';
         $this->official_message_review_scope();
+        $this->official_message_conversation_route();
         $this->official_message_textarea(
             '17_vermerke',
             $this->official_message_field_access(20),

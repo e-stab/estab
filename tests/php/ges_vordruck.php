@@ -131,6 +131,10 @@ $assert(
 $ausnahmen = [
     '.estab-official-ttb > .estab-official-readonly',
     '.estab-official-designation-hint',
+    // Der Hinweis "vorbelegt" neben der Abfassungszeit: Er steht im Raster
+    // der Rasterzeile von Feld 16, nur am Schirm, und traegt keine Angabe --
+    // die Uhrzeit selbst steht daneben in Arbeitsgroesse (NV-16).
+    '.estab-official-composition-note',
     '.estab-official-conversation-medium-status',
     '.estab-official-copy-distribution',
     '.estab-official-copy-legend',
