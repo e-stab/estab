@@ -452,8 +452,12 @@ $assert(
         && str_contains($summary, 'role="alert"')
         && str_contains($summary, 'href="#f_01_medium_fu"')
         && str_contains($summary, 'href="#f_12_betreff"')
-        && str_contains($summary, 'Feld 1 ')
-        && str_contains($summary, 'Feld 13 ')
+        // Die Liste nennt die Nummern des Blattes: der Betreff ist dort die
+        // 11, das obere Mittel traegt keine und steht mit seinem Namen.
+        && str_contains($summary, '<strong>Übermittlungsmittel</strong>')
+        && !str_contains($summary, 'Feld 1 ')
+        && str_contains($summary, 'Feld 11 ')
+        && !str_contains($summary, 'Feld 13 ')
         && !str_contains($summary, 'f_12_inhalt'),
     estab_dv_requirement(
         'NV-PFLICHTFELDER',
@@ -482,7 +486,7 @@ $reviewSummary = $render(static function () use ($fixture): void {
 });
 $assert(
     str_contains($reviewSummary, 'href="#f_17_vermerke"')
-        && str_contains($reviewSummary, 'Feld 20 ')
+        && str_contains($reviewSummary, 'Feld 17 ')
         && !str_contains($reviewSummary, 'f_15_quitdatum'),
     'Eine Rückweisung außerhalb der Pflichtfelder fehlt in der Übersicht, '
         . 'oder die Übersicht erfindet Beanstandungen.'

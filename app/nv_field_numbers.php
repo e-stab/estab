@@ -5,12 +5,15 @@ declare(strict_types=1);
 /**
  * The one place where the Nachrichtenvordruck's field numbers are translated.
  *
- * The form is counted twice. The Ausfüllanleitung numbers twenty fields and
- * prints those numbers into the corners of the boxes, so a responder who
- * reads "13" looks up instruction 13. The Stab-Unterlage counts seventeen,
- * because it draws several boxes as one and omits the ones the staff never
- * fills. The application carries a third scale on top: a per-field access
- * index that decides which boxes a workflow step opens.
+ * The form is counted twice. The printed sheet carries seventeen small
+ * numbers in the corners of its boxes -- the count of the Stab-Unterlage,
+ * which draws several boxes as one and leaves three unnumbered. The
+ * Ausfüllanleitung counts twenty, one per instruction; its numbers lead to
+ * the right explanation but are not the numbers the fields carry. The
+ * application therefore prints the sheet's numbers, finds the help by the
+ * instruction's numbers and names those only as the place to look. A third
+ * scale sits on top: a per-field access index that decides which boxes a
+ * workflow step opens.
  *
  * As long as every site translated for itself, each site was right and the
  * whole was unreadable: a comment says "Feld 19", the line below reaches for
@@ -108,4 +111,53 @@ function estab_nv_access_index(int $number): int
 function estab_nv_unterlage_number(int $number): ?int
 {
     return estab_nv_field($number)['unterlage'];
+}
+
+/**
+ * The number the sheet prints into this field's corner, or null.
+ *
+ * That is the Unterlage count: the sheet is the Unterlage's form. Keyed by
+ * the instruction number like everything else, so a call site never holds
+ * both scales.
+ */
+function estab_nv_printed_number(int $number): ?int
+{
+    return estab_nv_unterlage_number($number);
+}
+
+/**
+ * The number to print into this field's corner, or null.
+ *
+ * Absender and Abfassungszeit share one box on the sheet, numbered 12 once.
+ * The corner belongs to the first field of a shared box; the second stays
+ * blank, so the screen prints every number of the sheet exactly once.
+ */
+function estab_nv_corner_number(int $number): ?int
+{
+    $printed = estab_nv_printed_number($number);
+    if ($printed === null) {
+        return null;
+    }
+    foreach (estab_nv_field_map() as $candidate => $entry) {
+        if ($entry['unterlage'] === $printed) {
+            return $candidate === $number ? $printed : null;
+        }
+    }
+    return null;
+}
+
+/**
+ * The one printed number without an instruction of its own: the line
+ * "Einheit/Einrichtung/Stelle" under the sender, numbered 13 on the sheet.
+ */
+const ESTAB_NV_UNTERLAGE_EINHEIT = 13;
+
+/**
+ * What the reader is told on screen: "Feld 8" for a box the sheet numbers,
+ * otherwise the field's name alone.
+ */
+function estab_nv_visible_label(int $number, string $name): string
+{
+    $printed = estab_nv_printed_number($number);
+    return $printed === null ? $name : 'Feld ' . $printed . ' · ' . $name;
 }

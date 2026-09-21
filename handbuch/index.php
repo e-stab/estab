@@ -308,7 +308,9 @@ $handbookUpdated = '1. September 2026';
             einem schmalen Bildschirm bleibt das Blatt in seiner Form und
             lässt sich seitlich schieben.</p>
           <p>Zwanzig Felder haben ein kleines „i“. Ein Klick darauf erklärt
-            das Feld an Ort und Stelle.</p>
+            das Feld an Ort und Stelle. Die kleine Zahl in der Feldecke ist
+            die Nummer des Papiervordrucks; die Ausfüllhilfe nennt dazu ihre
+            Nummer in der Ausfüllanleitung.</p>
           <ul>
             <li><strong>Pflichtfelder.</strong> Betreff und Text, Anschrift,
               Absender und Zeichen. Welche davon nötig sind, hängt vom
@@ -340,32 +342,32 @@ $handbookUpdated = '1. September 2026';
 
         <article id="ausgang" class="estab-handbook-chapter"
           data-estab-handbook-section
-          data-handbook-keywords="Ausgang Verfasser Sichter Si LdF Fernmelder disponieren befördern Rückgabe Grund Weg Feld 7 Feld 6 Feld 20">
+          data-handbook-keywords="Ausgang Verfasser Sichter Si LdF Fernmelder disponieren befördern Rückgabe Grund Weg Feld 6 Feld 5 Feld 17">
           <header><span>6</span><h2>Nachricht ausgeben</h2></header>
           <p>Eine Nachricht nach draußen geht durch vier Hände. Jede Hand hat
             genau eine Aufgabe.</p>
           <ol class="estab-handbook-steps">
             <li><strong>Verfasser.</strong> Anschrift, Betreff, Inhalt,
               Abfassungszeit und Verteiler eintragen und absenden.
-              Die Abfassungszeit in Feld 16 ist mit der Uhrzeit beim Öffnen
+              Die Abfassungszeit in Feld 12 ist mit der Uhrzeit beim Öffnen
               vorbelegt; sie gehört dem Verfasser, der sie prüft und bei
-              Bedarf ändert. In Feld 7 trägt er ein, über welches
+              Bedarf ändert. In Feld 6 trägt er ein, über welches
               Mittel die Nachricht seiner Ansicht nach laufen soll. Dieser
               Wunsch bleibt im Vordruck stehen.</li>
             <li><strong>Si.</strong> Anschrift, Verfasserzeichen und Funktion
               prüfen. Dann freigeben oder mit Grund zurückgeben. Der
               Verfasser bessert nach und reicht erneut bei Si ein.</li>
             <li><strong>LdF.</strong> Rufnamen der Gegenstelle festlegen. In
-              Feld 1 das Mittel wählen, in Feld 6 den Weg. In „Streng“ kommt
+              der oberen Zeile das Mittel wählen, in Feld 5 den Weg. In „Streng“ kommt
               der Weg aus dem freigegebenen Fernmeldeplan. Hat eine
               Führungsstelle kein S6 und damit keinen Plan, benennt der LdF
-              in „Locker“ Mittel und Weg selbst. Der Wunsch aus Feld 7 bleibt
+              in „Locker“ Mittel und Weg selbst. Der Wunsch aus Feld 6 bleibt
               daneben stehen. Geht es fachlich nicht, gibt der LdF mit Grund
               an den Verfasser zurück.</li>
             <li><strong>Fernmelder.</strong> Nachricht tatsächlich
               übermitteln, Zeit und Zeichen eintragen. Ist die Gegenstelle
               über das gewählte Mittel nicht erreichbar, geht die Nachricht
-              mit Grund an den LdF zurück. Feld 20 hält fest, über welches
+              mit Grund an den LdF zurück. Feld 17 hält fest, über welches
               Mittel sie nicht erreichbar war. Der LdF wählt dann ein anderes
               Mittel.</li>
           </ol>
@@ -390,7 +392,7 @@ $handbookUpdated = '1. September 2026';
 
         <article id="eingang" class="estab-handbook-chapter"
           data-estab-handbook-section
-          data-handbook-keywords="Eingang aufnehmen Fernmelder Absender Rufname LdF Eingangsweg bestätigen Si bewerten Empfänger blaue Durchschrift Feld 15">
+          data-handbook-keywords="Eingang aufnehmen Fernmelder Absender Rufname LdF Eingangsweg bestätigen Si bewerten Empfänger blaue Durchschrift Feld 12">
           <header><span>7</span><h2>Nachricht aufnehmen</h2></header>
           <p>Eine Nachricht von draußen geht durch drei Hände.</p>
           <ol class="estab-handbook-steps">
@@ -411,7 +413,7 @@ $handbookUpdated = '1. September 2026';
               Technische Betriebsbuch verzeichnet die Aushändigung.</li>
           </ol>
           <p>Steht der Eingangsweg im Fernmeldeplan, schlägt eStab die
-            passende Gegenstelle in Feld 15 vor. Der Vorschlag ist eine
+            passende Gegenstelle in Feld 12 vor. Der Vorschlag ist eine
             Hilfe, keine Vorgabe: Der LdF kann ihn übernehmen, ändern oder
             leer lassen. Wege, die der Plan nicht kennt, erscheinen am
             Fernmeldeplan in einer eigenen Liste.</p>

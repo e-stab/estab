@@ -790,7 +790,8 @@ function estab_session_ui_message_outcome(
                 'tone' => 'forwarded',
                 'title' => 'Beförderungsweg festgelegt',
                 'destination' => 'Zur Beförderung an A/W',
-                'detail' => 'Feld 1 trägt Ihre Disposition. A/W befördert '
+                'detail' => 'Die obere Zeile der Fm-Zentrale trägt Ihre '
+                    . 'Disposition. A/W befördert '
                     . 'die Nachricht und weist Zeit und Zeichen der '
                     . 'Beförderung nach.',
                 'acting_function' => null,
