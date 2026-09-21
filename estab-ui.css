@@ -8107,6 +8107,13 @@ section.estab-message-timeline[data-estab-message-timeline] * {
     color: #173a5e;
 }
 
+/* Die Fundstelle in der Ausfuellanleitung: Der Dialog heisst wie das Feld
+   auf dem Blatt, die Nummer der Anleitung fuehrt nur zur Erklaerung. */
+.estab-official-help-source {
+    color: var(--tinte);
+    display: block;
+}
+
 .estab-official-help-close {
     align-self: flex-start;
     background: #eef4fa;
@@ -10758,9 +10765,12 @@ a.estab-message-list-chip:hover {
     max-width: 100%;
 }
 
+/* Die Zeile "Einheit/Einrichtung/Stelle" traegt auf dem Blatt die 13; die
+   Ecke braucht einen Bezugsrahmen wie jede andere Zelle. */
 .estab-official-author-unit {
     display: block;
     min-width: 0;
+    position: relative;
 }
 
 .estab-telecom-routes,

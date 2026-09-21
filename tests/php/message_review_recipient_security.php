@@ -199,8 +199,11 @@ $assert(
     )
 );
 
+// Der Verteiler ist Feld 19 der Ausfüllanleitung; auf dem Blatt und damit
+// am Bildschirm trägt er die 16, und die Meldung nennt, was der Sichter
+// vor sich sieht.
 $message = estab_workflow_missing_processor_message();
-foreach (['Feld 19', 'Bearbeiter', 'Verteiler', 'rote Durchschrift'] as $term) {
+foreach (['Feld 16', 'Bearbeiter', 'Verteiler', 'rote Durchschrift'] as $term) {
     $assert(
         str_contains($message, $term),
         estab_dv_requirement(

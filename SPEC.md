@@ -124,11 +124,14 @@ Kollision behauptet, trägt sie in Abschnitt 5.10 mit beiden Fundstellen ein.
 
 ### 2.3 Aufgelöste Widersprüche
 
-**W1 — Feldnummerierung.** Q1 beziffert den Vordruck mit **20** Feldern,
-Q2 denselben Vordruck mit **17**. Nach Sachnähe (Regel 1) gilt für die
-Bezifferung Q1: Q1 ist das Dokument, das jedem Feld eine Nummer *und* eine
-zugehörige Ausfüllhilfe zuordnet. Q2 gilt unverändert für den Laufweg. Die
-Übersetzung erfolgt ausschließlich über die Tabelle in Abschnitt 3.
+**W1 — Feldnummerierung.** Q1 beziffert seine **20** Erklärungen, das
+gedruckte Blatt trägt in den Feldecken die **17** kleinen Nummern der Q2.
+Die Nummern der Q1 führen zur richtigen Erklärung, sind aber nicht die
+Nummern, die die Felder tragen. Sichtbar beziffert wird deshalb wie das
+Blatt (Q2); die Ausfüllhilfe wird über Q1 gefunden und nennt diese Nummer
+als Fundstelle. Intern, in Regeltexten, Kommentaren und Bezeichnern, bleibt
+Q1 die Zählung, weil sie jedes Feld einzeln benennt. Die Übersetzung erfolgt
+ausschließlich über die Tabelle in Abschnitt 3.
 
 **W2 — Melder und Kurier.** Q3 Kap. 5.2 trennt zwei Rollen: „Der Melder kennt
 den Inhalt der Meldung und kann ggf. auf Rückfragen antworten" gegenüber
@@ -193,7 +196,11 @@ Index 10; Betreff, Nachrichtentext und Abfassungszeit teilen sich Index 12.
 Die Tabelle oben bleibt die normative Gegenüberstellung der beiden gedruckten
 Zählungen. Die vollständige Abbildung einschließlich des Zugriffsindex führt
 `app/nv_field_numbers.php`; sie ist die einzige Stelle, an der übersetzt wird.
-Die Ansicht des Vordrucks spricht nur noch die Zählung, die sie druckt.
+Die Ansicht des Vordrucks ruft Hilfe und Eckennummer mit derselben Q1-Nummer
+auf; gedruckt wird, was die Tabelle als Q2 liefert, und wo sie nichts
+liefert, bleibt die Ecke leer wie auf dem Papier. Die 13 der Unterlage,
+„Einheit/Einrichtung/Stelle", hat keine Erklärung in Q1 und steht deshalb
+als einzige Nummer ohne Ausfüllhilfe.
 
 ---
 
@@ -273,7 +280,7 @@ Anforderungen aus M9 erfüllt.
 
 | ID | Quelle | Soll | Abnahme | Ist |
 | --- | --- | --- | --- | --- |
-| `NV-FELDNUMMERN` | Q1 Felder 1–20 | Sichtbare Feldnummer und Nummer der Ausfüllhilfe sind gleich; jedes der zwanzig Felder trägt eine Nummer. | vorhandene Regel | `erfüllt` |
+| `NV-FELDNUMMERN` | Q2 Felder 1–17 | Die Feldecken tragen die siebzehn Nummern des gedruckten Blattes; die Zählung der Q1 führt nur zur Ausfüllhilfe und wird dort als Fundstelle genannt. | Bildschirm und PDF drucken 1–17 an denselben Feldern wie das Papier; jede Ausfüllhilfe nennt ihre Q1-Nummer. | `erfüllt` |
 | `NV-NUMMERNBRUECKE` | Abschnitt 3 | Die Übersetzung zwischen Q1- und Q2-Zählung liegt an genau einer Stelle. Kein Kommentar nennt eine Nummer der einen Zählung neben einem Bezeichner der anderen. | Eine Abbildungsfunktion ist die einzige Stelle mit beiden Zählungen; ein Test prüft Kommentar und Bezeichner auf Zählungsbruch. | `erfüllt` |
 | `NV-PFLICHTFELDER` | Q2 „Immer ausfüllen" | Die Felder 10, 13, 14, 15, 16 und 17 sind Pflicht. Eine Rückweisung benennt Feld und Grund. | vorhandene Regel | `erfüllt` |
 | `NV-01-TKM-TATSAECHLICH` | Q1 Feld 1 | Feld 1 nimmt das **tatsächlich** benutzte Übermittlungsmittel auf und ist von Feld 7 getrennt. | Feld 1 ist im Ausgang erst nach der Beförderung setzbar und übernimmt Feld 7 nicht automatisch. | `erfüllt` |
@@ -567,8 +574,10 @@ nicht zu verwenden.
 - Ein Regeltext benennt die Anforderung der Vorschrift, nicht die Umsetzung.
   Ein fehlgeschlagener Test soll die Vorschrift zitieren, nicht ein
   Implementierungsdetail.
-- Feldnummern im Text sind immer Q1-Nummern. Wer eine Q2-Nummer meint, sagt
-  es dazu.
+- Feldnummern in Dokumentation, Regeltexten, Kommentaren und Bezeichnern
+  sind Q1-Nummern. Was der Anwender am Bildschirm oder im Handbuch liest,
+  nennt die Nummer, die das Blatt druckt (Q2), oder den Namen des Feldes,
+  wenn das Blatt keine druckt.
 - Keine Eigennamen in fachlichen Beispielen; Dienststellen-, Teileinheits-
   oder Einheitsbezeichnungen, wie die Vorschrift es für den Vordruck verlangt.
 

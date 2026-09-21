@@ -211,7 +211,9 @@ $renderSource = substr(
     (int) strpos($view, 'function plot_official_message_form()')
 );
 $section = (int) strpos($renderSource, 'estab-official-message-text');
-$number = (int) strpos($renderSource, 'estab-official-print-number">14<');
+// Die Ecke wird ueber die Nummer der Ausfuellanleitung aufgerufen; das
+// Blatt druckt dort nichts, der Aufruf steht trotzdem am Feld.
+$number = (int) strpos($renderSource, '$this->official_message_print_number(14)');
 $guidanceCall = strpos($renderSource, 'official_message_text_guidance()');
 $assert(
     $guidanceCall !== false && $guidanceCall > $section

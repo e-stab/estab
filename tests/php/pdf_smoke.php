@@ -87,12 +87,21 @@ foreach (['Fm-Betriebsstelle', 'Nachweis-Nr.'] as $legacy) {
     }
 }
 
-// Die Feldnummern der Ausfuellanleitung stehen auf dem Blatt. Wer "13" liest,
-// schlaegt Anweisung 13 nach.
-foreach (array_keys(estab_nv_field_map()) as $printedNumber) {
+// Die kleinen Nummern des Blattes stehen in den Feldecken: die siebzehn der
+// Stab-Unterlage, wie auf dem Papier -- nicht die zwanzig der
+// Ausfuellanleitung, die nur zur Erklaerung fuehren.
+foreach (range(1, 17) as $printedNumber) {
     if (!str_contains($document, '(' . $printedNumber . ') Tj')) {
         throw new RuntimeException(
             'Printed field number is missing: ' . $printedNumber
+        );
+    }
+}
+foreach ([18, 19, 20] as $instructionNumber) {
+    if (str_contains($document, '(' . $instructionNumber . ') Tj')) {
+        throw new RuntimeException(
+            'The sheet prints an instruction number it does not carry: '
+                . $instructionNumber
         );
     }
 }

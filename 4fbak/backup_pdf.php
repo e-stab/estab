@@ -20,6 +20,7 @@ if (!defined('FPDF_FONTPATH')) {
 require_once __DIR__ . "/fpdf.php";
 require_once __DIR__ . "/../app/message_repository.php";
 require_once __DIR__ . "/../app/nv_raster.php";
+require_once __DIR__ . "/../app/nv_field_numbers.php";
 require_once __DIR__ . "/../app/nv_verteiler.php";
 require_once __DIR__ . "/../app/message_transport.php";
 require_once __DIR__ . "/../app/generated_form.php";
@@ -608,14 +609,25 @@ class vordruckaspdf extends PDF_Ellipse {
     );
   }
 
-  /** Die gedruckte Feldnummer der Ausfuellanleitung in der Feldecke. */
+  /**
+   * Die kleine Nummer des Blattes in der Feldecke.
+   *
+   * Aufgerufen mit der Nummer der Ausfuellanleitung wie am Bildschirm;
+   * gedruckt wird die Nummer der Stab-Unterlage, die auch das Papier
+   * traegt. Drei Felder haben dort keine und bleiben leer; die
+   * Abfassungszeit teilt sich die 12 mit dem Absender.
+   */
   function nv_nummer ($x, $y, $nummer){
+    $gedruckt = estab_nv_corner_number ((int) $nummer);
+    if ($gedruckt === null) {
+      return;
+    }
     $this->nv_text (
       $x,
       $y,
       $this->raster ['schrift']['nummer'],
       "",
-      (string) $nummer
+      (string) $gedruckt
     );
   }
 
@@ -1061,6 +1073,11 @@ class vordruckaspdf extends PDF_Ellipse {
     $this->nv_text (
       18.9, 223.6, $schrift ['feld'], "", "Einheit/Einrichtung/Stelle",
       99.3, "C"
+    );
+    // Die 13 des Blattes: die Zeile hat keine eigene Ausfuellhilfe.
+    $this->nv_text (
+      18.3, 225.9, $schrift ['nummer'], "",
+      (string) ESTAB_NV_UNTERLAGE_EINHEIT
     );
     $this->nv_rahmen (121.1, 216.9, 151.6, 223.5);
     $this->nv_text (

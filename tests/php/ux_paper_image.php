@@ -31,6 +31,7 @@ if (!function_exists('estab_message_html')) {
     }
 }
 require_once $root . '/app/permission_mode.php';
+require_once $root . '/app/nv_field_numbers.php';
 require_once $root . '/4fach/official_message_form.php';
 
 final class PaperImageFixture
@@ -207,25 +208,34 @@ $zoneNumbers = static function (string $render, string $zone, ?string $next): ar
         return [];
     }
     $block = substr($render, $start, $end - $start);
+    // Die Ecken drucken die Nummern des Blattes; der Aufruf nennt die der
+    // Ausfuellanleitung, uebersetzt wird in app/nv_field_numbers.php.
     preg_match_all(
-        '~estab-official-print-number">(\d+)<'
-            . '|official_message_timestamp_block\(\s*\'[^\']*\',\s*(\d+),~',
+        '~\$this->official_message_print_number\((\d+)\)'
+            . '|official_message_timestamp_block\(\s*\'[^\']*\',\s*(\d+),'
+            . '|\$this->official_message_print_unit_number\(\)~',
         $block,
         $hits,
         PREG_SET_ORDER
     );
     $numbers = [];
     foreach ($hits as $hit) {
-        $numbers[] = (int) ($hit[1] !== '' ? $hit[1] : $hit[2]);
+        $instruction = ($hit[1] ?? '') !== '' ? $hit[1] : ($hit[2] ?? '');
+        $printed = $instruction !== ''
+            ? estab_nv_corner_number((int) $instruction)
+            : ESTAB_NV_UNTERLAGE_EINHEIT;
+        if ($printed !== null) {
+            $numbers[] = $printed;
+        }
     }
     sort($numbers, SORT_NUMERIC);
     return $numbers;
 };
 
 $expectedZones = [
-    'fm-zentrale' => [[1, 2, 3, 4, 5, 6], 'nachricht'],
-    'nachricht' => [[7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17], 'sichter'],
-    'sichter' => [[18, 19, 20], null],
+    'fm-zentrale' => [[1, 2, 3, 4, 5], 'nachricht'],
+    'nachricht' => [[6, 7, 8, 9, 10, 11, 12, 13, 14], 'sichter'],
+    'sichter' => [[15, 16, 17], null],
 ];
 foreach ($expectedZones as $zone => [$expected, $next]) {
     $numbers = $zoneNumbers($render, $zone, $next);
